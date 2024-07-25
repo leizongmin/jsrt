@@ -54,5 +54,6 @@ dkms.conf
 
 /.cmake/
 /target/
+/build/
 /.vscode/
 core.*

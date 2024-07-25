@@ -3,14 +3,14 @@ A small JavaScript runtime.
 
 ## Setup up development environment
 
-Requirements:
+### Requirements
 
 - **gcc**
 - **make**
 - **cmake**
 - **clang-format**
 
-`launch.json` for VSCode:
+### `launch.json` for VSCode
 
 ```json
 {
@@ -29,6 +29,32 @@ Requirements:
 }
 ```
 
+### Use Zig C Compiler
+
+Run the following command to [download and install the latest Zig](https://ziglang.org/download/) or [install Zig from a package manager](https://github.com/ziglang/zig/wiki/Install-Zig-from-a-Package-Manager):
+
+```bash
+export install_zig_version=0.13.0
+cd /tmp
+wget https://ziglang.org/download/$install_zig_version/zig-linux-x86_64-$install_zig_version.tar.xz
+tar -xvf zig-linux-x86_64-$install_zig_version.tar.xz
+mv zig-linux-x86_64-$install_zig_version /opt/zig
+sudo ln -s /opt/zig/zig /usr/local/bin/zig
+```
+
+Use Zig C compiler to build the project:
+
+```bash
+make clean && CC="zig cc" CXX="zig c++" make all
+```
+
+Here is a cross-compiling example:
+
+```bash
+make clean && CC="zig cc -target x86_64-linux-musl" CXX="zig c++ -target x86_64-linux-musl" make all
+```
+
+
 # Build and Run
 
 Run the following command to build the project:
@@ -42,7 +68,6 @@ Run the following command to run a JavaScript file:
 ```bash
 ./bin/jsrt test.js
 ```
-
 
 
 # License

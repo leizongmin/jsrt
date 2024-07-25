@@ -38,7 +38,7 @@ export install_zig_version=0.13.0
 cd /tmp
 wget https://ziglang.org/download/$install_zig_version/zig-linux-x86_64-$install_zig_version.tar.xz
 tar -xvf zig-linux-x86_64-$install_zig_version.tar.xz
-mv zig-linux-x86_64-$install_zig_version /opt/zig
+sudo mv zig-linux-x86_64-$install_zig_version /opt/zig
 sudo ln -s /opt/zig/zig /usr/local/bin/zig
 ```
 

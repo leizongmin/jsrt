@@ -3,8 +3,8 @@
 #include <quickjs.h>
 #include <stdlib.h>
 
-#include "util/jsutils.h"
-#include "util/macro.h"
+#include "../util/jsutils.h"
+#include "../util/macro.h"
 
 typedef struct {
   JSRT_Runtime *rt;

@@ -3,6 +3,13 @@ A small JavaScript runtime.
 
 ## Setup up development environment
 
+Requirements:
+
+- **gcc**
+- **make**
+- **cmake**
+- **clang-format**
+
 `launch.json` for VSCode:
 
 ```json

@@ -52,7 +52,10 @@ Here is a cross-compiling example (runs `zig targets | jq .libc` to get the avai
 
 ```bash
 make clean && CC="zig cc -target x86_64-linux-musl" CXX="zig c++ -target x86_64-linux-musl" make all
+# probably may not work
 make clean && CC="zig cc -target aarch64_be-linux-gnu" CXX="zig c++ -target aarch64_be-linux-gnu" make all
+make clean && CC="zig cc -target x86_64-windows-gnu" CXX="zig c++ -target x86_64-windows-gnu" make all
+make clean && CC="zig cc -target x86_64-macos-none" CXX="zig c++ -target x86_64-macos-none" make all
 ```
 
 

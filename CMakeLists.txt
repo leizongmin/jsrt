@@ -36,30 +36,32 @@ add_library(quickjs STATIC ${QUICKJS_LIB_FILES})
 file(STRINGS deps/quickjs/VERSION QUICKJS_VERSION)
 target_compile_definitions(quickjs PRIVATE CONFIG_VERSION="${QUICKJS_VERSION}" CONFIG_BIGNUM _GNU_SOURCE)
 
-# build qjsc
-add_executable(qjsc deps/quickjs/qjsc.c deps/quickjs/quickjs-libc.c)
-target_compile_definitions(qjsc PRIVATE CONFIG_VERSION="${QUICKJS_VERSION}" CONFIG_BIGNUM _GNU_SOURCE)
-target_link_libraries(qjsc quickjs dl m pthread)
-# build qjscalc.c
-add_custom_command(OUTPUT qjscalc.c
-COMMAND qjsc -fbignum -c -o qjscalc.c ${CMAKE_CURRENT_SOURCE_DIR}/deps/quickjs/qjscalc.js
-DEPENDS qjsc)
-set_source_files_properties(qjscalc.c PROPERTIES GENERATED TRUE)
-# build qjsrepl.c
-add_custom_command(OUTPUT qjsrepl.c
-COMMAND qjsc -c -o qjsrepl.c -m ${CMAKE_CURRENT_SOURCE_DIR}/deps/quickjs/repl.js
-DEPENDS qjsc)
-set_source_files_properties(qjsrepl.c PROPERTIES GENERATED TRUE)
-# build qjs
-add_executable(qjs deps/quickjs/qjs.c qjscalc.c qjsrepl.c deps/quickjs/quickjs-libc.c)
-target_compile_definitions(qjs PRIVATE CONFIG_VERSION="${QUICKJS_VERSION}" CONFIG_BIGNUM _GNU_SOURCE)
-target_link_libraries(qjs quickjs dl m pthread)
+# build qjs and qjsc, use flag -DBUILD_QJS=ON to enable
+option(BUILD_QJS "Build qjs and qjsc executable" OFF)
+if(BUILD_QJS)
+    add_executable(qjsc deps/quickjs/qjsc.c deps/quickjs/quickjs-libc.c)
+    target_compile_definitions(qjsc PRIVATE CONFIG_VERSION="${QUICKJS_VERSION}" CONFIG_BIGNUM _GNU_SOURCE)
+    target_link_libraries(qjsc quickjs dl m pthread)
+    # build qjscalc.c
+    add_custom_command(OUTPUT qjscalc.c
+    COMMAND qjsc -fbignum -c -o qjscalc.c ${CMAKE_CURRENT_SOURCE_DIR}/deps/quickjs/qjscalc.js
+    DEPENDS qjsc)
+    set_source_files_properties(qjscalc.c PROPERTIES GENERATED TRUE)
+    # build qjsrepl.c
+    add_custom_command(OUTPUT qjsrepl.c
+    COMMAND qjsc -c -o qjsrepl.c -m ${CMAKE_CURRENT_SOURCE_DIR}/deps/quickjs/repl.js
+    DEPENDS qjsc)
+    set_source_files_properties(qjsrepl.c PROPERTIES GENERATED TRUE)
+    # build qjs
+    add_executable(qjs deps/quickjs/qjs.c qjscalc.c qjsrepl.c deps/quickjs/quickjs-libc.c)
+    target_compile_definitions(qjs PRIVATE CONFIG_VERSION="${QUICKJS_VERSION}" CONFIG_BIGNUM _GNU_SOURCE)
+    target_link_libraries(qjs quickjs dl m pthread)
+endif()
 
 # build libuv
 add_subdirectory(deps/libuv)
 add_library(myuv STATIC IMPORTED)
 set_target_properties(myuv PROPERTIES IMPORTED_LOCATION "${CMAKE_BINARY_DIR}/deps/libuv/libuv.a")
-
 
 # build jsrt
 file(GLOB_RECURSE JSRT_STD_FILES "src/std/*.c")

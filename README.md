@@ -48,10 +48,11 @@ Use Zig C compiler to build the project:
 make clean && CC="zig cc" CXX="zig c++" make all
 ```
 
-Here is a cross-compiling example:
+Here is a cross-compiling example (runs `zig targets | jq .libc` to get the available targets):
 
 ```bash
 make clean && CC="zig cc -target x86_64-linux-musl" CXX="zig c++ -target x86_64-linux-musl" make all
+make clean && CC="zig cc -target aarch64_be-linux-gnu" CXX="zig c++ -target aarch64_be-linux-gnu" make all
 ```
 
 

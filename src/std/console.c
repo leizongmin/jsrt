@@ -2,11 +2,10 @@
 
 #include <quickjs.h>
 #include <stdio.h>
+#include <unistd.h>
 
+#include "../util/colorize.h"
 #include "../util/dbuf.h"
-
-#define UTF8_CHAR_LEN_MAX 6
-static JSValue jsrt_internal_printf(JSContext *ctx, int argc, JSValueConst *argv, FILE *fp);
 
 static JSValue jsrt_console_log(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv);
 
@@ -28,12 +27,13 @@ static JSValue jsrt_console_log(JSContext *ctx, JSValueConst this_val, int argc,
 
   DynBuf dbuf;
   jsrt_init_dbuf(ctx, &dbuf);
+  bool colors = isatty(STDOUT_FILENO) && isatty(STDERR_FILENO);
 
   for (i = 0; i < argc; i++) {
     if (i != 0) {
       dbuf_putstr(&dbuf, " ");
     }
-    JSRT_GetJSValuePrettyString(&dbuf, ctx, argv[i], NULL);
+    JSRT_GetJSValuePrettyString(&dbuf, ctx, argv[i], NULL, colors);
   }
 
   fwrite(dbuf.buf, 1, dbuf.size, stdout);
@@ -43,34 +43,58 @@ static JSValue jsrt_console_log(JSContext *ctx, JSValueConst this_val, int argc,
   return JS_UNDEFINED;
 }
 
-JSValue JSRT_StringFormat(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv) {
+JSValue JSRT_StringFormat(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv, bool colors) {
   JSRT_Runtime *rt = JS_GetContextOpaque(ctx);
 
   return JS_UNDEFINED;
 }
 
-void JSRT_GetJSValuePrettyString(DynBuf *s, JSContext *ctx, JSValueConst value, const char *name) {
+void JSRT_GetJSValuePrettyString(DynBuf *s, JSContext *ctx, JSValueConst value, const char *name, bool colors) {
   uint32_t tag = JS_VALUE_GET_NORM_TAG(value);
   size_t len;
   const char *str;
   switch (tag) {
+    case JS_TAG_UNDEFINED: {
+      str = JS_ToCStringLen(ctx, &len, value);
+      colors &&dbuf_putstr(s, JSRT_ColorizeFontBlack);
+      dbuf_putstr(s, str);
+      colors &&dbuf_putstr(s, JSRT_ColorizeClear);
+      JS_FreeCString(ctx, str);
+      break;
+    }
     case JS_TAG_BIG_INT:
     case JS_TAG_BIG_FLOAT:
     case JS_TAG_BIG_DECIMAL:
     case JS_TAG_INT:
     case JS_TAG_FLOAT64:
-    case JS_TAG_UNDEFINED:
     case JS_TAG_BOOL:
-    case JS_TAG_SYMBOL:
-    case JS_TAG_NULL:
+    case JS_TAG_SYMBOL: {
+      str = JS_ToCStringLen(ctx, &len, value);
+      colors &&dbuf_putstr(s, JSRT_ColorizeFontYellow);
+      dbuf_putstr(s, str);
+      colors &&dbuf_putstr(s, JSRT_ColorizeClear);
+      JS_FreeCString(ctx, str);
+      break;
+    }
+    case JS_TAG_NULL: {
+      str = JS_ToCStringLen(ctx, &len, value);
+      colors &&dbuf_putstr(s, JSRT_ColorizeFontWhiteBold);
+      dbuf_putstr(s, str);
+      colors &&dbuf_putstr(s, JSRT_ColorizeClear);
+      JS_FreeCString(ctx, str);
+      break;
+    }
     case JS_TAG_STRING: {
       str = JS_ToCStringLen(ctx, &len, value);
+      colors &&dbuf_putstr(s, JSRT_ColorizeFontGreen);
       dbuf_putstr(s, str);
+      colors &&dbuf_putstr(s, JSRT_ColorizeClear);
       JS_FreeCString(ctx, str);
       break;
     }
     case JS_TAG_OBJECT: {
       if (JS_IsFunction(ctx, value)) {
+        colors &&dbuf_putstr(s, JSRT_ColorizeFontCyan);
         dbuf_putstr(s, "[Function: ");
         JSValue n = JS_GetPropertyStr(ctx, value, "name");
         str = JS_ToCStringLen(ctx, &len, n);
@@ -78,25 +102,38 @@ void JSRT_GetJSValuePrettyString(DynBuf *s, JSContext *ctx, JSValueConst value, 
         JS_FreeCString(ctx, str);
         JS_FreeValue(ctx, n);
         dbuf_putstr(s, "]");
+        colors &&dbuf_putstr(s, JSRT_ColorizeClear);
       } else {
+        // is an array?
+        JSValue n = JS_GetPropertyStr(ctx, value, "length");
+        bool is_array = JS_VALUE_GET_NORM_TAG(n) == JS_TAG_INT;
+        JS_FreeValue(ctx, n);
+
         JSPropertyEnum *tab;
         uint32_t keys_len;
         const char *k;
         JSValue v;
-        if (name == NULL) {
-          dbuf_putstr(s, "Object { ");
+
+        if (is_array) {
+          dbuf_putstr(s, "Array [ ");
         } else {
-          dbuf_putstr(s, "Object [");
-          dbuf_putstr(s, name);
-          dbuf_putstr(s, "] { ");
+          if (name == NULL) {
+            dbuf_putstr(s, "Object { ");
+          } else {
+            dbuf_putstr(s, "Object [");
+            dbuf_putstr(s, name);
+            dbuf_putstr(s, "] { ");
+          }
         }
+
         if (JS_GetOwnPropertyNames(ctx, &tab, &keys_len, value, JS_GPN_STRING_MASK | JS_GPN_ENUM_ONLY) >= 0) {
           for (uint32_t i = 0; i < keys_len; i++) {
+            // k is an number?
             k = JS_AtomToCString(ctx, tab[i].atom);
             dbuf_putstr(s, k);
             dbuf_putstr(s, ": ");
             v = JS_GetProperty(ctx, value, tab[i].atom);
-            JSRT_GetJSValuePrettyString(s, ctx, v, k);
+            JSRT_GetJSValuePrettyString(s, ctx, v, k, colors);
             JS_FreeCString(ctx, k);
             JS_FreeValue(ctx, v);
             if (i < keys_len - 1) {
@@ -104,7 +141,12 @@ void JSRT_GetJSValuePrettyString(DynBuf *s, JSContext *ctx, JSValueConst value, 
             }
           }
         }
-        dbuf_putstr(s, " }");
+
+        if (is_array) {
+          dbuf_putstr(s, " ]");
+        } else {
+          dbuf_putstr(s, " }");
+        }
       }
     } break;
     default:

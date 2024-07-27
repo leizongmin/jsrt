@@ -1,10 +1,12 @@
 use anyhow::Result;
-use rquickjs::{qjs, Context, Runtime, Value};
+use rquickjs::{qjs, Context, Ctx, Runtime, Value};
 use std::ffi::{CStr, CString};
+use std::mem;
 use std::ptr::NonNull;
 
 /// The main JSRT runtime object
 pub struct Core {
+  #[allow(dead_code)]
   rt: Runtime,
   ctx: Context,
 }
@@ -17,6 +19,7 @@ pub enum Error {
   Exception(Exception),
 
   /// An unknown error occurred
+  #[allow(unused_variables)]
   #[error("unknown error")]
   Unknown(anyhow::Error),
 }
@@ -37,6 +40,15 @@ impl Core {
   pub fn new() -> Result<Self> {
     let rt = Runtime::new()?;
     let ctx = Context::full(&rt)?;
+
+    rt.set_memory_limit(1024 * 1024 * 1024);
+    rt.set_max_stack_size(1024 * 1024);
+
+    // let resolver = (FileResolver::default().with_path("./").with_native(),);
+    // let loader = (ScriptLoader::default(), NativeLoader::default());
+    // rt.set_loader(resolver, loader);
+    crate::builtin::init_modules(ctx.clone())?;
+
     Ok(Self { rt, ctx })
   }
 
@@ -45,7 +57,7 @@ impl Core {
   pub fn eval_anonymous<S, F>(&self, source: S, callback: F) -> Result<()>
   where
     S: Into<Vec<u8>>,
-    F: FnOnce(Value),
+    F: FnOnce(Ctx, Value) -> Result<()>,
   {
     self.eval("anonymous", source, callback)
   }
@@ -57,7 +69,7 @@ impl Core {
   pub fn eval<S, F>(&self, filename: &str, source: S, callback: F) -> Result<()>
   where
     S: Into<Vec<u8>>,
-    F: FnOnce(Value),
+    F: FnOnce(Ctx, Value) -> Result<()>,
   {
     self.ctx.with(|ctx| {
       let src = source.into();
@@ -66,18 +78,22 @@ impl Core {
       let is_module = filename.ends_with(".mjs")
         || unsafe { qjs::JS_DetectModule(src.as_ptr(), src_len as _) == 1 };
 
-      let eval_flags = if is_module {
+      let mut eval_flags = if is_module {
         qjs::JS_EVAL_TYPE_MODULE
       } else {
         qjs::JS_EVAL_TYPE_GLOBAL
       };
+      eval_flags |= qjs::JS_EVAL_FLAG_STRICT;
+      eval_flags |= qjs::JS_EVAL_FLAG_ASYNC;
+
+      let filename = str_to_c_char(filename)?;
 
       let val = unsafe {
         qjs::JS_Eval(
           self.ctx.as_raw().as_ptr(),
           src.as_ptr(),
           src_len as _,
-          filename.as_ptr() as *const i8,
+          filename,
           eval_flags as _,
         )
       };
@@ -87,12 +103,80 @@ impl Core {
         let err = Error::Exception(Exception::from_raw_context(self.ctx.as_raw())?);
         Err(err.into())
       } else {
-        callback(unsafe { Value::from_raw(ctx.clone(), val) });
+        callback(ctx.clone(), unsafe { Value::from_raw(ctx.clone(), val) })?;
         unsafe { qjs::JS_FreeValue(ctx.as_raw().as_ptr(), val) };
         Ok(())
       }
     })
   }
+
+  pub fn execute_pending_job(&self, ctx: Ctx) -> Result<bool> {
+    let mut ctx_ptr = mem::MaybeUninit::<*mut qjs::JSContext>::uninit();
+    let result = unsafe {
+      qjs::JS_ExecutePendingJob(
+        qjs::JS_GetRuntime(ctx.as_raw().as_ptr()),
+        ctx_ptr.as_mut_ptr(),
+      )
+    };
+    if result == 0 {
+      // no jobs executed
+      return Ok(false);
+    }
+    if result == 1 {
+      // single job executed
+      return Ok(true);
+    }
+    let exc = unsafe { qjs::JS_GetException(ctx.as_raw().as_ptr()) };
+    let err = Error::Exception(Exception::from_raw_context(ctx.as_raw())?);
+    unsafe { qjs::JS_FreeValue(ctx.as_raw().as_ptr(), exc) };
+    Err(err.into())
+  }
+
+  pub fn await_promise<F>(&self, ctx: Ctx, p: Value, callback: F) -> Result<()>
+  where
+    F: FnOnce(Ctx, PromiseState) -> Result<bool> + Copy,
+  {
+    loop {
+      let state = unsafe { qjs::JS_PromiseState(self.ctx.as_raw().as_ptr(), p.as_raw()) };
+      match state {
+        qjs::JSPromiseStateEnum_JS_PROMISE_FULFILLED => {
+          eprintln!("promise fulfilled");
+          let result_raw = unsafe { qjs::JS_PromiseResult(self.ctx.as_raw().as_ptr(), p.as_raw()) };
+          let result = unsafe { Value::from_raw(ctx.clone(), result_raw) };
+          unsafe { qjs::JS_FreeValue(ctx.as_raw().as_ptr(), result_raw) };
+          callback(ctx.clone(), PromiseState::Fulfilled(result))?;
+          return Ok(());
+        }
+        qjs::JSPromiseStateEnum_JS_PROMISE_REJECTED => {
+          eprintln!("promise rejected");
+          let reason_val = unsafe { qjs::JS_PromiseResult(self.ctx.as_raw().as_ptr(), p.as_raw()) };
+          let throw_val = unsafe { qjs::JS_Throw(ctx.as_raw().as_ptr(), reason_val) };
+          let err = Error::Exception(Exception::from_raw_context(self.ctx.as_raw())?);
+          unsafe { qjs::JS_FreeValue(ctx.as_raw().as_ptr(), throw_val) };
+          unsafe { qjs::JS_FreeValue(ctx.as_raw().as_ptr(), reason_val) };
+          callback(ctx.clone(), PromiseState::Rejected(err))?;
+          return Ok(());
+        }
+        qjs::JSPromiseStateEnum_JS_PROMISE_PENDING => {
+          eprintln!("promise pending");
+          if !callback(ctx.clone(), PromiseState::Pending)? {
+            return Ok(());
+          }
+        }
+        _ => {
+          callback(ctx.clone(), PromiseState::Fulfilled(p))?;
+          return Ok(());
+        }
+      }
+    }
+  }
+}
+
+#[derive(Debug)]
+pub enum PromiseState<'a> {
+  Fulfilled(Value<'a>),
+  Rejected(Error),
+  Pending,
 }
 
 impl Exception {
@@ -116,10 +200,8 @@ impl Exception {
       stack = s.to_string();
     }
 
-    unsafe {
-      qjs::JS_FreeCString(ctx.as_ptr(), exc_str as *const i8);
-      qjs::JS_FreeValue(ctx.as_ptr(), exc);
-    }
+    unsafe { qjs::JS_FreeCString(ctx.as_ptr(), exc_str as *const i8) };
+    unsafe { qjs::JS_FreeValue(ctx.as_ptr(), exc) };
 
     Ok(Self {
       name,
@@ -136,6 +218,12 @@ unsafe fn cstr_to_string(ptr: *const i8) -> std::result::Result<String, std::str
   Ok(str_slice.to_string())
 }
 
+/// Convert a Rust string to a C string
+fn str_to_c_char(s: &str) -> Result<*const i8> {
+  let c_string = CString::new(s)?;
+  Ok(c_string.as_ptr())
+}
+
 /// Get a JS property as a string
 unsafe fn get_js_property_str(
   ctx: NonNull<qjs::JSContext>,
@@ -147,10 +235,8 @@ unsafe fn get_js_property_str(
   let prop_val = unsafe { qjs::JS_GetPropertyStr(ctx.as_ptr(), val, prop_name.as_ptr()) };
   if unsafe { qjs::JS_IsString(prop_val) } {
     let prop_str = unsafe { qjs::JS_ToCString(ctx.as_ptr(), prop_val) };
-    unsafe {
-      result = Some(cstr_to_string(prop_str)?);
-      qjs::JS_FreeCString(ctx.as_ptr(), prop_str as *const i8);
-    }
+    result = unsafe { Some(cstr_to_string(prop_str)?) };
+    unsafe { qjs::JS_FreeCString(ctx.as_ptr(), prop_str as *const i8) };
   }
   unsafe { qjs::JS_FreeValue(ctx.as_ptr(), prop_val) };
   Ok(result)
@@ -164,18 +250,51 @@ mod tests {
   fn test_jsrt() {
     let rt = Core::new().unwrap();
 
-    rt.eval_anonymous("let a = 1+1+3; a", |val| {
-      println!("result: {:?}", val);
-    })
-    .unwrap();
+    for _ in 0..3 {
+      rt.eval_anonymous("await 1", |ctx, val| {
+        println!("result: {:?}", val);
+        let val = rt.await_promise(ctx, val, |ctx, state| {
+          println!("state: {:?}", state);
+          // let has_job = rt.execute_pending_job(ctx)?;
+          // println!("has_job: {:?}", has_job);
+          // Ok(has_job)
+          Ok(false)
+        })?;
+        println!("result: {:?}", val);
+        Ok(())
+      })
+      .unwrap();
+    }
 
-    match rt.eval_anonymous("throw new Error('hello');", |val| {
-      println!("result: {:?}", val);
-    }) {
-      Ok(_) => {}
-      Err(e) => {
-        println!("error: {:?}", e);
+    for _ in 0..2 {
+      match rt.eval_anonymous("throw new Error('hello');", |ctx, val| {
+        println!("result: {:?}", val);
+        let val = rt.await_promise(ctx, val, |ctx, val| {
+          println!("state: {:?}", val);
+          Ok(false)
+        })?;
+        println!("result: {:?}", val);
+        Ok(())
+      }) {
+        Ok(_) => {}
+        Err(e) => {
+          println!("error: {:?}", e);
+        }
       }
     }
+
+    // rt.eval_anonymous(
+    //   r"
+    //   import { console } from 'jsrt:console';
+    //   console.log('hello');
+    // ",
+    //   |ctx, val| {
+    //     println!("result: {:?}", val);
+    //     let val = rt.await_promise(ctx, val)?;
+    //     println!("result: {:?}", val);
+    //     Ok(())
+    //   },
+    // )
+    // .unwrap();
   }
 }

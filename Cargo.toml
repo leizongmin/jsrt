@@ -6,7 +6,7 @@ edition = "2021"
 [dependencies]
 anyhow = "1.0.86"
 clap = { version = "4.5.7", features = ["derive"] }
-rquickjs = {version = "0.6.2", features = ["full"] }
+rquickjs = {version = "0.6.2", features = ["full", "loader", "dyn-load", "rust-alloc", "futures", "macro"] }
 thiserror = "1.0.63"
 
 [profile.release]

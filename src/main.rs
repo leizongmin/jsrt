@@ -2,6 +2,7 @@ use anyhow::{anyhow, Result};
 use clap::{Parser, Subcommand};
 use std::path::PathBuf;
 
+mod builtin;
 mod jsrt;
 
 /// Welcome to jsrt, a small JavaScript runtime.
@@ -71,8 +72,9 @@ fn main() {
 fn run_script_file(script_file: String) -> Result<()> {
   let source = std::fs::read_to_string(&script_file)?;
   let core = jsrt::Core::new()?;
-  core.eval(&script_file, source.as_str(), |val| {
+  core.eval(&script_file, source.as_str(), |_ctx, val| {
     println!("result: {:?}", val);
+    Ok(())
   })?;
   Ok(())
 }

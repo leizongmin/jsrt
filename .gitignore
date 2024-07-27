@@ -56,4 +56,5 @@ dkms.conf
 /target/
 /build/
 /.vscode/
+/.idea/
 core.*

@@ -5,5 +5,11 @@ edition = "2021"
 
 [dependencies]
 anyhow = "1.0.86"
-thiserror = "1.0.63"
+clap = { version = "4.5.7", features = ["derive"] }
 rquickjs = {version = "0.6.2", features = ["full"] }
+thiserror = "1.0.63"
+
+[profile.release]
+lto = true
+codegen-units = 1
+opt-level = 'z'

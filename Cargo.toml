@@ -1,0 +1,9 @@
+[package]
+name = "jsrt"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+anyhow = "1.0.86"
+thiserror = "1.0.63"
+rquickjs = {version = "0.6.2", features = ["full"] }

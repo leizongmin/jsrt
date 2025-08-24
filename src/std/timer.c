@@ -11,9 +11,9 @@ typedef struct {
   uv_timer_t uv_timer;
   uint64_t timeout;
   bool is_interval;
-  JSValueConst this_val;
+  JSValue this_val;
   int argc;
-  JSValueConst *argv;
+  JSValue *argv;
   JSValue callback;
 } JSRT_Timer;
 
@@ -88,9 +88,16 @@ static JSValue jsrt_start_timer(bool is_interval, JSContext *ctx, JSValueConst t
   timer->timeout = (uint64_t)timeout;
   timer->is_interval = is_interval;
   timer->callback = JS_DupValue(rt->ctx, callback);
-  timer->this_val = this_val;
+  timer->this_val = JS_DupValue(rt->ctx, this_val);
   timer->argc = argc - 2;
-  timer->argv = timer->argc > 0 ? argv + 2 : NULL;
+  if (timer->argc > 0) {
+    timer->argv = malloc(timer->argc * sizeof(JSValue));
+    for (int i = 0; i < timer->argc; i++) {
+      timer->argv[i] = JS_DupValue(rt->ctx, argv[i + 2]);
+    }
+  } else {
+    timer->argv = NULL;
+  }
 
   uv_timer_init(rt->uv_loop, &timer->uv_timer);
 
@@ -124,7 +131,7 @@ static JSValue jsrt_stop_timer(JSContext *ctx, JSValueConst this_val, int argc, 
 
 void jsrt_on_timer_callback(uv_timer_t *uv_timer) {
   JSRT_Timer *timer = uv_timer->data;
-  JSValueConst this_val = timer->this_val;
+  JSValue this_val = timer->this_val;
   int argc = timer->argc;
   JSValue *argv = timer->argv;
   JSValue callback = timer->callback;
@@ -145,9 +152,23 @@ static void jsrt_timer_free(JSRT_Timer *timer) {
   JSRT_Debug("TimerFree: timer=%p id=%llu", timer, timer->uv_timer.start_id);
   int status = uv_timer_stop(&timer->uv_timer);
   JSRT_Debug("uv_timer_stop: id=%llu status=%d", timer->uv_timer.start_id, status);
+  
+  // Close the handle to allow the loop to close properly
+  uv_close((uv_handle_t*)&timer->uv_timer, NULL);
+  
   JSRT_RuntimeFreeValue(timer->rt, timer->callback);
   timer->callback = JS_UNDEFINED;
   JSRT_RuntimeFreeValue(timer->rt, timer->this_val);
   timer->this_val = JS_UNDEFINED;
+  
+  // Free the copied arguments
+  if (timer->argv) {
+    for (int i = 0; i < timer->argc; i++) {
+      JSRT_RuntimeFreeValue(timer->rt, timer->argv[i]);
+    }
+    free(timer->argv);
+    timer->argv = NULL;
+  }
+  
   free(timer);
 }

@@ -6,7 +6,7 @@ console.log('t1', t1, t1.id);
 a.v++;
 
 const t2 = setTimeout((...args) => {
-  console.log('setTimeout2', ...args2);
+  console.log('setTimeout2', ...args);
 }, 0);
 console.log('t2', t2, t2.id);
 

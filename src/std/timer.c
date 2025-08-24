@@ -1,5 +1,6 @@
 #include "timer.h"
 
+#include <inttypes.h>
 #include <quickjs.h>
 #include <stdlib.h>
 
@@ -169,7 +170,7 @@ static void jsrt_timer_close_callback(uv_handle_t *handle) {
   }
 
   JSRT_Timer *timer = (JSRT_Timer *)handle->data;
-  JSRT_Debug("TimerCloseCallback: timer=%p id=%llu", timer, timer->timer_id);
+  JSRT_Debug("TimerCloseCallback: timer=%p id=%" PRIu64, timer, timer->timer_id);
 
   JSRT_RuntimeFreeValue(timer->rt, timer->callback);
   timer->callback = JS_UNDEFINED;
@@ -194,9 +195,9 @@ static void jsrt_timer_free(JSRT_Timer *timer) {
     return;
   }
 
-  JSRT_Debug("TimerFree: timer=%p id=%llu", timer, timer->timer_id);
+  JSRT_Debug("TimerFree: timer=%p id=%" PRIu64, timer, timer->timer_id);
   int status = uv_timer_stop(&timer->uv_timer);
-  JSRT_Debug("uv_timer_stop: id=%llu status=%d", timer->timer_id, status);
+  JSRT_Debug("uv_timer_stop: id=%" PRIu64 " status=%d", timer->timer_id, status);
 
   // Close the handle with proper callback to ensure safe cleanup
   uv_close((uv_handle_t *)&timer->uv_timer, jsrt_timer_close_callback);

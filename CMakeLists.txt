@@ -41,7 +41,7 @@ option(BUILD_QJS "Build qjs and qjsc executable" OFF)
 if(BUILD_QJS)
     add_executable(qjsc deps/quickjs/qjsc.c deps/quickjs/quickjs-libc.c)
     target_compile_definitions(qjsc PRIVATE CONFIG_VERSION="${QUICKJS_VERSION}" CONFIG_BIGNUM _GNU_SOURCE)
-    target_link_libraries(qjsc quickjs dl m pthread)
+    target_link_libraries(qjsc quickjs ${JSRT_PLATFORM_LIBS})
     # build qjscalc.c
     add_custom_command(OUTPUT qjscalc.c
     COMMAND qjsc -fbignum -c -o qjscalc.c ${CMAKE_CURRENT_SOURCE_DIR}/deps/quickjs/qjscalc.js
@@ -55,11 +55,20 @@ if(BUILD_QJS)
     # build qjs
     add_executable(qjs deps/quickjs/qjs.c qjscalc.c qjsrepl.c deps/quickjs/quickjs-libc.c)
     target_compile_definitions(qjs PRIVATE CONFIG_VERSION="${QUICKJS_VERSION}" CONFIG_BIGNUM _GNU_SOURCE)
-    target_link_libraries(qjs quickjs dl m pthread)
+    target_link_libraries(qjs quickjs ${JSRT_PLATFORM_LIBS})
 endif()
 
 # build libuv
 add_subdirectory(deps/libuv)
+
+# Platform-specific libraries
+if(WIN32)
+    # Windows doesn't need dl, m is built into MSVCRT, pthread is handled by libuv
+    set(JSRT_PLATFORM_LIBS)
+else()
+    # Unix/Linux systems need these libraries
+    set(JSRT_PLATFORM_LIBS dl m pthread)
+endif()
 
 # build jsrt
 file(GLOB_RECURSE JSRT_STD_FILES "src/std/*.c")
@@ -73,9 +82,7 @@ set(JSRT_LINK_LIBS
     jsrtcore
     quickjs
     uv_a
-    dl
-    m
-    pthread)
+    ${JSRT_PLATFORM_LIBS})
 add_library(jsrtcore STATIC ${JSRT_LIB_FILES})
 add_executable(jsrt src/main.c)
 target_link_libraries(jsrt ${JSRT_LINK_LIBS})

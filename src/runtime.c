@@ -31,7 +31,8 @@ JSRT_Runtime *JSRT_RuntimeNew() {
   rt->dispose_values_length = 0;
   rt->dispose_values = malloc(rt->dispose_values_capacity * sizeof(JSValue));
 
-  rt->uv_loop = uv_default_loop();
+  rt->uv_loop = malloc(sizeof(uv_loop_t));
+  uv_loop_init(rt->uv_loop);
   rt->uv_loop->data = rt;
 
   JSRT_RuntimeSetupStdConsole(rt);
@@ -42,6 +43,7 @@ JSRT_Runtime *JSRT_RuntimeNew() {
 
 void JSRT_RuntimeFree(JSRT_Runtime *rt) {
   uv_loop_close(rt->uv_loop);
+  free(rt->uv_loop);
 
   JSRT_RuntimeFreeDisposeValues(rt);
   JSRT_RuntimeFreeExceptionValues(rt);

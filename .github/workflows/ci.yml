@@ -64,12 +64,8 @@ jobs:
         ./target/release/jsrt test_ci.js
         ./target/debug/jsrt test_ci.js
     
-    - name: Run individual JavaScript tests
-      run: |
-        ./target/release/jsrt_test_js test/test_console.js
-        ./target/release/jsrt_test_js test/test_empty.js
-        # Note: test_timer.js currently has issues, skip for now
-        # ./target/release/jsrt_test_js test/test_timer.js
+    - name: Run unit tests
+      run: make test
     
     - name: Upload build artifacts
       uses: actions/upload-artifact@v4
@@ -119,6 +115,10 @@ jobs:
         echo 'console.log("Hello from Windows CI!");' > test_ci.js
         ./target/release/jsrt.exe test_ci.js
         ./target/debug/jsrt.exe test_ci.js
+    
+    - name: Run unit tests
+      shell: msys2 {0}
+      run: make test
     
     - name: Upload Windows build artifacts
       uses: actions/upload-artifact@v4

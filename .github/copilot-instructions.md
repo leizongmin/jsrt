@@ -42,6 +42,7 @@ The project uses CMake as the primary build system with Make as a convenient wra
 
 - The project uses clang-format for consistent code formatting
 - **ALWAYS run `make clang-format` before committing changes** - this is mandatory to ensure consistent formatting
+- **ALWAYS ensure `make test` passes before committing changes** - this is mandatory to ensure code quality
 - Follow existing C coding conventions in the codebase
 
 ## Testing
@@ -65,6 +66,7 @@ The project uses CMake as the primary build system with Make as a convenient wra
 - New standard library functions should go in `src/std/`
 - Utility functions should go in `src/util/`
 - Always run tests after making changes
+- **ALWAYS ensure `make test` passes before committing changes**
 - Use debug build (`make jsrt_g`) for development and debugging
 - **MANDATORY: Run `make clang-format` before committing any code changes**
 

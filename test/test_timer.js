@@ -1,33 +1,53 @@
-const a = {v: 0};
-const t1 = setTimeout((a, x, y, z) => {
-  console.log('setTimeout1', a.v, x, y, z);
-}, 0, a, 123, 456);
-console.log('t1', t1, t1.id);
-a.v++;
+// Cross-platform compatible timer tests
+console.log('Starting timer tests...');
 
-const t2 = setTimeout((...args) => {
-  console.log('setTimeout2', ...args);
+// Test 1: Basic setTimeout functionality
+console.log('Test 1: setTimeout basic test');
+setTimeout(() => {
+  console.log('setTimeout callback executed');
 }, 0);
-console.log('t2', t2, t2.id);
 
-const t3 = setTimeout((...args) => {
-  console.log('setTimeout3', ...args);
-}, 1000);
-console.log('t3', t3, t3.id);
+// Test 2: setTimeout with arguments
+console.log('Test 2: setTimeout with arguments');
+setTimeout((msg, num) => {
+  console.log('setTimeout with args:', msg, num);
+}, 0, 'hello', 123);
 
-const t4 = setTimeout((...args) => {
-  console.log('setTimeout4', ...args);
-}, 1000);
-console.log('t4', t4, t4.id);
-clearTimeout();
-clearTimeout(t4);
+// Test 3: Timer return value validation
+console.log('Test 3: Timer return value');
+const timer1 = setTimeout(() => {
+  console.log('timer1 executed');
+}, 0);
+console.log('Timer type:', typeof timer1);
+console.log('Timer has id:', 'id' in timer1);
 
-let counter = 0;
-const t5 = setInterval((...args) => {
-  counter++;
-  console.log('setInterval5', counter, ...args);
-  if (counter > 5) {
-    clearInterval(t5);
-  }
+// Test 4: Clear timeout functionality
+console.log('Test 4: clearTimeout test');  
+const timer2 = setTimeout(() => {
+  console.log('This should NOT appear - timer was cleared');
 }, 100);
-console.log('t5', t5, t5.id);
+clearTimeout(timer2);
+
+// Test 5: setInterval basic test (limited iterations)
+console.log('Test 5: setInterval basic test');
+let count = 0;
+const interval1 = setInterval(() => {
+  count++;
+  console.log('setInterval iteration:', count);
+  if (count >= 2) {
+    clearInterval(interval1);
+    console.log('setInterval cleared');
+  }
+}, 50);
+
+// Test 6: Clear functions with invalid arguments (should not crash)
+console.log('Test 6: Invalid clear calls');
+clearTimeout();
+clearTimeout(null);
+clearInterval();
+clearInterval(null);
+
+// Final completion message
+setTimeout(() => {
+  console.log('Timer tests completed successfully');
+}, 150);

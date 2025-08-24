@@ -1,5 +1,6 @@
 #include "timer.h"
 
+#include <inttypes.h>
 #include <quickjs.h>
 #include <stdlib.h>
 
@@ -11,13 +12,18 @@ typedef struct {
   uv_timer_t uv_timer;
   uint64_t timeout;
   bool is_interval;
+  uint64_t timer_id;  // Add our own timer ID field
   JSValue this_val;
   int argc;
   JSValue *argv;
   JSValue callback;
 } JSRT_Timer;
 
+// Static counter for generating unique timer IDs
+static uint64_t next_timer_id = 1;
+
 static void jsrt_timer_free(JSRT_Timer *timer);
+static void jsrt_timer_close_callback(uv_handle_t *handle);
 
 static JSValue jsrt_set_timeout(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv);
 static JSValue jsrt_set_interval(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv);
@@ -29,7 +35,8 @@ static JSClassID timer_class_id;
 static void jsrt_timer_finalizer(JSRuntime *rt, JSValue val) {
   JSRT_Timer *timer = JS_GetOpaque(val, timer_class_id);
   if (timer) {
-    // JSRT_Debug("TimerFinalizer: timer=%p id=%d", timer, timer->uv_timer.start_id);
+    // Use our own timer_id instead of potentially problematic uv_timer.start_id
+    // JSRT_Debug("TimerFinalizer: timer=%p id=%llu", timer, timer->timer_id);
   }
 }
 static JSClassDef timer_class = {
@@ -87,6 +94,7 @@ static JSValue jsrt_start_timer(bool is_interval, JSContext *ctx, JSValueConst t
   timer->uv_timer.data = timer;
   timer->timeout = (uint64_t)timeout;
   timer->is_interval = is_interval;
+  timer->timer_id = next_timer_id++;  // Assign our own timer ID
   timer->callback = JS_DupValue(rt->ctx, callback);
   timer->this_val = JS_DupValue(rt->ctx, this_val);
   timer->argc = argc - 2;
@@ -110,7 +118,8 @@ static JSValue jsrt_start_timer(bool is_interval, JSContext *ctx, JSValueConst t
   JSValueConst result = JS_NewObjectClass(rt->ctx, timer_class_id);
   if (!JS_IsException(result)) {
     JS_SetOpaque(result, timer);
-    JS_SetPropertyStr(rt->ctx, result, "id", JS_NewInt64(rt->ctx, (int64_t)timer->uv_timer.start_id));
+    // Use our own timer_id instead of potentially problematic uv_timer.start_id
+    JS_SetPropertyStr(rt->ctx, result, "id", JS_NewInt64(rt->ctx, (int64_t)timer->timer_id));
   }
 
   return result;
@@ -131,6 +140,11 @@ static JSValue jsrt_stop_timer(JSContext *ctx, JSValueConst this_val, int argc, 
 
 void jsrt_on_timer_callback(uv_timer_t *uv_timer) {
   JSRT_Timer *timer = uv_timer->data;
+  if (!timer) {
+    JSRT_Debug("Timer callback called with NULL timer data");
+    return;
+  }
+
   JSValue this_val = timer->this_val;
   int argc = timer->argc;
   JSValue *argv = timer->argv;
@@ -148,13 +162,15 @@ void jsrt_on_timer_callback(uv_timer_t *uv_timer) {
   }
 }
 
-static void jsrt_timer_free(JSRT_Timer *timer) {
-  JSRT_Debug("TimerFree: timer=%p id=%llu", timer, timer->uv_timer.start_id);
-  int status = uv_timer_stop(&timer->uv_timer);
-  JSRT_Debug("uv_timer_stop: id=%llu status=%d", timer->uv_timer.start_id, status);
+// Close callback that safely frees the timer after handle is closed
+static void jsrt_timer_close_callback(uv_handle_t *handle) {
+  if (!handle || !handle->data) {
+    JSRT_Debug("Timer close callback called with NULL handle or data");
+    return;
+  }
 
-  // Close the handle to allow the loop to close properly
-  uv_close((uv_handle_t *)&timer->uv_timer, NULL);
+  JSRT_Timer *timer = (JSRT_Timer *)handle->data;
+  JSRT_Debug("TimerCloseCallback: timer=%p id=%" PRIu64, timer, timer->timer_id);
 
   JSRT_RuntimeFreeValue(timer->rt, timer->callback);
   timer->callback = JS_UNDEFINED;
@@ -171,4 +187,18 @@ static void jsrt_timer_free(JSRT_Timer *timer) {
   }
 
   free(timer);
+}
+
+static void jsrt_timer_free(JSRT_Timer *timer) {
+  if (!timer) {
+    JSRT_Debug("Timer free called with NULL timer");
+    return;
+  }
+
+  JSRT_Debug("TimerFree: timer=%p id=%" PRIu64, timer, timer->timer_id);
+  int status = uv_timer_stop(&timer->uv_timer);
+  JSRT_Debug("uv_timer_stop: id=%" PRIu64 " status=%d", timer->timer_id, status);
+
+  // Close the handle with proper callback to ensure safe cleanup
+  uv_close((uv_handle_t *)&timer->uv_timer, jsrt_timer_close_callback);
 }

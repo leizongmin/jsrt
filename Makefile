@@ -1,4 +1,4 @@
-cpu_count := $(shell nproc || sysctl -n hw.logicalcpu || echo 4)
+cpu_count := $(shell nproc 2>/dev/null || sysctl -n hw.logicalcpu 2>/dev/null || echo 4)
 
 .PHONY: all
 all: clang-format jsrt
@@ -6,19 +6,19 @@ all: clang-format jsrt
 .PHONY: jsrt
 jsrt:
 	mkdir -p target/release
-	cd target/release && cmake -DCMAKE_BUILD_TYPE=Release $(CURDIR) && make -j$(cpu_count)
+	cd target/release && cmake -G "Unix Makefiles" -DCMAKE_BUILD_TYPE=Release $(CURDIR) && make -j$(cpu_count)
 	ls -alh target/release/jsrt
 
 .PHONY: jsrt_g
 jsrt_g:
 	mkdir -p target/debug
-	cd target/debug && cmake -DCMAKE_BUILD_TYPE=Debug $(CURDIR) && make -j$(cpu_count)
+	cd target/debug && cmake -G "Unix Makefiles" -DCMAKE_BUILD_TYPE=Debug $(CURDIR) && make -j$(cpu_count)
 	ls -alh target/debug/jsrt
 
 .PHONY: jsrt_m
 jsrt_m:
 	mkdir -p target/asan
-	cd target/asan && cmake -DENABLE_ASAN=ON -DCMAKE_BUILD_TYPE=Debug $(CURDIR) && make -j$(cpu_count)
+	cd target/asan && cmake -G "Unix Makefiles" -DENABLE_ASAN=ON -DCMAKE_BUILD_TYPE=Debug $(CURDIR) && make -j$(cpu_count)
 	ls -alh target/asan/jsrt
 
 .PHONY: jsrt_s

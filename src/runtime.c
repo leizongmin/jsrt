@@ -15,6 +15,12 @@
 #include "util/jsutils.h"
 #include "util/path.h"
 
+static void JSRT_RuntimeCloseWalkCallback(uv_handle_t *handle, void *arg) {
+  if (!uv_is_closing(handle)) {
+    uv_close(handle, NULL);
+  }
+}
+
 JSRT_Runtime *JSRT_RuntimeNew() {
   JSRT_Runtime *rt = malloc(sizeof(JSRT_Runtime));
   rt->rt = JS_NewRuntime();
@@ -31,7 +37,12 @@ JSRT_Runtime *JSRT_RuntimeNew() {
   rt->dispose_values_length = 0;
   rt->dispose_values = malloc(rt->dispose_values_capacity * sizeof(JSValue));
 
-  rt->uv_loop = uv_default_loop();
+  rt->exception_values_capacity = 16;
+  rt->exception_values_length = 0;
+  rt->exception_values = malloc(rt->exception_values_capacity * sizeof(JSValue));
+
+  rt->uv_loop = malloc(sizeof(uv_loop_t));
+  uv_loop_init(rt->uv_loop);
   rt->uv_loop->data = rt;
 
   JSRT_RuntimeSetupStdConsole(rt);
@@ -41,7 +52,17 @@ JSRT_Runtime *JSRT_RuntimeNew() {
 }
 
 void JSRT_RuntimeFree(JSRT_Runtime *rt) {
-  uv_loop_close(rt->uv_loop);
+  // Close all handles before closing the loop
+  uv_walk(rt->uv_loop, JSRT_RuntimeCloseWalkCallback, NULL);
+
+  // Run the loop once more to process the close callbacks
+  uv_run(rt->uv_loop, UV_RUN_DEFAULT);
+
+  int result = uv_loop_close(rt->uv_loop);
+  if (result != 0) {
+    JSRT_Debug("uv_loop_close failed: %s", uv_strerror(result));
+  }
+  free(rt->uv_loop);
 
   JSRT_RuntimeFreeDisposeValues(rt);
   JSRT_RuntimeFreeExceptionValues(rt);

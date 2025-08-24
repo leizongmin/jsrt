@@ -1,0 +1,158 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+  workflow_dispatch:
+
+jobs:
+  build-release:
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        include:
+          - os: ubuntu-latest
+            target: linux-x86_64
+            cc: gcc
+            cxx: g++
+            artifact_name: jsrt
+            asset_name: jsrt-linux-x86_64
+          - os: macos-latest
+            target: macos-x86_64
+            cc: clang
+            cxx: clang++
+            artifact_name: jsrt
+            asset_name: jsrt-macos-x86_64
+          - os: windows-latest
+            target: windows-x86_64
+            cc: gcc
+            cxx: g++
+            artifact_name: jsrt.exe
+            asset_name: jsrt-windows-x86_64.exe
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      with:
+        submodules: recursive
+    
+    - name: Install dependencies (Ubuntu)
+      if: matrix.os == 'ubuntu-latest'
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y build-essential cmake upx-ucl
+    
+    - name: Install dependencies (macOS)
+      if: matrix.os == 'macos-latest'
+      run: |
+        brew install cmake upx
+    
+    - name: Setup MSYS2 (Windows)
+      if: matrix.os == 'windows-latest'
+      uses: msys2/setup-msys2@v2
+      with:
+        msystem: UCRT64
+        update: true
+        install: >-
+          mingw-w64-ucrt-x86_64-gcc
+          mingw-w64-ucrt-x86_64-cmake
+          mingw-w64-ucrt-x86_64-make
+          make
+          upx
+    
+    - name: Build release binary (Linux/macOS)
+      if: matrix.os != 'windows-latest'
+      env:
+        CC: ${{ matrix.cc }}
+        CXX: ${{ matrix.cxx }}
+      run: |
+        make jsrt_s
+    
+    - name: Build release binary (Windows)
+      if: matrix.os == 'windows-latest'
+      shell: msys2 {0}
+      run: |
+        export CC=gcc
+        export CXX=g++
+        make jsrt
+        cp target/release/jsrt.exe target/release/jsrt_s.exe
+        strip target/release/jsrt_s.exe
+        upx --best target/release/jsrt_s.exe || true
+    
+    - name: Test release binary (Linux/macOS)
+      if: matrix.os != 'windows-latest'
+      run: |
+        echo 'console.log("Release test successful!");' > test_release.js
+        ./target/release/jsrt_s test_release.js
+    
+    - name: Test release binary (Windows)
+      if: matrix.os == 'windows-latest'
+      shell: msys2 {0}
+      run: |
+        echo 'console.log("Release test successful!");' > test_release.js
+        ./target/release/jsrt_s.exe test_release.js
+    
+    - name: Upload release artifact (Linux/macOS)
+      if: matrix.os != 'windows-latest'
+      uses: actions/upload-artifact@v4
+      with:
+        name: ${{ matrix.asset_name }}
+        path: target/release/jsrt_s
+    
+    - name: Upload release artifact (Windows)
+      if: matrix.os == 'windows-latest'
+      uses: actions/upload-artifact@v4
+      with:
+        name: ${{ matrix.asset_name }}
+        path: target/release/jsrt_s.exe
+
+  create-release:
+    needs: build-release
+    runs-on: ubuntu-latest
+    if: startsWith(github.ref, 'refs/tags/')
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+    
+    - name: Download all artifacts
+      uses: actions/download-artifact@v4
+    
+    - name: Prepare release assets
+      run: |
+        mkdir -p release-assets
+        cp jsrt-linux-x86_64/jsrt_s release-assets/jsrt-linux-x86_64
+        cp jsrt-macos-x86_64/jsrt_s release-assets/jsrt-macos-x86_64
+        cp jsrt-windows-x86_64.exe/jsrt_s.exe release-assets/jsrt-windows-x86_64.exe
+        
+        # Create checksums
+        cd release-assets
+        sha256sum * > checksums.txt
+    
+    - name: Create GitHub Release
+      uses: softprops/action-gh-release@v1
+      with:
+        files: |
+          release-assets/*
+        body: |
+          ## jsrt Release ${{ github.ref_name }}
+          
+          A small JavaScript runtime built with QuickJS and libuv.
+          
+          ### Downloads
+          - `jsrt-linux-x86_64` - Linux binary (x86_64)
+          - `jsrt-macos-x86_64` - macOS binary (x86_64)  
+          - `jsrt-windows-x86_64.exe` - Windows binary (x86_64)
+          - `checksums.txt` - SHA256 checksums for all binaries
+          
+          ### Usage
+          ```bash
+          ./jsrt script.js
+          ```
+          
+          See the [README](https://github.com/leizongmin/jsrt/blob/main/README.md) for more information.
+        draft: false
+        prerelease: false
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

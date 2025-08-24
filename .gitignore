@@ -57,3 +57,7 @@ dkms.conf
 /build/
 /.vscode/
 core.*
+
+# Temporary test files
+test_*.js
+!test/test_*.js

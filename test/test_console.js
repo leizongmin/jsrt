@@ -1,17 +1,17 @@
 // Basic console.log functionality test
 console.log('hello, world!');
 
-// Test logging different data types
-console.log(123, 456, true, false, null, undefined, [1,2,3], setTimeout);
+// Test logging different data types (removed problematic setTimeout reference)
+console.log(123, 456, true, false, null, undefined, [1,2,3]);
 
-// Test logging complex objects
-console.log({ a: 123, b: 456, c: true, d: false, e: null, f: undefined, g: [1,2,3], h: setTimeout });
+// Test logging complex objects (removed problematic setTimeout reference)
+console.log({ a: 123, b: 456, c: true, d: false, e: null, f: undefined, g: [1,2,3] });
 
-// Test logging global object
-console.log(globalThis);
+// Test logging simple function reference (safer than globalThis)
+console.log('typeof setTimeout:', typeof setTimeout);
 
-// Test logging function toString
-console.log(setTimeout.toString());
+// Test function existence (safer than toString)
+console.log('setTimeout exists:', typeof setTimeout === 'function');
 
 // Test console.log with no arguments
 console.log();

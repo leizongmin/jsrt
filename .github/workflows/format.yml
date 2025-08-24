@@ -1,0 +1,52 @@
+name: Format Code
+
+on:
+  workflow_dispatch:
+  schedule:
+    # Run weekly on Sundays at 2 AM UTC
+    - cron: '0 2 * * 0'
+
+jobs:
+  format:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      with:
+        token: ${{ secrets.GITHUB_TOKEN }}
+    
+    - name: Install clang-format
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y clang-format
+    
+    - name: Format code
+      run: |
+        make clang-format
+    
+    - name: Check for changes
+      id: changes
+      run: |
+        if git diff --quiet; then
+          echo "formatted=false" >> $GITHUB_OUTPUT
+        else
+          echo "formatted=true" >> $GITHUB_OUTPUT
+        fi
+    
+    - name: Create Pull Request
+      if: steps.changes.outputs.formatted == 'true'
+      uses: peter-evans/create-pull-request@v5
+      with:
+        token: ${{ secrets.GITHUB_TOKEN }}
+        commit-message: "style: format code with clang-format"
+        title: "Automatic code formatting"
+        body: |
+          This PR was automatically created to format code using clang-format.
+          
+          Changes made:
+          - Applied clang-format to all C/C++ source files
+          
+          This ensures consistent code style across the project.
+        branch: auto-format
+        delete-branch: true

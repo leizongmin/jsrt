@@ -106,14 +106,24 @@ jobs:
         export CXX=g++
         make jsrt
     
+    - name: Build (Debug)
+      shell: msys2 {0}
+      run: |
+        export CC=gcc
+        export CXX=g++
+        make jsrt_g
+    
     - name: Run basic functionality test
       shell: msys2 {0}
       run: |
         echo 'console.log("Hello from Windows CI!");' > test_ci.js
         ./target/release/jsrt.exe test_ci.js
+        ./target/debug/jsrt.exe test_ci.js
     
     - name: Upload Windows build artifacts
       uses: actions/upload-artifact@v4
       with:
         name: jsrt-windows
-        path: target/release/jsrt.exe
+        path: |
+          target/release/jsrt.exe
+          target/debug/jsrt.exe

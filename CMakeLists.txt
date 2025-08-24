@@ -60,8 +60,6 @@ endif()
 
 # build libuv
 add_subdirectory(deps/libuv)
-add_library(myuv STATIC IMPORTED)
-set_target_properties(myuv PROPERTIES IMPORTED_LOCATION "${CMAKE_BINARY_DIR}/deps/libuv/libuv.a")
 
 # build jsrt
 file(GLOB_RECURSE JSRT_STD_FILES "src/std/*.c")
@@ -74,7 +72,7 @@ set(JSRT_LIB_FILES
 set(JSRT_LINK_LIBS
     jsrtcore
     quickjs
-    myuv
+    uv_a
     dl
     m
     pthread)

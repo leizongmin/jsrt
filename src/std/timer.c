@@ -152,15 +152,15 @@ static void jsrt_timer_free(JSRT_Timer *timer) {
   JSRT_Debug("TimerFree: timer=%p id=%llu", timer, timer->uv_timer.start_id);
   int status = uv_timer_stop(&timer->uv_timer);
   JSRT_Debug("uv_timer_stop: id=%llu status=%d", timer->uv_timer.start_id, status);
-  
+
   // Close the handle to allow the loop to close properly
-  uv_close((uv_handle_t*)&timer->uv_timer, NULL);
-  
+  uv_close((uv_handle_t *)&timer->uv_timer, NULL);
+
   JSRT_RuntimeFreeValue(timer->rt, timer->callback);
   timer->callback = JS_UNDEFINED;
   JSRT_RuntimeFreeValue(timer->rt, timer->this_val);
   timer->this_val = JS_UNDEFINED;
-  
+
   // Free the copied arguments
   if (timer->argv) {
     for (int i = 0; i < timer->argc; i++) {
@@ -169,6 +169,6 @@ static void jsrt_timer_free(JSRT_Timer *timer) {
     free(timer->argv);
     timer->argv = NULL;
   }
-  
+
   free(timer);
 }

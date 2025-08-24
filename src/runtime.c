@@ -15,7 +15,7 @@
 #include "util/jsutils.h"
 #include "util/path.h"
 
-static void JSRT_RuntimeCloseWalkCallback(uv_handle_t* handle, void* arg) {
+static void JSRT_RuntimeCloseWalkCallback(uv_handle_t *handle, void *arg) {
   if (!uv_is_closing(handle)) {
     uv_close(handle, NULL);
   }
@@ -54,10 +54,10 @@ JSRT_Runtime *JSRT_RuntimeNew() {
 void JSRT_RuntimeFree(JSRT_Runtime *rt) {
   // Close all handles before closing the loop
   uv_walk(rt->uv_loop, JSRT_RuntimeCloseWalkCallback, NULL);
-  
+
   // Run the loop once more to process the close callbacks
   uv_run(rt->uv_loop, UV_RUN_DEFAULT);
-  
+
   int result = uv_loop_close(rt->uv_loop);
   if (result != 0) {
     JSRT_Debug("uv_loop_close failed: %s", uv_strerror(result));

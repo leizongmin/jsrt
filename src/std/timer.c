@@ -22,6 +22,7 @@ typedef struct {
 static uint64_t next_timer_id = 1;
 
 static void jsrt_timer_free(JSRT_Timer *timer);
+static void jsrt_timer_close_callback(uv_handle_t *handle);
 
 static JSValue jsrt_set_timeout(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv);
 static JSValue jsrt_set_interval(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv);
@@ -138,6 +139,11 @@ static JSValue jsrt_stop_timer(JSContext *ctx, JSValueConst this_val, int argc, 
 
 void jsrt_on_timer_callback(uv_timer_t *uv_timer) {
   JSRT_Timer *timer = uv_timer->data;
+  if (!timer) {
+    JSRT_Debug("Timer callback called with NULL timer data");
+    return;
+  }
+
   JSValue this_val = timer->this_val;
   int argc = timer->argc;
   JSValue *argv = timer->argv;
@@ -155,13 +161,15 @@ void jsrt_on_timer_callback(uv_timer_t *uv_timer) {
   }
 }
 
-static void jsrt_timer_free(JSRT_Timer *timer) {
-  JSRT_Debug("TimerFree: timer=%p id=%llu", timer, timer->timer_id);
-  int status = uv_timer_stop(&timer->uv_timer);
-  JSRT_Debug("uv_timer_stop: id=%llu status=%d", timer->timer_id, status);
+// Close callback that safely frees the timer after handle is closed
+static void jsrt_timer_close_callback(uv_handle_t *handle) {
+  if (!handle || !handle->data) {
+    JSRT_Debug("Timer close callback called with NULL handle or data");
+    return;
+  }
 
-  // Close the handle to allow the loop to close properly
-  uv_close((uv_handle_t *)&timer->uv_timer, NULL);
+  JSRT_Timer *timer = (JSRT_Timer *)handle->data;
+  JSRT_Debug("TimerCloseCallback: timer=%p id=%llu", timer, timer->timer_id);
 
   JSRT_RuntimeFreeValue(timer->rt, timer->callback);
   timer->callback = JS_UNDEFINED;
@@ -178,4 +186,18 @@ static void jsrt_timer_free(JSRT_Timer *timer) {
   }
 
   free(timer);
+}
+
+static void jsrt_timer_free(JSRT_Timer *timer) {
+  if (!timer) {
+    JSRT_Debug("Timer free called with NULL timer");
+    return;
+  }
+
+  JSRT_Debug("TimerFree: timer=%p id=%llu", timer, timer->timer_id);
+  int status = uv_timer_stop(&timer->uv_timer);
+  JSRT_Debug("uv_timer_stop: id=%llu status=%d", timer->timer_id, status);
+
+  // Close the handle with proper callback to ensure safe cleanup
+  uv_close((uv_handle_t *)&timer->uv_timer, jsrt_timer_close_callback);
 }

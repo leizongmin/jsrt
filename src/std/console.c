@@ -63,8 +63,6 @@ void JSRT_GetJSValuePrettyString(DynBuf *s, JSContext *ctx, JSValueConst value, 
       break;
     }
     case JS_TAG_BIG_INT:
-    case JS_TAG_BIG_FLOAT:
-    case JS_TAG_BIG_DECIMAL:
     case JS_TAG_INT:
     case JS_TAG_FLOAT64:
     case JS_TAG_BOOL:

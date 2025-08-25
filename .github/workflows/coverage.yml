@@ -75,8 +75,8 @@ jobs:
               body: body
             });
           }
-        env:
-          COMMENT_BODY: ${{ steps.coverage.outputs.comment_body }}
+      env:
+        COMMENT_BODY: ${{ steps.coverage.outputs.comment_body }}
     
     - name: Upload coverage reports
       uses: actions/upload-artifact@v4

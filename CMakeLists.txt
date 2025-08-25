@@ -91,10 +91,10 @@ target_link_libraries(jsrt ${JSRT_LINK_LIBS})
 enable_testing()
 file(GLOB_RECURSE JSRT_TEST_LIB_FILES "test/*.c")
 add_executable(jsrt_test_js ${JSRT_TEST_LIB_FILES})
-# testing js files
-file(GLOB_RECURSE JSRT_TEST_JS_FILES "test/test_*.js")
+# testing js files - include both .js and .mjs files
+file(GLOB_RECURSE JSRT_TEST_JS_FILES "test/test_*.js" "test/test_*.mjs")
 target_link_libraries(jsrt_test_js PRIVATE ${JSRT_LINK_LIBS})
 add_test(NAME jsrt_test_js COMMAND jsrt_test_js ${JSRT_TEST_JS_FILES})
 set_tests_properties(jsrt_test_js PROPERTIES
-    CAPTURE_OUTPUT ON
-    OUTPUT_STRIP_TRAILING_WHITESPACE off)
+    WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
+    OUTPUT_ON_FAILURE ON)

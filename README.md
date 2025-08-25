@@ -77,6 +77,39 @@ Run the following command to run a JavaScript file:
 ./bin/jsrt test.js
 ```
 
+## Development Builds
+
+Different build targets are available:
+
+- `make jsrt` - Release build
+- `make jsrt_g` - Debug build
+- `make jsrt_m` - Debug build with AddressSanitizer
+- `make jsrt_cov` - Debug build with coverage instrumentation
+
+## Testing
+
+Run tests with:
+
+```bash
+make test
+```
+
+## Coverage
+
+Generate test coverage report:
+
+```bash
+make coverage
+```
+
+This will:
+1. Build the project with coverage instrumentation
+2. Run all tests
+3. Generate coverage report in `target/coverage/html/`
+4. Display overall coverage summary
+
+The coverage report shows line and function coverage for all source files in the `src/` directory.
+
 
 # License
 

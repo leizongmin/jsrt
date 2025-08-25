@@ -28,10 +28,6 @@ JSRT_Runtime *JSRT_RuntimeNew() {
   JS_SetRuntimeOpaque(rt->rt, rt);
   rt->ctx = JS_NewContext(rt->rt);
   JS_SetContextOpaque(rt->ctx, rt);
-  JS_AddIntrinsicBigFloat(rt->ctx);
-  JS_AddIntrinsicBigDecimal(rt->ctx);
-  JS_AddIntrinsicOperators(rt->ctx);
-  JS_EnableBignumExt(rt->ctx, true);
 
   rt->global = JS_GetGlobalObject(rt->ctx);
   rt->dispose_values_capacity = 16;

@@ -8,11 +8,8 @@ const char* JSRT_GetTypeofJSValue(JSContext* ctx, JSValue value) {
   uint32_t tag = JS_VALUE_GET_NORM_TAG(value);
   switch (tag) {
     case JS_TAG_BIG_INT:
+    case JS_TAG_SHORT_BIG_INT:
       return "bigint";
-    case JS_TAG_BIG_FLOAT:
-      return "bigfloat";
-    case JS_TAG_BIG_DECIMAL:
-      return "bigdecimal";
     case JS_TAG_INT:
     case JS_TAG_FLOAT64:
       return "number";

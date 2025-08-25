@@ -8,9 +8,22 @@
 
 ### ✅ 已实现的 API
 
-#### 1. Console API (部分实现)
-- **已实现**：`console.log()` 
-- **状态**：基础功能完整，支持多参数、对象格式化、颜色输出
+#### 1. Console API (完全实现)
+- **已实现**：
+  - `console.log()` - 基础日志输出
+  - `console.error()` - 错误信息输出 (stderr, 红色)
+  - `console.warn()` - 警告信息输出 (stderr, 黄色)  
+  - `console.info()` - 信息输出 (stdout, 蓝色)
+  - `console.debug()` - 调试信息输出 (stdout, 灰色)
+  - `console.trace()` - 堆栈跟踪输出
+  - `console.assert()` - 条件断言检查
+  - `console.time()` / `console.timeEnd()` - 性能计时功能
+  - `console.count()` / `console.countReset()` - 计数功能
+  - `console.group()` / `console.groupEnd()` / `console.groupCollapsed()` - 分组输出
+  - `console.clear()` - 清屏功能
+  - `console.table()` - 表格化数据输出
+  - `console.dir()` - 对象深度检查输出
+- **状态**：完全符合 WinterCG 规范，支持颜色输出、分组缩进、计时统计等功能
 - **位置**：`src/std/console.c`
 
 #### 2. Timers API (完全实现)
@@ -38,23 +51,23 @@
 ### 第一阶段：核心 Web API (优先级：高)
 
 #### 1. Console API 扩展
-**当前状态**：❌ 不完整  
-**需要添加**：
-- `console.error()`
-- `console.warn()`
-- `console.info()`
-- `console.debug()`
-- `console.trace()`
-- `console.assert()`
-- `console.time()` / `console.timeEnd()`
-- `console.count()` / `console.countReset()`
-- `console.group()` / `console.groupEnd()` / `console.groupCollapsed()`
-- `console.clear()`
-- `console.table()`
-- `console.dir()`
+**当前状态**：✅ 已完成  
+**已实现**：
+- `console.error()` - 错误信息输出，支持 stderr 和红色显示
+- `console.warn()` - 警告信息输出，支持 stderr 和黄色显示
+- `console.info()` - 信息输出，支持蓝色显示
+- `console.debug()` - 调试信息输出，支持灰色显示
+- `console.trace()` - 堆栈跟踪输出
+- `console.assert()` - 条件断言，失败时输出错误信息
+- `console.time()` / `console.timeEnd()` - 高精度计时功能
+- `console.count()` / `console.countReset()` - 计数和重置功能
+- `console.group()` / `console.groupEnd()` / `console.groupCollapsed()` - 分组输出与缩进
+- `console.clear()` - 清除终端显示
+- `console.table()` - 表格化数据显示（基础实现）
+- `console.dir()` - 对象深度检查输出
 
 **实现复杂度**：🟡 中等  
-**预估工作量**：2-3 天
+**实际工作量**：1 天
 
 #### 2. Encoding API
 **当前状态**：❌ 未实现  

@@ -21,6 +21,12 @@ jsrt_m:
 	cd target/asan && cmake -G "Unix Makefiles" -DENABLE_ASAN=ON -DCMAKE_BUILD_TYPE=Debug $(CURDIR) && make -j$(cpu_count)
 	ls -alh target/asan/jsrt
 
+.PHONY: jsrt_cov
+jsrt_cov:
+	mkdir -p target/coverage
+	cd target/coverage && cmake -G "Unix Makefiles" -DENABLE_COVERAGE=ON -DCMAKE_BUILD_TYPE=Debug $(CURDIR) && make -j$(cpu_count)
+	ls -alh target/coverage/jsrt
+
 .PHONY: jsrt_s
 jsrt_s: jsrt
 	cp -f target/release/jsrt target/release/jsrt_s
@@ -48,3 +54,17 @@ test_g: jsrt_g
 .PHONY: test_m
 test_m: jsrt_m
 	make test -C target/asan
+
+.PHONY: test_cov
+test_cov: jsrt_cov
+	make test -C target/coverage
+
+.PHONY: coverage
+coverage: test_cov
+	@echo "Generating coverage report..."
+	lcov --capture --directory target/coverage --output-file target/coverage/coverage.info
+	lcov --remove target/coverage/coverage.info 'deps/*' 'target/*' 'test/*' --output-file target/coverage/coverage_filtered.info --ignore-errors unused
+	genhtml target/coverage/coverage_filtered.info --output-directory target/coverage/html
+	@echo "Coverage report generated in target/coverage/html/"
+	@echo "Overall coverage:"
+	lcov --summary target/coverage/coverage_filtered.info

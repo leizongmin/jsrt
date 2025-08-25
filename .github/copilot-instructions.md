@@ -69,6 +69,7 @@ The project uses CMake as the primary build system with Make as a convenient wra
 - **ALWAYS ensure `make test` passes before committing changes**
 - Use debug build (`make jsrt_g`) for development and debugging
 - **MANDATORY: Run `make clang-format` before committing any code changes**
+- **MANDATORY: Do NOT create example JavaScript files in the root directory - always place them in the `examples/` directory**
 
 ## Architecture
 

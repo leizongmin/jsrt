@@ -9,6 +9,7 @@
 #include <uv.h>
 
 #include "std/console.h"
+#include "std/module.h"
 #include "std/timer.h"
 #include "util/debug.h"
 #include "util/file.h"
@@ -47,6 +48,8 @@ JSRT_Runtime *JSRT_RuntimeNew() {
 
   JSRT_RuntimeSetupStdConsole(rt);
   JSRT_RuntimeSetupStdTimer(rt);
+  JSRT_StdModuleInit(rt);
+  JSRT_StdCommonJSInit(rt);
 
   return rt;
 }
@@ -66,6 +69,9 @@ void JSRT_RuntimeFree(JSRT_Runtime *rt) {
 
   JSRT_RuntimeFreeDisposeValues(rt);
   JSRT_RuntimeFreeExceptionValues(rt);
+
+  // Cleanup module system
+  JSRT_StdModuleCleanup(rt->ctx);
 
   JSRT_RuntimeFreeValue(rt, rt->global);
   rt->global = JS_UNDEFINED;

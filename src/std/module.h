@@ -17,7 +17,7 @@ char *JSRT_ModuleNormalize(JSContext *ctx, const char *module_base_name, const c
 // Initialize CommonJS support (require, module.exports, exports)
 void JSRT_StdCommonJSInit(JSRT_Runtime *rt);
 
-// Cleanup module system
-void JSRT_StdModuleCleanup();
+// Cleanup module system with context
+void JSRT_StdModuleCleanup(JSContext *ctx);
 
 #endif

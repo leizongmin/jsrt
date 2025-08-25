@@ -174,9 +174,6 @@ static JSValue js_require(JSContext *ctx, JSValueConst this_val, int argc, JSVal
     JSRT_Debug("js_require: freed resolved_path, using final_path='%s'", final_path);
   }
 
-  // TODO: Implement proper per-context module caching
-  // For now, skip caching to avoid memory issues
-  /*
   // Check cache first
   JSValue cached = get_cached_module(ctx, final_path);
   if (!JS_IsUndefined(cached)) {
@@ -184,7 +181,6 @@ static JSValue js_require(JSContext *ctx, JSValueConst this_val, int argc, JSVal
     free(final_path);
     return cached;
   }
-  */
 
   // Load and evaluate the file
   JSRT_ReadFileResult file_result = JSRT_ReadFile(final_path);
@@ -252,8 +248,8 @@ static JSValue js_require(JSContext *ctx, JSValueConst this_val, int argc, JSVal
   JS_FreeValue(ctx, module);
   JS_FreeValue(ctx, exports);
 
-  // TODO: Cache the module properly
-  // cache_module(ctx, final_path, module_exports);
+  // Cache the module for future use
+  cache_module(ctx, final_path, module_exports);
 
   JS_FreeCString(ctx, module_name);
   free(final_path);
@@ -275,11 +271,13 @@ void JSRT_StdCommonJSInit(JSRT_Runtime *rt) {
 }
 
 // Module cache cleanup function
-void JSRT_StdModuleCleanup() {
+void JSRT_StdModuleCleanup(JSContext *ctx) {
   if (module_cache) {
     for (size_t i = 0; i < module_cache_size; i++) {
       free(module_cache[i].name);
-      // Note: JSValue objects should be freed by their context, not here
+      if (ctx) {
+        JS_FreeValue(ctx, module_cache[i].exports);
+      }
     }
     free(module_cache);
     module_cache = NULL;

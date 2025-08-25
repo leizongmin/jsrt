@@ -70,7 +70,8 @@ static char *try_extensions(const char *base_path) {
 }
 
 char *JSRT_ModuleNormalize(JSContext *ctx, const char *module_base_name, const char *module_name, void *opaque) {
-  JSRT_Debug("JSRT_ModuleNormalize: module_name='%s', module_base_name='%s'", module_name, module_base_name ? module_base_name : "null");
+  JSRT_Debug("JSRT_ModuleNormalize: module_name='%s', module_base_name='%s'", module_name,
+             module_base_name ? module_base_name : "null");
 
   // module_name is what we want to import, module_base_name is the importing module
   char *resolved_path = resolve_module_path(module_name, module_base_name);
@@ -92,15 +93,16 @@ JSModuleDef *JSRT_ModuleLoader(JSContext *ctx, const char *module_name, void *op
   // Load the file
   JSRT_ReadFileResult file_result = JSRT_ReadFile(module_name);
   if (file_result.error != JSRT_READ_FILE_OK) {
-    JS_ThrowReferenceError(ctx, "could not load module filename '%s': %s", module_name, JSRT_ReadFileErrorToString(file_result.error));
+    JS_ThrowReferenceError(ctx, "could not load module filename '%s': %s", module_name,
+                           JSRT_ReadFileErrorToString(file_result.error));
     JSRT_ReadFileResultFree(&file_result);
     return NULL;
   }
 
   // Always compile as ES module - the module loader is only for ES modules
-  JSValue func_val = JS_Eval(ctx, file_result.data, file_result.size, module_name, 
-                             JS_EVAL_TYPE_MODULE | JS_EVAL_FLAG_COMPILE_ONLY);
-  
+  JSValue func_val =
+      JS_Eval(ctx, file_result.data, file_result.size, module_name, JS_EVAL_TYPE_MODULE | JS_EVAL_FLAG_COMPILE_ONLY);
+
   JSRT_ReadFileResultFree(&file_result);
 
   if (JS_IsException(func_val)) {
@@ -140,7 +142,7 @@ static void cache_module(JSContext *ctx, const char *name, JSValue exports) {
     module_cache_capacity = module_cache_capacity == 0 ? 16 : module_cache_capacity * 2;
     module_cache = realloc(module_cache, module_cache_capacity * sizeof(RequireModuleCache));
   }
-  
+
   module_cache[module_cache_size].name = strdup(name);
   module_cache[module_cache_size].exports = JS_DupValue(ctx, exports);
   module_cache_size++;
@@ -163,7 +165,7 @@ static JSValue js_require(JSContext *ctx, JSValueConst this_val, int argc, JSVal
   JSRT_Debug("js_require: resolved_path='%s'", resolved_path);
   char *final_path = try_extensions(resolved_path);
   JSRT_Debug("js_require: after try_extensions, final_path='%s'", final_path ? final_path : "NULL");
-  
+
   if (!final_path) {
     final_path = resolved_path;
     JSRT_Debug("js_require: using resolved_path as final_path='%s'", final_path);
@@ -201,14 +203,13 @@ static JSValue js_require(JSContext *ctx, JSValueConst this_val, int argc, JSVal
   // Create a wrapper function to provide CommonJS environment
   size_t wrapper_size = file_result.size + 512;
   char *wrapper_code = malloc(wrapper_size);
-  snprintf(wrapper_code, wrapper_size,
-           "(function(exports, require, module, __filename, __dirname) {\n%s\n})",
+  snprintf(wrapper_code, wrapper_size, "(function(exports, require, module, __filename, __dirname) {\n%s\n})",
            file_result.data);
 
   // Evaluate the wrapper function
   JSValue func = JS_Eval(ctx, wrapper_code, strlen(wrapper_code), final_path, JS_EVAL_TYPE_GLOBAL);
   free(wrapper_code);
-  
+
   if (JS_IsException(func)) {
     JSRT_ReadFileResultFree(&file_result);
     JS_FreeCString(ctx, module_name);
@@ -222,11 +223,8 @@ static JSValue js_require(JSContext *ctx, JSValueConst this_val, int argc, JSVal
   JSValue global = JS_GetGlobalObject(ctx);
   JSValue require_func = JS_GetPropertyStr(ctx, global, "require");
   JSValue args[5] = {
-    JS_DupValue(ctx, exports),
-    require_func,
-    JS_DupValue(ctx, module),
-    JS_NewString(ctx, final_path),
-    JS_NewString(ctx, ".")  // Simple __dirname
+      JS_DupValue(ctx, exports), require_func, JS_DupValue(ctx, module), JS_NewString(ctx, final_path),
+      JS_NewString(ctx, ".")  // Simple __dirname
   };
 
   JSValue result = JS_Call(ctx, func, global, 5, args);
@@ -270,7 +268,7 @@ void JSRT_StdModuleInit(JSRT_Runtime *rt) {
 
 void JSRT_StdCommonJSInit(JSRT_Runtime *rt) {
   JSRT_Debug("JSRT_StdCommonJSInit: initializing CommonJS support");
-  
+
   JSValue global = JS_GetGlobalObject(rt->ctx);
   JS_SetPropertyStr(rt->ctx, global, "require", JS_NewCFunction(rt->ctx, js_require, "require", 1));
   JS_FreeValue(rt->ctx, global);

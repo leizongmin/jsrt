@@ -9,6 +9,7 @@
 #include <uv.h>
 
 #include "std/console.h"
+#include "std/module.h"
 #include "std/timer.h"
 #include "util/debug.h"
 #include "util/file.h"
@@ -47,6 +48,8 @@ JSRT_Runtime *JSRT_RuntimeNew() {
 
   JSRT_RuntimeSetupStdConsole(rt);
   JSRT_RuntimeSetupStdTimer(rt);
+  JSRT_StdModuleInit(rt);
+  JSRT_StdCommonJSInit(rt);
 
   return rt;
 }

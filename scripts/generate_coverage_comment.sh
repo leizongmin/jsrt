@@ -40,7 +40,7 @@ lcov --list target/coverage/coverage_filtered.info 2>/dev/null | grep -A 100 "sr
         [ -z "$line_percent" ] && line_percent="0.0%"
         [ -z "$func_percent" ] && func_percent="0.0%"
         
-        echo "| \`src/$filename\` | $line_percent | $func_percent |"
+        echo "| **src/$filename** | $line_percent | $func_percent |"
     fi
 done
 

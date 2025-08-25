@@ -160,14 +160,21 @@ static JSValue js_require(JSContext *ctx, JSValueConst this_val, int argc, JSVal
 
   // Resolve the module path
   char *resolved_path = resolve_module_path(module_name, NULL);
+  JSRT_Debug("js_require: resolved_path='%s'", resolved_path);
   char *final_path = try_extensions(resolved_path);
+  JSRT_Debug("js_require: after try_extensions, final_path='%s'", final_path ? final_path : "NULL");
   
   if (!final_path) {
     final_path = resolved_path;
+    JSRT_Debug("js_require: using resolved_path as final_path='%s'", final_path);
   } else {
     free(resolved_path);
+    JSRT_Debug("js_require: freed resolved_path, using final_path='%s'", final_path);
   }
 
+  // TODO: Implement proper per-context module caching
+  // For now, skip caching to avoid memory issues
+  /*
   // Check cache first
   JSValue cached = get_cached_module(ctx, final_path);
   if (!JS_IsUndefined(cached)) {
@@ -175,6 +182,7 @@ static JSValue js_require(JSContext *ctx, JSValueConst this_val, int argc, JSVal
     free(final_path);
     return cached;
   }
+  */
 
   // Load and evaluate the file
   JSRT_ReadFileResult file_result = JSRT_ReadFile(final_path);
@@ -246,8 +254,8 @@ static JSValue js_require(JSContext *ctx, JSValueConst this_val, int argc, JSVal
   JS_FreeValue(ctx, module);
   JS_FreeValue(ctx, exports);
 
-  // Cache the module
-  cache_module(ctx, final_path, module_exports);
+  // TODO: Cache the module properly
+  // cache_module(ctx, final_path, module_exports);
 
   JS_FreeCString(ctx, module_name);
   free(final_path);
@@ -266,4 +274,18 @@ void JSRT_StdCommonJSInit(JSRT_Runtime *rt) {
   JSValue global = JS_GetGlobalObject(rt->ctx);
   JS_SetPropertyStr(rt->ctx, global, "require", JS_NewCFunction(rt->ctx, js_require, "require", 1));
   JS_FreeValue(rt->ctx, global);
+}
+
+// Module cache cleanup function
+void JSRT_StdModuleCleanup() {
+  if (module_cache) {
+    for (size_t i = 0; i < module_cache_size; i++) {
+      free(module_cache[i].name);
+      // Note: JSValue objects should be freed by their context, not here
+    }
+    free(module_cache);
+    module_cache = NULL;
+    module_cache_size = 0;
+    module_cache_capacity = 0;
+  }
 }

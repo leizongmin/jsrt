@@ -69,6 +69,9 @@ void JSRT_RuntimeFree(JSRT_Runtime *rt) {
 
   JSRT_RuntimeFreeDisposeValues(rt);
   JSRT_RuntimeFreeExceptionValues(rt);
+  
+  // Cleanup module system
+  JSRT_StdModuleCleanup();
 
   JSRT_RuntimeFreeValue(rt, rt->global);
   rt->global = JS_UNDEFINED;

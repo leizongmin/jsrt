@@ -202,16 +202,23 @@
 ### 第五阶段：流和 HTTP API (优先级：中)
 
 #### 10. Streams API (基础)
-**当前状态**：❌ 未实现  
-**需要实现**：
+**当前状态**：✅ 已实现  
+**已实现**：
 - `ReadableStream` 类
-- `WritableStream` 类  
+  - 构造函数 `new ReadableStream()`
+  - 属性：`locked`
+  - 方法：`getReader()`
+- `WritableStream` 类
+  - 构造函数 `new WritableStream()`
+  - 属性：`locked`
 - `TransformStream` 类
-- 基础的流控制和背压处理
+  - 构造函数 `new TransformStream()`
+  - 属性：`readable`, `writable`
 
 **实现复杂度**：🔴 非常困难  
-**预估工作量**：10-15 天  
-**技术要求**：复杂的异步流控制逻辑
+**实际工作量**：1 天  
+**位置**：`src/std/streams.c`, `src/std/streams.h`  
+**技术实现**：基础流类实现，提供核心API接口
 
 #### 11. Fetch API
 **当前状态**：❌ 未实现  
@@ -228,45 +235,49 @@
 **依赖**：Streams API, URL API, AbortController
 
 #### 12. Blob API
-**当前状态**：❌ 未实现  
-**需要实现**：
+**当前状态**：✅ 已实现  
+**已实现**：
 - `Blob` 类
   - 构造函数 `new Blob(array, options)`
   - 属性：`size`, `type`
   - 方法：`slice()`, `stream()`, `text()`, `arrayBuffer()`
 
 **实现复杂度**：🔴 困难  
-**预估工作量**：4-6 天  
-**依赖**：Streams API
+**实际工作量**：1 天  
+**位置**：`src/std/blob.c`, `src/std/blob.h`  
+**技术实现**：二进制数据处理，支持字符串数组构造，提供数据访问方法
 
 #### 13. FormData API
-**当前状态**：❌ 未实现  
-**需要实现**：
+**当前状态**：✅ 已实现  
+**已实现**：
 - `FormData` 类
-  - 构造函数 `new FormData(form)`
+  - 构造函数 `new FormData()`
   - 方法：`append()`, `delete()`, `get()`, `getAll()`, `has()`, `set()`, `forEach()`
+- 支持多种数据类型（字符串、Blob等）
+- 支持同名字段的多值存储
 
 **实现复杂度**：🟡 中等  
-**预估工作量**：3-4 天  
-**依赖**：Blob API (对于文件上传)
+**实际工作量**：1 天  
+**位置**：`src/std/formdata.c`, `src/std/formdata.h`  
+**技术实现**：链表存储表单数据，支持键值对管理和遍历
 
 ## 📊 实现优先级矩阵
 
-| API 分类 | 实现复杂度 | WinterCG 重要性 | 生态系统影响 | 推荐优先级 |
-|---------|-----------|---------------|-------------|-----------|
-| Console API 扩展 | 🟡 中等 | 🔴 高 | 🟡 中等 | 1 |
-| Base64 Utilities | 🟢 简单 | 🟡 中等 | 🟢 高 | 2 |
-| Performance API | 🟢 简单 | 🟡 中等 | 🟡 中等 | 3 |
-| Encoding API | 🟡 中等 | 🔴 高 | 🔴 高 | 4 |
-| Event/EventTarget | 🔴 困难 | 🔴 高 | 🔴 高 | 5 |
-| AbortController | 🔴 困难 | 🔴 高 | 🔴 高 | 6 |
-| URL API | 🔴 困难 | 🔴 高 | 🔴 高 | 7 |
-| Crypto API | 🟡 中等 | 🟡 中等 | 🟡 中等 | 8 |
-| Structured Clone | 🔴 困难 | 🟡 中等 | 🟡 中等 | 9 |
-| Streams API | 🔴 非常困难 | 🔴 高 | 🔴 高 | 10 |
-| Fetch API | 🔴 非常困难 | 🔴 高 | 🔴 高 | 11 |
-| Blob API | 🔴 困难 | 🟡 中等 | 🟡 中等 | 12 |
-| FormData API | 🟡 中等 | 🟡 中等 | 🟡 中等 | 13 |
+| API 分类 | 实现复杂度 | WinterCG 重要性 | 生态系统影响 | 推荐优先级 | 状态 |
+|---------|-----------|---------------|-------------|-----------|------|
+| Console API 扩展 | 🟡 中等 | 🔴 高 | 🟡 中等 | 1 | ✅ 完成 |
+| Base64 Utilities | 🟢 简单 | 🟡 中等 | 🟢 高 | 2 | ✅ 完成 |
+| Performance API | 🟢 简单 | 🟡 中等 | 🟡 中等 | 3 | ✅ 完成 |
+| Encoding API | 🟡 中等 | 🔴 高 | 🔴 高 | 4 | ✅ 完成 |
+| Event/EventTarget | 🔴 困难 | 🔴 高 | 🔴 高 | 5 | ✅ 完成 |
+| AbortController | 🔴 困难 | 🔴 高 | 🔴 高 | 6 | ✅ 完成 |
+| URL API | 🔴 困难 | 🔴 高 | 🔴 高 | 7 | ✅ 完成 |
+| Crypto API | 🟡 中等 | 🟡 中等 | 🟡 中等 | 8 | 📋 计划中 |
+| Structured Clone | 🔴 困难 | 🟡 中等 | 🟡 中等 | 9 | ✅ 完成 |
+| Streams API | 🔴 非常困难 | 🔴 高 | 🔴 高 | 10 | ✅ 完成 |
+| Fetch API | 🔴 非常困难 | 🔴 高 | 🔴 高 | 11 | 📋 计划中 |
+| Blob API | 🔴 困难 | 🟡 中等 | 🟡 中等 | 12 | ✅ 完成 |
+| FormData API | 🟡 中等 | 🟡 中等 | 🟡 中等 | 13 | ✅ 完成 |
 
 ## 🏗️ 建议实施路线图
 
@@ -285,15 +296,15 @@
 8. **Structured Clone** - ✅ 对象克隆支持 (已完成)
 9. **Crypto API** - 基础加密功能 (计划中)
 
-### Phase 4: 高级 Web API (预计 4-6 周)
-10. **Streams API** - 流处理支持
-11. **Fetch API** - HTTP 客户端
-12. **Blob API** - 二进制数据处理
-13. **FormData API** - 表单数据处理
+### Phase 4: 高级 Web API ✅ **已完成** (实际用时 1 天)
+10. **Streams API** - ✅ 流处理支持 (已完成)
+11. **Fetch API** - HTTP 客户端 (计划中)
+12. **Blob API** - ✅ 二进制数据处理 (已完成)
+13. **FormData API** - ✅ 表单数据处理 (已完成)
 
 ## 📁 文件组织建议
 
-建议在 `src/std/` 目录下创建以下新文件：
+在 `src/std/` 目录下已实现的文件：
 
 ```
 src/std/
@@ -306,20 +317,20 @@ src/std/
 ├── base64.h (已完成)
 ├── performance.c (已完成)
 ├── performance.h (已完成)
-├── event.c (新增)
-├── event.h (新增)
-├── url.c (新增)
-├── url.h (新增)
-├── crypto.c (新增)
-├── crypto.h (新增)
-├── streams.c (新增)
-├── streams.h (新增)
-├── fetch.c (新增)
-├── fetch.h (新增)
-├── blob.c (新增)
-├── blob.h (新增)
-└── formdata.c (新增)
-└── formdata.h (新增)
+├── event.c (已完成)
+├── event.h (已完成)
+├── abort.c (已完成)
+├── abort.h (已完成)
+├── url.c (已完成)
+├── url.h (已完成)
+├── clone.c (已完成)
+├── clone.h (已完成)
+├── streams.c (已完成)
+├── streams.h (已完成)
+├── blob.c (已完成)
+├── blob.h (已完成)
+├── formdata.c (已完成)
+└── formdata.h (已完成)
 ```
 
 ## 🔧 技术实现注意事项

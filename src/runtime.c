@@ -16,6 +16,7 @@
 #include "std/module.h"
 #include "std/performance.h"
 #include "std/timer.h"
+#include "std/url.h"
 #include "util/debug.h"
 #include "util/file.h"
 #include "util/jsutils.h"
@@ -54,6 +55,7 @@ JSRT_Runtime *JSRT_RuntimeNew() {
   JSRT_RuntimeSetupStdPerformance(rt);
   JSRT_RuntimeSetupStdEvent(rt);
   JSRT_RuntimeSetupStdAbort(rt);
+  JSRT_RuntimeSetupStdURL(rt);
   JSRT_StdModuleInit(rt);
   JSRT_StdCommonJSInit(rt);
 

@@ -20,7 +20,6 @@ typedef struct {
 
 static void JSRT_TextEncoderFinalize(JSRuntime *rt, JSValue val) {
   JSRT_TextEncoder *encoder = JS_GetOpaque(val, JSRT_TextEncoderClassID);
-  JSRT_Debug("TextEncoder finalizer called, encoder=%p", encoder);
   if (encoder) {
     free(encoder);
   }
@@ -122,6 +121,7 @@ static JSValue JSRT_TextEncoderEncodeInto(JSContext *ctx, JSValueConst this_val,
   uint8_t *buffer = JS_GetArrayBuffer(ctx, &byte_length, array_buffer);
   if (!buffer) {
     JS_FreeCString(ctx, input);
+    JS_FreeValue(ctx, array_buffer);
     return JS_EXCEPTION;
   }
 
@@ -130,6 +130,7 @@ static JSValue JSRT_TextEncoderEncodeInto(JSContext *ctx, JSValueConst this_val,
   memcpy(buffer + byte_offset, input, bytes_written);
 
   JS_FreeCString(ctx, input);
+  JS_FreeValue(ctx, array_buffer);
 
   // Return result object with read and written properties
   JSValue result = JS_NewObject(ctx);
@@ -148,7 +149,6 @@ typedef struct {
 
 static void JSRT_TextDecoderFinalize(JSRuntime *rt, JSValue val) {
   JSRT_TextDecoder *decoder = JS_GetOpaque(val, JSRT_TextDecoderClassID);
-  JSRT_Debug("TextDecoder finalizer called, decoder=%p", decoder);
   if (decoder) {
     free(decoder);
   }

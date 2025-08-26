@@ -8,6 +8,7 @@
 #include <string.h>
 #include <uv.h>
 
+#include "std/base64.h"
 #include "std/console.h"
 #include "std/encoding.h"
 #include "std/module.h"
@@ -46,6 +47,7 @@ JSRT_Runtime *JSRT_RuntimeNew() {
   JSRT_RuntimeSetupStdConsole(rt);
   JSRT_RuntimeSetupStdTimer(rt);
   JSRT_RuntimeSetupStdEncoding(rt);
+  JSRT_RuntimeSetupStdBase64(rt);
   JSRT_StdModuleInit(rt);
   JSRT_StdCommonJSInit(rt);
 

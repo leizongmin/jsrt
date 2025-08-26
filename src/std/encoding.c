@@ -9,13 +9,18 @@
 #include "../util/dbuf.h"
 #include "../util/debug.h"
 
+// Forward declare class IDs so they can be used in finalizers
+static JSClassID JSRT_TextEncoderClassID;
+static JSClassID JSRT_TextDecoderClassID;
+
 // TextEncoder implementation
 typedef struct {
   const char *encoding;
 } JSRT_TextEncoder;
 
 static void JSRT_TextEncoderFinalize(JSRuntime *rt, JSValue val) {
-  JSRT_TextEncoder *encoder = JS_GetOpaque(val, 0);
+  JSRT_TextEncoder *encoder = JS_GetOpaque(val, JSRT_TextEncoderClassID);
+  JSRT_Debug("TextEncoder finalizer called, encoder=%p", encoder);
   if (encoder) {
     free(encoder);
   }
@@ -25,8 +30,6 @@ static JSClassDef JSRT_TextEncoderClass = {
     .class_name = "TextEncoder",
     .finalizer = JSRT_TextEncoderFinalize,
 };
-
-static JSClassID JSRT_TextEncoderClassID;
 
 static JSValue JSRT_TextEncoderConstructor(JSContext *ctx, JSValueConst new_target, int argc, JSValueConst *argv) {
   JSValue obj;
@@ -76,9 +79,11 @@ static JSValue JSRT_TextEncoderEncode(JSContext *ctx, JSValueConst this_val, int
     return JS_EXCEPTION;
   }
 
-  JSValue uint8_array_ctor = JS_GetPropertyStr(ctx, JS_GetGlobalObject(ctx), "Uint8Array");
+  JSValue global = JS_GetGlobalObject(ctx);
+  JSValue uint8_array_ctor = JS_GetPropertyStr(ctx, global, "Uint8Array");
   JSValue uint8_array = JS_CallConstructor(ctx, uint8_array_ctor, 1, &array_buffer);
   JS_FreeValue(ctx, uint8_array_ctor);
+  JS_FreeValue(ctx, global);
   JS_FreeValue(ctx, array_buffer);
   JS_FreeCString(ctx, input);
 
@@ -142,7 +147,8 @@ typedef struct {
 } JSRT_TextDecoder;
 
 static void JSRT_TextDecoderFinalize(JSRuntime *rt, JSValue val) {
-  JSRT_TextDecoder *decoder = JS_GetOpaque(val, 0);
+  JSRT_TextDecoder *decoder = JS_GetOpaque(val, JSRT_TextDecoderClassID);
+  JSRT_Debug("TextDecoder finalizer called, decoder=%p", decoder);
   if (decoder) {
     free(decoder);
   }
@@ -152,8 +158,6 @@ static JSClassDef JSRT_TextDecoderClass = {
     .class_name = "TextDecoder",
     .finalizer = JSRT_TextDecoderFinalize,
 };
-
-static JSClassID JSRT_TextDecoderClassID;
 
 static JSValue JSRT_TextDecoderConstructor(JSContext *ctx, JSValueConst new_target, int argc, JSValueConst *argv) {
   JSValue obj;

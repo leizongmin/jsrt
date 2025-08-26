@@ -15,6 +15,7 @@
 #include "std/console.h"
 #include "std/encoding.h"
 #include "std/event.h"
+#include "std/fetch.h"
 #include "std/formdata.h"
 #include "std/module.h"
 #include "std/performance.h"
@@ -64,6 +65,7 @@ JSRT_Runtime *JSRT_RuntimeNew() {
   JSRT_RuntimeSetupStdStreams(rt);
   JSRT_RuntimeSetupStdBlob(rt);
   JSRT_RuntimeSetupStdFormData(rt);
+  JSRT_RuntimeSetupStdFetch(rt);
   JSRT_StdModuleInit(rt);
   JSRT_StdCommonJSInit(rt);
 

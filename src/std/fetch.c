@@ -606,7 +606,7 @@ static JSRT_Response *JSRT_FetchParseHttpResponse(const char *response_data, siz
 
 static void JSRT_FetchOnGetAddrInfo(uv_getaddrinfo_t *req, int status, struct addrinfo *res) {
   JSRT_FetchContext *ctx = (JSRT_FetchContext *)req->data;
-  
+
   // Safety check - ensure runtime context is still valid
   if (!ctx || !ctx->rt || !ctx->rt->ctx) {
     if (ctx) JSRT_FetchContextFree(ctx);
@@ -723,13 +723,13 @@ static void JSRT_FetchOnWrite(uv_write_t *req, int status) {
 
   if (status != 0) {
     JSRT_FetchContext *ctx = (JSRT_FetchContext *)req->handle->data;
-    
+
     // Safety check - ensure runtime context is still valid
     if (!ctx || !ctx->rt || !ctx->rt->ctx) {
       if (ctx) JSRT_FetchContextFree(ctx);
       return;
     }
-    
+
     JSValue error = JS_NewError(ctx->rt->ctx);
     char error_msg[256];
     snprintf(error_msg, sizeof(error_msg), "Write failed: %s", uv_strerror(status));
@@ -752,7 +752,7 @@ static void JSRT_FetchOnRead(uv_stream_t *stream, ssize_t nread, const uv_buf_t 
   // Safety check - ensure runtime context is still valid
   if (!ctx || !ctx->rt || !ctx->rt->ctx) {
     if (ctx) {
-      uv_close((uv_handle_t*)&ctx->tcp_handle, JSRT_FetchOnClose);
+      uv_close((uv_handle_t *)&ctx->tcp_handle, JSRT_FetchOnClose);
     }
     if (buf->base) free(buf->base);
     return;

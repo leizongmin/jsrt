@@ -1,14 +1,12 @@
 #include "fetch.h"
 
 #include <ctype.h>
-#include <netinet/in.h>
 #include <quickjs.h>
 #include <stdbool.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <sys/socket.h>
 #include <uv.h>
 
 #include "../util/debug.h"
@@ -415,8 +413,8 @@ static JSValue JSRT_Fetch(JSContext *ctx, JSValueConst this_val, int argc, JSVal
 
   struct addrinfo hints;
   memset(&hints, 0, sizeof(hints));
-  hints.ai_family = AF_INET;
-  hints.ai_socktype = SOCK_STREAM;
+  hints.ai_family = 2;    // AF_INET equivalent - IPv4
+  hints.ai_socktype = 1;  // SOCK_STREAM equivalent - TCP
 
   char port_str[16];
   snprintf(port_str, sizeof(port_str), "%d", fetch_ctx->port);

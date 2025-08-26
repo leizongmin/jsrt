@@ -303,6 +303,37 @@ static JSValue JSRT_ResponseGetOk(JSContext *ctx, JSValueConst this_val, int arg
   return JS_NewBool(ctx, response->ok);
 }
 
+static JSValue JSRT_ResponseText(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv) {
+  JSRT_Response *response = JS_GetOpaque2(ctx, this_val, JSRT_ResponseClassID);
+  if (!response) {
+    return JS_EXCEPTION;
+  }
+
+  // For now, just return the body as is if it's a string
+  return JS_DupValue(ctx, response->body);
+}
+
+static JSValue JSRT_ResponseJson(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv) {
+  JSRT_Response *response = JS_GetOpaque2(ctx, this_val, JSRT_ResponseClassID);
+  if (!response) {
+    return JS_EXCEPTION;
+  }
+
+  // For now, just parse the body as JSON
+  if (JS_IsString(response->body)) {
+    const char *json_str = JS_ToCString(ctx, response->body);
+    if (!json_str) {
+      return JS_EXCEPTION;
+    }
+
+    JSValue result = JS_ParseJSON(ctx, json_str, strlen(json_str), "<response>");
+    JS_FreeCString(ctx, json_str);
+    return result;
+  }
+
+  return JS_UNDEFINED;
+}
+
 // Basic fetch function implementation (simplified for initial version)
 static JSValue JSRT_Fetch(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv) {
   if (argc < 1) {
@@ -322,8 +353,19 @@ static JSValue JSRT_Fetch(JSContext *ctx, JSValueConst this_val, int argc, JSVal
   response->status = 200;
   response->status_text = strdup("OK");
   response->headers = JSRT_HeadersNew();
-  response->body = JS_NewString(ctx, "Hello World");  // Placeholder body
+
+  // Add some test response body based on URL
+  if (strstr(input, "json")) {
+    response->body = JS_NewString(ctx, "{\"message\": \"Hello from jsrt fetch\", \"status\": \"ok\"}");
+  } else {
+    response->body = JS_NewString(ctx, "Hello World from jsrt fetch");
+  }
+
   response->ok = true;
+
+  // Add some default response headers
+  JSRT_HeadersSet(response->headers, "content-type", strstr(input, "json") ? "application/json" : "text/plain");
+  JSRT_HeadersSet(response->headers, "server", "jsrt/1.0");
 
   JSValue response_obj = JS_NewObjectClass(ctx, JSRT_ResponseClassID);
   JS_SetOpaque(response_obj, response);
@@ -476,6 +518,10 @@ void JSRT_RuntimeSetupStdFetch(JSRT_Runtime *rt) {
                             JS_NewCFunction(rt->ctx, JSRT_ResponseGetStatus, "get status", 0), JS_PROP_CONFIGURABLE);
   JS_DefinePropertyValueStr(rt->ctx, response_proto, "ok", JS_NewCFunction(rt->ctx, JSRT_ResponseGetOk, "get ok", 0),
                             JS_PROP_CONFIGURABLE);
+
+  // Add response body methods
+  JS_SetPropertyStr(rt->ctx, response_proto, "text", JS_NewCFunction(rt->ctx, JSRT_ResponseText, "text", 0));
+  JS_SetPropertyStr(rt->ctx, response_proto, "json", JS_NewCFunction(rt->ctx, JSRT_ResponseJson, "json", 0));
 
   JS_SetClassProto(rt->ctx, JSRT_ResponseClassID, response_proto);
 

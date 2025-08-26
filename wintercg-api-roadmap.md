@@ -91,23 +91,26 @@
 **位置**：`src/std/encoding.c`, `src/std/encoding.h`
 
 #### 3. Base64 Utilities
-**当前状态**：❌ 未实现  
-**需要实现**：
-- `atob(encodedData)` - Base64 解码
-- `btoa(stringToEncode)` - Base64 编码
+**当前状态**：✅ 已完成  
+**已实现**：
+- `atob(encodedData)` - Base64 解码，完整的错误处理和规范兼容
+- `btoa(stringToEncode)` - Base64 编码，支持 Latin-1 字符验证
 
 **实现复杂度**：🟢 简单  
-**预估工作量**：1 天
+**实际工作量**：1 天  
+**位置**：`src/std/base64.c`, `src/std/base64.h`
 
 #### 4. Performance API (基础)
-**当前状态**：❌ 未实现  
-**需要实现**：
-- `performance.now()` - 高精度时间戳
-- `performance.timeOrigin` - 时间起点
+**当前状态**：✅ 已完成  
+**已实现**：
+- `performance.now()` - 高精度时间戳，使用 libuv 纳秒级精度
+- `performance.timeOrigin` - 时间起点属性
+- 单调时间保证，亚毫秒级精度测量能力
 
 **实现复杂度**：🟢 简单  
-**预估工作量**：1-2 天  
-**技术要求**：使用 libuv 的高精度时间 API
+**实际工作量**：1 天  
+**位置**：`src/std/performance.c`, `src/std/performance.h`  
+**技术实现**：使用 libuv 的 `uv_hrtime()` 高精度时间 API
 
 ### 第二阶段：网络和数据处理 API (优先级：高)
 
@@ -253,13 +256,13 @@
 
 ## 🏗️ 建议实施路线图
 
-### Phase 1: 基础扩展 (预计 1-2 周)
-1. **Console API 扩展** - 完善控制台输出功能
-2. **Base64 Utilities** - 添加编码解码支持  
-3. **Performance API** - 提供时间测量能力
+### Phase 1: 基础扩展 ✅ **已完成** (实际用时 1 天)
+1. **Console API 扩展** - ✅ 完善控制台输出功能
+2. **Base64 Utilities** - ✅ 添加编码解码支持  
+3. **Performance API** - ✅ 提供时间测量能力
 
 ### Phase 2: 编码和事件基础 (预计 2-3 周)
-4. **Encoding API** - 文本编码转换支持
+4. **Encoding API** - ✅ 文本编码转换支持 (已完成)
 5. **Event/EventTarget** - 事件系统基础设施
 6. **AbortController** - 取消操作支持
 
@@ -285,10 +288,10 @@ src/std/
 ├── module.c (现有，已完成)
 ├── encoding.c (已完成)
 ├── encoding.h (已完成)
-├── base64.c (新增)
-├── base64.h (新增)
-├── performance.c (新增)
-├── performance.h (新增)
+├── base64.c (已完成)
+├── base64.h (已完成)
+├── performance.c (已完成)
+├── performance.h (已完成)
 ├── event.c (新增)
 ├── event.h (新增)
 ├── url.c (新增)

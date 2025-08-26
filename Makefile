@@ -24,7 +24,7 @@ jsrt_m:
 .PHONY: jsrt_cov
 jsrt_cov:
 	mkdir -p target/coverage
-	cd target/coverage && cmake -G "Unix Makefiles" -DENABLE_COVERAGE=ON -DCMAKE_BUILD_TYPE=Debug $(CURDIR) && make -j$(cpu_count)
+	cd target/coverage && cmake -G "Unix Makefiles" -DENABLE_COVERAGE=ON -DCMAKE_BUILD_TYPE=Release $(CURDIR) && make -j$(cpu_count)
 	ls -alh target/coverage/jsrt
 
 .PHONY: jsrt_s

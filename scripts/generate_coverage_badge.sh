@@ -11,12 +11,33 @@ if [ ! -f "target/coverage/coverage_filtered.info" ]; then
     exit 1
 fi
 
-# Get overall line coverage percentage
-coverage_percent=$(lcov --summary target/coverage/coverage_filtered.info 2>/dev/null | grep "lines" | grep -o '[0-9]*\.[0-9]*%' | head -1 | sed 's/%//')
+# Parse coverage data directly from the .info file to ensure consistency with comment script
+total_lines_executed=0
+total_lines_total=0
 
-# If no decimal percentage found, try integer percentage
-if [ -z "$coverage_percent" ]; then
-    coverage_percent=$(lcov --summary target/coverage/coverage_filtered.info 2>/dev/null | grep "lines" | grep -o '[0-9]*%' | head -1 | sed 's/%//')
+while IFS= read -r line; do
+    case $line in
+        SF:*)
+            current_file=${line#SF:}
+            ;;
+        LH:*)
+            if [[ "$current_file" == */src/* ]]; then
+                total_lines_executed=$((total_lines_executed + ${line#LH:}))
+            fi
+            ;;
+        LF:*)
+            if [[ "$current_file" == */src/* ]]; then
+                total_lines_total=$((total_lines_total + ${line#LF:}))
+            fi
+            ;;
+    esac
+done < target/coverage/coverage_filtered.info
+
+# Calculate overall percentage
+if [ "$total_lines_total" -gt 0 ]; then
+    coverage_percent=$(echo "$total_lines_executed $total_lines_total" | awk '{printf "%.1f", ($1/$2)*100}')
+else
+    coverage_percent="0.0"
 fi
 
 # Determine badge color based on coverage percentage

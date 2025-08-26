@@ -11,38 +11,126 @@ if [ ! -f "target/coverage/coverage_filtered.info" ]; then
     exit 1
 fi
 
-# Get overall coverage
-overall_line_coverage=$(lcov --summary target/coverage/coverage_filtered.info 2>/dev/null | grep "lines" | grep -o '[0-9.]*%' | head -1)
-overall_function_coverage=$(lcov --summary target/coverage/coverage_filtered.info 2>/dev/null | grep "functions" | grep -o '[0-9.]*%' | head -1)
+# Parse coverage data directly from the .info file to get accurate function coverage
+temp_file=$(mktemp)
+current_file=""
+line_executed=0
+line_total=0
+func_executed=0
+func_total=0
+
+# Extract totals from the coverage data
+total_lines_executed=0
+total_lines_total=0
+total_functions_executed=0
+total_functions_total=0
+
+while IFS= read -r line; do
+    case $line in
+        SF:*)
+            # New source file - save previous file data if we have any
+            if [ -n "$current_file" ] && [[ "$current_file" == */src/* ]]; then
+                # Remove the path prefix to get just src/filename
+                filename=$(echo "$current_file" | sed 's/.*\/src\///')
+                
+                # Calculate percentages
+                if [ "$line_total" -gt 0 ]; then
+                    line_percent=$(echo "$line_executed $line_total" | awk '{printf "%.1f%%", ($1/$2)*100}')
+                else
+                    line_percent="0.0%"
+                fi
+                
+                if [ "$func_total" -gt 0 ]; then
+                    func_percent=$(echo "$func_executed $func_total" | awk '{printf "%.1f%%", ($1/$2)*100}')
+                else
+                    func_percent="0.0%"
+                fi
+                
+                # Store the data
+                echo "$filename|$line_percent|$func_percent|$line_executed|$line_total|$func_executed|$func_total" >> "$temp_file"
+            fi
+            
+            # Reset for new file
+            current_file=${line#SF:}
+            line_executed=0
+            line_total=0
+            func_executed=0
+            func_total=0
+            ;;
+        LH:*)
+            line_executed=${line#LH:}
+            ;;
+        LF:*)
+            line_total=${line#LF:}
+            ;;
+        FNH:*)
+            func_executed=${line#FNH:}
+            ;;
+        FNF:*)
+            func_total=${line#FNF:}
+            ;;
+    esac
+done < target/coverage/coverage_filtered.info
+
+# Handle the last file
+if [ -n "$current_file" ] && [[ "$current_file" == */src/* ]]; then
+    filename=$(echo "$current_file" | sed 's/.*\/src\///')
+    
+    if [ "$line_total" -gt 0 ]; then
+        line_percent=$(echo "$line_executed $line_total" | awk '{printf "%.1f%%", ($1/$2)*100}')
+    else
+        line_percent="0.0%"
+    fi
+    
+    if [ "$func_total" -gt 0 ]; then
+        func_percent=$(echo "$func_executed $func_total" | awk '{printf "%.1f%%", ($1/$2)*100}')
+    else
+        func_percent="0.0%"
+    fi
+    
+    echo "$filename|$line_percent|$func_percent|$line_executed|$line_total|$func_executed|$func_total" >> "$temp_file"
+fi
+
+# Calculate totals from the temp file
+while IFS='|' read -r filename line_percent func_percent line_executed line_total func_executed func_total; do
+    total_lines_executed=$((total_lines_executed + line_executed))
+    total_lines_total=$((total_lines_total + line_total))
+    total_functions_executed=$((total_functions_executed + func_executed))
+    total_functions_total=$((total_functions_total + func_total))
+done < "$temp_file"
+
+# Calculate overall percentages
+if [ "$total_lines_total" -gt 0 ]; then
+    overall_line_coverage=$(echo "$total_lines_executed $total_lines_total" | awk '{printf "%.1f%%", ($1/$2)*100}')
+else
+    overall_line_coverage="0.0%"
+fi
+
+if [ "$total_functions_total" -gt 0 ]; then
+    overall_function_coverage=$(echo "$total_functions_executed $total_functions_total" | awk '{printf "%.1f%%", ($1/$2)*100}')
+else
+    overall_function_coverage="0.0%"
+fi
 
 # Generate markdown comment
 echo "## 📊 Test Coverage Report"
 echo ""
 echo "### Overall Coverage"
-echo "- **Lines**: $overall_line_coverage"
-echo "- **Functions**: $overall_function_coverage"
+echo "- **Lines**: $overall_line_coverage ($total_lines_executed/$total_lines_total)"
+echo "- **Functions**: $overall_function_coverage ($total_functions_executed/$total_functions_total)"
 echo ""
 echo "### File Coverage (src/ directory)"
 echo ""
 echo "| File | Line Coverage | Function Coverage |"
 echo "|------|---------------|-------------------|"
 
-# Extract per-file coverage for src/ directory
-lcov --list target/coverage/coverage_filtered.info 2>/dev/null | grep -A 100 "src/]" | tail -n +2 | grep -E "^[^=|].*\|" | while IFS='|' read -r filename line_info func_info branch_info; do
-    # Clean up the filename and percentages
-    filename=$(echo "$filename" | sed 's/^ *//g' | sed 's/ *$//g')
-    line_percent=$(echo "$line_info" | grep -o '[0-9.]*%' | head -1)
-    func_percent=$(echo "$func_info" | grep -o '[0-9.]*%' | head -1)
-    
-    # Skip empty lines or header lines
-    if [ -n "$filename" ] && [ "$filename" != "Total:" ] && [[ "$filename" != *"="* ]]; then
-        # Default to 0% if no percentage found
-        [ -z "$line_percent" ] && line_percent="0.0%"
-        [ -z "$func_percent" ] && func_percent="0.0%"
-        
-        echo "| **src/$filename** | $line_percent | $func_percent |"
-    fi
-done
+# Output the individual file data
+while IFS='|' read -r filename line_percent func_percent line_executed line_total func_executed func_total; do
+    echo "| **src/$filename** | $line_percent | $func_percent |"
+done < "$temp_file"
+
+# Clean up
+rm -f "$temp_file"
 
 echo ""
 echo "---"

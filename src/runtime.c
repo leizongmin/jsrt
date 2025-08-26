@@ -11,6 +11,7 @@
 #include "std/base64.h"
 #include "std/console.h"
 #include "std/encoding.h"
+#include "std/event.h"
 #include "std/module.h"
 #include "std/performance.h"
 #include "std/timer.h"
@@ -50,6 +51,7 @@ JSRT_Runtime *JSRT_RuntimeNew() {
   JSRT_RuntimeSetupStdEncoding(rt);
   JSRT_RuntimeSetupStdBase64(rt);
   JSRT_RuntimeSetupStdPerformance(rt);
+  JSRT_RuntimeSetupStdEvent(rt);
   JSRT_StdModuleInit(rt);
   JSRT_StdCommonJSInit(rt);
 

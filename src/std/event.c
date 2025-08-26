@@ -228,7 +228,7 @@ static JSValue JSRT_EventTargetAddEventListener(JSContext *ctx, JSValueConst thi
   while (existing) {
     if (strcmp(existing->type, type) == 0 && JS_VALUE_GET_PTR(existing->callback) == JS_VALUE_GET_PTR(argv[1])) {
       JS_FreeCString(ctx, type);
-      return JS_UNDEFINED; // Already exists, don't add duplicate
+      return JS_UNDEFINED;  // Already exists, don't add duplicate
     }
     existing = existing->next;
   }
@@ -274,7 +274,8 @@ static JSValue JSRT_EventTargetAddEventListener(JSContext *ctx, JSValueConst thi
   return JS_UNDEFINED;
 }
 
-static JSValue JSRT_EventTargetRemoveEventListener(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv) {
+static JSValue JSRT_EventTargetRemoveEventListener(JSContext *ctx, JSValueConst this_val, int argc,
+                                                   JSValueConst *argv) {
   if (argc < 2) {
     return JS_ThrowTypeError(ctx, "removeEventListener requires at least 2 arguments");
   }
@@ -365,7 +366,7 @@ static JSValue JSRT_EventTargetDispatchEvent(JSContext *ctx, JSValueConst this_v
     if (toRemove) {
       JSRT_EventListener *prev = NULL;
       JSRT_EventListener *current = target->listeners;
-      
+
       while (current) {
         if (current == toRemove) {
           if (prev) {
@@ -391,7 +392,7 @@ static JSValue JSRT_EventTargetDispatchEvent(JSContext *ctx, JSValueConst this_v
 // Setup function
 void JSRT_RuntimeSetupStdEvent(JSRT_Runtime *rt) {
   JSContext *ctx = rt->ctx;
-  
+
   JSRT_Debug("JSRT_RuntimeSetupStdEvent: initializing Event/EventTarget API");
 
   // Register Event class
@@ -399,7 +400,7 @@ void JSRT_RuntimeSetupStdEvent(JSRT_Runtime *rt) {
   JS_NewClass(rt->rt, JSRT_EventClassID, &JSRT_EventClass);
 
   JSValue event_proto = JS_NewObject(ctx);
-  
+
   // Use property descriptors for getters
   JSValue get_type = JS_NewCFunction(ctx, JSRT_EventGetType, "get type", 0);
   JSValue get_target = JS_NewCFunction(ctx, JSRT_EventGetTarget, "get target", 0);
@@ -407,18 +408,25 @@ void JSRT_RuntimeSetupStdEvent(JSRT_Runtime *rt) {
   JSValue get_bubbles = JS_NewCFunction(ctx, JSRT_EventGetBubbles, "get bubbles", 0);
   JSValue get_cancelable = JS_NewCFunction(ctx, JSRT_EventGetCancelable, "get cancelable", 0);
   JSValue get_defaultPrevented = JS_NewCFunction(ctx, JSRT_EventGetDefaultPrevented, "get defaultPrevented", 0);
-  
+
   JS_DefinePropertyGetSet(ctx, event_proto, JS_NewAtom(ctx, "type"), get_type, JS_UNDEFINED, JS_PROP_CONFIGURABLE);
   JS_DefinePropertyGetSet(ctx, event_proto, JS_NewAtom(ctx, "target"), get_target, JS_UNDEFINED, JS_PROP_CONFIGURABLE);
-  JS_DefinePropertyGetSet(ctx, event_proto, JS_NewAtom(ctx, "currentTarget"), get_currentTarget, JS_UNDEFINED, JS_PROP_CONFIGURABLE);
-  JS_DefinePropertyGetSet(ctx, event_proto, JS_NewAtom(ctx, "bubbles"), get_bubbles, JS_UNDEFINED, JS_PROP_CONFIGURABLE);
-  JS_DefinePropertyGetSet(ctx, event_proto, JS_NewAtom(ctx, "cancelable"), get_cancelable, JS_UNDEFINED, JS_PROP_CONFIGURABLE);
-  JS_DefinePropertyGetSet(ctx, event_proto, JS_NewAtom(ctx, "defaultPrevented"), get_defaultPrevented, JS_UNDEFINED, JS_PROP_CONFIGURABLE);
-  
-  JS_SetPropertyStr(ctx, event_proto, "preventDefault", JS_NewCFunction(ctx, JSRT_EventPreventDefault, "preventDefault", 0));
-  JS_SetPropertyStr(ctx, event_proto, "stopPropagation", JS_NewCFunction(ctx, JSRT_EventStopPropagation, "stopPropagation", 0));
-  JS_SetPropertyStr(ctx, event_proto, "stopImmediatePropagation", JS_NewCFunction(ctx, JSRT_EventStopImmediatePropagation, "stopImmediatePropagation", 0));
-  
+  JS_DefinePropertyGetSet(ctx, event_proto, JS_NewAtom(ctx, "currentTarget"), get_currentTarget, JS_UNDEFINED,
+                          JS_PROP_CONFIGURABLE);
+  JS_DefinePropertyGetSet(ctx, event_proto, JS_NewAtom(ctx, "bubbles"), get_bubbles, JS_UNDEFINED,
+                          JS_PROP_CONFIGURABLE);
+  JS_DefinePropertyGetSet(ctx, event_proto, JS_NewAtom(ctx, "cancelable"), get_cancelable, JS_UNDEFINED,
+                          JS_PROP_CONFIGURABLE);
+  JS_DefinePropertyGetSet(ctx, event_proto, JS_NewAtom(ctx, "defaultPrevented"), get_defaultPrevented, JS_UNDEFINED,
+                          JS_PROP_CONFIGURABLE);
+
+  JS_SetPropertyStr(ctx, event_proto, "preventDefault",
+                    JS_NewCFunction(ctx, JSRT_EventPreventDefault, "preventDefault", 0));
+  JS_SetPropertyStr(ctx, event_proto, "stopPropagation",
+                    JS_NewCFunction(ctx, JSRT_EventStopPropagation, "stopPropagation", 0));
+  JS_SetPropertyStr(ctx, event_proto, "stopImmediatePropagation",
+                    JS_NewCFunction(ctx, JSRT_EventStopImmediatePropagation, "stopImmediatePropagation", 0));
+
   JS_SetClassProto(ctx, JSRT_EventClassID, event_proto);
 
   JSValue event_ctor = JS_NewCFunction2(ctx, JSRT_EventConstructor, "Event", 2, JS_CFUNC_constructor, 0);
@@ -429,13 +437,17 @@ void JSRT_RuntimeSetupStdEvent(JSRT_Runtime *rt) {
   JS_NewClass(rt->rt, JSRT_EventTargetClassID, &JSRT_EventTargetClass);
 
   JSValue event_target_proto = JS_NewObject(ctx);
-  JS_SetPropertyStr(ctx, event_target_proto, "addEventListener", JS_NewCFunction(ctx, JSRT_EventTargetAddEventListener, "addEventListener", 3));
-  JS_SetPropertyStr(ctx, event_target_proto, "removeEventListener", JS_NewCFunction(ctx, JSRT_EventTargetRemoveEventListener, "removeEventListener", 3));
-  JS_SetPropertyStr(ctx, event_target_proto, "dispatchEvent", JS_NewCFunction(ctx, JSRT_EventTargetDispatchEvent, "dispatchEvent", 1));
-  
+  JS_SetPropertyStr(ctx, event_target_proto, "addEventListener",
+                    JS_NewCFunction(ctx, JSRT_EventTargetAddEventListener, "addEventListener", 3));
+  JS_SetPropertyStr(ctx, event_target_proto, "removeEventListener",
+                    JS_NewCFunction(ctx, JSRT_EventTargetRemoveEventListener, "removeEventListener", 3));
+  JS_SetPropertyStr(ctx, event_target_proto, "dispatchEvent",
+                    JS_NewCFunction(ctx, JSRT_EventTargetDispatchEvent, "dispatchEvent", 1));
+
   JS_SetClassProto(ctx, JSRT_EventTargetClassID, event_target_proto);
 
-  JSValue event_target_ctor = JS_NewCFunction2(ctx, JSRT_EventTargetConstructor, "EventTarget", 0, JS_CFUNC_constructor, 0);
+  JSValue event_target_ctor =
+      JS_NewCFunction2(ctx, JSRT_EventTargetConstructor, "EventTarget", 0, JS_CFUNC_constructor, 0);
   JS_SetPropertyStr(ctx, rt->global, "EventTarget", event_target_ctor);
 
   JSRT_Debug("Event/EventTarget API setup completed");

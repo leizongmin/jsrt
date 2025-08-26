@@ -10,6 +10,7 @@
 
 #include "std/abort.h"
 #include "std/base64.h"
+#include "std/clone.h"
 #include "std/console.h"
 #include "std/encoding.h"
 #include "std/event.h"
@@ -56,6 +57,7 @@ JSRT_Runtime *JSRT_RuntimeNew() {
   JSRT_RuntimeSetupStdEvent(rt);
   JSRT_RuntimeSetupStdAbort(rt);
   JSRT_RuntimeSetupStdURL(rt);
+  JSRT_RuntimeSetupStdClone(rt);
   JSRT_StdModuleInit(rt);
   JSRT_StdCommonJSInit(rt);
 

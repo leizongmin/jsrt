@@ -10,12 +10,15 @@
 
 #include "std/abort.h"
 #include "std/base64.h"
+#include "std/blob.h"
 #include "std/clone.h"
 #include "std/console.h"
 #include "std/encoding.h"
 #include "std/event.h"
+#include "std/formdata.h"
 #include "std/module.h"
 #include "std/performance.h"
+#include "std/streams.h"
 #include "std/timer.h"
 #include "std/url.h"
 #include "util/debug.h"
@@ -58,6 +61,9 @@ JSRT_Runtime *JSRT_RuntimeNew() {
   JSRT_RuntimeSetupStdAbort(rt);
   JSRT_RuntimeSetupStdURL(rt);
   JSRT_RuntimeSetupStdClone(rt);
+  JSRT_RuntimeSetupStdStreams(rt);
+  JSRT_RuntimeSetupStdBlob(rt);
+  JSRT_RuntimeSetupStdFormData(rt);
   JSRT_StdModuleInit(rt);
   JSRT_StdCommonJSInit(rt);
 

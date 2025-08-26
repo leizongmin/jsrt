@@ -343,6 +343,7 @@ static void JSRT_FetchOnWrite(uv_write_t *req, int status);
 static void JSRT_FetchOnRead(uv_stream_t *stream, ssize_t nread, const uv_buf_t *buf);
 static void JSRT_FetchAllocBuffer(uv_handle_t *handle, size_t suggested_size, uv_buf_t *buf);
 static void JSRT_FetchOnGetAddrInfo(uv_getaddrinfo_t *req, int status, struct addrinfo *res);
+static void JSRT_FetchOnClose(uv_handle_t *handle);
 static int JSRT_FetchParseURL(const char *url, char **host, int *port, char **path);
 static char *JSRT_FetchBuildHttpRequest(const char *method, const char *path, const char *host, int port,
                                         JSRT_Headers *headers);
@@ -451,12 +452,16 @@ static void JSRT_FetchContextFree(JSRT_FetchContext *ctx) {
   if (ctx->response_buffer) free(ctx->response_buffer);
   if (ctx->request_headers) JSRT_HeadersFree(ctx->request_headers);
 
-  // Free JavaScript values
-  if (!JS_IsUndefined(ctx->resolve_func)) {
-    JS_FreeValue(ctx->rt->ctx, ctx->resolve_func);
-  }
-  if (!JS_IsUndefined(ctx->reject_func)) {
-    JS_FreeValue(ctx->rt->ctx, ctx->reject_func);
+  // Free JavaScript values safely - only if runtime context is still valid
+  if (ctx->rt && ctx->rt->ctx) {
+    if (!JS_IsUndefined(ctx->resolve_func)) {
+      JS_FreeValue(ctx->rt->ctx, ctx->resolve_func);
+      ctx->resolve_func = JS_UNDEFINED;
+    }
+    if (!JS_IsUndefined(ctx->reject_func)) {
+      JS_FreeValue(ctx->rt->ctx, ctx->reject_func);
+      ctx->reject_func = JS_UNDEFINED;
+    }
   }
 
   free(ctx);
@@ -601,6 +606,12 @@ static JSRT_Response *JSRT_FetchParseHttpResponse(const char *response_data, siz
 
 static void JSRT_FetchOnGetAddrInfo(uv_getaddrinfo_t *req, int status, struct addrinfo *res) {
   JSRT_FetchContext *ctx = (JSRT_FetchContext *)req->data;
+  
+  // Safety check - ensure runtime context is still valid
+  if (!ctx || !ctx->rt || !ctx->rt->ctx) {
+    if (ctx) JSRT_FetchContextFree(ctx);
+    goto cleanup;
+  }
 
   if (status != 0) {
     JSValue error = JS_NewError(ctx->rt->ctx);
@@ -648,6 +659,12 @@ cleanup:
 
 static void JSRT_FetchOnConnect(uv_connect_t *req, int status) {
   JSRT_FetchContext *ctx = (JSRT_FetchContext *)req->data;
+
+  // Safety check - ensure runtime context is still valid
+  if (!ctx || !ctx->rt || !ctx->rt->ctx) {
+    if (ctx) JSRT_FetchContextFree(ctx);
+    return;
+  }
 
   if (status != 0) {
     JSValue error = JS_NewError(ctx->rt->ctx);
@@ -706,6 +723,13 @@ static void JSRT_FetchOnWrite(uv_write_t *req, int status) {
 
   if (status != 0) {
     JSRT_FetchContext *ctx = (JSRT_FetchContext *)req->handle->data;
+    
+    // Safety check - ensure runtime context is still valid
+    if (!ctx || !ctx->rt || !ctx->rt->ctx) {
+      if (ctx) JSRT_FetchContextFree(ctx);
+      return;
+    }
+    
     JSValue error = JS_NewError(ctx->rt->ctx);
     char error_msg[256];
     snprintf(error_msg, sizeof(error_msg), "Write failed: %s", uv_strerror(status));
@@ -724,6 +748,15 @@ static void JSRT_FetchAllocBuffer(uv_handle_t *handle, size_t suggested_size, uv
 
 static void JSRT_FetchOnRead(uv_stream_t *stream, ssize_t nread, const uv_buf_t *buf) {
   JSRT_FetchContext *ctx = (JSRT_FetchContext *)stream->data;
+
+  // Safety check - ensure runtime context is still valid
+  if (!ctx || !ctx->rt || !ctx->rt->ctx) {
+    if (ctx) {
+      uv_close((uv_handle_t*)&ctx->tcp_handle, JSRT_FetchOnClose);
+    }
+    if (buf->base) free(buf->base);
+    return;
+  }
 
   if (nread < 0) {
     if (nread != UV_EOF) {
@@ -768,8 +801,7 @@ static void JSRT_FetchOnRead(uv_stream_t *stream, ssize_t nread, const uv_buf_t 
       }
     }
 
-    uv_close((uv_handle_t *)&ctx->tcp_handle, NULL);
-    JSRT_FetchContextFree(ctx);
+    uv_close((uv_handle_t *)&ctx->tcp_handle, JSRT_FetchOnClose);
     if (buf->base) free(buf->base);
     return;
   }
@@ -784,8 +816,7 @@ static void JSRT_FetchOnRead(uv_stream_t *stream, ssize_t nread, const uv_buf_t 
         JS_SetPropertyStr(ctx->rt->ctx, error, "message", JS_NewString(ctx->rt->ctx, "Out of memory"));
         JS_Call(ctx->rt->ctx, ctx->reject_func, JS_UNDEFINED, 1, &error);
         JS_FreeValue(ctx->rt->ctx, error);
-        uv_close((uv_handle_t *)&ctx->tcp_handle, NULL);
-        JSRT_FetchContextFree(ctx);
+        uv_close((uv_handle_t *)&ctx->tcp_handle, JSRT_FetchOnClose);
         if (buf->base) free(buf->base);
         return;
       }
@@ -798,6 +829,14 @@ static void JSRT_FetchOnRead(uv_stream_t *stream, ssize_t nread, const uv_buf_t 
   }
 
   if (buf->base) free(buf->base);
+}
+
+// Close callback - safely free the context after handle is closed
+static void JSRT_FetchOnClose(uv_handle_t *handle) {
+  JSRT_FetchContext *ctx = (JSRT_FetchContext *)handle->data;
+  if (ctx) {
+    JSRT_FetchContextFree(ctx);
+  }
 }
 
 static JSRT_Headers *JSRT_HeadersNew() {

@@ -29,8 +29,12 @@ static void JSRT_EventFinalize(JSRuntime *rt, JSValue val) {
   JSRT_Event *event = JS_GetOpaque(val, JSRT_EventClassID);
   if (event) {
     free(event->type);
-    JS_FreeValueRT(rt, event->target);
-    JS_FreeValueRT(rt, event->currentTarget);
+    if (!JS_IsUndefined(event->target)) {
+      JS_FreeValueRT(rt, event->target);
+    }
+    if (!JS_IsUndefined(event->currentTarget)) {
+      JS_FreeValueRT(rt, event->currentTarget);
+    }
     free(event);
   }
 }
@@ -409,16 +413,29 @@ void JSRT_RuntimeSetupStdEvent(JSRT_Runtime *rt) {
   JSValue get_cancelable = JS_NewCFunction(ctx, JSRT_EventGetCancelable, "get cancelable", 0);
   JSValue get_defaultPrevented = JS_NewCFunction(ctx, JSRT_EventGetDefaultPrevented, "get defaultPrevented", 0);
 
-  JS_DefinePropertyGetSet(ctx, event_proto, JS_NewAtom(ctx, "type"), get_type, JS_UNDEFINED, JS_PROP_CONFIGURABLE);
-  JS_DefinePropertyGetSet(ctx, event_proto, JS_NewAtom(ctx, "target"), get_target, JS_UNDEFINED, JS_PROP_CONFIGURABLE);
-  JS_DefinePropertyGetSet(ctx, event_proto, JS_NewAtom(ctx, "currentTarget"), get_currentTarget, JS_UNDEFINED,
+  // Create atoms and remember to free them
+  JSAtom type_atom = JS_NewAtom(ctx, "type");
+  JSAtom target_atom = JS_NewAtom(ctx, "target");
+  JSAtom currentTarget_atom = JS_NewAtom(ctx, "currentTarget");
+  JSAtom bubbles_atom = JS_NewAtom(ctx, "bubbles");
+  JSAtom cancelable_atom = JS_NewAtom(ctx, "cancelable");
+  JSAtom defaultPrevented_atom = JS_NewAtom(ctx, "defaultPrevented");
+
+  JS_DefinePropertyGetSet(ctx, event_proto, type_atom, get_type, JS_UNDEFINED, JS_PROP_CONFIGURABLE);
+  JS_DefinePropertyGetSet(ctx, event_proto, target_atom, get_target, JS_UNDEFINED, JS_PROP_CONFIGURABLE);
+  JS_DefinePropertyGetSet(ctx, event_proto, currentTarget_atom, get_currentTarget, JS_UNDEFINED, JS_PROP_CONFIGURABLE);
+  JS_DefinePropertyGetSet(ctx, event_proto, bubbles_atom, get_bubbles, JS_UNDEFINED, JS_PROP_CONFIGURABLE);
+  JS_DefinePropertyGetSet(ctx, event_proto, cancelable_atom, get_cancelable, JS_UNDEFINED, JS_PROP_CONFIGURABLE);
+  JS_DefinePropertyGetSet(ctx, event_proto, defaultPrevented_atom, get_defaultPrevented, JS_UNDEFINED,
                           JS_PROP_CONFIGURABLE);
-  JS_DefinePropertyGetSet(ctx, event_proto, JS_NewAtom(ctx, "bubbles"), get_bubbles, JS_UNDEFINED,
-                          JS_PROP_CONFIGURABLE);
-  JS_DefinePropertyGetSet(ctx, event_proto, JS_NewAtom(ctx, "cancelable"), get_cancelable, JS_UNDEFINED,
-                          JS_PROP_CONFIGURABLE);
-  JS_DefinePropertyGetSet(ctx, event_proto, JS_NewAtom(ctx, "defaultPrevented"), get_defaultPrevented, JS_UNDEFINED,
-                          JS_PROP_CONFIGURABLE);
+
+  // Free the atoms
+  JS_FreeAtom(ctx, type_atom);
+  JS_FreeAtom(ctx, target_atom);
+  JS_FreeAtom(ctx, currentTarget_atom);
+  JS_FreeAtom(ctx, bubbles_atom);
+  JS_FreeAtom(ctx, cancelable_atom);
+  JS_FreeAtom(ctx, defaultPrevented_atom);
 
   JS_SetPropertyStr(ctx, event_proto, "preventDefault",
                     JS_NewCFunction(ctx, JSRT_EventPreventDefault, "preventDefault", 0));

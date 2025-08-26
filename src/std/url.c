@@ -561,18 +561,35 @@ void JSRT_RuntimeSetupStdURL(JSRT_Runtime *rt) {
   JSValue get_hash = JS_NewCFunction(ctx, JSRT_URLGetHash, "get hash", 0);
   JSValue get_origin = JS_NewCFunction(ctx, JSRT_URLGetOrigin, "get origin", 0);
 
-  JS_DefinePropertyGetSet(ctx, url_proto, JS_NewAtom(ctx, "href"), get_href, JS_UNDEFINED, JS_PROP_CONFIGURABLE);
-  JS_DefinePropertyGetSet(ctx, url_proto, JS_NewAtom(ctx, "protocol"), get_protocol, JS_UNDEFINED,
-                          JS_PROP_CONFIGURABLE);
-  JS_DefinePropertyGetSet(ctx, url_proto, JS_NewAtom(ctx, "host"), get_host, JS_UNDEFINED, JS_PROP_CONFIGURABLE);
-  JS_DefinePropertyGetSet(ctx, url_proto, JS_NewAtom(ctx, "hostname"), get_hostname, JS_UNDEFINED,
-                          JS_PROP_CONFIGURABLE);
-  JS_DefinePropertyGetSet(ctx, url_proto, JS_NewAtom(ctx, "port"), get_port, JS_UNDEFINED, JS_PROP_CONFIGURABLE);
-  JS_DefinePropertyGetSet(ctx, url_proto, JS_NewAtom(ctx, "pathname"), get_pathname, JS_UNDEFINED,
-                          JS_PROP_CONFIGURABLE);
-  JS_DefinePropertyGetSet(ctx, url_proto, JS_NewAtom(ctx, "search"), get_search, JS_UNDEFINED, JS_PROP_CONFIGURABLE);
-  JS_DefinePropertyGetSet(ctx, url_proto, JS_NewAtom(ctx, "hash"), get_hash, JS_UNDEFINED, JS_PROP_CONFIGURABLE);
-  JS_DefinePropertyGetSet(ctx, url_proto, JS_NewAtom(ctx, "origin"), get_origin, JS_UNDEFINED, JS_PROP_CONFIGURABLE);
+  JSAtom href_atom = JS_NewAtom(ctx, "href");
+  JSAtom protocol_atom = JS_NewAtom(ctx, "protocol");
+  JSAtom host_atom = JS_NewAtom(ctx, "host");
+  JSAtom hostname_atom = JS_NewAtom(ctx, "hostname");
+  JSAtom port_atom = JS_NewAtom(ctx, "port");
+  JSAtom pathname_atom = JS_NewAtom(ctx, "pathname");
+  JSAtom search_atom = JS_NewAtom(ctx, "search");
+  JSAtom hash_atom = JS_NewAtom(ctx, "hash");
+  JSAtom origin_atom = JS_NewAtom(ctx, "origin");
+
+  JS_DefinePropertyGetSet(ctx, url_proto, href_atom, get_href, JS_UNDEFINED, JS_PROP_CONFIGURABLE);
+  JS_DefinePropertyGetSet(ctx, url_proto, protocol_atom, get_protocol, JS_UNDEFINED, JS_PROP_CONFIGURABLE);
+  JS_DefinePropertyGetSet(ctx, url_proto, host_atom, get_host, JS_UNDEFINED, JS_PROP_CONFIGURABLE);
+  JS_DefinePropertyGetSet(ctx, url_proto, hostname_atom, get_hostname, JS_UNDEFINED, JS_PROP_CONFIGURABLE);
+  JS_DefinePropertyGetSet(ctx, url_proto, port_atom, get_port, JS_UNDEFINED, JS_PROP_CONFIGURABLE);
+  JS_DefinePropertyGetSet(ctx, url_proto, pathname_atom, get_pathname, JS_UNDEFINED, JS_PROP_CONFIGURABLE);
+  JS_DefinePropertyGetSet(ctx, url_proto, search_atom, get_search, JS_UNDEFINED, JS_PROP_CONFIGURABLE);
+  JS_DefinePropertyGetSet(ctx, url_proto, hash_atom, get_hash, JS_UNDEFINED, JS_PROP_CONFIGURABLE);
+  JS_DefinePropertyGetSet(ctx, url_proto, origin_atom, get_origin, JS_UNDEFINED, JS_PROP_CONFIGURABLE);
+
+  JS_FreeAtom(ctx, href_atom);
+  JS_FreeAtom(ctx, protocol_atom);
+  JS_FreeAtom(ctx, host_atom);
+  JS_FreeAtom(ctx, hostname_atom);
+  JS_FreeAtom(ctx, port_atom);
+  JS_FreeAtom(ctx, pathname_atom);
+  JS_FreeAtom(ctx, search_atom);
+  JS_FreeAtom(ctx, hash_atom);
+  JS_FreeAtom(ctx, origin_atom);
 
   // Methods
   JS_SetPropertyStr(ctx, url_proto, "toString", JS_NewCFunction(ctx, JSRT_URLToString, "toString", 0));

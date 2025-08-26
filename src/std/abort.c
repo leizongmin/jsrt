@@ -25,7 +25,9 @@ static void JSRT_AbortSignalFinalize(JSRuntime *rt, JSValue val) {
   JSRT_AbortSignal *signal = JS_GetOpaque(val, JSRT_AbortSignalClassID);
   if (signal) {
     JS_FreeValueRT(rt, signal->event_target);
-    JS_FreeValueRT(rt, signal->reason);
+    if (!JS_IsUndefined(signal->reason)) {
+      JS_FreeValueRT(rt, signal->reason);
+    }
     free(signal);
   }
 }
@@ -246,9 +248,12 @@ void JSRT_RuntimeSetupStdAbort(JSRT_Runtime *rt) {
   // Properties
   JSValue get_aborted = JS_NewCFunction(ctx, JSRT_AbortSignalGetAborted, "get aborted", 0);
   JSValue get_reason = JS_NewCFunction(ctx, JSRT_AbortSignalGetReason, "get reason", 0);
-  JS_DefinePropertyGetSet(ctx, signal_proto, JS_NewAtom(ctx, "aborted"), get_aborted, JS_UNDEFINED,
-                          JS_PROP_CONFIGURABLE);
-  JS_DefinePropertyGetSet(ctx, signal_proto, JS_NewAtom(ctx, "reason"), get_reason, JS_UNDEFINED, JS_PROP_CONFIGURABLE);
+  JSAtom aborted_atom = JS_NewAtom(ctx, "aborted");
+  JSAtom reason_atom = JS_NewAtom(ctx, "reason");
+  JS_DefinePropertyGetSet(ctx, signal_proto, aborted_atom, get_aborted, JS_UNDEFINED, JS_PROP_CONFIGURABLE);
+  JS_DefinePropertyGetSet(ctx, signal_proto, reason_atom, get_reason, JS_UNDEFINED, JS_PROP_CONFIGURABLE);
+  JS_FreeAtom(ctx, aborted_atom);
+  JS_FreeAtom(ctx, reason_atom);
 
   // EventTarget methods
   JS_SetPropertyStr(ctx, signal_proto, "addEventListener",
@@ -276,8 +281,9 @@ void JSRT_RuntimeSetupStdAbort(JSRT_Runtime *rt) {
 
   // Properties
   JSValue get_signal = JS_NewCFunction(ctx, JSRT_AbortControllerGetSignal, "get signal", 0);
-  JS_DefinePropertyGetSet(ctx, controller_proto, JS_NewAtom(ctx, "signal"), get_signal, JS_UNDEFINED,
-                          JS_PROP_CONFIGURABLE);
+  JSAtom signal_atom = JS_NewAtom(ctx, "signal");
+  JS_DefinePropertyGetSet(ctx, controller_proto, signal_atom, get_signal, JS_UNDEFINED, JS_PROP_CONFIGURABLE);
+  JS_FreeAtom(ctx, signal_atom);
 
   // Methods
   JS_SetPropertyStr(ctx, controller_proto, "abort", JS_NewCFunction(ctx, JSRT_AbortControllerAbort, "abort", 1));

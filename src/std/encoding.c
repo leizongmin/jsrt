@@ -211,48 +211,62 @@ static JSValue JSRT_TextDecoderDecode(JSContext *ctx, JSValueConst this_val, int
 
   uint8_t *input_data = NULL;
   size_t input_len = 0;
-  bool needs_free_buffer = false;
-  JSValue array_buffer_to_free = JS_UNDEFINED;
 
   // Try to get as ArrayBuffer first
   input_data = JS_GetArrayBuffer(ctx, &input_len, argv[0]);
 
-  if (!input_data) {
-    // Try to get as typed array
-    size_t byte_offset, bytes_per_element;
-    JSValue array_buffer = JS_GetTypedArrayBuffer(ctx, argv[0], &byte_offset, &input_len, &bytes_per_element);
-    if (JS_IsException(array_buffer)) {
-      return JS_ThrowTypeError(ctx, "input must be an ArrayBuffer or typed array");
+  if (input_data) {
+    // ArrayBuffer path
+    if (input_len == 0) {
+      return JS_NewString(ctx, "");
     }
 
-    array_buffer_to_free = array_buffer;
+    // Skip BOM if not ignoring it and present
+    size_t start_pos = 0;
+    if (!decoder->ignore_bom && input_len >= 3 && input_data[0] == 0xEF && input_data[1] == 0xBB &&
+        input_data[2] == 0xBF) {
+      start_pos = 3;
+    }
 
-    if (input_len > 0) {
-      uint8_t *buffer = JS_GetArrayBuffer(ctx, NULL, array_buffer);
-      if (buffer) {
-        input_data = buffer + byte_offset;
-      } else {
-        JS_FreeValue(ctx, array_buffer_to_free);
-        return JS_ThrowTypeError(ctx, "Failed to get array buffer data");
+    // For UTF-8, we can directly create a string from the bytes
+    // QuickJS expects valid UTF-8, so we'll validate if fatal is true
+    if (decoder->fatal) {
+      // Validate UTF-8 sequence
+      const uint8_t *p = input_data + start_pos;
+      const uint8_t *end = input_data + input_len;
+      while (p < end) {
+        const uint8_t *p_next;
+        int c = unicode_from_utf8(p, end - p, &p_next);
+        if (c < 0) {
+          return JS_ThrowTypeError(ctx, "Invalid UTF-8 sequence");
+        }
+        p = p_next;
       }
     }
+
+    return JS_NewStringLen(ctx, (const char *)(input_data + start_pos), input_len - start_pos);
   }
 
-  // Handle empty arrays
+  // Try to get as typed array - testing just the call
+  size_t byte_offset, bytes_per_element;
+  JSValue array_buffer = JS_GetTypedArrayBuffer(ctx, argv[0], &byte_offset, &input_len, &bytes_per_element);
+  if (JS_IsException(array_buffer)) {
+    return JS_ThrowTypeError(ctx, "input must be an ArrayBuffer or typed array");
+  }
+
   if (input_len == 0) {
-    if (!JS_IsUndefined(array_buffer_to_free)) {
-      JS_FreeValue(ctx, array_buffer_to_free);
-    }
+    JS_FreeValue(ctx, array_buffer);
     return JS_NewString(ctx, "");
   }
 
-  // At this point we should have valid data
-  if (!input_data) {
-    if (!JS_IsUndefined(array_buffer_to_free)) {
-      JS_FreeValue(ctx, array_buffer_to_free);
-    }
-    return JS_ThrowTypeError(ctx, "Failed to get buffer data");
+  size_t buffer_size;
+  uint8_t *buffer = JS_GetArrayBuffer(ctx, &buffer_size, array_buffer);
+  if (!buffer) {
+    JS_FreeValue(ctx, array_buffer);
+    return JS_ThrowTypeError(ctx, "Failed to get buffer from typed array");
   }
+
+  input_data = buffer + byte_offset;
 
   // Skip BOM if not ignoring it and present
   size_t start_pos = 0;
@@ -271,22 +285,16 @@ static JSValue JSRT_TextDecoderDecode(JSContext *ctx, JSValueConst this_val, int
       const uint8_t *p_next;
       int c = unicode_from_utf8(p, end - p, &p_next);
       if (c < 0) {
-        if (!JS_IsUndefined(array_buffer_to_free)) {
-          JS_FreeValue(ctx, array_buffer_to_free);
-        }
+        JS_FreeValue(ctx, array_buffer);
         return JS_ThrowTypeError(ctx, "Invalid UTF-8 sequence");
       }
       p = p_next;
     }
   }
 
-  // Create string from UTF-8 bytes
+  // Create string from the buffer
   JSValue result = JS_NewStringLen(ctx, (const char *)(input_data + start_pos), input_len - start_pos);
-
-  if (!JS_IsUndefined(array_buffer_to_free)) {
-    JS_FreeValue(ctx, array_buffer_to_free);
-  }
-
+  JS_FreeValue(ctx, array_buffer);
   return result;
 }
 

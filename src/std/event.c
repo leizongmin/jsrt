@@ -10,8 +10,8 @@
 #include "../util/list.h"
 
 // Forward declare class IDs
-static JSClassID JSRT_EventClassID;
-static JSClassID JSRT_EventTargetClassID;
+JSClassID JSRT_EventClassID;
+JSClassID JSRT_EventTargetClassID;
 
 // Event implementation
 typedef struct {

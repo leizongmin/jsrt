@@ -110,7 +110,7 @@ static JSValue JSRT_BlobConstructor(JSContext *ctx, JSValueConst new_target, int
   return obj;
 }
 
-static JSValue JSRT_BlobGetSize(JSContext *ctx, JSValueConst this_val) {
+static JSValue JSRT_BlobGetSize(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv) {
   JSRT_Blob *blob = JS_GetOpaque(this_val, JSRT_BlobClassID);
   if (!blob) {
     return JS_EXCEPTION;
@@ -118,7 +118,7 @@ static JSValue JSRT_BlobGetSize(JSContext *ctx, JSValueConst this_val) {
   return JS_NewBigUint64(ctx, blob->size);
 }
 
-static JSValue JSRT_BlobGetType(JSContext *ctx, JSValueConst this_val) {
+static JSValue JSRT_BlobGetType(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv) {
   JSRT_Blob *blob = JS_GetOpaque(this_val, JSRT_BlobClassID);
   if (!blob) {
     return JS_EXCEPTION;

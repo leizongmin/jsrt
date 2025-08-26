@@ -44,7 +44,7 @@ static JSValue JSRT_ReadableStreamConstructor(JSContext *ctx, JSValueConst new_t
   return obj;
 }
 
-static JSValue JSRT_ReadableStreamGetLocked(JSContext *ctx, JSValueConst this_val) {
+static JSValue JSRT_ReadableStreamGetLocked(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv) {
   JSRT_ReadableStream *stream = JS_GetOpaque(this_val, JSRT_ReadableStreamClassID);
   if (!stream) {
     return JS_EXCEPTION;
@@ -104,7 +104,7 @@ static JSValue JSRT_WritableStreamConstructor(JSContext *ctx, JSValueConst new_t
   return obj;
 }
 
-static JSValue JSRT_WritableStreamGetLocked(JSContext *ctx, JSValueConst this_val) {
+static JSValue JSRT_WritableStreamGetLocked(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv) {
   JSRT_WritableStream *stream = JS_GetOpaque(this_val, JSRT_WritableStreamClassID);
   if (!stream) {
     return JS_EXCEPTION;
@@ -154,7 +154,7 @@ static JSValue JSRT_TransformStreamConstructor(JSContext *ctx, JSValueConst new_
   return obj;
 }
 
-static JSValue JSRT_TransformStreamGetReadable(JSContext *ctx, JSValueConst this_val) {
+static JSValue JSRT_TransformStreamGetReadable(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv) {
   JSRT_TransformStream *stream = JS_GetOpaque(this_val, JSRT_TransformStreamClassID);
   if (!stream) {
     return JS_EXCEPTION;
@@ -162,7 +162,7 @@ static JSValue JSRT_TransformStreamGetReadable(JSContext *ctx, JSValueConst this
   return JS_DupValue(ctx, stream->readable);
 }
 
-static JSValue JSRT_TransformStreamGetWritable(JSContext *ctx, JSValueConst this_val) {
+static JSValue JSRT_TransformStreamGetWritable(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv) {
   JSRT_TransformStream *stream = JS_GetOpaque(this_val, JSRT_TransformStreamClassID);
   if (!stream) {
     return JS_EXCEPTION;

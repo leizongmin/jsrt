@@ -394,9 +394,75 @@ static JSValue JSRT_Fetch(JSContext *ctx, JSValueConst this_val, int argc, JSVal
   fetch_ctx->method = strdup("GET");  // Default method
   fetch_ctx->request_headers = JSRT_HeadersNew();
 
+  // Process options if provided
+  if (argc >= 2 && JS_IsObject(argv[1])) {
+    JSValue options = argv[1];
+
+    // Extract method
+    JSValue method_val = JS_GetPropertyStr(ctx, options, "method");
+    if (JS_IsString(method_val)) {
+      const char *method_str = JS_ToCString(ctx, method_val);
+      if (method_str) {
+        free(fetch_ctx->method);
+        fetch_ctx->method = strdup(method_str);
+        JS_FreeCString(ctx, method_str);
+      }
+    }
+    JS_FreeValue(ctx, method_val);
+
+    // Extract headers
+    JSValue headers_val = JS_GetPropertyStr(ctx, options, "headers");
+    if (JS_IsObject(headers_val)) {
+      // Try to get as Headers object first
+      JSRT_Headers *custom_headers = JS_GetOpaque2(ctx, headers_val, JSRT_HeadersClassID);
+      if (custom_headers) {
+        // Copy headers from Headers object
+        JSRT_HeaderItem *item = custom_headers->first;
+        while (item) {
+          JSRT_HeadersSet(fetch_ctx->request_headers, item->name, item->value);
+          item = item->next;
+        }
+      } else {
+        // Try to iterate as plain object
+        JSPropertyEnum *props;
+        uint32_t prop_count;
+        if (JS_GetOwnPropertyNames(ctx, &props, &prop_count, headers_val, JS_GPN_STRING_MASK) == 0) {
+          for (uint32_t i = 0; i < prop_count; i++) {
+            JSValue key = JS_AtomToString(ctx, props[i].atom);
+            JSValue value = JS_GetProperty(ctx, headers_val, props[i].atom);
+            if (JS_IsString(key) && JS_IsString(value)) {
+              const char *key_str = JS_ToCString(ctx, key);
+              const char *value_str = JS_ToCString(ctx, value);
+              if (key_str && value_str) {
+                JSRT_HeadersSet(fetch_ctx->request_headers, key_str, value_str);
+              }
+              if (key_str) JS_FreeCString(ctx, key_str);
+              if (value_str) JS_FreeCString(ctx, value_str);
+            }
+            JS_FreeValue(ctx, key);
+            JS_FreeValue(ctx, value);
+          }
+          for (uint32_t i = 0; i < prop_count; i++) {
+            JS_FreeAtom(ctx, props[i].atom);
+          }
+          js_free(ctx, props);
+        }
+      }
+    }
+    JS_FreeValue(ctx, headers_val);
+
+    // TODO: Add body support for POST requests
+    // JSValue body_val = JS_GetPropertyStr(ctx, options, "body");
+    // JS_FreeValue(ctx, body_val);
+  }
+
   // Set default headers
-  JSRT_HeadersSet(fetch_ctx->request_headers, "user-agent", "jsrt/1.0");
-  JSRT_HeadersSet(fetch_ctx->request_headers, "connection", "close");
+  if (!JSRT_HeadersGet(fetch_ctx->request_headers, "user-agent")) {
+    JSRT_HeadersSet(fetch_ctx->request_headers, "user-agent", "jsrt/1.0");
+  }
+  if (!JSRT_HeadersGet(fetch_ctx->request_headers, "connection")) {
+    JSRT_HeadersSet(fetch_ctx->request_headers, "connection", "close");
+  }
 
   // Start DNS resolution
   uv_getaddrinfo_t *getaddrinfo_req = malloc(sizeof(uv_getaddrinfo_t));
@@ -517,28 +583,72 @@ static int JSRT_FetchParseURL(const char *url, char **host, int *port, char **pa
 
 static char *JSRT_FetchBuildHttpRequest(const char *method, const char *path, const char *host, int port,
                                         JSRT_Headers *headers) {
-  // Calculate required buffer size
-  size_t request_size = 1024;  // Start with reasonable size
+  // Calculate required buffer size more accurately
+  size_t base_size = strlen(method) + strlen(path) + strlen(host) + 100;  // Base request line + host header
+
+  // Calculate headers size
+  size_t headers_size = 0;
+  if (headers) {
+    JSRT_HeaderItem *item = headers->first;
+    while (item) {
+      headers_size += strlen(item->name) + strlen(item->value) + 4;  // ": \r\n"
+      item = item->next;
+    }
+  }
+
+  size_t request_size = base_size + headers_size + 10;  // Extra buffer for safety
+  if (request_size < 1024) request_size = 1024;         // Minimum size
+
   char *request = malloc(request_size);
   if (!request) return NULL;
 
   // Build request line
   int len = snprintf(request, request_size, "%s %s HTTP/1.1\r\n", method, path);
+  if (len >= (int)request_size) {
+    free(request);
+    return NULL;
+  }
 
-  // Add Host header
-  len += snprintf(request + len, request_size - len, "Host: %s:%d\r\n", host, port);
+  // Add Host header - handle default ports properly
+  if (port == 80) {
+    len += snprintf(request + len, request_size - len, "Host: %s\r\n", host);
+  } else {
+    len += snprintf(request + len, request_size - len, "Host: %s:%d\r\n", host, port);
+  }
+
+  if (len >= (int)request_size) {
+    free(request);
+    return NULL;
+  }
 
   // Add custom headers
   if (headers) {
     JSRT_HeaderItem *item = headers->first;
-    while (item && len < request_size - 100) {
-      len += snprintf(request + len, request_size - len, "%s: %s\r\n", item->name, item->value);
+    while (item && len < (int)request_size - 10) {
+      int header_len = snprintf(request + len, request_size - len, "%s: %s\r\n", item->name, item->value);
+      if (len + header_len >= (int)request_size) {
+        // Need more space - reallocate
+        request_size *= 2;
+        char *new_request = realloc(request, request_size);
+        if (!new_request) {
+          free(request);
+          return NULL;
+        }
+        request = new_request;
+        header_len = snprintf(request + len, request_size - len, "%s: %s\r\n", item->name, item->value);
+      }
+      len += header_len;
       item = item->next;
     }
   }
 
   // End headers
-  len += snprintf(request + len, request_size - len, "\r\n");
+  if (len + 3 < (int)request_size) {
+    len += snprintf(request + len, request_size - len, "\r\n");
+  } else {
+    free(request);
+    return NULL;
+  }
 
   return request;
 }
@@ -552,47 +662,87 @@ static JSRT_Response *JSRT_FetchParseHttpResponse(const char *response_data, siz
   memset(response, 0, sizeof(JSRT_Response));
   response->headers = JSRT_HeadersNew();
 
-  // Find end of headers
+  // Find end of headers - try both \r\n\r\n and \n\n for compatibility
   const char *headers_end = strstr(response_data, "\r\n\r\n");
   if (!headers_end) {
-    JSRT_HeadersFree(response->headers);
-    free(response);
-    return NULL;
+    headers_end = strstr(response_data, "\n\n");
+    if (!headers_end) {
+      JSRT_HeadersFree(response->headers);
+      free(response);
+      return NULL;
+    }
   }
 
-  // Parse status line
-  if (sscanf(response_data, "HTTP/1.%*d %d", &response->status) != 1) {
-    response->status = 500;  // Default to server error
+  // Parse status line - more robust parsing
+  int major, minor;
+  char status_text_buffer[256] = {0};
+  if (sscanf(response_data, "HTTP/%d.%d %d %255[^\r\n]", &major, &minor, &response->status, status_text_buffer) >= 3) {
+    // Successfully parsed status line
+    if (strlen(status_text_buffer) > 0) {
+      response->status_text = strdup(status_text_buffer);
+    } else {
+      // Use default status text based on status code
+      if (response->status >= 200 && response->status < 300) {
+        response->status_text = strdup("OK");
+      } else if (response->status >= 400 && response->status < 500) {
+        response->status_text = strdup("Client Error");
+      } else if (response->status >= 500) {
+        response->status_text = strdup("Server Error");
+      } else {
+        response->status_text = strdup("Unknown");
+      }
+    }
+  } else {
+    // Fallback parsing
+    response->status = 500;
+    response->status_text = strdup("Parse Error");
   }
 
   response->ok = (response->status >= 200 && response->status < 300);
-  response->status_text = strdup(response->ok ? "OK" : "Error");
 
-  // Parse headers (simplified)
+  // Parse headers - improved robustness
   const char *header_start = strchr(response_data, '\n');
   if (header_start) {
-    header_start++;  // Skip first line
+    header_start++;  // Skip status line
     while (header_start < headers_end) {
-      const char *header_end = strchr(header_start, '\n');
-      if (!header_end) break;
+      const char *line_end = strchr(header_start, '\n');
+      if (!line_end) break;
 
-      const char *colon = strchr(header_start, ':');
-      if (colon && colon < header_end) {
-        // Extract header name and value
-        char *name = malloc(colon - header_start + 1);
-        char *value = malloc(header_end - colon);
-        if (name && value) {
-          strncpy(name, header_start, colon - header_start);
-          name[colon - header_start] = '\0';
-          strncpy(value, colon + 2, header_end - colon - 3);  // Skip ': ' and '\r'
-          value[header_end - colon - 3] = '\0';
-          JSRT_HeadersSet(response->headers, name, value);
-        }
-        if (name) free(name);
-        if (value) free(value);
+      // Handle \r\n line endings
+      const char *actual_line_end = line_end;
+      if (line_end > header_start && *(line_end - 1) == '\r') {
+        actual_line_end = line_end - 1;
       }
 
-      header_start = header_end + 1;
+      const char *colon = strchr(header_start, ':');
+      if (colon && colon < actual_line_end) {
+        // Calculate lengths
+        size_t name_len = colon - header_start;
+        size_t value_len = actual_line_end - colon - 1;
+
+        // Skip whitespace after colon
+        const char *value_start = colon + 1;
+        while (value_start < actual_line_end && (*value_start == ' ' || *value_start == '\t')) {
+          value_start++;
+          value_len--;
+        }
+
+        if (name_len > 0 && value_len > 0) {
+          char *name = malloc(name_len + 1);
+          char *value = malloc(value_len + 1);
+          if (name && value) {
+            strncpy(name, header_start, name_len);
+            name[name_len] = '\0';
+            strncpy(value, value_start, value_len);
+            value[value_len] = '\0';
+            JSRT_HeadersSet(response->headers, name, value);
+          }
+          if (name) free(name);
+          if (value) free(value);
+        }
+      }
+
+      header_start = line_end + 1;
     }
   }
 

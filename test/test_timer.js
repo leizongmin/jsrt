@@ -1,4 +1,5 @@
 // Cross-platform compatible timer tests
+const assert = require("std:assert");
 console.log('Starting timer tests...');
 
 // Test 1: Basic setTimeout functionality

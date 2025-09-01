@@ -1,4 +1,5 @@
 // Test FormData API
+const assert = require("std:assert");
 console.log("Testing FormData API...");
 
 // Test basic FormData constructor

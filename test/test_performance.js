@@ -1,4 +1,5 @@
 // Performance API tests for WinterCG compliance
+const assert = require("std:assert");
 console.log('=== Starting Performance API Tests ===');
 
 // Test 1: Check if performance object exists

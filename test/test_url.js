@@ -1,4 +1,5 @@
 // Test URL and URLSearchParams implementation
+const assert = require("std:assert");
 console.log('=== URL/URLSearchParams API Tests ===');
 
 // Test 1: Basic URL construction

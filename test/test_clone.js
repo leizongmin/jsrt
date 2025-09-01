@@ -1,4 +1,5 @@
 // Test structuredClone implementation
+const assert = require("std:assert");
 console.log('=== Structured Clone API Tests ===');
 
 // Test 1: Primitive values

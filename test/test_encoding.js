@@ -1,4 +1,5 @@
 // Comprehensive Encoding API tests for WinterCG compliance
+const assert = require("std:assert");
 console.log('=== Starting Encoding API Tests ===');
 
 // Test 1: TextEncoder basic functionality

@@ -1,4 +1,5 @@
 // Base64 Utilities tests for WinterCG compliance
+const assert = require("std:assert");
 console.log('=== Starting Base64 Utilities Tests ===');
 
 // Test 1: Basic btoa functionality

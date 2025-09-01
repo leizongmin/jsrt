@@ -2,7 +2,14 @@
   "permissions": {
     "allow": [
       "Bash(make:*)",
-      "Bash(./target/release/jsrt:*)"
+      "Bash(./target/release/jsrt:*)",
+      "Bash(find:*)",
+      "Bash(echo:*)",
+      "Bash(echo:*)",
+      "Bash(./target/debug/jsrt:*)",
+      "Bash(ln:*)",
+      "Bash(./bin/jsrt:*)",
+      "Bash(/dev/null)"
     ],
     "deny": [],
     "ask": []

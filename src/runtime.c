@@ -9,7 +9,6 @@
 #include <uv.h>
 
 #include "std/abort.h"
-#include "std/assert.h"
 #include "std/base64.h"
 #include "std/blob.h"
 #include "std/clone.h"
@@ -67,7 +66,6 @@ JSRT_Runtime *JSRT_RuntimeNew() {
   JSRT_RuntimeSetupStdBlob(rt);
   JSRT_RuntimeSetupStdFormData(rt);
   JSRT_RuntimeSetupStdFetch(rt);
-  JSRT_RuntimeSetupStdAssert(rt);
   JSRT_StdModuleInit(rt);
   JSRT_StdCommonJSInit(rt);
 

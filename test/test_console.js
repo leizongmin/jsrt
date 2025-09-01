@@ -1,4 +1,5 @@
 // Cross-platform compatible console tests
+const assert = require("std:assert");
 console.log('hello, world!');
 
 // Test logging different data types (safe references only)

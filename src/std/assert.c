@@ -86,21 +86,18 @@ static JSValue jsrt_assert_equal(JSContext *ctx, JSValueConst this_val, int argc
     return throw_assertion_error(ctx, "assert.equal requires at least 2 arguments");
   }
 
-  JSValue val1 = JS_DupValue(ctx, argv[0]);
-  JSValue val2 = JS_DupValue(ctx, argv[1]);
-  int equal = JS_StrictEq(ctx, val1, val2);
-  // For loose equality, convert to string and compare
-  if (equal != 1) {
-    const char *str1 = JS_ToCString(ctx, val1);
-    const char *str2 = JS_ToCString(ctx, val2);
-    if (str1 && str2) {
-      equal = (strcmp(str1, str2) == 0) ? 1 : 0;
-    }
-    if (str1) JS_FreeCString(ctx, str1);
-    if (str2) JS_FreeCString(ctx, str2);
-  }
-  JS_FreeValue(ctx, val1);
-  JS_FreeValue(ctx, val2);
+  // Use JavaScript evaluation to implement loose equality (==)
+  JSValue global = JS_GetGlobalObject(ctx);
+  JS_SetPropertyStr(ctx, global, "__assertTmp1", JS_DupValue(ctx, argv[0]));
+  JS_SetPropertyStr(ctx, global, "__assertTmp2", JS_DupValue(ctx, argv[1]));
+
+  JSValue result = JS_Eval(ctx, "__assertTmp1 == __assertTmp2", 26, "<assert>", JS_EVAL_FLAG_STRICT);
+  int equal = JS_ToBool(ctx, result);
+
+  JS_DeleteProperty(ctx, global, JS_NewAtom(ctx, "__assertTmp1"), 0);
+  JS_DeleteProperty(ctx, global, JS_NewAtom(ctx, "__assertTmp2"), 0);
+  JS_FreeValue(ctx, global);
+  JS_FreeValue(ctx, result);
   equal = (equal == 1);
   if (!equal) {
     const char *message = "Expected values to be equal (==)";
@@ -358,50 +355,24 @@ static JSValue jsrt_assert_doesNotThrow(JSContext *ctx, JSValueConst this_val, i
   return JS_UNDEFINED;
 }
 
-// Initialize assert module
-void JSRT_RuntimeSetupStdAssert(JSRT_Runtime *rt) {
-  // Create assert object
-  JSValue assert = JS_NewObject(rt->ctx);
+// Create assert module for std:assert
+JSValue JSRT_CreateAssertModule(JSContext *ctx) {
+  // Create assert function that is also callable
+  JSValue assert_func = JS_NewCFunction(ctx, jsrt_assert, "assert", 2);
 
-  // Set main assert function (callable object)
-  JS_SetPropertyStr(rt->ctx, rt->global, "assert", JS_NewCFunction(rt->ctx, jsrt_assert, "assert", 2));
+  // Set methods on the assert function object
+  JS_SetPropertyStr(ctx, assert_func, "ok", JS_NewCFunction(ctx, jsrt_assert_ok, "ok", 2));
+  JS_SetPropertyStr(ctx, assert_func, "equal", JS_NewCFunction(ctx, jsrt_assert_equal, "equal", 3));
+  JS_SetPropertyStr(ctx, assert_func, "notEqual", JS_NewCFunction(ctx, jsrt_assert_notEqual, "notEqual", 3));
+  JS_SetPropertyStr(ctx, assert_func, "strictEqual", JS_NewCFunction(ctx, jsrt_assert_strictEqual, "strictEqual", 3));
+  JS_SetPropertyStr(ctx, assert_func, "notStrictEqual",
+                    JS_NewCFunction(ctx, jsrt_assert_notStrictEqual, "notStrictEqual", 3));
+  JS_SetPropertyStr(ctx, assert_func, "deepEqual", JS_NewCFunction(ctx, jsrt_assert_deepEqual, "deepEqual", 3));
+  JS_SetPropertyStr(ctx, assert_func, "notDeepEqual",
+                    JS_NewCFunction(ctx, jsrt_assert_notDeepEqual, "notDeepEqual", 3));
+  JS_SetPropertyStr(ctx, assert_func, "throws", JS_NewCFunction(ctx, jsrt_assert_throws, "throws", 3));
+  JS_SetPropertyStr(ctx, assert_func, "doesNotThrow",
+                    JS_NewCFunction(ctx, jsrt_assert_doesNotThrow, "doesNotThrow", 3));
 
-  // Create assert module object with methods
-  JSValue assert_module = JS_NewObject(rt->ctx);
-
-  // Set methods on assert module
-  JS_SetPropertyStr(rt->ctx, assert_module, "ok", JS_NewCFunction(rt->ctx, jsrt_assert_ok, "ok", 2));
-  JS_SetPropertyStr(rt->ctx, assert_module, "equal", JS_NewCFunction(rt->ctx, jsrt_assert_equal, "equal", 3));
-  JS_SetPropertyStr(rt->ctx, assert_module, "notEqual", JS_NewCFunction(rt->ctx, jsrt_assert_notEqual, "notEqual", 3));
-  JS_SetPropertyStr(rt->ctx, assert_module, "strictEqual",
-                    JS_NewCFunction(rt->ctx, jsrt_assert_strictEqual, "strictEqual", 3));
-  JS_SetPropertyStr(rt->ctx, assert_module, "notStrictEqual",
-                    JS_NewCFunction(rt->ctx, jsrt_assert_notStrictEqual, "notStrictEqual", 3));
-  JS_SetPropertyStr(rt->ctx, assert_module, "deepEqual",
-                    JS_NewCFunction(rt->ctx, jsrt_assert_deepEqual, "deepEqual", 3));
-  JS_SetPropertyStr(rt->ctx, assert_module, "notDeepEqual",
-                    JS_NewCFunction(rt->ctx, jsrt_assert_notDeepEqual, "notDeepEqual", 3));
-  JS_SetPropertyStr(rt->ctx, assert_module, "throws", JS_NewCFunction(rt->ctx, jsrt_assert_throws, "throws", 3));
-  JS_SetPropertyStr(rt->ctx, assert_module, "doesNotThrow",
-                    JS_NewCFunction(rt->ctx, jsrt_assert_doesNotThrow, "doesNotThrow", 3));
-
-  // Also set methods on global assert function
-  JSValue global_assert = JS_GetPropertyStr(rt->ctx, rt->global, "assert");
-  JS_SetPropertyStr(rt->ctx, global_assert, "ok", JS_NewCFunction(rt->ctx, jsrt_assert_ok, "ok", 2));
-  JS_SetPropertyStr(rt->ctx, global_assert, "equal", JS_NewCFunction(rt->ctx, jsrt_assert_equal, "equal", 3));
-  JS_SetPropertyStr(rt->ctx, global_assert, "notEqual", JS_NewCFunction(rt->ctx, jsrt_assert_notEqual, "notEqual", 3));
-  JS_SetPropertyStr(rt->ctx, global_assert, "strictEqual",
-                    JS_NewCFunction(rt->ctx, jsrt_assert_strictEqual, "strictEqual", 3));
-  JS_SetPropertyStr(rt->ctx, global_assert, "notStrictEqual",
-                    JS_NewCFunction(rt->ctx, jsrt_assert_notStrictEqual, "notStrictEqual", 3));
-  JS_SetPropertyStr(rt->ctx, global_assert, "deepEqual",
-                    JS_NewCFunction(rt->ctx, jsrt_assert_deepEqual, "deepEqual", 3));
-  JS_SetPropertyStr(rt->ctx, global_assert, "notDeepEqual",
-                    JS_NewCFunction(rt->ctx, jsrt_assert_notDeepEqual, "notDeepEqual", 3));
-  JS_SetPropertyStr(rt->ctx, global_assert, "throws", JS_NewCFunction(rt->ctx, jsrt_assert_throws, "throws", 3));
-  JS_SetPropertyStr(rt->ctx, global_assert, "doesNotThrow",
-                    JS_NewCFunction(rt->ctx, jsrt_assert_doesNotThrow, "doesNotThrow", 3));
-
-  JS_FreeValue(rt->ctx, global_assert);
-  JS_FreeValue(rt->ctx, assert_module);
+  return assert_func;
 }

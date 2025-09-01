@@ -1,4 +1,5 @@
 // Test Event and EventTarget implementation
+const assert = require("std:assert");
 console.log('=== Event/EventTarget API Tests ===');
 
 // Test 1: Basic Event construction

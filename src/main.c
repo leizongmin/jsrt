@@ -12,7 +12,7 @@ int main(int argc, char **argv) {
   }
 
   const char *filename = argv[1];
-  int ret = JSRT_CmdRunFile(filename);
+  int ret = JSRT_CmdRunFile(filename, argc, argv);
 
   return ret;
 }

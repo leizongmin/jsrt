@@ -1,9 +1,13 @@
 #include "jsrt.h"
 
 #include "runtime.h"
+#include "std/process.h"
 #include "util/file.h"
 
-int JSRT_CmdRunFile(const char *filename) {
+int JSRT_CmdRunFile(const char *filename, int argc, char **argv) {
+  // Store command line arguments for process module
+  g_jsrt_argc = argc;
+  g_jsrt_argv = argv;
   int ret = 0;
   JSRT_Runtime *rt = JSRT_RuntimeNew();
 

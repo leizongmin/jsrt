@@ -19,6 +19,7 @@
 #include "std/formdata.h"
 #include "std/module.h"
 #include "std/performance.h"
+#include "std/process.h"
 #include "std/streams.h"
 #include "std/timer.h"
 #include "std/url.h"
@@ -66,6 +67,7 @@ JSRT_Runtime *JSRT_RuntimeNew() {
   JSRT_RuntimeSetupStdBlob(rt);
   JSRT_RuntimeSetupStdFormData(rt);
   JSRT_RuntimeSetupStdFetch(rt);
+  JSRT_RuntimeSetupStdProcess(rt);
   JSRT_StdModuleInit(rt);
   JSRT_StdCommonJSInit(rt);
 

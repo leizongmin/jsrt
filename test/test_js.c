@@ -19,7 +19,7 @@ int main(int argc, char **argv) {
   for (int i = 1; i < argc; i++) {
     const char *filename = argv[i];
     printf("\033[32mRun file: %s\033[0m\n", filename);
-    int ret = JSRT_CmdRunFile(filename);
+    int ret = JSRT_CmdRunFile(filename, argc, argv);
     if (ret != 0) {
       printf("\033[32m>> Error: %d\033[0m\n", ret);
       return ret;

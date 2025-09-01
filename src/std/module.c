@@ -9,6 +9,7 @@
 #include "../util/file.h"
 #include "../util/path.h"
 #include "assert.h"
+#include "process.h"
 
 // Module init function for std:assert ES module
 static int js_std_assert_init(JSContext *ctx, JSModuleDef *m) {
@@ -17,6 +18,16 @@ static int js_std_assert_init(JSContext *ctx, JSModuleDef *m) {
     return -1;
   }
   JS_SetModuleExport(ctx, m, "default", assert_module);
+  return 0;
+}
+
+// Module init function for std:process ES module
+static int js_std_process_init(JSContext *ctx, JSModuleDef *m) {
+  JSValue process_module = JSRT_CreateProcessModule(ctx);
+  if (JS_IsException(process_module)) {
+    return -1;
+  }
+  JS_SetModuleExport(ctx, m, "default", process_module);
   return 0;
 }
 
@@ -119,6 +130,15 @@ JSModuleDef *JSRT_ModuleLoader(JSContext *ctx, const char *module_name, void *op
       return m;
     }
 
+    if (strcmp(std_module, "process") == 0) {
+      // Create std:process module with init function
+      JSModuleDef *m = JS_NewCModule(ctx, module_name, js_std_process_init);
+      if (m) {
+        JS_AddModuleExport(ctx, m, "default");
+      }
+      return m;
+    }
+
     JS_ThrowReferenceError(ctx, "Unknown std module '%s'", std_module);
     return NULL;
   }
@@ -199,6 +219,12 @@ static JSValue js_require(JSContext *ctx, JSValueConst this_val, int argc, JSVal
 
     if (strcmp(std_module, "assert") == 0) {
       JSValue result = JSRT_CreateAssertModule(ctx);
+      JS_FreeCString(ctx, module_name);
+      return result;
+    }
+
+    if (strcmp(std_module, "process") == 0) {
+      JSValue result = JSRT_CreateProcessModule(ctx);
       JS_FreeCString(ctx, module_name);
       return result;
     }

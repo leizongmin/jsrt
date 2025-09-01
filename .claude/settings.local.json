@@ -9,7 +9,8 @@
       "Bash(./target/debug/jsrt:*)",
       "Bash(ln:*)",
       "Bash(./bin/jsrt:*)",
-      "Bash(/dev/null)"
+      "Bash(/dev/null)",
+      "Bash(git commit:*)"
     ],
     "deny": [],
     "ask": []

@@ -14,12 +14,12 @@ jobs:
       uses: actions/checkout@v4
       with:
         submodules: recursive
-    
+
     - name: Install clang-format
       run: |
         sudo apt-get update
         sudo apt-get install -y clang-format
-    
+
     - name: Check code formatting
       run: |
         make clang-format
@@ -42,45 +42,45 @@ jobs:
           - os: macos-latest
             cc: clang
             cxx: clang++
-    
+
     steps:
     - name: Checkout code
       uses: actions/checkout@v4
       with:
         submodules: recursive
-    
+
     - name: Install dependencies (Ubuntu)
       if: matrix.os == 'ubuntu-latest'
       run: |
         sudo apt-get update
         sudo apt-get install -y build-essential cmake
-    
+
     - name: Install dependencies (macOS)
       if: matrix.os == 'macos-latest'
       run: |
-        brew install cmake
-    
+        echo "no need to install cmake on macos"
+
     - name: Build (Release)
       env:
         CC: ${{ matrix.cc }}
         CXX: ${{ matrix.cxx }}
       run: make jsrt
-    
+
     - name: Build (Debug)
       env:
         CC: ${{ matrix.cc }}
         CXX: ${{ matrix.cxx }}
       run: make jsrt_g
-    
+
     - name: Run basic functionality test
       run: |
         echo 'console.log("Hello from CI!");' > test_ci.js
         ./target/release/jsrt test_ci.js
         ./target/debug/jsrt test_ci.js
-    
+
     - name: Run unit tests
       run: make test
-    
+
     - name: Upload build artifacts
       uses: actions/upload-artifact@v4
       with:
@@ -98,7 +98,7 @@ jobs:
       uses: actions/checkout@v4
       with:
         submodules: recursive
-    
+
     - name: Setup MSYS2
       uses: msys2/setup-msys2@v2
       with:
@@ -109,32 +109,32 @@ jobs:
           mingw-w64-ucrt-x86_64-cmake
           mingw-w64-ucrt-x86_64-make
           make
-    
+
     - name: Build (Release)
       shell: msys2 {0}
       run: |
         export CC=gcc
         export CXX=g++
         make jsrt
-    
+
     - name: Build (Debug)
       shell: msys2 {0}
       run: |
         export CC=gcc
         export CXX=g++
         make jsrt_g
-    
+
     - name: Run basic functionality test
       shell: msys2 {0}
       run: |
         echo 'console.log("Hello from Windows CI!");' > test_ci.js
         ./target/release/jsrt.exe test_ci.js
         ./target/debug/jsrt.exe test_ci.js
-    
+
     - name: Run unit tests
       shell: msys2 {0}
       run: make test
-    
+
     - name: Upload Windows build artifacts
       uses: actions/upload-artifact@v4
       with:

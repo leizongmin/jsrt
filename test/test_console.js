@@ -10,6 +10,8 @@ console.log({ a: 123, b: 456, c: true, d: false, e: null, f: undefined, g: [1,2,
 // Test function existence checks (safe way)
 console.log('setTimeout exists:', typeof setTimeout === 'function');
 console.log('console.log exists:', typeof console.log === 'function');
+assert.strictEqual(typeof setTimeout, 'function', 'setTimeout should be a function');
+assert.strictEqual(typeof console.log, 'function', 'console.log should be a function');
 
 // Test console.log with no arguments
 console.log();

@@ -5,15 +5,24 @@ console.log('=== URL/URLSearchParams API Tests ===');
 console.log('Test 1: Basic URL construction');
 const url1 = new URL('https://example.com/path?param=value#hash');
 console.log('URL created:', typeof url1);
+assert.strictEqual(typeof url1, 'object', 'URL should be an object');
 console.log('href:', url1.href);
+assert.strictEqual(url1.href, 'https://example.com/path?param=value#hash', 'href should match input');
 console.log('protocol:', url1.protocol);
+assert.strictEqual(url1.protocol, 'https:', 'protocol should be https:');
 console.log('host:', url1.host);
+assert.strictEqual(url1.host, 'example.com', 'host should be example.com');
 console.log('hostname:', url1.hostname);
+assert.strictEqual(url1.hostname, 'example.com', 'hostname should be example.com');
 console.log('port:', url1.port);
 console.log('pathname:', url1.pathname);
+assert.strictEqual(url1.pathname, '/path', 'pathname should be /path');
 console.log('search:', url1.search);
+assert.strictEqual(url1.search, '?param=value', 'search should be ?param=value');
 console.log('hash:', url1.hash);
+assert.strictEqual(url1.hash, '#hash', 'hash should be #hash');
 console.log('origin:', url1.origin);
+assert.strictEqual(url1.origin, 'https://example.com', 'origin should be https://example.com');
 
 // Test 2: URL with port
 console.log('\nTest 2: URL with port');

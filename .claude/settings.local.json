@@ -1,0 +1,10 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(make:*)",
+      "Bash(./target/release/jsrt:*)"
+    ],
+    "deny": [],
+    "ask": []
+  }
+}

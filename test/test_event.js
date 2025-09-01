@@ -5,23 +5,32 @@ console.log('=== Event/EventTarget API Tests ===');
 console.log('Test 1: Basic Event construction');
 const event1 = new Event('test');
 console.log('Event type:', event1.type);
+assert.strictEqual(event1.type, 'test', 'Event type should be "test"');
 console.log('Event bubbles:', event1.bubbles);
+assert.strictEqual(event1.bubbles, false, 'Event bubbles should default to false');
 console.log('Event cancelable:', event1.cancelable);
+assert.strictEqual(event1.cancelable, false, 'Event cancelable should default to false');
 console.log('Event defaultPrevented:', event1.defaultPrevented);
+assert.strictEqual(event1.defaultPrevented, false, 'Event defaultPrevented should default to false');
 
 // Test 2: Event with options
 console.log('\nTest 2: Event with options');
 const event2 = new Event('custom', { bubbles: true, cancelable: true });
 console.log('Event type:', event2.type);
+assert.strictEqual(event2.type, 'custom', 'Event type should be "custom"');
 console.log('Event bubbles:', event2.bubbles);
+assert.strictEqual(event2.bubbles, true, 'Event bubbles should be true');
 console.log('Event cancelable:', event2.cancelable);
+assert.strictEqual(event2.cancelable, true, 'Event cancelable should be true');
 
 // Test 3: Event preventDefault
 console.log('\nTest 3: Event preventDefault');
 const event3 = new Event('cancel', { cancelable: true });
 console.log('Before preventDefault:', event3.defaultPrevented);
+assert.strictEqual(event3.defaultPrevented, false, 'defaultPrevented should be false before preventDefault');
 event3.preventDefault();
 console.log('After preventDefault:', event3.defaultPrevented);
+assert.strictEqual(event3.defaultPrevented, true, 'defaultPrevented should be true after preventDefault');
 
 // Test 4: Basic EventTarget
 console.log('\nTest 4: Basic EventTarget');
@@ -41,8 +50,11 @@ const testEvent = new Event('test');
 console.log('Before dispatch - called:', called);
 const result = target.dispatchEvent(testEvent);
 console.log('After dispatch - called:', called);
+assert.strictEqual(called, true, 'Event listener should be called');
 console.log('Dispatch result:', result);
+assert.strictEqual(typeof result, 'boolean', 'dispatchEvent should return boolean');
 console.log('Event target set correctly:', eventData && eventData.target === target);
+assert.strictEqual(eventData.target, target, 'Event target should be set correctly');
 
 // Test 6: Multiple listeners
 console.log('\nTest 6: Multiple listeners');

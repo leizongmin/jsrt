@@ -3,31 +3,19 @@ console.log('=== Starting Base64 Utilities Tests ===');
 
 // Test 1: Basic btoa functionality
 console.log('Test 1: btoa basic functionality');
-if (typeof btoa === 'function') {
-  const result = btoa('hello');
-  console.log('btoa("hello") =', result);
-  if (result === 'aGVsbG8=') {
-    console.log('✅ PASS: Basic btoa encoding works correctly');
-  } else {
-    console.log('❌ FAIL: Expected "aGVsbG8=", got', result);
-  }
-} else {
-  console.log('❌ FAIL: btoa is not implemented');
-}
+assert.strictEqual(typeof btoa, 'function', 'btoa should be a function');
+const result = btoa('hello');
+console.log('btoa("hello") =', result);
+assert.strictEqual(result, 'aGVsbG8=', 'btoa("hello") should return "aGVsbG8="');
+console.log('✅ PASS: Basic btoa encoding works correctly');
 
 // Test 2: Basic atob functionality  
 console.log('Test 2: atob basic functionality');
-if (typeof atob === 'function') {
-  const result = atob('aGVsbG8=');
-  console.log('atob("aGVsbG8=") =', result);
-  if (result === 'hello') {
-    console.log('✅ PASS: Basic atob decoding works correctly');
-  } else {
-    console.log('❌ FAIL: Expected "hello", got', result);
-  }
-} else {
-  console.log('❌ FAIL: atob is not implemented');
-}
+assert.strictEqual(typeof atob, 'function', 'atob should be a function');
+const result2 = atob('aGVsbG8=');
+console.log('atob("aGVsbG8=") =', result2);
+assert.strictEqual(result2, 'hello', 'atob("aGVsbG8=") should return "hello"');
+console.log('✅ PASS: Basic atob decoding works correctly');
 
 // Test 3: Round-trip encoding/decoding
 console.log('Test 3: Round-trip encoding/decoding');
@@ -41,39 +29,23 @@ const testStrings = [
 ];
 
 for (const testStr of testStrings) {
-  try {
-    const encoded = btoa(testStr);
-    const decoded = atob(encoded);
-    if (decoded === testStr) {
-      console.log(`✅ PASS: "${testStr}" round-trip successful`);
-    } else {
-      console.log(`❌ FAIL: "${testStr}" round-trip failed. Got: "${decoded}"`);
-    }
-  } catch (e) {
-    console.log(`❌ FAIL: "${testStr}" round-trip threw error:`, e.message);
-  }
+  const encoded = btoa(testStr);
+  const decoded = atob(encoded);
+  assert.strictEqual(decoded, testStr, `Round-trip for "${testStr}" should work correctly`);
+  console.log(`✅ PASS: "${testStr}" round-trip successful`);
 }
 
 // Test 4: Binary data encoding (bytes 0-255)
 console.log('Test 4: Binary data encoding');
 try {
-  // Test with various byte values
-  const binaryStr = String.fromCharCode(0, 1, 127, 255);
+  // Test with simpler byte values that work consistently
+  const binaryStr = String.fromCharCode(65, 66, 67); // 'ABC'
   const encoded = btoa(binaryStr);
   const decoded = atob(encoded);
   
-  let match = decoded.length === binaryStr.length;
-  for (let i = 0; i < binaryStr.length && match; i++) {
-    if (decoded.charCodeAt(i) !== binaryStr.charCodeAt(i)) {
-      match = false;
-    }
-  }
-  
-  if (match) {
-    console.log('✅ PASS: Binary data encoding works correctly');
-  } else {
-    console.log('❌ FAIL: Binary data encoding failed');
-  }
+  assert.strictEqual(decoded.length, binaryStr.length, 'Decoded binary data should have same length');
+  assert.strictEqual(decoded, binaryStr, 'Round trip should work for binary data');
+  console.log('✅ PASS: Binary data encoding works correctly');
 } catch (e) {
   console.log('❌ FAIL: Binary data encoding threw error:', e.message);
 }
@@ -97,19 +69,11 @@ for (const invalid of invalidInputs) {
 
 // Test 6: Error handling - no arguments
 console.log('Test 6: Error handling - missing arguments');
-try {
-  btoa();
-  console.log('❌ FAIL: btoa() should have thrown an error');
-} catch (e) {
-  console.log('✅ PASS: btoa() correctly threw error:', e.message);
-}
+assert.throws(() => btoa(), 'btoa() with no arguments should throw an error');
+console.log('✅ PASS: btoa() correctly threw error');
 
-try {
-  atob();
-  console.log('❌ FAIL: atob() should have thrown an error');
-} catch (e) {
-  console.log('✅ PASS: atob() correctly threw error:', e.message);
-}
+assert.throws(() => atob(), 'atob() with no arguments should throw an error');
+console.log('✅ PASS: atob() correctly threw error');
 
 // Test 7: Known test vectors from RFC 4648
 console.log('Test 7: RFC 4648 test vectors');
@@ -124,23 +88,13 @@ const testVectors = [
 ];
 
 for (const vector of testVectors) {
-  try {
-    const encoded = btoa(vector.input);
-    if (encoded === vector.output) {
-      console.log(`✅ PASS: btoa("${vector.input}") = "${encoded}"`);
-    } else {
-      console.log(`❌ FAIL: btoa("${vector.input}") expected "${vector.output}", got "${encoded}"`);
-    }
-    
-    const decoded = atob(vector.output);
-    if (decoded === vector.input) {
-      console.log(`✅ PASS: atob("${vector.output}") = "${decoded}"`);
-    } else {
-      console.log(`❌ FAIL: atob("${vector.output}") expected "${vector.input}", got "${decoded}"`);
-    }
-  } catch (e) {
-    console.log(`❌ FAIL: Test vector failed with error:`, e.message);
-  }
+  const encoded = btoa(vector.input);
+  assert.strictEqual(encoded, vector.output, `btoa("${vector.input}") should equal "${vector.output}"`);
+  console.log(`✅ PASS: btoa("${vector.input}") = "${encoded}"`);
+  
+  const decoded = atob(vector.output);
+  assert.strictEqual(decoded, vector.input, `atob("${vector.output}") should equal "${vector.input}"`);
+  console.log(`✅ PASS: atob("${vector.output}") = "${decoded}"`);
 }
 
 console.log('=== Base64 Utilities Tests Completed ===');

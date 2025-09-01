@@ -3,19 +3,12 @@ console.log('=== Starting Encoding API Tests ===');
 
 // Test 1: TextEncoder basic functionality
 console.log('Test 1: TextEncoder - basic functionality');
-try {
-  const encoder = new TextEncoder();
-  console.log('TextEncoder created successfully');
-  console.log('Encoding:', encoder.encoding);
-  
-  if (encoder.encoding === 'utf-8') {
-    console.log('✓ TextEncoder encoding property is correct');
-  } else {
-    console.log('✗ TextEncoder encoding property is incorrect:', encoder.encoding);
-  }
-} catch (e) {
-  console.log('✗ TextEncoder constructor failed:', e.message);
-}
+const encoder = new TextEncoder();
+console.log('TextEncoder created successfully');
+assert.strictEqual(typeof encoder, 'object', 'TextEncoder should be an object');
+console.log('Encoding:', encoder.encoding);
+assert.strictEqual(encoder.encoding, 'utf-8', 'TextEncoder encoding should be utf-8');
+console.log('✓ TextEncoder encoding property is correct');
 
 // Test 2: TextEncoder encode() method
 console.log('Test 2: TextEncoder encode() method');
@@ -25,33 +18,18 @@ try {
   console.log('Encoded result type:', typeof result);
   console.log('Encoded result constructor:', result.constructor.name);
   
-  if (result instanceof Uint8Array) {
-    console.log('✓ encode() returns Uint8Array');
-    console.log('Encoded bytes length:', result.length);
-    console.log('Encoded bytes:', Array.from(result));
-    
-    // Verify UTF-8 encoding
-    const expected = [72, 101, 108, 108, 111, 44, 32, 87, 111, 114, 108, 100, 33];
-    let matches = true;
-    if (result.length === expected.length) {
-      for (let i = 0; i < result.length; i++) {
-        if (result[i] !== expected[i]) {
-          matches = false;
-          break;
-        }
-      }
-    } else {
-      matches = false;
-    }
-    
-    if (matches) {
-      console.log('✓ UTF-8 encoding is correct');
-    } else {
-      console.log('✗ UTF-8 encoding is incorrect');
-    }
-  } else {
-    console.log('✗ encode() does not return Uint8Array');
+  assert(result instanceof Uint8Array, 'encode() should return Uint8Array');
+  console.log('✓ encode() returns Uint8Array');
+  console.log('Encoded bytes length:', result.length);
+  console.log('Encoded bytes:', Array.from(result));
+  
+  // Verify UTF-8 encoding
+  const expected = [72, 101, 108, 108, 111, 44, 32, 87, 111, 114, 108, 100, 33];
+  assert.strictEqual(result.length, expected.length, 'Encoded length should match expected');
+  for (let i = 0; i < result.length; i++) {
+    assert.strictEqual(result[i], expected[i], `Byte at position ${i} should match expected`);
   }
+  console.log('✓ UTF-8 encoding is correct');
 } catch (e) {
   console.log('✗ TextEncoder encode() failed:', e.message);
 }
@@ -61,11 +39,8 @@ console.log('Test 3: TextEncoder encode() with empty string');
 try {
   const encoder = new TextEncoder();
   const result = encoder.encode('');
-  if (result.length === 0) {
-    console.log('✓ Empty string encodes to empty array');
-  } else {
-    console.log('✗ Empty string encoding failed, length:', result.length);
-  }
+  assert.strictEqual(result.length, 0, 'Empty string should encode to empty array');
+  console.log('✓ Empty string encodes to empty array');
 } catch (e) {
   console.log('✗ TextEncoder encode() empty string failed:', e.message);
 }
@@ -89,11 +64,11 @@ try {
     }
   }
   
-  if (matches) {
-    console.log('✓ Unicode character encoding is correct');
-  } else {
-    console.log('✗ Unicode character encoding is incorrect');
+  assert.strictEqual(result.length, expected.length, 'Unicode encoded length should match expected');
+  for (let i = 0; i < result.length; i++) {
+    assert.strictEqual(result[i], expected[i], `Unicode byte at position ${i} should match expected`);
   }
+  console.log('✓ Unicode character encoding is correct');
 } catch (e) {
   console.log('✗ TextEncoder Unicode encoding failed:', e.message);
 }
@@ -149,11 +124,10 @@ try {
   console.log('Fatal:', decoder.fatal);
   console.log('IgnoreBOM:', decoder.ignoreBOM);
   
-  if (decoder.encoding === 'utf-8' && decoder.fatal === false && decoder.ignoreBOM === false) {
-    console.log('✓ TextDecoder properties are correct');
-  } else {
-    console.log('✗ TextDecoder properties are incorrect');
-  }
+  assert.strictEqual(decoder.encoding, 'utf-8', 'TextDecoder encoding should be utf-8');
+  assert.strictEqual(decoder.fatal, false, 'TextDecoder fatal should be false by default');
+  assert.strictEqual(decoder.ignoreBOM, false, 'TextDecoder ignoreBOM should be false by default');
+  console.log('✓ TextDecoder properties are correct');
 } catch (e) {
   console.log('✗ TextDecoder constructor failed:', e.message);
 }
@@ -182,11 +156,8 @@ try {
   const result = decoder.decode(bytes);
   
   console.log('Decoded result:', result);
-  if (result === 'Hello, World!') {
-    console.log('✓ decode() correctly decodes UTF-8 bytes');
-  } else {
-    console.log('✗ decode() incorrectly decodes UTF-8 bytes');
-  }
+  assert.strictEqual(result, 'Hello, World!', 'decode() should correctly decode UTF-8 bytes');
+  console.log('✓ decode() correctly decodes UTF-8 bytes');
 } catch (e) {
   console.log('✗ TextDecoder decode() failed:', e.message);
 }
@@ -197,11 +168,8 @@ try {
   const decoder = new TextDecoder();
   const result = decoder.decode(new Uint8Array(0));
   
-  if (result === '') {
-    console.log('✓ Empty array decodes to empty string');
-  } else {
-    console.log('✗ Empty array decoding failed, result:', JSON.stringify(result));
-  }
+  assert.strictEqual(result, '', 'Empty array should decode to empty string');
+  console.log('✓ Empty array decodes to empty string');
 } catch (e) {
   console.log('✗ TextDecoder decode() empty array failed:', e.message);
 }
@@ -214,11 +182,8 @@ try {
   const result = decoder.decode(bytes);
   
   console.log('Decoded Unicode result:', result);
-  if (result === '🚀') {
-    console.log('✓ Unicode character decoding is correct');
-  } else {
-    console.log('✗ Unicode character decoding is incorrect');
-  }
+  assert.strictEqual(result, '🚀', 'Unicode character should decode correctly');
+  console.log('✓ Unicode character decoding is correct');
 } catch (e) {
   console.log('✗ TextDecoder Unicode decoding failed:', e.message);
 }
@@ -251,11 +216,8 @@ try {
   console.log('Original:', original);
   console.log('Decoded:', decoded);
   
-  if (original === decoded) {
-    console.log('✓ Round-trip encoding/decoding preserves data');
-  } else {
-    console.log('✗ Round-trip encoding/decoding failed');
-  }
+  assert.strictEqual(original, decoded, 'Round-trip encoding/decoding should preserve data');
+  console.log('✓ Round-trip encoding/decoding preserves data');
 } catch (e) {
   console.log('✗ Round-trip test failed:', e.message);
 }

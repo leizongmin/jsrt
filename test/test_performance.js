@@ -3,44 +3,29 @@ console.log('=== Starting Performance API Tests ===');
 
 // Test 1: Check if performance object exists
 console.log('Test 1: Performance object availability');
-if (typeof performance === 'object' && performance !== null) {
-  console.log('✅ PASS: performance object is available');
-} else {
-  console.log('❌ FAIL: performance object is not available');
-}
+assert.strictEqual(typeof performance, 'object', 'performance should be an object');
+assert(performance !== null, 'performance should not be null');
+console.log('✅ PASS: performance object is available');
 
 // Test 2: Check performance.now() method
 console.log('Test 2: performance.now() method');
-if (typeof performance.now === 'function') {
-  console.log('✅ PASS: performance.now is a function');
-  
-  // Test basic functionality
-  const start = performance.now();
-  console.log('performance.now() at start =', start);
-  
-  if (typeof start === 'number' && start >= 0) {
-    console.log('✅ PASS: performance.now() returns a non-negative number');
-  } else {
-    console.log('❌ FAIL: performance.now() should return a non-negative number, got:', start);
-  }
-} else {
-  console.log('❌ FAIL: performance.now is not a function');
-}
+assert.strictEqual(typeof performance.now, 'function', 'performance.now should be a function');
+console.log('✅ PASS: performance.now is a function');
+
+// Test basic functionality
+const start = performance.now();
+console.log('performance.now() at start =', start);
+assert.strictEqual(typeof start, 'number', 'performance.now() should return a number');
+assert(start >= 0, 'performance.now() should return a non-negative number');
+console.log('✅ PASS: performance.now() returns a non-negative number');
 
 // Test 3: Check performance.timeOrigin property
 console.log('Test 3: performance.timeOrigin property');
-if ('timeOrigin' in performance) {
-  const timeOrigin = performance.timeOrigin;
-  console.log('performance.timeOrigin =', timeOrigin);
-  
-  if (typeof timeOrigin === 'number') {
-    console.log('✅ PASS: performance.timeOrigin is a number');
-  } else {
-    console.log('❌ FAIL: performance.timeOrigin should be a number, got:', typeof timeOrigin);
-  }
-} else {
-  console.log('❌ FAIL: performance.timeOrigin property is not available');
-}
+assert('timeOrigin' in performance, 'performance.timeOrigin property should be available');
+const timeOrigin = performance.timeOrigin;
+console.log('performance.timeOrigin =', timeOrigin);
+assert.strictEqual(typeof timeOrigin, 'number', 'performance.timeOrigin should be a number');
+console.log('✅ PASS: performance.timeOrigin is a number');
 
 // Test 4: Monotonic time progression
 console.log('Test 4: Monotonic time progression');
@@ -58,11 +43,8 @@ if (typeof performance.now === 'function') {
   console.log('Time 2:', time2);
   console.log('Difference:', time2 - time1);
   
-  if (time2 >= time1) {
-    console.log('✅ PASS: Time progresses monotonically');
-  } else {
-    console.log('❌ FAIL: Time should not go backwards');
-  }
+  assert(time2 >= time1, 'Time should not go backwards');
+  console.log('✅ PASS: Time progresses monotonically');
   
   if (time2 - time1 > 0) {
     console.log('✅ PASS: Time difference is positive (some time elapsed)');
@@ -110,11 +92,8 @@ if (typeof performance.now === 'function') {
     
     console.log('Elapsed time with setTimeout(0):', elapsed, 'ms');
     
-    if (elapsed >= 0) {
-      console.log('✅ PASS: Can measure setTimeout intervals');
-    } else {
-      console.log('❌ FAIL: Negative elapsed time detected');
-    }
+    assert(elapsed >= 0, 'Elapsed time should not be negative');
+    console.log('✅ PASS: Can measure setTimeout intervals');
     
     // Test 7: Comparison with console.time
     console.log('Test 7: Comparison with console timing');
@@ -137,6 +116,7 @@ if (typeof performance.now === 'function') {
       console.log('Sum result:', sum); // Prevent optimization
       
       if (perfElapsed > 0) {
+        assert(perfElapsed > 0, 'performance.now() should measure positive elapsed time');
         console.log('✅ PASS: performance.now() measured positive elapsed time');
       } else {
         console.log('ℹ️ INFO: Operation completed in less than timer resolution');

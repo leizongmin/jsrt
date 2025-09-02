@@ -12,7 +12,8 @@
       "Bash(JSRT_DEBUG=1 ./target/release/jsrt:*)",
       "Bash(./jsrt_test_js:*)",
       "Bash(git commit:*)",
-      "Read(//private/tmp/**)"
+      "Read(//private/tmp/**)",
+      "Bash(cmake:*)"
     ],
     "deny": [],
     "ask": []

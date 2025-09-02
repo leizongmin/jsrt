@@ -1,13 +1,65 @@
 #include "jsrt.h"
 
+#include <stdbool.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
+#include <sys/wait.h>
 
 #include "runtime.h"
 #include "std/process.h"
 #include "util/file.h"
+
+// Helper function to check if a string is a URL
+static bool is_url(const char *str) {
+  return (strncmp(str, "http://", 7) == 0 || 
+          strncmp(str, "https://", 8) == 0 || 
+          strncmp(str, "file://", 7) == 0);
+}
+
+// Helper function to download URL content
+static JSRT_ReadFileResult download_url(const char *url) {
+  JSRT_ReadFileResult result = JSRT_ReadFileResultDefault();
+  
+  // Handle file:// URLs
+  if (strncmp(url, "file://", 7) == 0) {
+    const char *filepath = url + 7;
+    return JSRT_ReadFile(filepath);
+  }
+  
+  // Handle http:// and https:// URLs using curl
+  if (strncmp(url, "http://", 7) == 0 || strncmp(url, "https://", 8) == 0) {
+    // Create temporary file
+    char temp_file[] = "/tmp/jsrt_download_XXXXXX";
+    int temp_fd = mkstemp(temp_file);
+    if (temp_fd == -1) {
+      result.error = JSRT_READ_FILE_ERROR_READ_ERROR;
+      return result;
+    }
+    close(temp_fd);
+    
+    // Use curl to download
+    char curl_cmd[2048];
+    snprintf(curl_cmd, sizeof(curl_cmd), "curl -s -f -L '%s' -o '%s'", url, temp_file);
+    
+    int curl_result = system(curl_cmd);
+    if (curl_result != 0) {
+      unlink(temp_file);
+      result.error = JSRT_READ_FILE_ERROR_FILE_NOT_FOUND;
+      return result;
+    }
+    
+    // Read the downloaded file
+    result = JSRT_ReadFile(temp_file);
+    unlink(temp_file);
+    return result;
+  }
+  
+  // Unsupported protocol
+  result.error = JSRT_READ_FILE_ERROR_FILE_NOT_FOUND;
+  return result;
+}
 
 int JSRT_CmdRunFile(const char *filename, int argc, char **argv) {
   // Store command line arguments for process module
@@ -20,7 +72,13 @@ int JSRT_CmdRunFile(const char *filename, int argc, char **argv) {
   JSRT_EvalResult res = JSRT_EvalResultDefault();
   JSRT_EvalResult res2 = JSRT_EvalResultDefault();
 
-  file = JSRT_ReadFile(filename);
+  // Check if filename is a URL and handle accordingly
+  if (is_url(filename)) {
+    file = download_url(filename);
+  } else {
+    file = JSRT_ReadFile(filename);
+  }
+  
   if (file.error != JSRT_READ_FILE_OK) {
     fprintf(stderr, "Error: %s\n", JSRT_ReadFileErrorToString(file.error));
     ret = 1;

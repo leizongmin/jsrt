@@ -17,8 +17,10 @@
 #include <stdlib.h>
 #include <string.h>
 #include <time.h>
+#include <uv.h>
 
 #include "../util/debug.h"
+#include "../util/file.h"
 #include "crypto.h"
 
 // Platform-specific function implementations
@@ -125,6 +127,46 @@ static JSValue jsrt_process_uptime(JSContext *ctx, JSValueConst this_val, int ar
   return JS_NewFloat64(ctx, uptime_seconds);
 }
 
+// Helper function to read and cache the VERSION file
+static char *get_jsrt_version() {
+  static char *cached_version = NULL;
+  static bool version_loaded = false;
+
+  if (version_loaded) {
+    return cached_version;
+  }
+
+  version_loaded = true;
+  JSRT_ReadFileResult version_file = JSRT_ReadFileResultDefault();
+
+  // Try VERSION in current directory first
+  version_file = JSRT_ReadFile("VERSION");
+
+  // If not found, try relative paths that might work depending on working directory
+  if (version_file.error != JSRT_READ_FILE_OK) {
+    version_file = JSRT_ReadFile("../VERSION");
+  }
+
+  // Also try from build directory structure
+  if (version_file.error != JSRT_READ_FILE_OK) {
+    version_file = JSRT_ReadFile("../../VERSION");
+  }
+
+  if (version_file.error == JSRT_READ_FILE_OK && version_file.data != NULL) {
+    // Remove trailing newline if present
+    char *version_str = version_file.data;
+    size_t len = strlen(version_str);
+    if (len > 0 && version_str[len - 1] == '\n') {
+      version_str[len - 1] = '\0';
+    }
+    // Make a copy since we'll free the file data
+    cached_version = strdup(version_str);
+    JSRT_ReadFileResultFree(&version_file);
+  }
+
+  return cached_version;  // Will be NULL if not found
+}
+
 // process.pid getter
 static JSValue jsrt_process_get_pid(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv) {
   return JS_NewInt32(ctx, (int32_t)JSRT_GETPID());
@@ -145,7 +187,14 @@ static JSValue jsrt_process_get_argv0(JSContext *ctx, JSValueConst this_val, int
 
 // process.version getter
 static JSValue jsrt_process_get_version(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv) {
-  return JS_NewString(ctx, "v1.0.0");
+  char *version = get_jsrt_version();
+  if (version != NULL) {
+    // Add 'v' prefix to version
+    char version_with_prefix[256];
+    snprintf(version_with_prefix, sizeof(version_with_prefix), "v%s", version);
+    return JS_NewString(ctx, version_with_prefix);
+  }
+  return JS_NewString(ctx, "v1.0.0");  // Fallback
 }
 
 // process.platform getter
@@ -186,8 +235,19 @@ static JSValue jsrt_process_get_arch(JSContext *ctx, JSValueConst this_val, int 
 static JSValue jsrt_process_get_versions(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv) {
   JSValue versions_obj = JS_NewObject(ctx);
 
-  // Add jsrt version
-  JS_SetPropertyStr(ctx, versions_obj, "jsrt", JS_NewString(ctx, "1.0.0"));
+  // Add jsrt version from VERSION file
+  char *version = get_jsrt_version();
+  if (version != NULL) {
+    JS_SetPropertyStr(ctx, versions_obj, "jsrt", JS_NewString(ctx, version));
+  } else {
+    JS_SetPropertyStr(ctx, versions_obj, "jsrt", JS_NewString(ctx, "1.0.0"));  // Fallback
+  }
+
+  // Add libuv version
+  const char *uv_version = uv_version_string();
+  if (uv_version != NULL) {
+    JS_SetPropertyStr(ctx, versions_obj, "uv", JS_NewString(ctx, uv_version));
+  }
 
   // Add OpenSSL version if available
   const char *openssl_version = JSRT_GetOpenSSLVersion();

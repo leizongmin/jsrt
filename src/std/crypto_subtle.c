@@ -8,6 +8,7 @@
 #include "../util/debug.h"
 #include "crypto.h"
 #include "crypto_digest.h"
+#include "crypto_hmac.h"
 #include "crypto_symmetric.h"
 
 // Algorithm name to enum mapping
@@ -84,6 +85,10 @@ bool jsrt_crypto_is_algorithm_supported(jsrt_crypto_algorithm_t alg) {
       return true;  // Implemented
     case JSRT_CRYPTO_ALG_AES_CTR:
       return false;  // TODO: Implement
+
+    // Message authentication codes
+    case JSRT_CRYPTO_ALG_HMAC:
+      return true;  // Implemented
 
     default:
       return false;
@@ -857,12 +862,299 @@ JSValue jsrt_subtle_decrypt(JSContext *ctx, JSValueConst this_val, int argc, JSV
 }
 
 JSValue jsrt_subtle_sign(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv) {
-  JSValue error = jsrt_crypto_throw_error(ctx, "NotSupportedError", "sign not yet implemented");
+  if (argc < 3) {
+    JSValue error = jsrt_crypto_throw_error(ctx, "TypeError", "sign requires 3 arguments");
+    return create_rejected_promise(ctx, error);
+  }
+
+  // Parse algorithm (first argument)
+  jsrt_crypto_algorithm_t alg = jsrt_crypto_parse_algorithm(ctx, argv[0]);
+  if (alg == JSRT_CRYPTO_ALG_UNKNOWN) {
+    JSValue error = jsrt_crypto_throw_error(ctx, "NotSupportedError", "Unsupported algorithm");
+    return create_rejected_promise(ctx, error);
+  }
+
+  if (!jsrt_crypto_is_algorithm_supported(alg)) {
+    JSValue error = jsrt_crypto_throw_error(ctx, "NotSupportedError", "Algorithm not yet implemented");
+    return create_rejected_promise(ctx, error);
+  }
+
+  // Validate that this is a signing algorithm
+  if (alg != JSRT_CRYPTO_ALG_HMAC) {
+    JSValue error = jsrt_crypto_throw_error(ctx, "InvalidAccessError", "Algorithm not suitable for signing");
+    return create_rejected_promise(ctx, error);
+  }
+
+  // Get key data from CryptoKey object (second argument)
+  JSValue key_data_val = JS_GetPropertyStr(ctx, argv[1], "__keyData");
+  if (JS_IsUndefined(key_data_val)) {
+    JS_FreeValue(ctx, key_data_val);
+    JSValue error = jsrt_crypto_throw_error(ctx, "InvalidAccessError", "Invalid CryptoKey object");
+    return create_rejected_promise(ctx, error);
+  }
+
+  size_t key_data_size;
+  uint8_t *key_data = JS_GetArrayBuffer(ctx, &key_data_size, key_data_val);
+  if (!key_data) {
+    JS_FreeValue(ctx, key_data_val);
+    JSValue error = jsrt_crypto_throw_error(ctx, "InvalidAccessError", "Invalid key data");
+    return create_rejected_promise(ctx, error);
+  }
+
+  // Get data to sign - handle both ArrayBuffer and TypedArray
+  size_t data_size;
+  uint8_t *data = NULL;
+
+  // Try ArrayBuffer first
+  data = JS_GetArrayBuffer(ctx, &data_size, argv[2]);
+
+  // If not ArrayBuffer, try TypedArray
+  if (!data) {
+    JSValue buffer_val = JS_GetPropertyStr(ctx, argv[2], "buffer");
+    JSValue byteOffset_val = JS_GetPropertyStr(ctx, argv[2], "byteOffset");
+    JSValue byteLength_val = JS_GetPropertyStr(ctx, argv[2], "byteLength");
+
+    if (!JS_IsUndefined(buffer_val) && !JS_IsUndefined(byteOffset_val) && !JS_IsUndefined(byteLength_val)) {
+      size_t buffer_size;
+      uint8_t *buffer_data = JS_GetArrayBuffer(ctx, &buffer_size, buffer_val);
+
+      if (buffer_data) {
+        uint32_t offset, length;
+        JS_ToUint32(ctx, &offset, byteOffset_val);
+        JS_ToUint32(ctx, &length, byteLength_val);
+
+        data = buffer_data + offset;
+        data_size = length;
+      }
+    }
+
+    JS_FreeValue(ctx, buffer_val);
+    JS_FreeValue(ctx, byteOffset_val);
+    JS_FreeValue(ctx, byteLength_val);
+  }
+
+  if (!data) {
+    JS_FreeValue(ctx, key_data_val);
+    JSValue error = jsrt_crypto_throw_error(ctx, "TypeError", "Data must be an ArrayBuffer or TypedArray");
+    return create_rejected_promise(ctx, error);
+  }
+
+  // For HMAC, get hash algorithm from the key's algorithm
+  if (alg == JSRT_CRYPTO_ALG_HMAC) {
+    JSValue key_algorithm_val = JS_GetPropertyStr(ctx, argv[1], "algorithm");
+    JSValue hash_val = JS_GetPropertyStr(ctx, key_algorithm_val, "hash");
+
+    const char *hash_name = JS_ToCString(ctx, hash_val);
+    if (!hash_name) {
+      JS_FreeValue(ctx, key_data_val);
+      JS_FreeValue(ctx, key_algorithm_val);
+      JS_FreeValue(ctx, hash_val);
+      JSValue error = jsrt_crypto_throw_error(ctx, "OperationError", "Invalid hash algorithm for HMAC");
+      return create_rejected_promise(ctx, error);
+    }
+
+    jsrt_hmac_algorithm_t hmac_alg = jsrt_crypto_parse_hmac_algorithm(hash_name);
+    JS_FreeCString(ctx, hash_name);
+    JS_FreeValue(ctx, hash_val);
+    JS_FreeValue(ctx, key_algorithm_val);
+
+    // Set up HMAC parameters
+    jsrt_hmac_params_t *params = malloc(sizeof(jsrt_hmac_params_t));
+    if (!params) {
+      JS_FreeValue(ctx, key_data_val);
+      JSValue error = jsrt_crypto_throw_error(ctx, "OperationError", "Memory allocation failed");
+      return create_rejected_promise(ctx, error);
+    }
+
+    params->algorithm = hmac_alg;
+    params->key_data = key_data;
+    params->key_length = key_data_size;
+
+    // Perform HMAC signing
+    uint8_t *signature_data;
+    size_t signature_size;
+    int result = jsrt_crypto_hmac_sign(params, data, data_size, &signature_data, &signature_size);
+
+    // Clean up
+    free(params);
+    JS_FreeValue(ctx, key_data_val);
+
+    if (result != 0) {
+      JSValue error = jsrt_crypto_throw_error(ctx, "OperationError", "HMAC signing failed");
+      return create_rejected_promise(ctx, error);
+    }
+
+    // Create result ArrayBuffer
+    JSValue result_buffer = JS_NewArrayBuffer(ctx, signature_data, signature_size, NULL, NULL, 0);
+    return create_resolved_promise(ctx, result_buffer);
+  }
+
+  JS_FreeValue(ctx, key_data_val);
+  JSValue error = jsrt_crypto_throw_error(ctx, "NotSupportedError", "Algorithm mode not yet implemented");
   return create_rejected_promise(ctx, error);
 }
 
 JSValue jsrt_subtle_verify(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv) {
-  JSValue error = jsrt_crypto_throw_error(ctx, "NotSupportedError", "verify not yet implemented");
+  if (argc < 4) {
+    JSValue error = jsrt_crypto_throw_error(ctx, "TypeError", "verify requires 4 arguments");
+    return create_rejected_promise(ctx, error);
+  }
+
+  // Parse algorithm (first argument)
+  jsrt_crypto_algorithm_t alg = jsrt_crypto_parse_algorithm(ctx, argv[0]);
+  if (alg == JSRT_CRYPTO_ALG_UNKNOWN) {
+    JSValue error = jsrt_crypto_throw_error(ctx, "NotSupportedError", "Unsupported algorithm");
+    return create_rejected_promise(ctx, error);
+  }
+
+  if (!jsrt_crypto_is_algorithm_supported(alg)) {
+    JSValue error = jsrt_crypto_throw_error(ctx, "NotSupportedError", "Algorithm not yet implemented");
+    return create_rejected_promise(ctx, error);
+  }
+
+  // Validate that this is a verification algorithm
+  if (alg != JSRT_CRYPTO_ALG_HMAC) {
+    JSValue error = jsrt_crypto_throw_error(ctx, "InvalidAccessError", "Algorithm not suitable for verification");
+    return create_rejected_promise(ctx, error);
+  }
+
+  // Get key data from CryptoKey object (second argument)
+  JSValue key_data_val = JS_GetPropertyStr(ctx, argv[1], "__keyData");
+  if (JS_IsUndefined(key_data_val)) {
+    JS_FreeValue(ctx, key_data_val);
+    JSValue error = jsrt_crypto_throw_error(ctx, "InvalidAccessError", "Invalid CryptoKey object");
+    return create_rejected_promise(ctx, error);
+  }
+
+  size_t key_data_size;
+  uint8_t *key_data = JS_GetArrayBuffer(ctx, &key_data_size, key_data_val);
+  if (!key_data) {
+    JS_FreeValue(ctx, key_data_val);
+    JSValue error = jsrt_crypto_throw_error(ctx, "InvalidAccessError", "Invalid key data");
+    return create_rejected_promise(ctx, error);
+  }
+
+  // Get signature to verify - handle both ArrayBuffer and TypedArray (third argument)
+  size_t signature_size;
+  uint8_t *signature_data = NULL;
+
+  // Try ArrayBuffer first
+  signature_data = JS_GetArrayBuffer(ctx, &signature_size, argv[2]);
+
+  // If not ArrayBuffer, try TypedArray
+  if (!signature_data) {
+    JSValue buffer_val = JS_GetPropertyStr(ctx, argv[2], "buffer");
+    JSValue byteOffset_val = JS_GetPropertyStr(ctx, argv[2], "byteOffset");
+    JSValue byteLength_val = JS_GetPropertyStr(ctx, argv[2], "byteLength");
+
+    if (!JS_IsUndefined(buffer_val) && !JS_IsUndefined(byteOffset_val) && !JS_IsUndefined(byteLength_val)) {
+      size_t buffer_size;
+      uint8_t *buffer_data = JS_GetArrayBuffer(ctx, &buffer_size, buffer_val);
+
+      if (buffer_data) {
+        uint32_t offset, length;
+        JS_ToUint32(ctx, &offset, byteOffset_val);
+        JS_ToUint32(ctx, &length, byteLength_val);
+
+        signature_data = buffer_data + offset;
+        signature_size = length;
+      }
+    }
+
+    JS_FreeValue(ctx, buffer_val);
+    JS_FreeValue(ctx, byteOffset_val);
+    JS_FreeValue(ctx, byteLength_val);
+  }
+
+  if (!signature_data) {
+    JS_FreeValue(ctx, key_data_val);
+    JSValue error = jsrt_crypto_throw_error(ctx, "TypeError", "Signature must be an ArrayBuffer or TypedArray");
+    return create_rejected_promise(ctx, error);
+  }
+
+  // Get data to verify - handle both ArrayBuffer and TypedArray (fourth argument)
+  size_t data_size;
+  uint8_t *data = NULL;
+
+  // Try ArrayBuffer first
+  data = JS_GetArrayBuffer(ctx, &data_size, argv[3]);
+
+  // If not ArrayBuffer, try TypedArray
+  if (!data) {
+    JSValue buffer_val = JS_GetPropertyStr(ctx, argv[3], "buffer");
+    JSValue byteOffset_val = JS_GetPropertyStr(ctx, argv[3], "byteOffset");
+    JSValue byteLength_val = JS_GetPropertyStr(ctx, argv[3], "byteLength");
+
+    if (!JS_IsUndefined(buffer_val) && !JS_IsUndefined(byteOffset_val) && !JS_IsUndefined(byteLength_val)) {
+      size_t buffer_size;
+      uint8_t *buffer_data = JS_GetArrayBuffer(ctx, &buffer_size, buffer_val);
+
+      if (buffer_data) {
+        uint32_t offset, length;
+        JS_ToUint32(ctx, &offset, byteOffset_val);
+        JS_ToUint32(ctx, &length, byteLength_val);
+
+        data = buffer_data + offset;
+        data_size = length;
+      }
+    }
+
+    JS_FreeValue(ctx, buffer_val);
+    JS_FreeValue(ctx, byteOffset_val);
+    JS_FreeValue(ctx, byteLength_val);
+  }
+
+  if (!data) {
+    JS_FreeValue(ctx, key_data_val);
+    JSValue error = jsrt_crypto_throw_error(ctx, "TypeError", "Data must be an ArrayBuffer or TypedArray");
+    return create_rejected_promise(ctx, error);
+  }
+
+  // For HMAC, get hash algorithm from the key's algorithm
+  if (alg == JSRT_CRYPTO_ALG_HMAC) {
+    JSValue key_algorithm_val = JS_GetPropertyStr(ctx, argv[1], "algorithm");
+    JSValue hash_val = JS_GetPropertyStr(ctx, key_algorithm_val, "hash");
+
+    const char *hash_name = JS_ToCString(ctx, hash_val);
+    if (!hash_name) {
+      JS_FreeValue(ctx, key_data_val);
+      JS_FreeValue(ctx, key_algorithm_val);
+      JS_FreeValue(ctx, hash_val);
+      JSValue error = jsrt_crypto_throw_error(ctx, "OperationError", "Invalid hash algorithm for HMAC");
+      return create_rejected_promise(ctx, error);
+    }
+
+    jsrt_hmac_algorithm_t hmac_alg = jsrt_crypto_parse_hmac_algorithm(hash_name);
+    JS_FreeCString(ctx, hash_name);
+    JS_FreeValue(ctx, hash_val);
+    JS_FreeValue(ctx, key_algorithm_val);
+
+    // Set up HMAC parameters
+    jsrt_hmac_params_t *params = malloc(sizeof(jsrt_hmac_params_t));
+    if (!params) {
+      JS_FreeValue(ctx, key_data_val);
+      JSValue error = jsrt_crypto_throw_error(ctx, "OperationError", "Memory allocation failed");
+      return create_rejected_promise(ctx, error);
+    }
+
+    params->algorithm = hmac_alg;
+    params->key_data = key_data;
+    params->key_length = key_data_size;
+
+    // Perform HMAC verification
+    bool verification_result = jsrt_crypto_hmac_verify(params, data, data_size, signature_data, signature_size);
+
+    // Clean up
+    free(params);
+    JS_FreeValue(ctx, key_data_val);
+
+    // Return verification result as boolean
+    JSValue result_bool = JS_NewBool(ctx, verification_result);
+    return create_resolved_promise(ctx, result_bool);
+  }
+
+  JS_FreeValue(ctx, key_data_val);
+  JSValue error = jsrt_crypto_throw_error(ctx, "NotSupportedError", "Algorithm mode not yet implemented");
   return create_rejected_promise(ctx, error);
 }
 
@@ -922,6 +1214,55 @@ JSValue jsrt_subtle_generateKey(JSContext *ctx, JSValueConst this_val, int argc,
     // Store the key data as an internal property (ArrayBuffer)
     JSValue key_buffer = JS_NewArrayBuffer(ctx, key_data, key_data_length, NULL, NULL, 0);
     JS_SetPropertyStr(ctx, key_obj, "__keyData", key_buffer);
+
+    return create_resolved_promise(ctx, key_obj);
+  }
+
+  // Generate HMAC key
+  if (alg == JSRT_CRYPTO_ALG_HMAC) {
+    // Get hash algorithm from algorithm object
+    JSValue hash_val = JS_GetPropertyStr(ctx, argv[0], "hash");
+    if (JS_IsUndefined(hash_val)) {
+      JS_FreeValue(ctx, hash_val);
+      JSValue error = jsrt_crypto_throw_error(ctx, "OperationError", "HMAC requires hash parameter");
+      return create_rejected_promise(ctx, error);
+    }
+
+    // Parse hash algorithm
+    const char *hash_name = JS_ToCString(ctx, hash_val);
+    if (!hash_name) {
+      JS_FreeValue(ctx, hash_val);
+      JSValue error = jsrt_crypto_throw_error(ctx, "OperationError", "Invalid hash algorithm for HMAC");
+      return create_rejected_promise(ctx, error);
+    }
+
+    jsrt_hmac_algorithm_t hmac_alg = jsrt_crypto_parse_hmac_algorithm(hash_name);
+    JS_FreeCString(ctx, hash_name);
+    JS_FreeValue(ctx, hash_val);
+
+    if (!jsrt_crypto_is_hmac_algorithm_supported(hmac_alg)) {
+      JSValue error = jsrt_crypto_throw_error(ctx, "NotSupportedError", "HMAC hash algorithm not supported");
+      return create_rejected_promise(ctx, error);
+    }
+
+    // Generate the HMAC key
+    uint8_t *key_data;
+    size_t key_data_length;
+    if (jsrt_crypto_generate_hmac_key(hmac_alg, &key_data, &key_data_length) != 0) {
+      JSValue error = jsrt_crypto_throw_error(ctx, "OperationError", "Failed to generate HMAC key");
+      return create_rejected_promise(ctx, error);
+    }
+
+    // Create CryptoKey object with the raw key data
+    JSValue key_obj = JS_NewObject(ctx);
+    JS_SetPropertyStr(ctx, key_obj, "type", JS_NewString(ctx, "secret"));
+    JS_SetPropertyStr(ctx, key_obj, "extractable", JS_NewBool(ctx, extractable));
+    JS_SetPropertyStr(ctx, key_obj, "algorithm", JS_DupValue(ctx, argv[0]));
+    JS_SetPropertyStr(ctx, key_obj, "usages", JS_DupValue(ctx, argv[2]));
+
+    // Store the raw key data as ArrayBuffer
+    JSValue key_data_buffer = JS_NewArrayBuffer(ctx, key_data, key_data_length, NULL, NULL, 0);
+    JS_SetPropertyStr(ctx, key_obj, "__keyData", key_data_buffer);
 
     return create_resolved_promise(ctx, key_obj);
   }

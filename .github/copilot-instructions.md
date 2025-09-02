@@ -81,8 +81,44 @@ jsrt integrates:
 - libuv for asynchronous I/O operations and event loop
 - Custom standard library implementations for console, timers, etc.
 
+## Cross-Platform Handling
+
+The project supports multiple platforms (Linux, macOS, Windows) and requires careful attention to platform-specific differences:
+
+### Dynamic Loading
+- **Unix/Linux/macOS**: Use `dlopen()`, `dlsym()`, `dlclose()`, `dlerror()` from `<dlfcn.h>`
+- **Windows**: Use `LoadLibraryA()`, `GetProcAddress()`, `FreeLibrary()`, `GetLastError()` from `<windows.h>`
+
+**Key Issue**: `GetProcAddress()` returns `FARPROC` (specific function signature) while `dlsym()` returns `void*` (generic pointer). 
+
+**Solution**: Cast Windows result to `void*` for compatibility:
+```c
+#ifdef _WIN32
+#define JSRT_DLSYM(handle, name) ((void*)GetProcAddress(handle, name))
+#else
+#define JSRT_DLSYM(handle, name) dlsym(handle, name)
+#endif
+```
+
+### Platform-Specific Headers
+```c
+#ifdef _WIN32
+#include <windows.h>
+extern HMODULE openssl_handle;
+#else
+#include <dlfcn.h>
+extern void *openssl_handle;
+#endif
+```
+
+### Library Linking
+The CMakeLists.txt handles platform-specific libraries:
+- **Windows**: No need for `dl`, `m`, `pthread` (handled by MSVCRT/libuv)
+- **Unix**: Requires `dl m pthread` libraries
+
 When suggesting code changes:
 - Maintain compatibility with the existing API
 - Keep memory management patterns consistent
 - Follow the error handling patterns used throughout the codebase
 - Consider cross-platform compatibility
+- Test changes on multiple platforms when dealing with platform-specific code

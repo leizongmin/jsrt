@@ -16,7 +16,7 @@
 // Cross-platform dynamic loading abstractions
 #ifdef _WIN32
 extern HMODULE openssl_handle;
-#define JSRT_DLSYM(handle, name) GetProcAddress(handle, name)
+#define JSRT_DLSYM(handle, name) ((void *)GetProcAddress(handle, name))
 #else
 extern void *openssl_handle;
 #define JSRT_DLSYM(handle, name) dlsym(handle, name)

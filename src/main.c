@@ -1,11 +1,20 @@
 #include <stdbool.h>
 #include <stdio.h>
+#include <string.h>
+#include <unistd.h>
 
 #include "jsrt.h"
 
 void PrintHelp(bool is_error);
 
 int main(int argc, char **argv) {
+  // Handle special stdin flag or piped input
+  if ((argc == 2 && strcmp(argv[1], "-") == 0) || (argc == 1 && !isatty(STDIN_FILENO))) {
+    // Run from stdin
+    int ret = JSRT_CmdRunStdin(argc, argv);
+    return ret;
+  }
+
   if (argc < 2) {
     PrintHelp(true);
     return 1;
@@ -30,5 +39,7 @@ void PrintHelp(bool is_error) {
           "       jsrt repl                         Run REPL\n"
           "       jsrt version                      Print version\n"
           "       jsrt help                         Print this help message\n"
+          "       jsrt -                            Read JavaScript code from stdin\n"
+          "       echo 'code' | jsrt                Pipe JavaScript code from stdin\n"
           "\n");
 }

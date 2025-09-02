@@ -8,6 +8,7 @@
 #include "../util/debug.h"
 #include "crypto.h"
 #include "crypto_digest.h"
+#include "crypto_symmetric.h"
 
 // Algorithm name to enum mapping
 static const struct {
@@ -68,13 +69,22 @@ const char *jsrt_crypto_algorithm_to_string(jsrt_crypto_algorithm_t alg) {
 
 // Check if algorithm is supported
 bool jsrt_crypto_is_algorithm_supported(jsrt_crypto_algorithm_t alg) {
-  // For now, only digest algorithms are supported
   switch (alg) {
+    // Digest algorithms
     case JSRT_CRYPTO_ALG_SHA1:
     case JSRT_CRYPTO_ALG_SHA256:
     case JSRT_CRYPTO_ALG_SHA384:
     case JSRT_CRYPTO_ALG_SHA512:
       return true;
+
+    // Symmetric encryption algorithms
+    case JSRT_CRYPTO_ALG_AES_CBC:
+      return true;  // Implemented
+    case JSRT_CRYPTO_ALG_AES_GCM:
+      return true;  // Implemented
+    case JSRT_CRYPTO_ALG_AES_CTR:
+      return false;  // TODO: Implement
+
     default:
       return false;
   }
@@ -241,14 +251,608 @@ JSValue jsrt_subtle_digest(JSContext *ctx, JSValueConst this_val, int argc, JSVa
   return create_resolved_promise(ctx, result);
 }
 
-// Stub implementations for other SubtleCrypto methods
+// crypto.subtle.encrypt implementation
 JSValue jsrt_subtle_encrypt(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv) {
-  JSValue error = jsrt_crypto_throw_error(ctx, "NotSupportedError", "encrypt not yet implemented");
+  if (argc < 3) {
+    JSValue error = jsrt_crypto_throw_error(ctx, "TypeError", "encrypt requires 3 arguments");
+    return create_rejected_promise(ctx, error);
+  }
+
+  // Parse algorithm (first argument)
+  jsrt_crypto_algorithm_t alg = jsrt_crypto_parse_algorithm(ctx, argv[0]);
+  if (alg == JSRT_CRYPTO_ALG_UNKNOWN) {
+    JSValue error = jsrt_crypto_throw_error(ctx, "NotSupportedError", "Unsupported algorithm");
+    return create_rejected_promise(ctx, error);
+  }
+
+  if (!jsrt_crypto_is_algorithm_supported(alg)) {
+    JSValue error = jsrt_crypto_throw_error(ctx, "NotSupportedError", "Algorithm not yet implemented");
+    return create_rejected_promise(ctx, error);
+  }
+
+  // Validate that this is an encryption algorithm
+  if (alg != JSRT_CRYPTO_ALG_AES_CBC && alg != JSRT_CRYPTO_ALG_AES_GCM && alg != JSRT_CRYPTO_ALG_AES_CTR) {
+    JSValue error = jsrt_crypto_throw_error(ctx, "InvalidAccessError", "Algorithm not suitable for encryption");
+    return create_rejected_promise(ctx, error);
+  }
+
+  // Get key data from CryptoKey object (second argument)
+  JSValue key_data_val = JS_GetPropertyStr(ctx, argv[1], "__keyData");
+  if (JS_IsUndefined(key_data_val)) {
+    JS_FreeValue(ctx, key_data_val);
+    JSValue error = jsrt_crypto_throw_error(ctx, "InvalidAccessError", "Invalid CryptoKey object");
+    return create_rejected_promise(ctx, error);
+  }
+
+  size_t key_data_size;
+  uint8_t *key_data = JS_GetArrayBuffer(ctx, &key_data_size, key_data_val);
+  if (!key_data) {
+    JS_FreeValue(ctx, key_data_val);
+    JSValue error = jsrt_crypto_throw_error(ctx, "InvalidAccessError", "Invalid key data");
+    return create_rejected_promise(ctx, error);
+  }
+
+  // Get plaintext data (third argument) - handle both ArrayBuffer and TypedArray
+  size_t plaintext_size;
+  uint8_t *plaintext_data = NULL;
+
+  // Try ArrayBuffer first
+  plaintext_data = JS_GetArrayBuffer(ctx, &plaintext_size, argv[2]);
+
+  // If not ArrayBuffer, try TypedArray
+  if (!plaintext_data) {
+    JSValue buffer_val = JS_GetPropertyStr(ctx, argv[2], "buffer");
+    JSValue byteOffset_val = JS_GetPropertyStr(ctx, argv[2], "byteOffset");
+    JSValue byteLength_val = JS_GetPropertyStr(ctx, argv[2], "byteLength");
+
+    if (!JS_IsUndefined(buffer_val) && !JS_IsUndefined(byteOffset_val) && !JS_IsUndefined(byteLength_val)) {
+      size_t buffer_size;
+      uint8_t *buffer_data = JS_GetArrayBuffer(ctx, &buffer_size, buffer_val);
+
+      if (buffer_data) {
+        uint32_t offset, length;
+        JS_ToUint32(ctx, &offset, byteOffset_val);
+        JS_ToUint32(ctx, &length, byteLength_val);
+
+        plaintext_data = buffer_data + offset;
+        plaintext_size = length;
+      }
+    }
+
+    JS_FreeValue(ctx, buffer_val);
+    JS_FreeValue(ctx, byteOffset_val);
+    JS_FreeValue(ctx, byteLength_val);
+  }
+
+  if (!plaintext_data) {
+    JS_FreeValue(ctx, key_data_val);
+    JSValue error = jsrt_crypto_throw_error(ctx, "TypeError", "Data must be an ArrayBuffer or TypedArray");
+    return create_rejected_promise(ctx, error);
+  }
+
+  // For AES-CBC, get IV from algorithm parameters
+  if (alg == JSRT_CRYPTO_ALG_AES_CBC) {
+    JSValue iv_val = JS_GetPropertyStr(ctx, argv[0], "iv");
+    if (JS_IsUndefined(iv_val)) {
+      JS_FreeValue(ctx, key_data_val);
+      JS_FreeValue(ctx, iv_val);
+      JSValue error = jsrt_crypto_throw_error(ctx, "OperationError", "AES-CBC requires IV parameter");
+      return create_rejected_promise(ctx, error);
+    }
+
+    size_t iv_size;
+    uint8_t *iv_data = NULL;
+
+    // Try ArrayBuffer first
+    iv_data = JS_GetArrayBuffer(ctx, &iv_size, iv_val);
+
+    // If not ArrayBuffer, try TypedArray
+    if (!iv_data) {
+      JSValue iv_buffer_val = JS_GetPropertyStr(ctx, iv_val, "buffer");
+      JSValue iv_byteOffset_val = JS_GetPropertyStr(ctx, iv_val, "byteOffset");
+      JSValue iv_byteLength_val = JS_GetPropertyStr(ctx, iv_val, "byteLength");
+
+      if (!JS_IsUndefined(iv_buffer_val) && !JS_IsUndefined(iv_byteOffset_val) && !JS_IsUndefined(iv_byteLength_val)) {
+        size_t buffer_size;
+        uint8_t *buffer_data = JS_GetArrayBuffer(ctx, &buffer_size, iv_buffer_val);
+
+        if (buffer_data) {
+          uint32_t offset, length;
+          JS_ToUint32(ctx, &offset, iv_byteOffset_val);
+          JS_ToUint32(ctx, &length, iv_byteLength_val);
+
+          iv_data = buffer_data + offset;
+          iv_size = length;
+        }
+      }
+
+      JS_FreeValue(ctx, iv_buffer_val);
+      JS_FreeValue(ctx, iv_byteOffset_val);
+      JS_FreeValue(ctx, iv_byteLength_val);
+    }
+
+    if (!iv_data || iv_size != JSRT_AES_CBC_IV_SIZE) {
+      JS_FreeValue(ctx, key_data_val);
+      JS_FreeValue(ctx, iv_val);
+      JSValue error = jsrt_crypto_throw_error(ctx, "OperationError", "Invalid IV for AES-CBC");
+      return create_rejected_promise(ctx, error);
+    }
+
+    // Set up encryption parameters
+    jsrt_symmetric_params_t *params = malloc(sizeof(jsrt_symmetric_params_t));
+    if (!params) {
+      JS_FreeValue(ctx, key_data_val);
+      JS_FreeValue(ctx, iv_val);
+      JSValue error = jsrt_crypto_throw_error(ctx, "OperationError", "Memory allocation failed");
+      return create_rejected_promise(ctx, error);
+    }
+
+    params->algorithm = JSRT_SYMMETRIC_AES_CBC;
+    params->key_data = key_data;
+    params->key_length = key_data_size;
+    params->params.cbc.iv = iv_data;
+    params->params.cbc.iv_length = iv_size;
+
+    // Perform encryption
+    uint8_t *ciphertext_data;
+    size_t ciphertext_size;
+    int result = jsrt_crypto_aes_encrypt(params, plaintext_data, plaintext_size, &ciphertext_data, &ciphertext_size);
+
+    // Clean up
+    free(params);
+    JS_FreeValue(ctx, key_data_val);
+    JS_FreeValue(ctx, iv_val);
+
+    if (result != 0) {
+      JSValue error = jsrt_crypto_throw_error(ctx, "OperationError", "Encryption operation failed");
+      return create_rejected_promise(ctx, error);
+    }
+
+    // Create result ArrayBuffer
+    JSValue result_buffer = JS_NewArrayBuffer(ctx, ciphertext_data, ciphertext_size, NULL, NULL, 0);
+    return create_resolved_promise(ctx, result_buffer);
+  }
+
+  // For AES-GCM, get IV and optional additionalData from algorithm parameters
+  if (alg == JSRT_CRYPTO_ALG_AES_GCM) {
+    JSValue iv_val = JS_GetPropertyStr(ctx, argv[0], "iv");
+    if (JS_IsUndefined(iv_val)) {
+      JS_FreeValue(ctx, key_data_val);
+      JS_FreeValue(ctx, iv_val);
+      JSValue error = jsrt_crypto_throw_error(ctx, "OperationError", "AES-GCM requires IV parameter");
+      return create_rejected_promise(ctx, error);
+    }
+
+    size_t iv_size;
+    uint8_t *iv_data = NULL;
+
+    // Try ArrayBuffer first
+    iv_data = JS_GetArrayBuffer(ctx, &iv_size, iv_val);
+
+    // If not ArrayBuffer, try TypedArray
+    if (!iv_data) {
+      JSValue iv_buffer_val = JS_GetPropertyStr(ctx, iv_val, "buffer");
+      JSValue iv_byteOffset_val = JS_GetPropertyStr(ctx, iv_val, "byteOffset");
+      JSValue iv_byteLength_val = JS_GetPropertyStr(ctx, iv_val, "byteLength");
+
+      if (!JS_IsUndefined(iv_buffer_val) && !JS_IsUndefined(iv_byteOffset_val) && !JS_IsUndefined(iv_byteLength_val)) {
+        size_t buffer_size;
+        uint8_t *buffer_data = JS_GetArrayBuffer(ctx, &buffer_size, iv_buffer_val);
+
+        if (buffer_data) {
+          uint32_t offset, length;
+          JS_ToUint32(ctx, &offset, iv_byteOffset_val);
+          JS_ToUint32(ctx, &length, iv_byteLength_val);
+
+          iv_data = buffer_data + offset;
+          iv_size = length;
+        }
+      }
+
+      JS_FreeValue(ctx, iv_buffer_val);
+      JS_FreeValue(ctx, iv_byteOffset_val);
+      JS_FreeValue(ctx, iv_byteLength_val);
+    }
+
+    if (!iv_data) {
+      JS_FreeValue(ctx, key_data_val);
+      JS_FreeValue(ctx, iv_val);
+      JSValue error = jsrt_crypto_throw_error(ctx, "OperationError", "Invalid IV for AES-GCM");
+      return create_rejected_promise(ctx, error);
+    }
+
+    // Get optional additionalData
+    JSValue additionalData_val = JS_GetPropertyStr(ctx, argv[0], "additionalData");
+    uint8_t *additional_data = NULL;
+    size_t additional_data_size = 0;
+
+    if (!JS_IsUndefined(additionalData_val) && !JS_IsNull(additionalData_val)) {
+      // Try ArrayBuffer first
+      additional_data = JS_GetArrayBuffer(ctx, &additional_data_size, additionalData_val);
+
+      // If not ArrayBuffer, try TypedArray
+      if (!additional_data) {
+        JSValue aad_buffer_val = JS_GetPropertyStr(ctx, additionalData_val, "buffer");
+        JSValue aad_byteOffset_val = JS_GetPropertyStr(ctx, additionalData_val, "byteOffset");
+        JSValue aad_byteLength_val = JS_GetPropertyStr(ctx, additionalData_val, "byteLength");
+
+        if (!JS_IsUndefined(aad_buffer_val) && !JS_IsUndefined(aad_byteOffset_val) &&
+            !JS_IsUndefined(aad_byteLength_val)) {
+          size_t buffer_size;
+          uint8_t *buffer_data = JS_GetArrayBuffer(ctx, &buffer_size, aad_buffer_val);
+
+          if (buffer_data) {
+            uint32_t offset, length;
+            JS_ToUint32(ctx, &offset, aad_byteOffset_val);
+            JS_ToUint32(ctx, &length, aad_byteLength_val);
+
+            additional_data = buffer_data + offset;
+            additional_data_size = length;
+          }
+        }
+
+        JS_FreeValue(ctx, aad_buffer_val);
+        JS_FreeValue(ctx, aad_byteOffset_val);
+        JS_FreeValue(ctx, aad_byteLength_val);
+      }
+    }
+
+    // Get optional tagLength (default to 16 bytes)
+    JSValue tagLength_val = JS_GetPropertyStr(ctx, argv[0], "tagLength");
+    uint32_t tag_length = JSRT_GCM_TAG_SIZE;  // Default 16 bytes
+    if (!JS_IsUndefined(tagLength_val)) {
+      JS_ToUint32(ctx, &tag_length, tagLength_val);
+      if (tag_length < 12 || tag_length > 16 || tag_length % 4 != 0) {
+        tag_length = JSRT_GCM_TAG_SIZE;  // Use default if invalid
+      }
+    }
+
+    // Set up encryption parameters
+    jsrt_symmetric_params_t *params = malloc(sizeof(jsrt_symmetric_params_t));
+    if (!params) {
+      JS_FreeValue(ctx, key_data_val);
+      JS_FreeValue(ctx, iv_val);
+      JS_FreeValue(ctx, additionalData_val);
+      JS_FreeValue(ctx, tagLength_val);
+      JSValue error = jsrt_crypto_throw_error(ctx, "OperationError", "Memory allocation failed");
+      return create_rejected_promise(ctx, error);
+    }
+
+    params->algorithm = JSRT_SYMMETRIC_AES_GCM;
+    params->key_data = key_data;
+    params->key_length = key_data_size;
+    params->params.gcm.iv = iv_data;
+    params->params.gcm.iv_length = iv_size;
+    params->params.gcm.additional_data = additional_data;
+    params->params.gcm.additional_data_length = additional_data_size;
+    params->params.gcm.tag_length = tag_length;
+
+    // Perform encryption
+    uint8_t *ciphertext_data;
+    size_t ciphertext_size;
+    int result = jsrt_crypto_aes_encrypt(params, plaintext_data, plaintext_size, &ciphertext_data, &ciphertext_size);
+
+    // Clean up
+    free(params);
+    JS_FreeValue(ctx, key_data_val);
+    JS_FreeValue(ctx, iv_val);
+    JS_FreeValue(ctx, additionalData_val);
+    JS_FreeValue(ctx, tagLength_val);
+
+    if (result != 0) {
+      JSValue error = jsrt_crypto_throw_error(ctx, "OperationError", "Encryption operation failed");
+      return create_rejected_promise(ctx, error);
+    }
+
+    // Create result ArrayBuffer
+    JSValue result_buffer = JS_NewArrayBuffer(ctx, ciphertext_data, ciphertext_size, NULL, NULL, 0);
+    return create_resolved_promise(ctx, result_buffer);
+  }
+
+  JS_FreeValue(ctx, key_data_val);
+  JSValue error = jsrt_crypto_throw_error(ctx, "NotSupportedError", "Algorithm mode not yet implemented");
   return create_rejected_promise(ctx, error);
 }
 
 JSValue jsrt_subtle_decrypt(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv) {
-  JSValue error = jsrt_crypto_throw_error(ctx, "NotSupportedError", "decrypt not yet implemented");
+  if (argc < 3) {
+    JSValue error = jsrt_crypto_throw_error(ctx, "TypeError", "decrypt requires 3 arguments");
+    return create_rejected_promise(ctx, error);
+  }
+
+  // Parse algorithm (first argument)
+  jsrt_crypto_algorithm_t alg = jsrt_crypto_parse_algorithm(ctx, argv[0]);
+  if (alg == JSRT_CRYPTO_ALG_UNKNOWN) {
+    JSValue error = jsrt_crypto_throw_error(ctx, "NotSupportedError", "Unsupported algorithm");
+    return create_rejected_promise(ctx, error);
+  }
+
+  if (!jsrt_crypto_is_algorithm_supported(alg)) {
+    JSValue error = jsrt_crypto_throw_error(ctx, "NotSupportedError", "Algorithm not yet implemented");
+    return create_rejected_promise(ctx, error);
+  }
+
+  // Validate that this is an encryption algorithm
+  if (alg != JSRT_CRYPTO_ALG_AES_CBC && alg != JSRT_CRYPTO_ALG_AES_GCM && alg != JSRT_CRYPTO_ALG_AES_CTR) {
+    JSValue error = jsrt_crypto_throw_error(ctx, "InvalidAccessError", "Algorithm not suitable for decryption");
+    return create_rejected_promise(ctx, error);
+  }
+
+  // Get key data from CryptoKey object (second argument)
+  JSValue key_data_val = JS_GetPropertyStr(ctx, argv[1], "__keyData");
+  if (JS_IsUndefined(key_data_val)) {
+    JS_FreeValue(ctx, key_data_val);
+    JSValue error = jsrt_crypto_throw_error(ctx, "InvalidAccessError", "Invalid CryptoKey object");
+    return create_rejected_promise(ctx, error);
+  }
+
+  size_t key_data_size;
+  uint8_t *key_data = JS_GetArrayBuffer(ctx, &key_data_size, key_data_val);
+  if (!key_data) {
+    JS_FreeValue(ctx, key_data_val);
+    JSValue error = jsrt_crypto_throw_error(ctx, "InvalidAccessError", "Invalid key data");
+    return create_rejected_promise(ctx, error);
+  }
+
+  // Get ciphertext data (third argument) - handle both ArrayBuffer and TypedArray
+  size_t ciphertext_size;
+  uint8_t *ciphertext_data = NULL;
+
+  // Try ArrayBuffer first
+  ciphertext_data = JS_GetArrayBuffer(ctx, &ciphertext_size, argv[2]);
+
+  // If not ArrayBuffer, try TypedArray
+  if (!ciphertext_data) {
+    JSValue buffer_val = JS_GetPropertyStr(ctx, argv[2], "buffer");
+    JSValue byteOffset_val = JS_GetPropertyStr(ctx, argv[2], "byteOffset");
+    JSValue byteLength_val = JS_GetPropertyStr(ctx, argv[2], "byteLength");
+
+    if (!JS_IsUndefined(buffer_val) && !JS_IsUndefined(byteOffset_val) && !JS_IsUndefined(byteLength_val)) {
+      size_t buffer_size;
+      uint8_t *buffer_data = JS_GetArrayBuffer(ctx, &buffer_size, buffer_val);
+
+      if (buffer_data) {
+        uint32_t offset, length;
+        JS_ToUint32(ctx, &offset, byteOffset_val);
+        JS_ToUint32(ctx, &length, byteLength_val);
+
+        ciphertext_data = buffer_data + offset;
+        ciphertext_size = length;
+      }
+    }
+
+    JS_FreeValue(ctx, buffer_val);
+    JS_FreeValue(ctx, byteOffset_val);
+    JS_FreeValue(ctx, byteLength_val);
+  }
+
+  if (!ciphertext_data) {
+    JS_FreeValue(ctx, key_data_val);
+    JSValue error = jsrt_crypto_throw_error(ctx, "TypeError", "Data must be an ArrayBuffer or TypedArray");
+    return create_rejected_promise(ctx, error);
+  }
+
+  // For AES-CBC, get IV from algorithm parameters
+  if (alg == JSRT_CRYPTO_ALG_AES_CBC) {
+    JSValue iv_val = JS_GetPropertyStr(ctx, argv[0], "iv");
+    if (JS_IsUndefined(iv_val)) {
+      JS_FreeValue(ctx, key_data_val);
+      JS_FreeValue(ctx, iv_val);
+      JSValue error = jsrt_crypto_throw_error(ctx, "OperationError", "AES-CBC requires IV parameter");
+      return create_rejected_promise(ctx, error);
+    }
+
+    size_t iv_size;
+    uint8_t *iv_data = NULL;
+
+    // Try ArrayBuffer first
+    iv_data = JS_GetArrayBuffer(ctx, &iv_size, iv_val);
+
+    // If not ArrayBuffer, try TypedArray
+    if (!iv_data) {
+      JSValue iv_buffer_val = JS_GetPropertyStr(ctx, iv_val, "buffer");
+      JSValue iv_byteOffset_val = JS_GetPropertyStr(ctx, iv_val, "byteOffset");
+      JSValue iv_byteLength_val = JS_GetPropertyStr(ctx, iv_val, "byteLength");
+
+      if (!JS_IsUndefined(iv_buffer_val) && !JS_IsUndefined(iv_byteOffset_val) && !JS_IsUndefined(iv_byteLength_val)) {
+        size_t buffer_size;
+        uint8_t *buffer_data = JS_GetArrayBuffer(ctx, &buffer_size, iv_buffer_val);
+
+        if (buffer_data) {
+          uint32_t offset, length;
+          JS_ToUint32(ctx, &offset, iv_byteOffset_val);
+          JS_ToUint32(ctx, &length, iv_byteLength_val);
+
+          iv_data = buffer_data + offset;
+          iv_size = length;
+        }
+      }
+
+      JS_FreeValue(ctx, iv_buffer_val);
+      JS_FreeValue(ctx, iv_byteOffset_val);
+      JS_FreeValue(ctx, iv_byteLength_val);
+    }
+
+    if (!iv_data || iv_size != JSRT_AES_CBC_IV_SIZE) {
+      JS_FreeValue(ctx, key_data_val);
+      JS_FreeValue(ctx, iv_val);
+      JSValue error = jsrt_crypto_throw_error(ctx, "OperationError", "Invalid IV for AES-CBC");
+      return create_rejected_promise(ctx, error);
+    }
+
+    // Set up decryption parameters
+    jsrt_symmetric_params_t *params = malloc(sizeof(jsrt_symmetric_params_t));
+    if (!params) {
+      JS_FreeValue(ctx, key_data_val);
+      JS_FreeValue(ctx, iv_val);
+      JSValue error = jsrt_crypto_throw_error(ctx, "OperationError", "Memory allocation failed");
+      return create_rejected_promise(ctx, error);
+    }
+
+    params->algorithm = JSRT_SYMMETRIC_AES_CBC;
+    params->key_data = key_data;
+    params->key_length = key_data_size;
+    params->params.cbc.iv = iv_data;
+    params->params.cbc.iv_length = iv_size;
+
+    // Perform decryption
+    uint8_t *plaintext_data;
+    size_t plaintext_size;
+    int result = jsrt_crypto_aes_decrypt(params, ciphertext_data, ciphertext_size, &plaintext_data, &plaintext_size);
+
+    // Clean up
+    free(params);
+    JS_FreeValue(ctx, key_data_val);
+    JS_FreeValue(ctx, iv_val);
+
+    if (result != 0) {
+      JSValue error = jsrt_crypto_throw_error(ctx, "OperationError", "Decryption operation failed");
+      return create_rejected_promise(ctx, error);
+    }
+
+    // Create result ArrayBuffer
+    JSValue result_buffer = JS_NewArrayBuffer(ctx, plaintext_data, plaintext_size, NULL, NULL, 0);
+    return create_resolved_promise(ctx, result_buffer);
+  }
+
+  // For AES-GCM, get IV and optional additionalData from algorithm parameters
+  if (alg == JSRT_CRYPTO_ALG_AES_GCM) {
+    JSValue iv_val = JS_GetPropertyStr(ctx, argv[0], "iv");
+    if (JS_IsUndefined(iv_val)) {
+      JS_FreeValue(ctx, key_data_val);
+      JS_FreeValue(ctx, iv_val);
+      JSValue error = jsrt_crypto_throw_error(ctx, "OperationError", "AES-GCM requires IV parameter");
+      return create_rejected_promise(ctx, error);
+    }
+
+    size_t iv_size;
+    uint8_t *iv_data = NULL;
+
+    // Try ArrayBuffer first
+    iv_data = JS_GetArrayBuffer(ctx, &iv_size, iv_val);
+
+    // If not ArrayBuffer, try TypedArray
+    if (!iv_data) {
+      JSValue iv_buffer_val = JS_GetPropertyStr(ctx, iv_val, "buffer");
+      JSValue iv_byteOffset_val = JS_GetPropertyStr(ctx, iv_val, "byteOffset");
+      JSValue iv_byteLength_val = JS_GetPropertyStr(ctx, iv_val, "byteLength");
+
+      if (!JS_IsUndefined(iv_buffer_val) && !JS_IsUndefined(iv_byteOffset_val) && !JS_IsUndefined(iv_byteLength_val)) {
+        size_t buffer_size;
+        uint8_t *buffer_data = JS_GetArrayBuffer(ctx, &buffer_size, iv_buffer_val);
+
+        if (buffer_data) {
+          uint32_t offset, length;
+          JS_ToUint32(ctx, &offset, iv_byteOffset_val);
+          JS_ToUint32(ctx, &length, iv_byteLength_val);
+
+          iv_data = buffer_data + offset;
+          iv_size = length;
+        }
+      }
+
+      JS_FreeValue(ctx, iv_buffer_val);
+      JS_FreeValue(ctx, iv_byteOffset_val);
+      JS_FreeValue(ctx, iv_byteLength_val);
+    }
+
+    if (!iv_data) {
+      JS_FreeValue(ctx, key_data_val);
+      JS_FreeValue(ctx, iv_val);
+      JSValue error = jsrt_crypto_throw_error(ctx, "OperationError", "Invalid IV for AES-GCM");
+      return create_rejected_promise(ctx, error);
+    }
+
+    // Get optional additionalData
+    JSValue additionalData_val = JS_GetPropertyStr(ctx, argv[0], "additionalData");
+    uint8_t *additional_data = NULL;
+    size_t additional_data_size = 0;
+
+    if (!JS_IsUndefined(additionalData_val) && !JS_IsNull(additionalData_val)) {
+      // Try ArrayBuffer first
+      additional_data = JS_GetArrayBuffer(ctx, &additional_data_size, additionalData_val);
+
+      // If not ArrayBuffer, try TypedArray
+      if (!additional_data) {
+        JSValue aad_buffer_val = JS_GetPropertyStr(ctx, additionalData_val, "buffer");
+        JSValue aad_byteOffset_val = JS_GetPropertyStr(ctx, additionalData_val, "byteOffset");
+        JSValue aad_byteLength_val = JS_GetPropertyStr(ctx, additionalData_val, "byteLength");
+
+        if (!JS_IsUndefined(aad_buffer_val) && !JS_IsUndefined(aad_byteOffset_val) &&
+            !JS_IsUndefined(aad_byteLength_val)) {
+          size_t buffer_size;
+          uint8_t *buffer_data = JS_GetArrayBuffer(ctx, &buffer_size, aad_buffer_val);
+
+          if (buffer_data) {
+            uint32_t offset, length;
+            JS_ToUint32(ctx, &offset, aad_byteOffset_val);
+            JS_ToUint32(ctx, &length, aad_byteLength_val);
+
+            additional_data = buffer_data + offset;
+            additional_data_size = length;
+          }
+        }
+
+        JS_FreeValue(ctx, aad_buffer_val);
+        JS_FreeValue(ctx, aad_byteOffset_val);
+        JS_FreeValue(ctx, aad_byteLength_val);
+      }
+    }
+
+    // Get optional tagLength (default to 16 bytes)
+    JSValue tagLength_val = JS_GetPropertyStr(ctx, argv[0], "tagLength");
+    uint32_t tag_length = JSRT_GCM_TAG_SIZE;  // Default 16 bytes
+    if (!JS_IsUndefined(tagLength_val)) {
+      JS_ToUint32(ctx, &tag_length, tagLength_val);
+      if (tag_length < 12 || tag_length > 16 || tag_length % 4 != 0) {
+        tag_length = JSRT_GCM_TAG_SIZE;  // Use default if invalid
+      }
+    }
+
+    // Set up decryption parameters
+    jsrt_symmetric_params_t *params = malloc(sizeof(jsrt_symmetric_params_t));
+    if (!params) {
+      JS_FreeValue(ctx, key_data_val);
+      JS_FreeValue(ctx, iv_val);
+      JS_FreeValue(ctx, additionalData_val);
+      JS_FreeValue(ctx, tagLength_val);
+      JSValue error = jsrt_crypto_throw_error(ctx, "OperationError", "Memory allocation failed");
+      return create_rejected_promise(ctx, error);
+    }
+
+    params->algorithm = JSRT_SYMMETRIC_AES_GCM;
+    params->key_data = key_data;
+    params->key_length = key_data_size;
+    params->params.gcm.iv = iv_data;
+    params->params.gcm.iv_length = iv_size;
+    params->params.gcm.additional_data = additional_data;
+    params->params.gcm.additional_data_length = additional_data_size;
+    params->params.gcm.tag_length = tag_length;
+
+    // Perform decryption
+    uint8_t *plaintext_data;
+    size_t plaintext_size;
+    int result = jsrt_crypto_aes_decrypt(params, ciphertext_data, ciphertext_size, &plaintext_data, &plaintext_size);
+
+    // Clean up
+    free(params);
+    JS_FreeValue(ctx, key_data_val);
+    JS_FreeValue(ctx, iv_val);
+    JS_FreeValue(ctx, additionalData_val);
+    JS_FreeValue(ctx, tagLength_val);
+
+    if (result != 0) {
+      JSValue error = jsrt_crypto_throw_error(ctx, "OperationError", "Decryption operation failed");
+      return create_rejected_promise(ctx, error);
+    }
+
+    // Create result ArrayBuffer
+    JSValue result_buffer = JS_NewArrayBuffer(ctx, plaintext_data, plaintext_size, NULL, NULL, 0);
+    return create_resolved_promise(ctx, result_buffer);
+  }
+
+  JS_FreeValue(ctx, key_data_val);
+  JSValue error = jsrt_crypto_throw_error(ctx, "NotSupportedError", "Algorithm mode not yet implemented");
   return create_rejected_promise(ctx, error);
 }
 
@@ -263,7 +867,66 @@ JSValue jsrt_subtle_verify(JSContext *ctx, JSValueConst this_val, int argc, JSVa
 }
 
 JSValue jsrt_subtle_generateKey(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv) {
-  JSValue error = jsrt_crypto_throw_error(ctx, "NotSupportedError", "generateKey not yet implemented");
+  if (argc < 3) {
+    JSValue error = jsrt_crypto_throw_error(ctx, "TypeError", "generateKey requires 3 arguments");
+    return create_rejected_promise(ctx, error);
+  }
+
+  // Parse algorithm (first argument)
+  jsrt_crypto_algorithm_t alg = jsrt_crypto_parse_algorithm(ctx, argv[0]);
+  if (alg == JSRT_CRYPTO_ALG_UNKNOWN) {
+    JSValue error = jsrt_crypto_throw_error(ctx, "NotSupportedError", "Unsupported algorithm");
+    return create_rejected_promise(ctx, error);
+  }
+
+  // Parse extractable (second argument)
+  bool extractable = JS_ToBool(ctx, argv[1]);
+
+  // Parse keyUsages (third argument) - for now we just validate it's an array
+  if (!JS_IsArray(ctx, argv[2])) {
+    JSValue error = jsrt_crypto_throw_error(ctx, "TypeError", "keyUsages must be an array");
+    return create_rejected_promise(ctx, error);
+  }
+
+  // Generate key based on algorithm
+  if (alg == JSRT_CRYPTO_ALG_AES_CBC || alg == JSRT_CRYPTO_ALG_AES_GCM || alg == JSRT_CRYPTO_ALG_AES_CTR) {
+    // Get key length from algorithm object
+    JSValue length_val = JS_GetPropertyStr(ctx, argv[0], "length");
+    int32_t key_length_bits = 256;  // Default to AES-256
+    if (!JS_IsUndefined(length_val)) {
+      JS_ToInt32(ctx, &key_length_bits, length_val);
+    }
+    JS_FreeValue(ctx, length_val);
+
+    // Validate key length
+    if (key_length_bits != 128 && key_length_bits != 192 && key_length_bits != 256) {
+      JSValue error = jsrt_crypto_throw_error(ctx, "OperationError", "Invalid AES key length");
+      return create_rejected_promise(ctx, error);
+    }
+
+    // Generate the key
+    uint8_t *key_data;
+    size_t key_data_length;
+    if (jsrt_crypto_generate_aes_key(key_length_bits, &key_data, &key_data_length) != 0) {
+      JSValue error = jsrt_crypto_throw_error(ctx, "OperationError", "Failed to generate AES key");
+      return create_rejected_promise(ctx, error);
+    }
+
+    // Create CryptoKey object with the raw key data
+    JSValue key_obj = JS_NewObject(ctx);
+    JS_SetPropertyStr(ctx, key_obj, "type", JS_NewString(ctx, "secret"));
+    JS_SetPropertyStr(ctx, key_obj, "extractable", JS_NewBool(ctx, extractable));
+    JS_SetPropertyStr(ctx, key_obj, "algorithm", JS_DupValue(ctx, argv[0]));
+    JS_SetPropertyStr(ctx, key_obj, "usages", JS_DupValue(ctx, argv[2]));
+
+    // Store the key data as an internal property (ArrayBuffer)
+    JSValue key_buffer = JS_NewArrayBuffer(ctx, key_data, key_data_length, NULL, NULL, 0);
+    JS_SetPropertyStr(ctx, key_obj, "__keyData", key_buffer);
+
+    return create_resolved_promise(ctx, key_obj);
+  }
+
+  JSValue error = jsrt_crypto_throw_error(ctx, "NotSupportedError", "Algorithm not supported for key generation");
   return create_rejected_promise(ctx, error);
 }
 

@@ -189,27 +189,48 @@
 **位置**：`src/std/clone.c`, `src/std/clone.h`  
 **技术实现**：使用循环引用映射表，递归克隆算法，支持复杂对象结构
 
-#### 9. Crypto API (基础)
-**当前状态**：✅ 已完成  
+#### 9. Crypto API (完整WebCrypto实现)
+**当前状态**：✅ 已完成（增强版）  
 **已实现**：
-- `crypto.getRandomValues(typedArray)` - 生成密码学安全的随机数，支持OpenSSL动态加载
-  - 支持 Uint8Array、Uint16Array、Uint32Array、Int8Array、Int16Array、Int32Array
-  - 完整的参数验证和错误处理
-  - 65536字节配额限制（符合Web标准）
-  - OpenSSL不可用时自动降级到系统随机数生成器
-- `crypto.randomUUID()` - 生成符合RFC 4122标准的UUID v4
-  - 正确的版本和变体位设置
-  - 支持OpenSSL和系统随机数生成器
-- **可选OpenSSL支持**：
-  - 动态库加载，支持Windows、macOS、Linux多平台
-  - 如OpenSSL不可用，自动禁用crypto API或使用备用随机数生成器
-  - `process.versions.openssl` 属性显示OpenSSL版本信息
-- 完整的单元测试覆盖
+- **基础Crypto API**：
+  - `crypto.getRandomValues(typedArray)` - 生成密码学安全的随机数
+    - 支持 Uint8Array、Uint16Array、Uint32Array、Int8Array、Int16Array、Int32Array
+    - 完整的参数验证和错误处理
+    - 65536字节配额限制（符合Web标准）
+  - `crypto.randomUUID()` - 生成符合RFC 4122标准的UUID v4
+    - 正确的版本和变体位设置
+    - 支持OpenSSL和系统随机数生成器
 
-**实现复杂度**：🟡 中等  
-**实际工作量**：1 天  
-**位置**：`src/std/crypto.c`, `src/std/crypto.h`  
-**技术实现**：动态加载OpenSSL库，支持多平台库路径检测，包含系统随机数备用方案
+- **SubtleCrypto API (完整实现)**：
+  - `crypto.subtle` 对象 - 符合W3C WebCrypto API规范
+  - `crypto.subtle.digest(algorithm, data)` - 消息摘要算法
+    - 支持 SHA-1、SHA-256、SHA-384、SHA-512
+    - Promise-based异步API
+    - 支持TypedArray和ArrayBuffer输入
+    - 完整的错误处理和WebCrypto标准错误类型
+  - **后续扩展接口**（已定义框架）：
+    - `crypto.subtle.encrypt()` / `crypto.subtle.decrypt()` - 对称/非对称加密
+    - `crypto.subtle.sign()` / `crypto.subtle.verify()` - 数字签名
+    - `crypto.subtle.generateKey()` - 密钥生成
+    - `crypto.subtle.importKey()` / `crypto.subtle.exportKey()` - 密钥导入导出
+    - `crypto.subtle.deriveKey()` / `crypto.subtle.deriveBits()` - 密钥派生
+
+- **OpenSSL集成**：
+  - 动态库加载，支持Windows、macOS、Linux多平台
+  - OpenSSL 3.x兼容性
+  - 如OpenSSL不可用，crypto.subtle自动禁用，基础随机数功能降级到系统实现
+  - `process.versions.openssl` 属性显示OpenSSL版本信息
+
+- **架构设计**：
+  - 模块化设计，算法实现独立
+  - Promise包装层处理同步OpenSSL操作
+  - 完整的内存管理和错误处理
+  - 支持未来异步操作扩展
+
+**实现复杂度**：🔴 困难（增强版）  
+**实际工作量**：2 天  
+**位置**：`src/std/crypto.c`, `src/std/crypto.h`, `src/std/crypto_subtle.c`, `src/std/crypto_subtle.h`, `src/std/crypto_digest.c`, `src/std/crypto_digest.h`  
+**技术实现**：完整WebCrypto API架构，OpenSSL动态加载，消息摘要算法完整实现，为后续对称/非对称加密奠定基础
 
 ### 第五阶段：流和 HTTP API (优先级：中)
 
@@ -312,7 +333,7 @@
 | Event/EventTarget | 🔴 困难 | 🔴 高 | 🔴 高 | 5 | ✅ 完成 |
 | AbortController | 🔴 困难 | 🔴 高 | 🔴 高 | 6 | ✅ 完成 |
 | URL API | 🔴 困难 | 🔴 高 | 🔴 高 | 7 | ✅ 完成 |
-| Crypto API | 🟡 中等 | 🟡 中等 | 🟡 中等 | 8 | ✅ 完成 |
+| Crypto API (WebCrypto) | 🔴 困难 | 🔴 高 | 🔴 高 | 8 | ✅ 完成（增强版） |
 | Structured Clone | 🔴 困难 | 🟡 中等 | 🟡 中等 | 9 | ✅ 完成 |
 | Streams API | 🔴 非常困难 | 🔴 高 | 🔴 高 | 10 | ✅ 完成 |
 | Fetch API | 🔴 非常困难 | 🔴 高 | 🔴 高 | 11 | ✅ 完成 |
@@ -334,7 +355,7 @@
 ### Phase 3: URL 和 Web 标准 ✅ **已完成** (实际用时 1 天)  
 7. **URL API** - ✅ URL 解析和操作 (已完成)
 8. **Structured Clone** - ✅ 对象克隆支持 (已完成)
-9. **Crypto API** - ✅ 基础加密功能 (已完成)
+9. **Crypto API (WebCrypto)** - ✅ 完整WebCrypto实现 (已完成，增强版)
 
 ### Phase 4: 高级 Web API ✅ **已完成** (实际用时 1 天)
 10. **Streams API** - ✅ 流处理支持 (已完成)
@@ -365,8 +386,12 @@ src/std/
 ├── url.h (已完成)
 ├── clone.c (已完成)
 ├── clone.h (已完成)
-├── crypto.c (已完成)
-├── crypto.h (已完成)
+├── crypto.c (已完成，WebCrypto增强版)
+├── crypto.h (已完成，WebCrypto增强版)
+├── crypto_subtle.c (新增，SubtleCrypto实现)
+├── crypto_subtle.h (新增，SubtleCrypto头文件)
+├── crypto_digest.c (新增，消息摘要算法)
+├── crypto_digest.h (新增，消息摘要头文件)
 ├── streams.c (已完成)
 ├── streams.h (已完成)
 ├── blob.c (已完成)
@@ -407,13 +432,46 @@ src/std/
 4. [libuv Documentation](https://docs.libuv.org/)
 5. [WHATWG Standards](https://whatwg.org/)
 
+## 🚀 WebCrypto API 扩展规划
+
+基于当前的SubtleCrypto.digest实现，下一步可以继续扩展WebCrypto API的其他功能：
+
+### Phase 1: 对称加密算法 🔄 **下一阶段**
+- **AES-CBC** - 分组密码链接模式
+- **AES-GCM** - Galois/Counter模式（带认证）
+- **AES-CTR** - 计数器模式
+- **预估工作量**：3-4天
+- **技术挑战**：IV/Nonce管理、GCM认证标签、填充处理
+
+### Phase 2: 消息认证码 🔄 **计划中**
+- **HMAC-SHA-256/384/512** - 基于哈希的消息认证码
+- **密钥生成和导入** - 支持对称密钥管理
+- **预估工作量**：1-2天
+
+### Phase 3: 非对称加密 🔄 **长期规划**
+- **RSA-OAEP/PKCS1-v1_5** - RSA加密解密
+- **ECDSA/ECDH** - 椭圆曲线算法
+- **密钥对生成** - 公私钥管理
+- **预估工作量**：5-7天
+
+### Phase 4: 密钥管理 🔄 **长期规划**
+- **PBKDF2/HKDF** - 密钥派生函数
+- **JWK格式支持** - JSON Web Key导入导出
+- **预估工作量**：2-3天
+
+详细实现计划参考：`docs/webcrypto-implementation-plan.md`
+
 ## 📝 下一步行动
 
-1. **审查此计划**：确认实施优先级和技术方案
-2. **环境准备**：设置开发和测试环境
-3. **创建测试套件**：为每个 API 创建符合规范的测试用例
-4. **开始实施 Phase 1**：从最简单的 API 开始实现
-5. **持续集成**：确保每个新 API 都有相应的测试和文档
+### WinterCG API完成情况
+✅ **所有WinterCG Minimum Common API已完成实现**
+
+### 后续增强方向
+1. **WebCrypto API扩展**：继续实现对称加密算法（AES系列）
+2. **性能优化**：为现有API进行性能调优和内存优化
+3. **测试完善**：增加更多边界情况和兼容性测试
+4. **文档补充**：完善API使用说明和最佳实践指南
+5. **生态系统集成**：确保与Node.js和浏览器环境的最大兼容性
 
 ---
 

@@ -16,8 +16,25 @@
 - **降级机制**：系统随机数生成器备用方案
 - **位置**：`src/std/crypto.c`, `src/std/crypto.h`
 
-#### 2. 运行时集成
-- **已实现**：`process.versions.openssl` - 显示OpenSSL版本信息
+#### 2. SubtleCrypto基础架构
+- **已实现**：`crypto.subtle` 对象和完整方法框架
+- **已实现**：Promise-based异步API架构
+- **已实现**：WebCrypto标准错误处理机制
+- **已实现**：算法解析和验证系统
+- **已实现**：TypedArray和ArrayBuffer输入处理
+- **位置**：`src/std/crypto_subtle.c`, `src/std/crypto_subtle.h`
+
+#### 3. 消息摘要算法 (完整实现)
+- **已实现**：`crypto.subtle.digest(algorithm, data)`
+- **支持算法**：SHA-1, SHA-256, SHA-384, SHA-512
+- **已实现**：OpenSSL EVP API集成
+- **已实现**：完整的Promise包装和错误处理
+- **已实现**：测试向量验证
+- **位置**：`src/std/crypto_digest.c`, `src/std/crypto_digest.h`
+
+#### 4. 运行时集成
+- **已实现**：`process.versions.openssl` - 显示OpenSSL版本信息  
+- **已实现**：进程对象全局注册
 - **已实现**：完整的单元测试覆盖
 - **已实现**：构建系统集成
 
@@ -358,11 +375,16 @@ JSValue jsrt_crypto_throw_error(JSContext *ctx,
 
 ## 📊 实施优先级和时间规划
 
-### Phase 1: 基础架构 (1-2周)
+### Phase 1: 基础架构 ✅ **已完成** (1-2周)
 1. ✅ **基础随机数** - 已完成
-2. ✅ **SubtleCrypto架构** - 已完成 (同步实现)
+2. ✅ **SubtleCrypto架构** - 已完成 (Promise-based API)
 3. ✅ **消息摘要** - 已完成 (SHA-1, SHA-256, SHA-384, SHA-512)
-4. **异步操作框架** - 2-3天 (暂时使用同步实现)
+4. ✅ **错误处理机制** - 已完成 (WebCrypto标准错误类型)
+5. ✅ **TypedArray处理** - 已完成 (支持ArrayBuffer和TypedArray输入)
+6. ✅ **OpenSSL集成** - 已完成 (动态加载，多平台支持)
+
+**实际完成时间**：2天  
+**核心成果**：完整的SubtleCrypto.digest实现，为后续算法奠定坚实基础
 
 ### Phase 2: 对称加密 (1-2周)  
 5. **AES-CBC/GCM/CTR** - 4-5天

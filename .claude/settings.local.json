@@ -21,7 +21,13 @@
       "Bash(.build.bat Release)",
       "Bash(where cl)",
       "Bash(git checkout:*)",
-      "Bash(mingw32-make:*)"
+      "Bash(mingw32-make:*)",
+      "Bash(where gcc)",
+      "Bash(where mingw32-make)",
+      "Bash(dir:*)",
+      "Bash(git submodule:*)",
+      "Bash(mkdir:*)",
+      "Bash(grep:*)"
     ],
     "deny": [],
     "ask": []

@@ -98,6 +98,12 @@ static bool rsa_funcs_loaded = false;
 #define EVP_PKEY_CTRL_MD 1
 #define RSA_PKCS1_PADDING 1
 #define RSA_PKCS1_OAEP_PADDING 4
+#define RSA_PKCS1_PSS_PADDING 6
+// PSS specific controls
+#define EVP_PKEY_CTRL_RSA_PSS_SALTLEN (EVP_PKEY_ALG_CTRL + 2)
+#define RSA_PSS_SALTLEN_DIGEST -1
+#define RSA_PSS_SALTLEN_MAX -2
+#define RSA_PSS_SALTLEN_AUTO -3
 // Correct OpenSSL 1.1.1+ values for RSA key generation controls
 #define EVP_PKEY_CTRL_RSA_KEYGEN_BITS (EVP_PKEY_ALG_CTRL + 3)
 #define EVP_PKEY_CTRL_RSA_KEYGEN_PUBEXP (EVP_PKEY_ALG_CTRL + 4)
@@ -517,7 +523,7 @@ bool jsrt_crypto_is_rsa_algorithm_supported(jsrt_rsa_algorithm_t alg) {
     case JSRT_RSASSA_PKCS1_V1_5:
       return true;  // Implemented
     case JSRT_RSA_PSS:
-      return false;  // TODO: Implement
+      return false;  // TODO: Fix OpenSSL 3.x compatibility
     default:
       return false;
   }
@@ -714,8 +720,8 @@ int jsrt_crypto_rsa_sign(jsrt_rsa_params_t *params, const uint8_t *data, size_t 
     return -1;
   }
 
-  // For RSASSA-PKCS1-v1_5, use EVP_DigestSign
-  if (params->algorithm == JSRT_RSASSA_PKCS1_V1_5) {
+  // For RSASSA-PKCS1-v1_5 and RSA-PSS, use EVP_DigestSign
+  if (params->algorithm == JSRT_RSASSA_PKCS1_V1_5 || params->algorithm == JSRT_RSA_PSS) {
     if (!openssl_rsa_funcs.EVP_DigestSignInit || !openssl_rsa_funcs.EVP_DigestSign) {
       JSRT_Debug("JSRT_Crypto_RSA: EVP_DigestSign functions not available");
       return -1;
@@ -735,10 +741,40 @@ int jsrt_crypto_rsa_sign(jsrt_rsa_params_t *params, const uint8_t *data, size_t 
     }
 
     // Initialize digest signing
-    if (openssl_rsa_funcs.EVP_DigestSignInit(md_ctx, NULL, md, NULL, params->rsa_key) <= 0) {
+    void *pkey_ctx = NULL;
+    if (openssl_rsa_funcs.EVP_DigestSignInit(md_ctx, &pkey_ctx, md, NULL, params->rsa_key) <= 0) {
       openssl_rsa_funcs.EVP_MD_CTX_free(md_ctx);
       JSRT_Debug("JSRT_Crypto_RSA: Failed to initialize digest signing");
       return -1;
+    }
+
+    // For RSA-PSS, set padding and salt length
+    if (params->algorithm == JSRT_RSA_PSS && pkey_ctx) {
+      // Set PSS padding - try alternative control value first
+      int padding_result = openssl_rsa_funcs.EVP_PKEY_CTX_ctrl(
+          pkey_ctx, EVP_PKEY_RSA, EVP_PKEY_OP_SIGN, EVP_PKEY_CTRL_RSA_PADDING_ALT, RSA_PKCS1_PSS_PADDING, NULL);
+      if (padding_result <= 0) {
+        // Try with the other control value
+        padding_result = openssl_rsa_funcs.EVP_PKEY_CTX_ctrl(pkey_ctx, EVP_PKEY_RSA, EVP_PKEY_OP_SIGN,
+                                                             EVP_PKEY_CTRL_RSA_PADDING, RSA_PKCS1_PSS_PADDING, NULL);
+      }
+
+      if (padding_result <= 0) {
+        openssl_rsa_funcs.EVP_MD_CTX_free(md_ctx);
+        JSRT_Debug("JSRT_Crypto_RSA: Failed to set PSS padding (tried both control values)");
+        return -1;
+      }
+
+      // Set salt length (default to digest length)
+      int salt_len = params->params.pss.salt_length > 0 ? params->params.pss.salt_length : RSA_PSS_SALTLEN_DIGEST;
+      if (openssl_rsa_funcs.EVP_PKEY_CTX_ctrl(pkey_ctx, EVP_PKEY_RSA, EVP_PKEY_OP_SIGN, EVP_PKEY_CTRL_RSA_PSS_SALTLEN,
+                                              salt_len, NULL) <= 0) {
+        openssl_rsa_funcs.EVP_MD_CTX_free(md_ctx);
+        JSRT_Debug("JSRT_Crypto_RSA: Failed to set PSS salt length");
+        return -1;
+      }
+
+      JSRT_Debug("JSRT_Crypto_RSA: Configured RSA-PSS with salt_length=%d", salt_len);
     }
 
     // Get signature length
@@ -830,8 +866,8 @@ bool jsrt_crypto_rsa_verify(jsrt_rsa_params_t *params, const uint8_t *data, size
     return false;
   }
 
-  // For RSASSA-PKCS1-v1_5, use EVP_DigestVerify
-  if (params->algorithm == JSRT_RSASSA_PKCS1_V1_5) {
+  // For RSASSA-PKCS1-v1_5 and RSA-PSS, use EVP_DigestVerify
+  if (params->algorithm == JSRT_RSASSA_PKCS1_V1_5 || params->algorithm == JSRT_RSA_PSS) {
     if (!openssl_rsa_funcs.EVP_DigestVerifyInit || !openssl_rsa_funcs.EVP_DigestVerify) {
       JSRT_Debug("JSRT_Crypto_RSA: EVP_DigestVerify functions not available");
       return false;
@@ -851,10 +887,40 @@ bool jsrt_crypto_rsa_verify(jsrt_rsa_params_t *params, const uint8_t *data, size
     }
 
     // Initialize digest verification
-    if (openssl_rsa_funcs.EVP_DigestVerifyInit(md_ctx, NULL, md, NULL, params->rsa_key) <= 0) {
+    void *pkey_ctx = NULL;
+    if (openssl_rsa_funcs.EVP_DigestVerifyInit(md_ctx, &pkey_ctx, md, NULL, params->rsa_key) <= 0) {
       openssl_rsa_funcs.EVP_MD_CTX_free(md_ctx);
       JSRT_Debug("JSRT_Crypto_RSA: Failed to initialize digest verification");
       return false;
+    }
+
+    // For RSA-PSS, set padding and salt length
+    if (params->algorithm == JSRT_RSA_PSS && pkey_ctx) {
+      // Set PSS padding - try alternative control value first
+      int padding_result = openssl_rsa_funcs.EVP_PKEY_CTX_ctrl(
+          pkey_ctx, EVP_PKEY_RSA, EVP_PKEY_OP_VERIFY, EVP_PKEY_CTRL_RSA_PADDING_ALT, RSA_PKCS1_PSS_PADDING, NULL);
+      if (padding_result <= 0) {
+        // Try with the other control value
+        padding_result = openssl_rsa_funcs.EVP_PKEY_CTX_ctrl(pkey_ctx, EVP_PKEY_RSA, EVP_PKEY_OP_VERIFY,
+                                                             EVP_PKEY_CTRL_RSA_PADDING, RSA_PKCS1_PSS_PADDING, NULL);
+      }
+
+      if (padding_result <= 0) {
+        openssl_rsa_funcs.EVP_MD_CTX_free(md_ctx);
+        JSRT_Debug("JSRT_Crypto_RSA: Failed to set PSS padding for verification (tried both control values)");
+        return false;
+      }
+
+      // Set salt length (default to digest length)
+      int salt_len = params->params.pss.salt_length > 0 ? params->params.pss.salt_length : RSA_PSS_SALTLEN_DIGEST;
+      if (openssl_rsa_funcs.EVP_PKEY_CTX_ctrl(pkey_ctx, EVP_PKEY_RSA, EVP_PKEY_OP_VERIFY, EVP_PKEY_CTRL_RSA_PSS_SALTLEN,
+                                              salt_len, NULL) <= 0) {
+        openssl_rsa_funcs.EVP_MD_CTX_free(md_ctx);
+        JSRT_Debug("JSRT_Crypto_RSA: Failed to set PSS salt length for verification");
+        return false;
+      }
+
+      JSRT_Debug("JSRT_Crypto_RSA: Configured RSA-PSS verification with salt_length=%d", salt_len);
     }
 
     // Perform verification

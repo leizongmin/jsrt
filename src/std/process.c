@@ -1,16 +1,89 @@
 #include "process.h"
 
+// Platform-specific includes
+#ifdef _WIN32
+#include <tlhelp32.h>
+#include <windows.h>
+#else
+#include <sys/time.h>
+#include <unistd.h>
+#endif
+
 #include <quickjs.h>
 #include <stdbool.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <sys/time.h>
 #include <time.h>
-#include <unistd.h>
 
 #include "../util/debug.h"
 #include "crypto.h"
+
+// Platform-specific function implementations
+#ifdef _WIN32
+// Windows equivalent of gettimeofday()
+static int gettimeofday(struct timeval *tv, void *tz) {
+  FILETIME ft;
+  unsigned __int64 tmpres = 0;
+  static int tzflag = 0;
+
+  if (NULL != tv) {
+    GetSystemTimeAsFileTime(&ft);
+
+    tmpres |= ft.dwHighDateTime;
+    tmpres <<= 32;
+    tmpres |= ft.dwLowDateTime;
+
+    tmpres /= 10;  // convert into microseconds
+    // converting file time to unix epoch
+    tmpres -= 11644473600000000ULL;
+    tv->tv_sec = (long)(tmpres / 1000000UL);
+    tv->tv_usec = (long)(tmpres % 1000000UL);
+  }
+
+  return 0;
+}
+
+// Windows equivalent of getpid()
+static int getpid(void) { return (int)GetCurrentProcessId(); }
+
+// Windows equivalent of getppid()
+static int getppid(void) {
+  HANDLE hSnapshot;
+  PROCESSENTRY32 pe32;
+  DWORD dwParentPID = 0;
+  DWORD dwCurrentPID = GetCurrentProcessId();
+
+  hSnapshot = CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0);
+  if (hSnapshot == INVALID_HANDLE_VALUE) {
+    return 0;
+  }
+
+  pe32.dwSize = sizeof(PROCESSENTRY32);
+
+  if (Process32First(hSnapshot, &pe32)) {
+    do {
+      if (pe32.th32ProcessID == dwCurrentPID) {
+        dwParentPID = pe32.th32ParentProcessID;
+        break;
+      }
+    } while (Process32Next(hSnapshot, &pe32));
+  }
+
+  CloseHandle(hSnapshot);
+  return (int)dwParentPID;
+}
+
+// Define struct timeval for Windows
+#ifndef _STRUCT_TIMEVAL_DEFINED
+#define _STRUCT_TIMEVAL_DEFINED
+struct timeval {
+  long tv_sec;
+  long tv_usec;
+};
+#endif
+
+#endif
 
 // Global variables for command line arguments
 int g_jsrt_argc = 0;

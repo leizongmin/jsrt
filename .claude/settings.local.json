@@ -4,14 +4,11 @@
       "Bash(make:*)",
       "Bash(./target/release/jsrt:*)",
       "Bash(find:*)",
-      "Bash(echo:*)",
-      "Bash(echo:*)",
       "Bash(./target/debug/jsrt:*)",
-      "Bash(ln:*)",
       "Bash(./bin/jsrt:*)",
-      "Bash(/dev/null)",
-      "Bash(git commit:*)",
-      "Bash(timeout:*)"
+      "Read(//usr/lib/**)",
+      "Read(//opt/homebrew/lib/**)",
+      "Bash(git add:*)"
     ],
     "deny": [],
     "ask": []

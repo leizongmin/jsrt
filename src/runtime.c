@@ -13,6 +13,7 @@
 #include "std/blob.h"
 #include "std/clone.h"
 #include "std/console.h"
+#include "std/crypto.h"
 #include "std/encoding.h"
 #include "std/event.h"
 #include "std/fetch.h"
@@ -67,6 +68,7 @@ JSRT_Runtime *JSRT_RuntimeNew() {
   JSRT_RuntimeSetupStdBlob(rt);
   JSRT_RuntimeSetupStdFormData(rt);
   JSRT_RuntimeSetupStdFetch(rt);
+  JSRT_RuntimeSetupStdCrypto(rt);
   JSRT_RuntimeSetupStdProcess(rt);
   JSRT_StdModuleInit(rt);
   JSRT_StdCommonJSInit(rt);

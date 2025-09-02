@@ -190,14 +190,26 @@
 **技术实现**：使用循环引用映射表，递归克隆算法，支持复杂对象结构
 
 #### 9. Crypto API (基础)
-**当前状态**：❌ 未实现  
-**需要实现**：
-- `crypto.getRandomValues(typedArray)` - 生成密码学安全的随机数
-- `crypto.randomUUID()` - 生成 UUID v4
+**当前状态**：✅ 已完成  
+**已实现**：
+- `crypto.getRandomValues(typedArray)` - 生成密码学安全的随机数，支持OpenSSL动态加载
+  - 支持 Uint8Array、Uint16Array、Uint32Array、Int8Array、Int16Array、Int32Array
+  - 完整的参数验证和错误处理
+  - 65536字节配额限制（符合Web标准）
+  - OpenSSL不可用时自动降级到系统随机数生成器
+- `crypto.randomUUID()` - 生成符合RFC 4122标准的UUID v4
+  - 正确的版本和变体位设置
+  - 支持OpenSSL和系统随机数生成器
+- **可选OpenSSL支持**：
+  - 动态库加载，支持Windows、macOS、Linux多平台
+  - 如OpenSSL不可用，自动禁用crypto API或使用备用随机数生成器
+  - `process.versions.openssl` 属性显示OpenSSL版本信息
+- 完整的单元测试覆盖
 
 **实现复杂度**：🟡 中等  
-**预估工作量**：2-3 天  
-**技术要求**：系统随机数生成器接口
+**实际工作量**：1 天  
+**位置**：`src/std/crypto.c`, `src/std/crypto.h`  
+**技术实现**：动态加载OpenSSL库，支持多平台库路径检测，包含系统随机数备用方案
 
 ### 第五阶段：流和 HTTP API (优先级：中)
 
@@ -300,7 +312,7 @@
 | Event/EventTarget | 🔴 困难 | 🔴 高 | 🔴 高 | 5 | ✅ 完成 |
 | AbortController | 🔴 困难 | 🔴 高 | 🔴 高 | 6 | ✅ 完成 |
 | URL API | 🔴 困难 | 🔴 高 | 🔴 高 | 7 | ✅ 完成 |
-| Crypto API | 🟡 中等 | 🟡 中等 | 🟡 中等 | 8 | 📋 计划中 |
+| Crypto API | 🟡 中等 | 🟡 中等 | 🟡 中等 | 8 | ✅ 完成 |
 | Structured Clone | 🔴 困难 | 🟡 中等 | 🟡 中等 | 9 | ✅ 完成 |
 | Streams API | 🔴 非常困难 | 🔴 高 | 🔴 高 | 10 | ✅ 完成 |
 | Fetch API | 🔴 非常困难 | 🔴 高 | 🔴 高 | 11 | ✅ 完成 |
@@ -322,7 +334,7 @@
 ### Phase 3: URL 和 Web 标准 ✅ **已完成** (实际用时 1 天)  
 7. **URL API** - ✅ URL 解析和操作 (已完成)
 8. **Structured Clone** - ✅ 对象克隆支持 (已完成)
-9. **Crypto API** - 基础加密功能 (计划中)
+9. **Crypto API** - ✅ 基础加密功能 (已完成)
 
 ### Phase 4: 高级 Web API ✅ **已完成** (实际用时 1 天)
 10. **Streams API** - ✅ 流处理支持 (已完成)
@@ -353,6 +365,8 @@ src/std/
 ├── url.h (已完成)
 ├── clone.c (已完成)
 ├── clone.h (已完成)
+├── crypto.c (已完成)
+├── crypto.h (已完成)
 ├── streams.c (已完成)
 ├── streams.h (已完成)
 ├── blob.c (已完成)

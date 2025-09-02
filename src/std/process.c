@@ -10,6 +10,7 @@
 #include <unistd.h>
 
 #include "../util/debug.h"
+#include "crypto.h"
 
 // Global variables for command line arguments
 int g_jsrt_argc = 0;
@@ -108,6 +109,22 @@ static JSValue jsrt_process_get_arch(JSContext *ctx, JSValueConst this_val, int 
 #endif
 }
 
+// process.versions getter
+static JSValue jsrt_process_get_versions(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv) {
+  JSValue versions_obj = JS_NewObject(ctx);
+
+  // Add jsrt version
+  JS_SetPropertyStr(ctx, versions_obj, "jsrt", JS_NewString(ctx, "1.0.0"));
+
+  // Add OpenSSL version if available
+  const char *openssl_version = JSRT_GetOpenSSLVersion();
+  if (openssl_version != NULL) {
+    JS_SetPropertyStr(ctx, versions_obj, "openssl", JS_NewString(ctx, openssl_version));
+  }
+
+  return versions_obj;
+}
+
 // Create process module for std:process
 JSValue JSRT_CreateProcessModule(JSContext *ctx) {
   JSValue process_obj = JS_NewObject(ctx);
@@ -141,6 +158,11 @@ JSValue JSRT_CreateProcessModule(JSContext *ctx) {
   // process.arch - define as a getter property
   JSValue arch_prop = JS_NewCFunction(ctx, jsrt_process_get_arch, "get arch", 0);
   JS_DefinePropertyGetSet(ctx, process_obj, JS_NewAtom(ctx, "arch"), arch_prop, JS_UNDEFINED, JS_PROP_CONFIGURABLE);
+
+  // process.versions - define as a getter property
+  JSValue versions_prop = JS_NewCFunction(ctx, jsrt_process_get_versions, "get versions", 0);
+  JS_DefinePropertyGetSet(ctx, process_obj, JS_NewAtom(ctx, "versions"), versions_prop, JS_UNDEFINED,
+                          JS_PROP_CONFIGURABLE);
 
   // process.uptime()
   JS_SetPropertyStr(ctx, process_obj, "uptime", JS_NewCFunction(ctx, jsrt_process_uptime, "uptime", 0));

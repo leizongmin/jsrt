@@ -32,7 +32,7 @@ typedef int (*EVP_PKEY_derive_fn)(void* ctx, unsigned char* key, size_t* keylen)
 typedef void* (*EVP_PKEY_CTX_new_fn)(void* pkey, void* e);
 typedef int (*EVP_PKEY_paramgen_init_fn)(void* ctx);
 typedef int (*EVP_PKEY_paramgen_fn)(void* ctx, void** ppkey);
-typedef int (*EC_KEY_new_by_curve_name_fn)(int nid);
+typedef void* (*EC_KEY_new_by_curve_name_fn)(int nid);
 typedef void (*EC_KEY_free_fn)(void* key);
 typedef int (*EVP_PKEY_set1_EC_KEY_fn)(void* pkey, void* key);
 typedef void* (*EVP_PKEY_new_fn)(void);

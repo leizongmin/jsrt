@@ -736,7 +736,11 @@ JSValue jsrt_subtle_encrypt(JSContext *ctx, JSValueConst this_val, int argc, JSV
 
     // Free the created EVP_PKEY
     if (rsa_key) {
+#ifdef _WIN32
       extern HMODULE openssl_handle;
+#else
+      extern void *openssl_handle;
+#endif
       if (openssl_handle) {
         void (*EVP_PKEY_free)(void *) = JSRT_DLSYM(openssl_handle, "EVP_PKEY_free");
         if (EVP_PKEY_free) {
@@ -1197,7 +1201,11 @@ JSValue jsrt_subtle_decrypt(JSContext *ctx, JSValueConst this_val, int argc, JSV
 
     // Free the created EVP_PKEY
     if (rsa_key) {
+#ifdef _WIN32
       extern HMODULE openssl_handle;
+#else
+      extern void *openssl_handle;
+#endif
       if (openssl_handle) {
         void (*EVP_PKEY_free)(void *) = JSRT_DLSYM(openssl_handle, "EVP_PKEY_free");
         if (EVP_PKEY_free) {

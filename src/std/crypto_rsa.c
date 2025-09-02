@@ -1,10 +1,25 @@
 #include "crypto_rsa.h"
 
+// Platform-specific includes for dynamic loading  
+#ifdef _WIN32
+#include <windows.h>
+#else
 #include <dlfcn.h>
+#endif
+
 #include <string.h>
 
 #include "../util/debug.h"
 #include "crypto.h"
+
+// Cross-platform dynamic loading abstractions
+#ifdef _WIN32
+extern HMODULE openssl_handle;
+#define JSRT_DLSYM(handle, name) GetProcAddress(handle, name)
+#else
+extern void *openssl_handle;
+#define JSRT_DLSYM(handle, name) dlsym(handle, name)
+#endif
 
 // OpenSSL function pointers for RSA operations
 typedef struct {
@@ -71,7 +86,6 @@ static bool load_rsa_functions(void) {
     return openssl_rsa_funcs.EVP_PKEY_new != NULL;
   }
 
-  extern void *openssl_handle;
   if (!openssl_handle) {
     JSRT_Debug("JSRT_Crypto_RSA: OpenSSL handle not available");
     return false;
@@ -80,41 +94,41 @@ static bool load_rsa_functions(void) {
   JSRT_Debug("JSRT_Crypto_RSA: Loading RSA functions from OpenSSL handle %p", openssl_handle);
 
   // Load key management functions
-  openssl_rsa_funcs.EVP_PKEY_new = dlsym(openssl_handle, "EVP_PKEY_new");
-  openssl_rsa_funcs.EVP_PKEY_free = dlsym(openssl_handle, "EVP_PKEY_free");
-  openssl_rsa_funcs.EVP_PKEY_CTX_new_id = dlsym(openssl_handle, "EVP_PKEY_CTX_new_id");
-  openssl_rsa_funcs.EVP_PKEY_CTX_new = dlsym(openssl_handle, "EVP_PKEY_CTX_new");
-  openssl_rsa_funcs.EVP_PKEY_CTX_free = dlsym(openssl_handle, "EVP_PKEY_CTX_free");
-  openssl_rsa_funcs.EVP_PKEY_keygen_init = dlsym(openssl_handle, "EVP_PKEY_keygen_init");
-  openssl_rsa_funcs.EVP_PKEY_keygen = dlsym(openssl_handle, "EVP_PKEY_keygen");
-  openssl_rsa_funcs.EVP_PKEY_CTX_ctrl = dlsym(openssl_handle, "EVP_PKEY_CTX_ctrl");
+  openssl_rsa_funcs.EVP_PKEY_new = JSRT_DLSYM(openssl_handle, "EVP_PKEY_new");
+  openssl_rsa_funcs.EVP_PKEY_free = JSRT_DLSYM(openssl_handle, "EVP_PKEY_free");
+  openssl_rsa_funcs.EVP_PKEY_CTX_new_id = JSRT_DLSYM(openssl_handle, "EVP_PKEY_CTX_new_id");
+  openssl_rsa_funcs.EVP_PKEY_CTX_new = JSRT_DLSYM(openssl_handle, "EVP_PKEY_CTX_new");
+  openssl_rsa_funcs.EVP_PKEY_CTX_free = JSRT_DLSYM(openssl_handle, "EVP_PKEY_CTX_free");
+  openssl_rsa_funcs.EVP_PKEY_keygen_init = JSRT_DLSYM(openssl_handle, "EVP_PKEY_keygen_init");
+  openssl_rsa_funcs.EVP_PKEY_keygen = JSRT_DLSYM(openssl_handle, "EVP_PKEY_keygen");
+  openssl_rsa_funcs.EVP_PKEY_CTX_ctrl = JSRT_DLSYM(openssl_handle, "EVP_PKEY_CTX_ctrl");
 
   // Load encryption/decryption functions
-  openssl_rsa_funcs.EVP_PKEY_encrypt_init = dlsym(openssl_handle, "EVP_PKEY_encrypt_init");
-  openssl_rsa_funcs.EVP_PKEY_encrypt = dlsym(openssl_handle, "EVP_PKEY_encrypt");
-  openssl_rsa_funcs.EVP_PKEY_decrypt_init = dlsym(openssl_handle, "EVP_PKEY_decrypt_init");
-  openssl_rsa_funcs.EVP_PKEY_decrypt = dlsym(openssl_handle, "EVP_PKEY_decrypt");
+  openssl_rsa_funcs.EVP_PKEY_encrypt_init = JSRT_DLSYM(openssl_handle, "EVP_PKEY_encrypt_init");
+  openssl_rsa_funcs.EVP_PKEY_encrypt = JSRT_DLSYM(openssl_handle, "EVP_PKEY_encrypt");
+  openssl_rsa_funcs.EVP_PKEY_decrypt_init = JSRT_DLSYM(openssl_handle, "EVP_PKEY_decrypt_init");
+  openssl_rsa_funcs.EVP_PKEY_decrypt = JSRT_DLSYM(openssl_handle, "EVP_PKEY_decrypt");
 
   // Load signature/verification functions
-  openssl_rsa_funcs.EVP_PKEY_sign_init = dlsym(openssl_handle, "EVP_PKEY_sign_init");
-  openssl_rsa_funcs.EVP_PKEY_sign = dlsym(openssl_handle, "EVP_PKEY_sign");
-  openssl_rsa_funcs.EVP_PKEY_verify_init = dlsym(openssl_handle, "EVP_PKEY_verify_init");
-  openssl_rsa_funcs.EVP_PKEY_verify = dlsym(openssl_handle, "EVP_PKEY_verify");
+  openssl_rsa_funcs.EVP_PKEY_sign_init = JSRT_DLSYM(openssl_handle, "EVP_PKEY_sign_init");
+  openssl_rsa_funcs.EVP_PKEY_sign = JSRT_DLSYM(openssl_handle, "EVP_PKEY_sign");
+  openssl_rsa_funcs.EVP_PKEY_verify_init = JSRT_DLSYM(openssl_handle, "EVP_PKEY_verify_init");
+  openssl_rsa_funcs.EVP_PKEY_verify = JSRT_DLSYM(openssl_handle, "EVP_PKEY_verify");
 
   // Load hash functions
-  openssl_rsa_funcs.EVP_sha1 = dlsym(openssl_handle, "EVP_sha1");
-  openssl_rsa_funcs.EVP_sha256 = dlsym(openssl_handle, "EVP_sha256");
-  openssl_rsa_funcs.EVP_sha384 = dlsym(openssl_handle, "EVP_sha384");
-  openssl_rsa_funcs.EVP_sha512 = dlsym(openssl_handle, "EVP_sha512");
+  openssl_rsa_funcs.EVP_sha1 = JSRT_DLSYM(openssl_handle, "EVP_sha1");
+  openssl_rsa_funcs.EVP_sha256 = JSRT_DLSYM(openssl_handle, "EVP_sha256");
+  openssl_rsa_funcs.EVP_sha384 = JSRT_DLSYM(openssl_handle, "EVP_sha384");
+  openssl_rsa_funcs.EVP_sha512 = JSRT_DLSYM(openssl_handle, "EVP_sha512");
 
   // Load random function
-  openssl_rsa_funcs.RAND_bytes = dlsym(openssl_handle, "RAND_bytes");
+  openssl_rsa_funcs.RAND_bytes = JSRT_DLSYM(openssl_handle, "RAND_bytes");
 
   // Load key serialization functions
-  openssl_rsa_funcs.i2d_PUBKEY = dlsym(openssl_handle, "i2d_PUBKEY");
-  openssl_rsa_funcs.i2d_PrivateKey = dlsym(openssl_handle, "i2d_PrivateKey");
-  openssl_rsa_funcs.d2i_PUBKEY = dlsym(openssl_handle, "d2i_PUBKEY");
-  openssl_rsa_funcs.d2i_PrivateKey = dlsym(openssl_handle, "d2i_PrivateKey");
+  openssl_rsa_funcs.i2d_PUBKEY = JSRT_DLSYM(openssl_handle, "i2d_PUBKEY");
+  openssl_rsa_funcs.i2d_PrivateKey = JSRT_DLSYM(openssl_handle, "i2d_PrivateKey");
+  openssl_rsa_funcs.d2i_PUBKEY = JSRT_DLSYM(openssl_handle, "d2i_PUBKEY");
+  openssl_rsa_funcs.d2i_PrivateKey = JSRT_DLSYM(openssl_handle, "d2i_PrivateKey");
 
   rsa_funcs_loaded = true;
 

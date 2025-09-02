@@ -1,11 +1,26 @@
 #include "crypto_symmetric.h"
 
+// Platform-specific includes for dynamic loading  
+#ifdef _WIN32
+#include <windows.h>
+#else
 #include <dlfcn.h>
+#endif
+
 #include <stdlib.h>
 #include <string.h>
 
 #include "../util/debug.h"
 #include "crypto.h"
+
+// Cross-platform dynamic loading abstractions
+#ifdef _WIN32
+extern HMODULE openssl_handle;
+#define JSRT_DLSYM(handle, name) GetProcAddress(handle, name)
+#else
+extern void *openssl_handle;
+#define JSRT_DLSYM(handle, name) dlsym(handle, name)
+#endif
 
 // OpenSSL function pointers for symmetric encryption
 typedef struct {
@@ -58,42 +73,41 @@ static bool load_symmetric_functions(void) {
     return openssl_symmetric_funcs.EVP_aes_256_cbc != NULL;
   }
 
-  extern void *openssl_handle;
   if (!openssl_handle) {
     JSRT_Debug("JSRT_Crypto_Symmetric: OpenSSL handle not available");
     return false;
   }
 
   // Load cipher functions
-  openssl_symmetric_funcs.EVP_aes_128_cbc = dlsym(openssl_handle, "EVP_aes_128_cbc");
-  openssl_symmetric_funcs.EVP_aes_192_cbc = dlsym(openssl_handle, "EVP_aes_192_cbc");
-  openssl_symmetric_funcs.EVP_aes_256_cbc = dlsym(openssl_handle, "EVP_aes_256_cbc");
-  openssl_symmetric_funcs.EVP_aes_128_gcm = dlsym(openssl_handle, "EVP_aes_128_gcm");
-  openssl_symmetric_funcs.EVP_aes_192_gcm = dlsym(openssl_handle, "EVP_aes_192_gcm");
-  openssl_symmetric_funcs.EVP_aes_256_gcm = dlsym(openssl_handle, "EVP_aes_256_gcm");
-  openssl_symmetric_funcs.EVP_aes_128_ctr = dlsym(openssl_handle, "EVP_aes_128_ctr");
-  openssl_symmetric_funcs.EVP_aes_192_ctr = dlsym(openssl_handle, "EVP_aes_192_ctr");
-  openssl_symmetric_funcs.EVP_aes_256_ctr = dlsym(openssl_handle, "EVP_aes_256_ctr");
+  openssl_symmetric_funcs.EVP_aes_128_cbc = JSRT_DLSYM(openssl_handle, "EVP_aes_128_cbc");
+  openssl_symmetric_funcs.EVP_aes_192_cbc = JSRT_DLSYM(openssl_handle, "EVP_aes_192_cbc");
+  openssl_symmetric_funcs.EVP_aes_256_cbc = JSRT_DLSYM(openssl_handle, "EVP_aes_256_cbc");
+  openssl_symmetric_funcs.EVP_aes_128_gcm = JSRT_DLSYM(openssl_handle, "EVP_aes_128_gcm");
+  openssl_symmetric_funcs.EVP_aes_192_gcm = JSRT_DLSYM(openssl_handle, "EVP_aes_192_gcm");
+  openssl_symmetric_funcs.EVP_aes_256_gcm = JSRT_DLSYM(openssl_handle, "EVP_aes_256_gcm");
+  openssl_symmetric_funcs.EVP_aes_128_ctr = JSRT_DLSYM(openssl_handle, "EVP_aes_128_ctr");
+  openssl_symmetric_funcs.EVP_aes_192_ctr = JSRT_DLSYM(openssl_handle, "EVP_aes_192_ctr");
+  openssl_symmetric_funcs.EVP_aes_256_ctr = JSRT_DLSYM(openssl_handle, "EVP_aes_256_ctr");
 
   // Load context management functions
-  openssl_symmetric_funcs.EVP_CIPHER_CTX_new = dlsym(openssl_handle, "EVP_CIPHER_CTX_new");
-  openssl_symmetric_funcs.EVP_CIPHER_CTX_free = dlsym(openssl_handle, "EVP_CIPHER_CTX_free");
+  openssl_symmetric_funcs.EVP_CIPHER_CTX_new = JSRT_DLSYM(openssl_handle, "EVP_CIPHER_CTX_new");
+  openssl_symmetric_funcs.EVP_CIPHER_CTX_free = JSRT_DLSYM(openssl_handle, "EVP_CIPHER_CTX_free");
 
   // Load encryption functions
-  openssl_symmetric_funcs.EVP_EncryptInit_ex = dlsym(openssl_handle, "EVP_EncryptInit_ex");
-  openssl_symmetric_funcs.EVP_EncryptUpdate = dlsym(openssl_handle, "EVP_EncryptUpdate");
-  openssl_symmetric_funcs.EVP_EncryptFinal_ex = dlsym(openssl_handle, "EVP_EncryptFinal_ex");
+  openssl_symmetric_funcs.EVP_EncryptInit_ex = JSRT_DLSYM(openssl_handle, "EVP_EncryptInit_ex");
+  openssl_symmetric_funcs.EVP_EncryptUpdate = JSRT_DLSYM(openssl_handle, "EVP_EncryptUpdate");
+  openssl_symmetric_funcs.EVP_EncryptFinal_ex = JSRT_DLSYM(openssl_handle, "EVP_EncryptFinal_ex");
 
   // Load decryption functions
-  openssl_symmetric_funcs.EVP_DecryptInit_ex = dlsym(openssl_handle, "EVP_DecryptInit_ex");
-  openssl_symmetric_funcs.EVP_DecryptUpdate = dlsym(openssl_handle, "EVP_DecryptUpdate");
-  openssl_symmetric_funcs.EVP_DecryptFinal_ex = dlsym(openssl_handle, "EVP_DecryptFinal_ex");
+  openssl_symmetric_funcs.EVP_DecryptInit_ex = JSRT_DLSYM(openssl_handle, "EVP_DecryptInit_ex");
+  openssl_symmetric_funcs.EVP_DecryptUpdate = JSRT_DLSYM(openssl_handle, "EVP_DecryptUpdate");
+  openssl_symmetric_funcs.EVP_DecryptFinal_ex = JSRT_DLSYM(openssl_handle, "EVP_DecryptFinal_ex");
 
   // Load GCM specific functions
-  openssl_symmetric_funcs.EVP_CIPHER_CTX_ctrl = dlsym(openssl_handle, "EVP_CIPHER_CTX_ctrl");
+  openssl_symmetric_funcs.EVP_CIPHER_CTX_ctrl = JSRT_DLSYM(openssl_handle, "EVP_CIPHER_CTX_ctrl");
 
   // Load random function for key generation
-  openssl_symmetric_funcs.RAND_bytes = dlsym(openssl_handle, "RAND_bytes");
+  openssl_symmetric_funcs.RAND_bytes = JSRT_DLSYM(openssl_handle, "RAND_bytes");
 
   symmetric_funcs_loaded = true;
 

@@ -1,11 +1,26 @@
 #include "crypto_digest.h"
 
+// Platform-specific includes for dynamic loading  
+#ifdef _WIN32
+#include <windows.h>
+#else
 #include <dlfcn.h>
+#endif
+
 #include <stdlib.h>
 #include <string.h>
 
 #include "../util/debug.h"
 #include "crypto.h"
+
+// Cross-platform dynamic loading abstractions
+#ifdef _WIN32
+extern HMODULE openssl_handle;
+#define JSRT_DLSYM(handle, name) GetProcAddress(handle, name)
+#else
+extern void *openssl_handle;
+#define JSRT_DLSYM(handle, name) dlsym(handle, name)
+#endif
 
 // OpenSSL function pointers for digest operations
 typedef struct {
@@ -30,27 +45,26 @@ static bool load_digest_functions(void) {
     return openssl_digest_funcs.EVP_sha256 != NULL;
   }
 
-  extern void *openssl_handle;
   if (!openssl_handle) {
     JSRT_Debug("JSRT_Crypto_Digest: OpenSSL handle not available");
     return false;
   }
 
   // Load digest algorithm functions
-  openssl_digest_funcs.EVP_sha1 = dlsym(openssl_handle, "EVP_sha1");
-  openssl_digest_funcs.EVP_sha256 = dlsym(openssl_handle, "EVP_sha256");
-  openssl_digest_funcs.EVP_sha384 = dlsym(openssl_handle, "EVP_sha384");
-  openssl_digest_funcs.EVP_sha512 = dlsym(openssl_handle, "EVP_sha512");
+  openssl_digest_funcs.EVP_sha1 = JSRT_DLSYM(openssl_handle, "EVP_sha1");
+  openssl_digest_funcs.EVP_sha256 = JSRT_DLSYM(openssl_handle, "EVP_sha256");
+  openssl_digest_funcs.EVP_sha384 = JSRT_DLSYM(openssl_handle, "EVP_sha384");
+  openssl_digest_funcs.EVP_sha512 = JSRT_DLSYM(openssl_handle, "EVP_sha512");
 
   // Load context management functions
-  openssl_digest_funcs.EVP_MD_CTX_new = dlsym(openssl_handle, "EVP_MD_CTX_new");
-  openssl_digest_funcs.EVP_MD_CTX_free = dlsym(openssl_handle, "EVP_MD_CTX_free");
+  openssl_digest_funcs.EVP_MD_CTX_new = JSRT_DLSYM(openssl_handle, "EVP_MD_CTX_new");
+  openssl_digest_funcs.EVP_MD_CTX_free = JSRT_DLSYM(openssl_handle, "EVP_MD_CTX_free");
 
   // Load digest operation functions
-  openssl_digest_funcs.EVP_DigestInit_ex = dlsym(openssl_handle, "EVP_DigestInit_ex");
-  openssl_digest_funcs.EVP_DigestUpdate = dlsym(openssl_handle, "EVP_DigestUpdate");
-  openssl_digest_funcs.EVP_DigestFinal_ex = dlsym(openssl_handle, "EVP_DigestFinal_ex");
-  openssl_digest_funcs.EVP_MD_size = dlsym(openssl_handle, "EVP_MD_size");
+  openssl_digest_funcs.EVP_DigestInit_ex = JSRT_DLSYM(openssl_handle, "EVP_DigestInit_ex");
+  openssl_digest_funcs.EVP_DigestUpdate = JSRT_DLSYM(openssl_handle, "EVP_DigestUpdate");
+  openssl_digest_funcs.EVP_DigestFinal_ex = JSRT_DLSYM(openssl_handle, "EVP_DigestFinal_ex");
+  openssl_digest_funcs.EVP_MD_size = JSRT_DLSYM(openssl_handle, "EVP_MD_size");
 
   digest_funcs_loaded = true;
 

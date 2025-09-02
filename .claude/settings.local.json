@@ -14,7 +14,14 @@
       "Bash(git commit:*)",
       "Read(//private/tmp/**)",
       "Bash(cmake:*)",
-      "Bash(./target/release/qjsc:*)"
+      "Bash(./target/release/qjsc:*)",
+      "Bash(where cmake)",
+      "Bash(gcc:*)",
+      "Bash(cl)",
+      "Bash(.build.bat Release)",
+      "Bash(where cl)",
+      "Bash(git checkout:*)",
+      "Bash(mingw32-make:*)"
     ],
     "deny": [],
     "ask": []

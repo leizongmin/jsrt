@@ -57,6 +57,10 @@ typedef struct {
   char *method;
   JSRT_Headers *request_headers;
 
+  // Request body data
+  char *request_body;
+  size_t request_body_size;
+
   // Response data
   char *response_buffer;
   size_t response_size;
@@ -309,8 +313,22 @@ static JSValue JSRT_ResponseText(JSContext *ctx, JSValueConst this_val, int argc
     return JS_EXCEPTION;
   }
 
-  // For now, just return the body as is if it's a string
-  return JS_DupValue(ctx, response->body);
+  // Create Promise capability - text() should return a Promise<string>
+  JSValue resolving_funcs[2];
+  JSValue promise = JS_NewPromiseCapability(ctx, resolving_funcs);
+  if (JS_IsException(promise)) {
+    return JS_EXCEPTION;
+  }
+
+  // Immediately resolve the promise with the body text
+  JSValue result = JS_DupValue(ctx, response->body);
+  JS_Call(ctx, resolving_funcs[0], JS_UNDEFINED, 1, &result);
+
+  JS_FreeValue(ctx, result);
+  JS_FreeValue(ctx, resolving_funcs[0]);
+  JS_FreeValue(ctx, resolving_funcs[1]);
+
+  return promise;
 }
 
 static JSValue JSRT_ResponseJson(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv) {
@@ -319,19 +337,139 @@ static JSValue JSRT_ResponseJson(JSContext *ctx, JSValueConst this_val, int argc
     return JS_EXCEPTION;
   }
 
-  // For now, just parse the body as JSON
+  // Create Promise capability - json() should return a Promise<any>
+  JSValue resolving_funcs[2];
+  JSValue promise = JS_NewPromiseCapability(ctx, resolving_funcs);
+  if (JS_IsException(promise)) {
+    return JS_EXCEPTION;
+  }
+
+  // Parse JSON and resolve/reject the promise
   if (JS_IsString(response->body)) {
     const char *json_str = JS_ToCString(ctx, response->body);
     if (!json_str) {
-      return JS_EXCEPTION;
+      JSValue error = JS_NewError(ctx);
+      JS_SetPropertyStr(ctx, error, "message", JS_NewString(ctx, "Failed to get response text"));
+      JS_Call(ctx, resolving_funcs[1], JS_UNDEFINED, 1, &error);
+      JS_FreeValue(ctx, error);
+    } else {
+      JSValue result = JS_ParseJSON(ctx, json_str, strlen(json_str), "<response>");
+      if (JS_IsException(result)) {
+        // JSON parsing failed - reject the promise
+        JSValue error = JS_NewError(ctx);
+        JS_SetPropertyStr(ctx, error, "message", JS_NewString(ctx, "Invalid JSON in response"));
+        JS_Call(ctx, resolving_funcs[1], JS_UNDEFINED, 1, &error);
+        JS_FreeValue(ctx, error);
+        JS_FreeValue(ctx, result);
+      } else {
+        // JSON parsing succeeded - resolve the promise
+        JS_Call(ctx, resolving_funcs[0], JS_UNDEFINED, 1, &result);
+        JS_FreeValue(ctx, result);
+      }
+      JS_FreeCString(ctx, json_str);
     }
-
-    JSValue result = JS_ParseJSON(ctx, json_str, strlen(json_str), "<response>");
-    JS_FreeCString(ctx, json_str);
-    return result;
+  } else {
+    // Body is not a string - reject the promise
+    JSValue error = JS_NewError(ctx);
+    JS_SetPropertyStr(ctx, error, "message", JS_NewString(ctx, "Response body is not text"));
+    JS_Call(ctx, resolving_funcs[1], JS_UNDEFINED, 1, &error);
+    JS_FreeValue(ctx, error);
   }
 
-  return JS_UNDEFINED;
+  JS_FreeValue(ctx, resolving_funcs[0]);
+  JS_FreeValue(ctx, resolving_funcs[1]);
+
+  return promise;
+}
+
+static JSValue JSRT_ResponseArrayBuffer(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv) {
+  JSRT_Response *response = JS_GetOpaque2(ctx, this_val, JSRT_ResponseClassID);
+  if (!response) {
+    return JS_EXCEPTION;
+  }
+
+  // Create Promise capability - arrayBuffer() should return a Promise<ArrayBuffer>
+  JSValue resolving_funcs[2];
+  JSValue promise = JS_NewPromiseCapability(ctx, resolving_funcs);
+  if (JS_IsException(promise)) {
+    return JS_EXCEPTION;
+  }
+
+  // Convert response body to ArrayBuffer
+  if (JS_IsString(response->body)) {
+    size_t body_len;
+    const char *body_str = JS_ToCStringLen(ctx, &body_len, response->body);
+    if (!body_str) {
+      JSValue error = JS_NewError(ctx);
+      JS_SetPropertyStr(ctx, error, "message", JS_NewString(ctx, "Failed to get response text"));
+      JS_Call(ctx, resolving_funcs[1], JS_UNDEFINED, 1, &error);
+      JS_FreeValue(ctx, error);
+    } else {
+      JSValue arraybuffer = JS_NewArrayBufferCopy(ctx, (const uint8_t *)body_str, body_len);
+      JS_Call(ctx, resolving_funcs[0], JS_UNDEFINED, 1, &arraybuffer);
+      JS_FreeValue(ctx, arraybuffer);
+      JS_FreeCString(ctx, body_str);
+    }
+  } else {
+    // Body is not a string - create empty ArrayBuffer
+    JSValue arraybuffer = JS_NewArrayBufferCopy(ctx, NULL, 0);
+    JS_Call(ctx, resolving_funcs[0], JS_UNDEFINED, 1, &arraybuffer);
+    JS_FreeValue(ctx, arraybuffer);
+  }
+
+  JS_FreeValue(ctx, resolving_funcs[0]);
+  JS_FreeValue(ctx, resolving_funcs[1]);
+
+  return promise;
+}
+
+static JSValue JSRT_ResponseBlob(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv) {
+  JSRT_Response *response = JS_GetOpaque2(ctx, this_val, JSRT_ResponseClassID);
+  if (!response) {
+    return JS_EXCEPTION;
+  }
+
+  // Create Promise capability - blob() should return a Promise<Blob>
+  JSValue resolving_funcs[2];
+  JSValue promise = JS_NewPromiseCapability(ctx, resolving_funcs);
+  if (JS_IsException(promise)) {
+    return JS_EXCEPTION;
+  }
+
+  // For now, just resolve with a simple representation
+  // In a full implementation, we'd create a proper Blob object
+  if (JS_IsString(response->body)) {
+    size_t body_len;
+    const char *body_str = JS_ToCStringLen(ctx, &body_len, response->body);
+    if (!body_str) {
+      JSValue error = JS_NewError(ctx);
+      JS_SetPropertyStr(ctx, error, "message", JS_NewString(ctx, "Failed to get response text"));
+      JS_Call(ctx, resolving_funcs[1], JS_UNDEFINED, 1, &error);
+      JS_FreeValue(ctx, error);
+    } else {
+      // Create a simple blob-like object
+      JSValue blob = JS_NewObject(ctx);
+      JS_SetPropertyStr(ctx, blob, "size", JS_NewUint32(ctx, body_len));
+      JS_SetPropertyStr(ctx, blob, "type", JS_NewString(ctx, "text/plain"));
+
+      JS_Call(ctx, resolving_funcs[0], JS_UNDEFINED, 1, &blob);
+      JS_FreeValue(ctx, blob);
+      JS_FreeCString(ctx, body_str);
+    }
+  } else {
+    // Body is not a string - create empty blob
+    JSValue blob = JS_NewObject(ctx);
+    JS_SetPropertyStr(ctx, blob, "size", JS_NewUint32(ctx, 0));
+    JS_SetPropertyStr(ctx, blob, "type", JS_NewString(ctx, "application/octet-stream"));
+
+    JS_Call(ctx, resolving_funcs[0], JS_UNDEFINED, 1, &blob);
+    JS_FreeValue(ctx, blob);
+  }
+
+  JS_FreeValue(ctx, resolving_funcs[0]);
+  JS_FreeValue(ctx, resolving_funcs[1]);
+
+  return promise;
 }
 
 // Forward declarations for HTTP implementation
@@ -344,7 +482,7 @@ static void JSRT_FetchOnGetAddrInfo(uv_getaddrinfo_t *req, int status, struct ad
 static void JSRT_FetchOnClose(uv_handle_t *handle);
 static int JSRT_FetchParseURL(const char *url, char **host, int *port, char **path);
 static char *JSRT_FetchBuildHttpRequest(const char *method, const char *path, const char *host, int port,
-                                        JSRT_Headers *headers);
+                                        JSRT_Headers *headers, const char *body, size_t body_size);
 static JSRT_Response *JSRT_FetchParseHttpResponse(const char *response_data, size_t response_size);
 
 // Real fetch function implementation using libuv
@@ -376,7 +514,7 @@ static JSValue JSRT_Fetch(JSContext *ctx, JSValueConst this_val, int argc, JSVal
   }
 
   memset(fetch_ctx, 0, sizeof(JSRT_FetchContext));
-  fetch_ctx->rt = JS_GetRuntimeOpaque(JS_GetRuntime(ctx));
+  fetch_ctx->rt = JS_GetContextOpaque(ctx);
   fetch_ctx->resolve_func = JS_DupValue(ctx, resolving_funcs[0]);
   fetch_ctx->reject_func = JS_DupValue(ctx, resolving_funcs[1]);
 
@@ -451,9 +589,33 @@ static JSValue JSRT_Fetch(JSContext *ctx, JSValueConst this_val, int argc, JSVal
     }
     JS_FreeValue(ctx, headers_val);
 
-    // TODO: Add body support for POST requests
-    // JSValue body_val = JS_GetPropertyStr(ctx, options, "body");
-    // JS_FreeValue(ctx, body_val);
+    // Handle request body for POST/PUT requests
+    JSValue body_val = JS_GetPropertyStr(ctx, options, "body");
+    if (!JS_IsUndefined(body_val) && !JS_IsNull(body_val)) {
+      if (JS_IsString(body_val)) {
+        // String body
+        size_t body_len;
+        const char *body_str = JS_ToCStringLen(ctx, &body_len, body_val);
+        if (body_str) {
+          fetch_ctx->request_body = malloc(body_len + 1);
+          if (fetch_ctx->request_body) {
+            memcpy(fetch_ctx->request_body, body_str, body_len);
+            fetch_ctx->request_body[body_len] = '\0';
+            fetch_ctx->request_body_size = body_len;
+
+            // Set content-length header if not already set
+            if (!JSRT_HeadersGet(fetch_ctx->request_headers, "content-length")) {
+              char content_length_str[32];
+              snprintf(content_length_str, sizeof(content_length_str), "%zu", body_len);
+              JSRT_HeadersSet(fetch_ctx->request_headers, "content-length", content_length_str);
+            }
+          }
+          JS_FreeCString(ctx, body_str);
+        }
+      }
+      // TODO: Add support for other body types (ArrayBuffer, Blob, etc.)
+    }
+    JS_FreeValue(ctx, body_val);
   }
 
   // Set default headers
@@ -513,6 +675,7 @@ static void JSRT_FetchContextFree(JSRT_FetchContext *ctx) {
   if (ctx->host) free(ctx->host);
   if (ctx->path) free(ctx->path);
   if (ctx->method) free(ctx->method);
+  if (ctx->request_body) free(ctx->request_body);
   if (ctx->response_buffer) free(ctx->response_buffer);
   if (ctx->request_headers) JSRT_HeadersFree(ctx->request_headers);
 
@@ -582,7 +745,7 @@ static int JSRT_FetchParseURL(const char *url, char **host, int *port, char **pa
 }
 
 static char *JSRT_FetchBuildHttpRequest(const char *method, const char *path, const char *host, int port,
-                                        JSRT_Headers *headers) {
+                                        JSRT_Headers *headers, const char *body, size_t body_size) {
   // Calculate required buffer size more accurately
   size_t base_size = strlen(method) + strlen(path) + strlen(host) + 100;  // Base request line + host header
 
@@ -596,8 +759,8 @@ static char *JSRT_FetchBuildHttpRequest(const char *method, const char *path, co
     }
   }
 
-  size_t request_size = base_size + headers_size + 10;  // Extra buffer for safety
-  if (request_size < 1024) request_size = 1024;         // Minimum size
+  size_t request_size = base_size + headers_size + body_size + 10;  // Extra buffer for safety
+  if (request_size < 1024) request_size = 1024;                     // Minimum size
 
   char *request = malloc(request_size);
   if (!request) return NULL;
@@ -648,6 +811,25 @@ static char *JSRT_FetchBuildHttpRequest(const char *method, const char *path, co
   } else {
     free(request);
     return NULL;
+  }
+
+  // Add body if present
+  if (body && body_size > 0) {
+    if (len + body_size < request_size) {
+      memcpy(request + len, body, body_size);
+      len += body_size;
+    } else {
+      // Need more space
+      request_size = len + body_size + 10;
+      char *new_request = realloc(request, request_size);
+      if (!new_request) {
+        free(request);
+        return NULL;
+      }
+      request = new_request;
+      memcpy(request + len, body, body_size);
+      len += body_size;
+    }
   }
 
   return request;
@@ -802,6 +984,7 @@ static void JSRT_FetchOnGetAddrInfo(uv_getaddrinfo_t *req, int status, struct ad
 
 cleanup:
   if (res) uv_freeaddrinfo(res);
+  // Free the getaddrinfo request
   free(req);
 }
 
@@ -839,7 +1022,8 @@ static void JSRT_FetchOnConnect(uv_connect_t *req, int status) {
   }
 
   // Build and send HTTP request
-  char *http_request = JSRT_FetchBuildHttpRequest(ctx->method, ctx->path, ctx->host, ctx->port, ctx->request_headers);
+  char *http_request = JSRT_FetchBuildHttpRequest(ctx->method, ctx->path, ctx->host, ctx->port, ctx->request_headers,
+                                                  ctx->request_body, ctx->request_body_size);
   if (!http_request) {
     JSValue error = JS_NewError(ctx->rt->ctx);
     JS_SetPropertyStr(ctx->rt->ctx, error, "message", JS_NewString(ctx->rt->ctx, "Failed to build HTTP request"));
@@ -1137,6 +1321,9 @@ void JSRT_RuntimeSetupStdFetch(JSRT_Runtime *rt) {
   // Add response body methods
   JS_SetPropertyStr(rt->ctx, response_proto, "text", JS_NewCFunction(rt->ctx, JSRT_ResponseText, "text", 0));
   JS_SetPropertyStr(rt->ctx, response_proto, "json", JS_NewCFunction(rt->ctx, JSRT_ResponseJson, "json", 0));
+  JS_SetPropertyStr(rt->ctx, response_proto, "arrayBuffer",
+                    JS_NewCFunction(rt->ctx, JSRT_ResponseArrayBuffer, "arrayBuffer", 0));
+  JS_SetPropertyStr(rt->ctx, response_proto, "blob", JS_NewCFunction(rt->ctx, JSRT_ResponseBlob, "blob", 0));
 
   JS_SetClassProto(rt->ctx, JSRT_ResponseClassID, response_proto);
 

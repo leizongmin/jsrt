@@ -10,7 +10,8 @@
       "Bash(ln:*)",
       "Bash(./bin/jsrt:*)",
       "Bash(/dev/null)",
-      "Bash(git commit:*)"
+      "Bash(git commit:*)",
+      "Bash(timeout:*)"
     ],
     "deny": [],
     "ask": []

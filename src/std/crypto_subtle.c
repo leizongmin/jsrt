@@ -9,20 +9,30 @@
 #include "crypto.h"
 #include "crypto_digest.h"
 #include "crypto_hmac.h"
+#include "crypto_rsa.h"
 #include "crypto_symmetric.h"
 
 // Algorithm name to enum mapping
 static const struct {
   const char *name;
   jsrt_crypto_algorithm_t algorithm;
-} algorithm_map[] = {{"SHA-1", JSRT_CRYPTO_ALG_SHA1},      {"SHA-256", JSRT_CRYPTO_ALG_SHA256},
-                     {"SHA-384", JSRT_CRYPTO_ALG_SHA384},  {"SHA-512", JSRT_CRYPTO_ALG_SHA512},
-                     {"AES-CBC", JSRT_CRYPTO_ALG_AES_CBC}, {"AES-GCM", JSRT_CRYPTO_ALG_AES_GCM},
-                     {"AES-CTR", JSRT_CRYPTO_ALG_AES_CTR}, {"RSA-OAEP", JSRT_CRYPTO_ALG_RSA_OAEP},
-                     {"RSA-PSS", JSRT_CRYPTO_ALG_RSA_PSS}, {"RSASSA-PKCS1-v1_5", JSRT_CRYPTO_ALG_RSASSA_PKCS1_V1_5},
-                     {"ECDSA", JSRT_CRYPTO_ALG_ECDSA},     {"ECDH", JSRT_CRYPTO_ALG_ECDH},
-                     {"HMAC", JSRT_CRYPTO_ALG_HMAC},       {"PBKDF2", JSRT_CRYPTO_ALG_PBKDF2},
-                     {"HKDF", JSRT_CRYPTO_ALG_HKDF},       {NULL, JSRT_CRYPTO_ALG_UNKNOWN}};
+} algorithm_map[] = {{"SHA-1", JSRT_CRYPTO_ALG_SHA1},
+                     {"SHA-256", JSRT_CRYPTO_ALG_SHA256},
+                     {"SHA-384", JSRT_CRYPTO_ALG_SHA384},
+                     {"SHA-512", JSRT_CRYPTO_ALG_SHA512},
+                     {"AES-CBC", JSRT_CRYPTO_ALG_AES_CBC},
+                     {"AES-GCM", JSRT_CRYPTO_ALG_AES_GCM},
+                     {"AES-CTR", JSRT_CRYPTO_ALG_AES_CTR},
+                     {"RSA-OAEP", JSRT_CRYPTO_ALG_RSA_OAEP},
+                     {"RSA-PSS", JSRT_CRYPTO_ALG_RSA_PSS},
+                     {"RSASSA-PKCS1-v1_5", JSRT_CRYPTO_ALG_RSASSA_PKCS1_V1_5},
+                     {"RSA-PKCS1-v1_5", JSRT_CRYPTO_ALG_RSA_PKCS1_V1_5},
+                     {"ECDSA", JSRT_CRYPTO_ALG_ECDSA},
+                     {"ECDH", JSRT_CRYPTO_ALG_ECDH},
+                     {"HMAC", JSRT_CRYPTO_ALG_HMAC},
+                     {"PBKDF2", JSRT_CRYPTO_ALG_PBKDF2},
+                     {"HKDF", JSRT_CRYPTO_ALG_HKDF},
+                     {NULL, JSRT_CRYPTO_ALG_UNKNOWN}};
 
 // Parse algorithm parameter
 jsrt_crypto_algorithm_t jsrt_crypto_parse_algorithm(JSContext *ctx, JSValue algorithm) {
@@ -89,6 +99,14 @@ bool jsrt_crypto_is_algorithm_supported(jsrt_crypto_algorithm_t alg) {
     // Message authentication codes
     case JSRT_CRYPTO_ALG_HMAC:
       return true;  // Implemented
+
+    // Asymmetric encryption algorithms
+    case JSRT_CRYPTO_ALG_RSA_OAEP:
+      return true;  // Implemented
+    case JSRT_CRYPTO_ALG_RSA_PKCS1_V1_5:
+    case JSRT_CRYPTO_ALG_RSASSA_PKCS1_V1_5:
+    case JSRT_CRYPTO_ALG_RSA_PSS:
+      return false;  // TODO: Implement
 
     default:
       return false;
@@ -276,7 +294,8 @@ JSValue jsrt_subtle_encrypt(JSContext *ctx, JSValueConst this_val, int argc, JSV
   }
 
   // Validate that this is an encryption algorithm
-  if (alg != JSRT_CRYPTO_ALG_AES_CBC && alg != JSRT_CRYPTO_ALG_AES_GCM && alg != JSRT_CRYPTO_ALG_AES_CTR) {
+  if (alg != JSRT_CRYPTO_ALG_AES_CBC && alg != JSRT_CRYPTO_ALG_AES_GCM && alg != JSRT_CRYPTO_ALG_AES_CTR &&
+      alg != JSRT_CRYPTO_ALG_RSA_OAEP && alg != JSRT_CRYPTO_ALG_RSA_PKCS1_V1_5) {
     JSValue error = jsrt_crypto_throw_error(ctx, "InvalidAccessError", "Algorithm not suitable for encryption");
     return create_rejected_promise(ctx, error);
   }
@@ -554,6 +573,120 @@ JSValue jsrt_subtle_encrypt(JSContext *ctx, JSValueConst this_val, int argc, JSV
     return create_resolved_promise(ctx, result_buffer);
   }
 
+  // RSA-OAEP encryption
+  if (alg == JSRT_CRYPTO_ALG_RSA_OAEP) {
+    // Get hash algorithm from algorithm object - can be either string or object with name property
+    JSValue hash_val = JS_GetPropertyStr(ctx, argv[0], "hash");
+    const char *hash_name = NULL;
+
+    if (JS_IsString(hash_val)) {
+      // Hash is a string like "SHA-256"
+      hash_name = JS_ToCString(ctx, hash_val);
+    } else {
+      // Hash is an object with name property
+      JSValue hash_name_val = JS_GetPropertyStr(ctx, hash_val, "name");
+      hash_name = JS_ToCString(ctx, hash_name_val);
+    }
+
+    jsrt_rsa_hash_algorithm_t hash_alg = jsrt_crypto_parse_rsa_hash_algorithm(hash_name);
+    if (hash_alg == JSRT_RSA_HASH_SHA1) {  // Use enum comparison instead of invalid value
+      JS_FreeCString(ctx, hash_name);
+      JS_FreeValue(ctx, hash_val);
+      JS_FreeValue(ctx, key_data_val);
+      JSValue error = jsrt_crypto_throw_error(ctx, "NotSupportedError", "Unsupported hash algorithm");
+      return create_rejected_promise(ctx, error);
+    }
+
+    // Get optional label parameter
+    JSValue label_val = JS_GetPropertyStr(ctx, argv[0], "label");
+    uint8_t *label_data = NULL;
+    size_t label_size = 0;
+
+    if (!JS_IsUndefined(label_val) && !JS_IsNull(label_val)) {
+      label_data = JS_GetArrayBuffer(ctx, &label_size, label_val);
+      if (!label_data) {
+        // Try TypedArray
+        JSValue label_buffer_val = JS_GetPropertyStr(ctx, label_val, "buffer");
+        if (!JS_IsUndefined(label_buffer_val)) {
+          size_t buffer_size;
+          uint8_t *buffer_data = JS_GetArrayBuffer(ctx, &buffer_size, label_buffer_val);
+          if (buffer_data) {
+            JSValue offset_val = JS_GetPropertyStr(ctx, label_val, "byteOffset");
+            JSValue length_val = JS_GetPropertyStr(ctx, label_val, "byteLength");
+            uint32_t offset = 0, length = 0;
+            JS_ToUint32(ctx, &offset, offset_val);
+            JS_ToUint32(ctx, &length, length_val);
+            label_data = buffer_data + offset;
+            label_size = length;
+            JS_FreeValue(ctx, offset_val);
+            JS_FreeValue(ctx, length_val);
+          }
+          JS_FreeValue(ctx, label_buffer_val);
+        }
+      }
+    }
+
+    // Get key type to determine if it's public or private key
+    JSValue key_type_val = JS_GetPropertyStr(ctx, argv[1], "type");
+    const char *key_type = JS_ToCString(ctx, key_type_val);
+
+    // Create EVP_PKEY from stored DER data
+    void *rsa_key = NULL;
+    if (key_type && strcmp(key_type, "public") == 0) {
+      rsa_key = jsrt_crypto_rsa_create_public_key_from_der(key_data, key_data_size);
+    } else if (key_type && strcmp(key_type, "private") == 0) {
+      rsa_key = jsrt_crypto_rsa_create_private_key_from_der(key_data, key_data_size);
+    }
+
+    JS_FreeCString(ctx, key_type);
+    JS_FreeValue(ctx, key_type_val);
+
+    if (!rsa_key) {
+      JS_FreeValue(ctx, key_data_val);
+      JSValue error = jsrt_crypto_throw_error(ctx, "OperationError", "Failed to load RSA key");
+      return create_rejected_promise(ctx, error);
+    }
+
+    // Set up RSA parameters
+    jsrt_rsa_params_t params = {0};
+    params.algorithm = JSRT_RSA_OAEP;
+    params.hash_algorithm = hash_alg;
+    params.rsa_key = rsa_key;  // Use the actual EVP_PKEY
+    params.params.oaep.label = label_data;
+    params.params.oaep.label_length = label_size;
+
+    // Perform RSA encryption
+    uint8_t *ciphertext_data = NULL;
+    size_t ciphertext_size = 0;
+    int result = jsrt_crypto_rsa_encrypt(&params, plaintext_data, plaintext_size, &ciphertext_data, &ciphertext_size);
+
+    // Cleanup
+    JS_FreeCString(ctx, hash_name);
+    JS_FreeValue(ctx, hash_val);
+    JS_FreeValue(ctx, label_val);
+    JS_FreeValue(ctx, key_data_val);
+
+    // Free the created EVP_PKEY
+    if (rsa_key) {
+      extern void *openssl_handle;
+      if (openssl_handle) {
+        void (*EVP_PKEY_free)(void *) = dlsym(openssl_handle, "EVP_PKEY_free");
+        if (EVP_PKEY_free) {
+          EVP_PKEY_free(rsa_key);
+        }
+      }
+    }
+
+    if (result != 0 || !ciphertext_data) {
+      JSValue error = jsrt_crypto_throw_error(ctx, "OperationError", "RSA encryption failed");
+      return create_rejected_promise(ctx, error);
+    }
+
+    // Create result ArrayBuffer
+    JSValue result_buffer = JS_NewArrayBuffer(ctx, ciphertext_data, ciphertext_size, NULL, NULL, 0);
+    return create_resolved_promise(ctx, result_buffer);
+  }
+
   JS_FreeValue(ctx, key_data_val);
   JSValue error = jsrt_crypto_throw_error(ctx, "NotSupportedError", "Algorithm mode not yet implemented");
   return create_rejected_promise(ctx, error);
@@ -578,7 +711,8 @@ JSValue jsrt_subtle_decrypt(JSContext *ctx, JSValueConst this_val, int argc, JSV
   }
 
   // Validate that this is an encryption algorithm
-  if (alg != JSRT_CRYPTO_ALG_AES_CBC && alg != JSRT_CRYPTO_ALG_AES_GCM && alg != JSRT_CRYPTO_ALG_AES_CTR) {
+  if (alg != JSRT_CRYPTO_ALG_AES_CBC && alg != JSRT_CRYPTO_ALG_AES_GCM && alg != JSRT_CRYPTO_ALG_AES_CTR &&
+      alg != JSRT_CRYPTO_ALG_RSA_OAEP) {
     JSValue error = jsrt_crypto_throw_error(ctx, "InvalidAccessError", "Algorithm not suitable for decryption");
     return create_rejected_promise(ctx, error);
   }
@@ -848,6 +982,120 @@ JSValue jsrt_subtle_decrypt(JSContext *ctx, JSValueConst this_val, int argc, JSV
 
     if (result != 0) {
       JSValue error = jsrt_crypto_throw_error(ctx, "OperationError", "Decryption operation failed");
+      return create_rejected_promise(ctx, error);
+    }
+
+    // Create result ArrayBuffer
+    JSValue result_buffer = JS_NewArrayBuffer(ctx, plaintext_data, plaintext_size, NULL, NULL, 0);
+    return create_resolved_promise(ctx, result_buffer);
+  }
+
+  // RSA-OAEP decryption
+  if (alg == JSRT_CRYPTO_ALG_RSA_OAEP) {
+    // Get hash algorithm from algorithm object - can be either string or object with name property
+    JSValue hash_val = JS_GetPropertyStr(ctx, argv[0], "hash");
+    const char *hash_name = NULL;
+
+    if (JS_IsString(hash_val)) {
+      // Hash is a string like "SHA-256"
+      hash_name = JS_ToCString(ctx, hash_val);
+    } else {
+      // Hash is an object with name property
+      JSValue hash_name_val = JS_GetPropertyStr(ctx, hash_val, "name");
+      hash_name = JS_ToCString(ctx, hash_name_val);
+    }
+
+    jsrt_rsa_hash_algorithm_t hash_alg = jsrt_crypto_parse_rsa_hash_algorithm(hash_name);
+    if (hash_alg == JSRT_RSA_HASH_SHA1) {  // Use enum comparison instead of invalid value
+      JS_FreeCString(ctx, hash_name);
+      JS_FreeValue(ctx, hash_val);
+      JS_FreeValue(ctx, key_data_val);
+      JSValue error = jsrt_crypto_throw_error(ctx, "NotSupportedError", "Unsupported hash algorithm");
+      return create_rejected_promise(ctx, error);
+    }
+
+    // Get optional label parameter
+    JSValue label_val = JS_GetPropertyStr(ctx, argv[0], "label");
+    uint8_t *label_data = NULL;
+    size_t label_size = 0;
+
+    if (!JS_IsUndefined(label_val) && !JS_IsNull(label_val)) {
+      label_data = JS_GetArrayBuffer(ctx, &label_size, label_val);
+      if (!label_data) {
+        // Try TypedArray
+        JSValue label_buffer_val = JS_GetPropertyStr(ctx, label_val, "buffer");
+        if (!JS_IsUndefined(label_buffer_val)) {
+          size_t buffer_size;
+          uint8_t *buffer_data = JS_GetArrayBuffer(ctx, &buffer_size, label_buffer_val);
+          if (buffer_data) {
+            JSValue offset_val = JS_GetPropertyStr(ctx, label_val, "byteOffset");
+            JSValue length_val = JS_GetPropertyStr(ctx, label_val, "byteLength");
+            uint32_t offset = 0, length = 0;
+            JS_ToUint32(ctx, &offset, offset_val);
+            JS_ToUint32(ctx, &length, length_val);
+            label_data = buffer_data + offset;
+            label_size = length;
+            JS_FreeValue(ctx, offset_val);
+            JS_FreeValue(ctx, length_val);
+          }
+          JS_FreeValue(ctx, label_buffer_val);
+        }
+      }
+    }
+
+    // Get key type to determine if it's public or private key
+    JSValue key_type_val = JS_GetPropertyStr(ctx, argv[1], "type");
+    const char *key_type = JS_ToCString(ctx, key_type_val);
+
+    // Create EVP_PKEY from stored DER data
+    void *rsa_key = NULL;
+    if (key_type && strcmp(key_type, "public") == 0) {
+      rsa_key = jsrt_crypto_rsa_create_public_key_from_der(key_data, key_data_size);
+    } else if (key_type && strcmp(key_type, "private") == 0) {
+      rsa_key = jsrt_crypto_rsa_create_private_key_from_der(key_data, key_data_size);
+    }
+
+    JS_FreeCString(ctx, key_type);
+    JS_FreeValue(ctx, key_type_val);
+
+    if (!rsa_key) {
+      JS_FreeValue(ctx, key_data_val);
+      JSValue error = jsrt_crypto_throw_error(ctx, "OperationError", "Failed to load RSA key");
+      return create_rejected_promise(ctx, error);
+    }
+
+    // Set up RSA parameters
+    jsrt_rsa_params_t params = {0};
+    params.algorithm = JSRT_RSA_OAEP;
+    params.hash_algorithm = hash_alg;
+    params.rsa_key = rsa_key;  // Use the actual EVP_PKEY
+    params.params.oaep.label = label_data;
+    params.params.oaep.label_length = label_size;
+
+    // Perform RSA decryption
+    uint8_t *plaintext_data = NULL;
+    size_t plaintext_size = 0;
+    int result = jsrt_crypto_rsa_decrypt(&params, ciphertext_data, ciphertext_size, &plaintext_data, &plaintext_size);
+
+    // Cleanup
+    JS_FreeCString(ctx, hash_name);
+    JS_FreeValue(ctx, hash_val);
+    JS_FreeValue(ctx, label_val);
+    JS_FreeValue(ctx, key_data_val);
+
+    // Free the created EVP_PKEY
+    if (rsa_key) {
+      extern void *openssl_handle;
+      if (openssl_handle) {
+        void (*EVP_PKEY_free)(void *) = dlsym(openssl_handle, "EVP_PKEY_free");
+        if (EVP_PKEY_free) {
+          EVP_PKEY_free(rsa_key);
+        }
+      }
+    }
+
+    if (result != 0 || !plaintext_data) {
+      JSValue error = jsrt_crypto_throw_error(ctx, "OperationError", "RSA decryption failed");
       return create_rejected_promise(ctx, error);
     }
 
@@ -1265,6 +1513,136 @@ JSValue jsrt_subtle_generateKey(JSContext *ctx, JSValueConst this_val, int argc,
     JS_SetPropertyStr(ctx, key_obj, "__keyData", key_data_buffer);
 
     return create_resolved_promise(ctx, key_obj);
+  }
+
+  // RSA key generation
+  if (alg == JSRT_CRYPTO_ALG_RSA_OAEP || alg == JSRT_CRYPTO_ALG_RSA_PSS || alg == JSRT_CRYPTO_ALG_RSASSA_PKCS1_V1_5) {
+    // Get modulus length from algorithm object
+    JSValue modulus_length_val = JS_GetPropertyStr(ctx, argv[0], "modulusLength");
+    int32_t modulus_length = 2048;  // Default to 2048 bits
+    if (!JS_IsUndefined(modulus_length_val)) {
+      JS_ToInt32(ctx, &modulus_length, modulus_length_val);
+    }
+    JS_FreeValue(ctx, modulus_length_val);
+
+    // Validate modulus length
+    if (modulus_length < 1024 || modulus_length > 4096) {
+      JSValue error = jsrt_crypto_throw_error(ctx, "OperationError", "Invalid RSA key length");
+      return create_rejected_promise(ctx, error);
+    }
+
+    // Get public exponent
+    JSValue public_exponent_val = JS_GetPropertyStr(ctx, argv[0], "publicExponent");
+    uint32_t public_exponent = 65537;  // Default to F4 (0x010001)
+    if (!JS_IsUndefined(public_exponent_val)) {
+      // Handle Uint8Array public exponent
+      size_t exp_size;
+      uint8_t *exp_data = JS_GetArrayBuffer(ctx, &exp_size, public_exponent_val);
+      if (exp_data && exp_size <= 4) {
+        public_exponent = 0;
+        for (size_t i = 0; i < exp_size; i++) {
+          public_exponent = (public_exponent << 8) | exp_data[i];
+        }
+      }
+    }
+    JS_FreeValue(ctx, public_exponent_val);
+
+    // Get hash algorithm - can be either string or object with name property
+    JSValue hash_val = JS_GetPropertyStr(ctx, argv[0], "hash");
+    const char *hash_name = NULL;
+
+    if (JS_IsString(hash_val)) {
+      // Hash is a string like "SHA-256"
+      hash_name = JS_ToCString(ctx, hash_val);
+    } else {
+      // Hash is an object with name property
+      JSValue hash_name_val = JS_GetPropertyStr(ctx, hash_val, "name");
+      hash_name = JS_ToCString(ctx, hash_name_val);
+    }
+
+    jsrt_rsa_hash_algorithm_t hash_alg = jsrt_crypto_parse_rsa_hash_algorithm(hash_name);
+    // For now, we support SHA-256, SHA-384, and SHA-512. SHA-1 is not secure.
+    if (hash_alg == JSRT_RSA_HASH_SHA1) {
+      JS_FreeCString(ctx, hash_name);
+      JS_FreeValue(ctx, hash_val);
+      JSValue error = jsrt_crypto_throw_error(ctx, "NotSupportedError", "SHA-1 is not supported for RSA operations");
+      return create_rejected_promise(ctx, error);
+    }
+
+    // Generate RSA key pair
+    jsrt_rsa_keypair_t *keypair = NULL;
+    int result = jsrt_crypto_generate_rsa_keypair(modulus_length, public_exponent, hash_alg, &keypair);
+
+    JS_FreeCString(ctx, hash_name);
+    JS_FreeValue(ctx, hash_val);
+
+    if (result != 0 || !keypair) {
+      JSValue error = jsrt_crypto_throw_error(ctx, "OperationError", "Failed to generate RSA key pair");
+      return create_rejected_promise(ctx, error);
+    }
+
+    // Extract public and private key data
+    uint8_t *public_key_data = NULL, *private_key_data = NULL;
+    size_t public_key_size = 0, private_key_size = 0;
+
+    if (jsrt_crypto_rsa_extract_public_key_data(keypair->public_key, &public_key_data, &public_key_size) != 0 ||
+        jsrt_crypto_rsa_extract_private_key_data(keypair->private_key, &private_key_data, &private_key_size) != 0) {
+      jsrt_crypto_rsa_keypair_free(keypair);
+      JSValue error = jsrt_crypto_throw_error(ctx, "OperationError", "Failed to extract RSA key data");
+      return create_rejected_promise(ctx, error);
+    }
+
+    // Create CryptoKeyPair object
+    JSValue keypair_obj = JS_NewObject(ctx);
+
+    // Create public key object
+    JSValue public_key_obj = JS_NewObject(ctx);
+    JS_SetPropertyStr(ctx, public_key_obj, "type", JS_NewString(ctx, "public"));
+    JS_SetPropertyStr(ctx, public_key_obj, "extractable", JS_NewBool(ctx, true));  // Public keys are always extractable
+    JS_SetPropertyStr(ctx, public_key_obj, "usages", JS_DupValue(ctx, argv[2]));
+
+    // Set algorithm info for public key
+    JSValue public_alg_obj = JS_NewObject(ctx);
+    JS_SetPropertyStr(ctx, public_alg_obj, "name", JS_NewString(ctx, jsrt_crypto_algorithm_to_string(alg)));
+    JS_SetPropertyStr(ctx, public_alg_obj, "modulusLength", JS_NewInt32(ctx, modulus_length));
+
+    // Set public exponent as Uint8Array
+    JSValue exp_array = JS_NewArrayBufferCopy(ctx, (uint8_t *)&public_exponent, 4);
+    JS_SetPropertyStr(ctx, public_alg_obj, "publicExponent", exp_array);
+
+    JSValue hash_obj = JS_NewObject(ctx);
+    JS_SetPropertyStr(ctx, hash_obj, "name", JS_NewString(ctx, jsrt_crypto_rsa_hash_algorithm_to_string(hash_alg)));
+    JS_SetPropertyStr(ctx, public_alg_obj, "hash", hash_obj);
+
+    JS_SetPropertyStr(ctx, public_key_obj, "algorithm", public_alg_obj);
+
+    // Store the raw key data
+    JSValue public_key_buffer = JS_NewArrayBufferCopy(ctx, public_key_data, public_key_size);
+    JS_SetPropertyStr(ctx, public_key_obj, "__keyData", public_key_buffer);
+
+    // Create private key object
+    JSValue private_key_obj = JS_NewObject(ctx);
+    JS_SetPropertyStr(ctx, private_key_obj, "type", JS_NewString(ctx, "private"));
+    JS_SetPropertyStr(ctx, private_key_obj, "extractable", JS_NewBool(ctx, extractable));
+    JS_SetPropertyStr(ctx, private_key_obj, "usages", JS_DupValue(ctx, argv[2]));
+
+    // Set algorithm info for private key (same as public key)
+    JS_SetPropertyStr(ctx, private_key_obj, "algorithm", JS_DupValue(ctx, public_alg_obj));
+
+    // Store the raw key data
+    JSValue private_key_buffer = JS_NewArrayBufferCopy(ctx, private_key_data, private_key_size);
+    JS_SetPropertyStr(ctx, private_key_obj, "__keyData", private_key_buffer);
+
+    // Set the key pair
+    JS_SetPropertyStr(ctx, keypair_obj, "publicKey", public_key_obj);
+    JS_SetPropertyStr(ctx, keypair_obj, "privateKey", private_key_obj);
+
+    // Cleanup
+    jsrt_crypto_rsa_keypair_free(keypair);
+    free(public_key_data);
+    free(private_key_data);
+
+    return create_resolved_promise(ctx, keypair_obj);
   }
 
   JSValue error = jsrt_crypto_throw_error(ctx, "NotSupportedError", "Algorithm not supported for key generation");

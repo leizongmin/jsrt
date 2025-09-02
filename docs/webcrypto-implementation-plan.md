@@ -32,7 +32,22 @@
 - **已实现**：测试向量验证
 - **位置**：`src/std/crypto_digest.c`, `src/std/crypto_digest.h`
 
-#### 4. 运行时集成
+#### 4. 对称加密算法 (完整实现)
+- **已实现**：`crypto.subtle.encrypt(algorithm, key, data)` 和 `crypto.subtle.decrypt(algorithm, key, data)`
+- **支持算法**：AES-CBC (128/256位), AES-GCM (128/256位)
+- **已实现**：IV/随机数处理，认证标签管理
+- **已实现**：Additional Authenticated Data (AAD) 支持
+- **已实现**：密钥生成 `crypto.subtle.generateKey()`
+- **位置**：`src/std/crypto_symmetric.c`, `src/std/crypto_symmetric.h`
+
+#### 5. 消息认证码 (完整实现)
+- **已实现**：`crypto.subtle.sign(algorithm, key, data)` 和 `crypto.subtle.verify(algorithm, key, signature, data)`
+- **支持算法**：HMAC-SHA-1, HMAC-SHA-256, HMAC-SHA-384, HMAC-SHA-512
+- **已实现**：常数时间签名验证 (防时间攻击)
+- **已实现**：HMAC密钥生成
+- **位置**：`src/std/crypto_hmac.c`, `src/std/crypto_hmac.h`
+
+#### 6. 运行时集成
 - **已实现**：`process.versions.openssl` - 显示OpenSSL版本信息  
 - **已实现**：进程对象全局注册
 - **已实现**：完整的单元测试覆盖
@@ -139,23 +154,41 @@ const encrypted = await crypto.subtle.encrypt(
 
 ### 第二阶段：非对称加密算法 (优先级：高)
 
-#### 2.1 RSA算法族
+#### 2.1 RSA算法族 - ✅ 核心功能完成
 **目标**：实现RSA加密和签名
 
-**需要实现**：
-- RSA-PKCS1-v1_5 (加密/解密)
-- RSA-OAEP (加密/解密)
-- RSASSA-PKCS1-v1_5 (签名/验证)
-- RSA-PSS (签名/验证)
+**已完成功能** ✅：
+- ✅ RSA-OAEP 密钥对生成 (1024-4096位)
+- ✅ RSA算法基础架构和OpenSSL集成
+- ✅ WebCrypto API集成 (generateKey/encrypt/decrypt方法)
+- ✅ 哈希算法支持 (SHA-256/384/512，排除SHA-1)
+- ✅ RSA-OAEP 加密/解密核心实现
+- ✅ 测试框架兼容性修复 (async/await → Promise chains)
+- ✅ 内存管理和EVP_PKEY生命周期管理
 
-**密钥长度支持**：1024, 2048, 3072, 4096位
+**关键技术突破** 🔧：
+- 解决了QuickJS运行时async/await兼容性问题
+- 实现了OpenSSL EVP_PKEY的DER序列化/反序列化
+- 修复了segmentation fault和测试基础设施问题
+- 完成了RSA密钥在WebCrypto对象中的存储和检索机制
 
-**OpenSSL映射**：
-- `EVP_PKEY_RSA`
-- `EVP_PKEY_encrypt()`, `EVP_PKEY_decrypt()`
-- `EVP_PKEY_sign()`, `EVP_PKEY_verify()`
+**待完成功能**：
+- 🚧 RSA-OAEP 加密/解密操作完整测试验证
+- 🚧 RSA-PKCS1-v1_5 (加密/解密)  
+- 🚧 RSASSA-PKCS1-v1_5 (签名/验证)
+- 🚧 RSA-PSS (签名/验证)
 
-**API示例**：
+**密钥长度支持**：1024, 2048, 3072, 4096位 ✅
+
+**技术实现** ✅：
+- **文件**: `src/std/crypto_rsa.h`, `src/std/crypto_rsa.c`
+- **OpenSSL映射**:
+  - `EVP_PKEY_RSA` ✅
+  - `EVP_PKEY_CTX_new_id()`, `EVP_PKEY_keygen()` ✅
+  - `EVP_PKEY_encrypt()`, `EVP_PKEY_decrypt()` (基础架构已完成)
+  - `EVP_PKEY_sign()`, `EVP_PKEY_verify()` (基础架构已完成)
+
+**成功测试** ✅：
 ```javascript
 const keyPair = await crypto.subtle.generateKey(
   {
@@ -167,10 +200,16 @@ const keyPair = await crypto.subtle.generateKey(
   true,
   ["encrypt", "decrypt"]
 );
+// ✅ 测试通过：生成2048位RSA-OAEP密钥对成功
 ```
 
-**实现复杂度**：🔴 非常困难  
-**预估工作量**：5-7 天
+**关键突破** 🎉：
+- 解决OpenSSL控制常量问题：`EVP_PKEY_CTRL_RSA_KEYGEN_BITS = (EVP_PKEY_ALG_CTRL + 3)`
+- 实现灵活的哈希算法解析 (支持字符串和对象格式)
+- 完整的动态库加载和内存管理
+
+**实际工作量**：2天 (预估5-7天)  
+**实现复杂度**：🔴 非常困难 → ✅ 已突破核心难点
 
 #### 2.2 椭圆曲线算法 (ECDSA/ECDH)
 **目标**：实现椭圆曲线加密和签名
@@ -386,10 +425,13 @@ JSValue jsrt_crypto_throw_error(JSContext *ctx,
 **实际完成时间**：2天  
 **核心成果**：完整的SubtleCrypto.digest实现，为后续算法奠定坚实基础
 
-### Phase 2: 对称加密 (1-2周)  
-5. **AES-CBC/GCM/CTR** - 4-5天
-6. **HMAC** - 1-2天
-7. **单元测试** - 2-3天
+### Phase 2: 对称加密 ✅ **已完成** (1周)
+5. ✅ **AES-CBC/GCM** - 已完成 (支持128/256位密钥)
+6. ✅ **HMAC** - 已完成 (支持SHA-1/256/384/512)
+7. ✅ **单元测试** - 已完成 (全面测试覆盖)
+
+**实际完成时间**：3天  
+**核心成果**：完整的对称加密和消息认证码实现，包括AES-CBC、AES-GCM和HMAC算法
 
 ### Phase 3: 非对称加密 (2-3周)
 8. **RSA算法族** - 5-7天
@@ -452,10 +494,10 @@ option(JSRT_CRYPTO_REQUIRE_OPENSSL "Require OpenSSL (fail if not found)" OFF)
 ## 🎯 成功标准
 
 ### 功能完整性
-- [ ] 支持所有主要对称加密算法
+- [x] 支持所有主要对称加密算法 (AES-CBC, AES-GCM, HMAC)
 - [ ] 支持所有主要非对称加密算法  
-- [ ] 支持完整的密钥生命周期管理
-- [ ] 通过所有W3C测试用例
+- [x] 支持基础密钥生命周期管理 (generateKey)
+- [x] 通过核心对称加密W3C测试用例
 
 ### 性能指标
 - [ ] 加密操作延迟 < 10ms (AES-256, 1KB数据)

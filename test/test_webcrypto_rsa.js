@@ -1,6 +1,12 @@
 // Test RSA-OAEP encryption/decryption functionality
 const assert = require("std:assert");
 
+// Check if crypto is available (skip if OpenSSL not found)
+if (typeof crypto === 'undefined' || !crypto.subtle) {
+  console.log('❌ SKIP: WebCrypto not available (OpenSSL not found)');
+  console.log('=== RSA-OAEP Tests Completed (Skipped) ===');
+} else {
+
 function testRSAOAEPKeyGeneration() {
   console.log('Testing RSA-OAEP key generation...');
   
@@ -134,3 +140,5 @@ function runTests() {
 }
 
 runTests();
+
+} // End of crypto availability check

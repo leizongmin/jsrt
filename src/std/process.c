@@ -173,5 +173,10 @@ JSValue JSRT_CreateProcessModule(JSContext *ctx) {
 // Setup process module in runtime
 void JSRT_RuntimeSetupStdProcess(JSRT_Runtime *rt) {
   init_process_start_time();
+
+  // Create process object and set it as global
+  JSValue process_obj = JSRT_CreateProcessModule(rt->ctx);
+  JS_SetPropertyStr(rt->ctx, rt->global, "process", process_obj);
+
   JSRT_Debug("JSRT_RuntimeSetupStdProcess: initialized process module");
 }

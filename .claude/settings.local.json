@@ -8,7 +8,8 @@
       "Bash(./bin/jsrt:*)",
       "Read(//usr/lib/**)",
       "Read(//opt/homebrew/lib/**)",
-      "Bash(git add:*)"
+      "Bash(git add:*)",
+      "Bash(JSRT_DEBUG=1 ./target/release/jsrt:*)"
     ],
     "deny": [],
     "ask": []

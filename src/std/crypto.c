@@ -10,9 +10,10 @@
 #include <time.h>
 
 #include "../util/debug.h"
+#include "crypto_subtle.h"
 
-// OpenSSL function pointers
-static void *openssl_handle = NULL;
+// OpenSSL function pointers - make openssl_handle accessible to other modules
+void *openssl_handle = NULL;
 static char *openssl_version = NULL;
 
 // Function pointer types for OpenSSL functions we need
@@ -225,8 +226,15 @@ void JSRT_RuntimeSetupStdCrypto(JSRT_Runtime *rt) {
   JS_SetPropertyStr(rt->ctx, crypto_obj, "randomUUID",
                     JS_NewCFunction(rt->ctx, jsrt_crypto_randomUUID, "randomUUID", 0));
 
+  // crypto.subtle (SubtleCrypto API)
+  JSValue subtle_obj = JSRT_CreateSubtleCrypto(rt->ctx);
+  JS_SetPropertyStr(rt->ctx, crypto_obj, "subtle", subtle_obj);
+
   // Register crypto object to globalThis
   JS_SetPropertyStr(rt->ctx, rt->global, "crypto", crypto_obj);
+
+  // Initialize SubtleCrypto
+  JSRT_SetupSubtleCrypto(rt);
 
   JSRT_Debug("JSRT_RuntimeSetupStdCrypto: initialized WebCrypto API with OpenSSL support");
 }

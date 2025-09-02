@@ -229,17 +229,20 @@ const keyPair = await crypto.subtle.generateKey(
 - ✅ 建立完整的RSA密钥生命周期管理 (生成->序列化->使用->清理)
 - ✅ 创建模块化测试框架，支持多种哈希算法和错误场景测试
 
-#### 2.2 椭圆曲线算法 (ECDSA/ECDH)
+#### 2.2 椭圆曲线算法 (ECDSA/ECDH) - ⚠️ 部分实现
 **目标**：实现椭圆曲线加密和签名
 
-**需要实现**：
-- ECDSA (签名/验证)
-- ECDH (密钥交换)
+**已实现功能** ⚠️：
+- ✅ ECDSA/ECDH 密钥对生成 (P-256, P-384, P-521曲线)
+- ✅ EC算法基础架构和OpenSSL集成
+- ✅ WebCrypto API集成 (generateKey方法)
+- ⚠️ ECDSA签名/验证 - 基础代码完成，但需要sign/verify方法集成
+- ⚠️ ECDH密钥派生 - 基础代码完成，但需要deriveBits方法集成
 
 **支持曲线**：
-- P-256 (secp256r1)
-- P-384 (secp384r1)  
-- P-521 (secp521r1)
+- P-256 (secp256r1) ✅
+- P-384 (secp384r1) ✅
+- P-521 (secp521r1) ✅
 
 **OpenSSL映射**：
 - `EVP_PKEY_EC`
@@ -254,8 +257,23 @@ const keyPair = await crypto.subtle.generateKey(
 );
 ```
 
-**实现复杂度**：🔴 非常困难  
-**预估工作量**：4-6 天
+**技术实现** ⚠️：
+- **文件**: `src/std/crypto_ec.h`, `src/std/crypto_ec.c`
+- **OpenSSL函数**:
+  - `EVP_PKEY_CTX_new_id()`, `EVP_PKEY_keygen()` (密钥生成)
+  - `EVP_DigestSign()`, `EVP_DigestVerify()` (ECDSA签名/验证)
+  - `EVP_PKEY_derive()` (ECDH密钥派生)
+  - `EC_KEY_new_by_curve_name()` (兼容性支持)
+
+**实际工作量**：1天 (预估4-6天)
+**实现复杂度**：🔴 非常困难 → ⚠️ 部分完成
+
+**最新进展** (2025-09-03)：
+- ✅ **EC密钥生成完成** - 支持P-256, P-384, P-521曲线
+- ✅ **基础架构搭建** - 完成crypto_ec模块和OpenSSL函数加载
+- ✅ **测试用例创建** - ECDSA和ECDH完整测试覆盖
+- ⚠️ **待完成集成** - sign/verify/deriveBits方法需要在crypto_subtle.c中连接
+- ⚠️ **当前状态** - 核心功能已实现，需要完成WebCrypto API方法集成
 
 ### 第三阶段：密钥管理和派生 (优先级：中)
 
@@ -451,11 +469,13 @@ JSValue jsrt_crypto_throw_error(JSContext *ctx,
 **实际完成时间**：3天  
 **核心成果**：完整的对称加密和消息认证码实现，包括AES-CBC、AES-GCM和HMAC算法
 
-### Phase 3: 非对称加密 ✅ **RSA算法族完成** (2-3周)
+### Phase 3: 非对称加密 ⚠️ **进行中** (2-3周)
 8. **RSA算法族** - ✅ **完成** (RSA-OAEP✅, RSA-PKCS1-v1_5✅, RSASSA-PKCS1-v1_5✅)
    - **实际完成时间**: 4天 (预估5-7天)
    - **核心成果**: 完整的RSA加密和签名实现，支持多种填充模式和哈希算法
-9. **椭圆曲线** - 4-6天 (待开始)
+9. **椭圆曲线** - ⚠️ **部分完成** (ECDSA/ECDH密钥生成✅，签名/派生待集成)
+   - **实际完成时间**: 1天 (预估4-6天)
+   - **核心成果**: EC密钥生成和基础架构完成，需要完成API集成
 10. **密钥管理** - 3-4天 (待开始)
 
 ### Phase 4: 高级功能 (1-2周)
@@ -520,6 +540,8 @@ option(JSRT_CRYPTO_REQUIRE_OPENSSL "Require OpenSSL (fail if not found)" OFF)
 - [x] 通过核心对称加密W3C测试用例
 - [x] RSA密钥生成和基础设施 (支持1024-4096位密钥)
 - [x] RSA签名/验证完全通过测试 (支持SHA-256/384/512)
+- [x] EC密钥生成支持 (P-256, P-384, P-521曲线)
+- [ ] EC签名/验证和密钥派生完整实现
 
 ### 性能指标
 - [ ] 加密操作延迟 < 10ms (AES-256, 1KB数据)

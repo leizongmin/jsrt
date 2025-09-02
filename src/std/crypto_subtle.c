@@ -14,6 +14,7 @@
 #include "../util/debug.h"
 #include "crypto.h"
 #include "crypto_digest.h"
+#include "crypto_ec.h"
 #include "crypto_hmac.h"
 #include "crypto_rsa.h"
 #include "crypto_symmetric.h"
@@ -1948,6 +1949,60 @@ JSValue jsrt_subtle_generateKey(JSContext *ctx, JSValueConst this_val, int argc,
     free(private_key_data);
 
     return create_resolved_promise(ctx, keypair_obj);
+  }
+
+  // EC key generation (ECDSA/ECDH)
+  if (alg == JSRT_CRYPTO_ALG_ECDSA || alg == JSRT_CRYPTO_ALG_ECDH) {
+    // Get named curve from algorithm object
+    JSValue curve_val = JS_GetPropertyStr(ctx, argv[0], "namedCurve");
+    const char *curve_name = JS_ToCString(ctx, curve_val);
+    JS_FreeValue(ctx, curve_val);
+
+    if (!curve_name) {
+      JSValue error = jsrt_crypto_throw_error(ctx, "OperationError", "namedCurve is required for EC algorithms");
+      return create_rejected_promise(ctx, error);
+    }
+
+    // Parse curve
+    jsrt_ec_curve_t curve;
+    if (!jsrt_ec_curve_from_string(curve_name, &curve)) {
+      JS_FreeCString(ctx, curve_name);
+      JSValue error = jsrt_crypto_throw_error(ctx, "NotSupportedError", "Unsupported EC curve");
+      return create_rejected_promise(ctx, error);
+    }
+
+    // Get hash algorithm for ECDSA (optional for ECDH)
+    const char *hash_name = NULL;
+    if (alg == JSRT_CRYPTO_ALG_ECDSA) {
+      JSValue hash_val = JS_GetPropertyStr(ctx, argv[0], "hash");
+      if (!JS_IsUndefined(hash_val)) {
+        if (JS_IsString(hash_val)) {
+          hash_name = JS_ToCString(ctx, hash_val);
+        } else {
+          JSValue hash_name_val = JS_GetPropertyStr(ctx, hash_val, "name");
+          hash_name = JS_ToCString(ctx, hash_name_val);
+          JS_FreeValue(ctx, hash_name_val);
+        }
+      }
+      JS_FreeValue(ctx, hash_val);
+    }
+
+    // Prepare parameters
+    jsrt_ec_keygen_params_t params = {
+        .algorithm = (alg == JSRT_CRYPTO_ALG_ECDSA) ? JSRT_ECDSA : JSRT_ECDH, .curve = curve, .hash = hash_name};
+
+    // Generate EC key pair
+    JSValue result = jsrt_ec_generate_key(ctx, &params);
+
+    // Cleanup
+    JS_FreeCString(ctx, curve_name);
+    if (hash_name) JS_FreeCString(ctx, hash_name);
+
+    if (JS_IsException(result)) {
+      return create_rejected_promise(ctx, result);
+    }
+
+    return create_resolved_promise(ctx, result);
   }
 
   JSValue error = jsrt_crypto_throw_error(ctx, "NotSupportedError", "Algorithm not supported for key generation");

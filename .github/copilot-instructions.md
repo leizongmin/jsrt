@@ -130,14 +130,15 @@ Cross-platform implementations needed for process-related functionality:
 ```c
 #include <windows.h>
 #include <tlhelp32.h>
+#include <process.h>      // For getpid()
+#include <winsock2.h>     // For struct timeval
 
-// getpid() → GetCurrentProcessId()
-static int getpid(void) {
-  return (int)GetCurrentProcessId();
-}
+// IMPORTANT: Avoid redefinition conflicts!
+// Windows already provides getpid() in <process.h>
+// Use system getpid() directly: getpid()
 
-// getppid() → Process enumeration with CreateToolhelp32Snapshot()
-static int getppid(void) {
+// Only implement getppid() since Windows doesn't have it
+static int jsrt_getppid(void) {
   HANDLE hSnapshot;
   PROCESSENTRY32 pe32;
   DWORD dwParentPID = 0;
@@ -160,8 +161,9 @@ static int getppid(void) {
   return (int)dwParentPID;
 }
 
-// gettimeofday() → GetSystemTimeAsFileTime() with epoch conversion
-static int gettimeofday(struct timeval *tv, void *tz) {
+// Windows gettimeofday() implementation
+// IMPORTANT: Use unique name to avoid conflicts with system headers
+static int jsrt_gettimeofday(struct timeval *tv, void *tz) {
   FILETIME ft;
   unsigned __int64 tmpres = 0;
   
@@ -178,7 +180,18 @@ static int gettimeofday(struct timeval *tv, void *tz) {
   
   return 0;
 }
+
+// Cross-platform macros for consistent API
+#define JSRT_GETPID() getpid()                    // Use system function
+#define JSRT_GETPPID() jsrt_getppid()            // Use our implementation
+#define JSRT_GETTIMEOFDAY(tv, tz) jsrt_gettimeofday(tv, tz)  // Use our implementation
 ```
+
+**Critical Notes:**
+- **DO NOT redefine system functions** like `getpid()` or `gettimeofday()` on Windows - this causes compilation errors
+- **Use system-provided struct timeval** from `<winsock2.h>` instead of defining your own
+- **Prefix custom functions** with `jsrt_` to avoid naming conflicts
+- **Use cross-platform macros** to provide consistent API across platforms
 
 When suggesting code changes:
 - Maintain compatibility with the existing API
@@ -186,3 +199,6 @@ When suggesting code changes:
 - Follow the error handling patterns used throughout the codebase
 - Consider cross-platform compatibility
 - Test changes on multiple platforms when dealing with platform-specific code
+- **CRITICAL**: Never redefine system functions on Windows - use unique prefixed names (e.g., `jsrt_function_name()`)
+- **CRITICAL**: Always check for existing system headers before defining structs or functions
+- **CRITICAL**: Use cross-platform macros for consistent API across different platforms

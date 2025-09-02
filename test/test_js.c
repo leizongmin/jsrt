@@ -16,15 +16,23 @@ int main(int argc, char **argv) {
     return 1;
   }
 
+  int failed_count = 0;
   for (int i = 1; i < argc; i++) {
     const char *filename = argv[i];
     printf("\033[32mRun file: %s\033[0m\n", filename);
     int ret = JSRT_CmdRunFile(filename, argc, argv);
     if (ret != 0) {
-      printf("\033[32m>> Error: %d\033[0m\n", ret);
-      return ret;
+      printf("\033[31m>> Error: %d\033[0m\n", ret);
+      failed_count++;
+      // Continue with other tests instead of stopping
+    } else {
+      printf("\033[32m>> OK\033[0m\n");
     }
-    printf("\033[32m>> OK\033[0m\n");
+  }
+
+  if (failed_count > 0) {
+    printf("\033[31m%d test(s) failed\033[0m\n", failed_count);
+    return 1;
   }
   printf("\033[32mDone.\033[0m\n");
   return 0;

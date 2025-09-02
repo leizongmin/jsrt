@@ -1,6 +1,12 @@
 #include "crypto.h"
 
+// Platform-specific includes for dynamic loading
+#ifdef _WIN32
+#include <windows.h>
+#else
 #include <dlfcn.h>
+#endif
+
 #include <quickjs.h>
 #include <stdbool.h>
 #include <stdint.h>
@@ -13,7 +19,11 @@
 #include "crypto_subtle.h"
 
 // OpenSSL function pointers - make openssl_handle accessible to other modules
+#ifdef _WIN32
+HMODULE openssl_handle = NULL;
+#else
 void *openssl_handle = NULL;
+#endif
 static char *openssl_version = NULL;
 
 // Function pointer types for OpenSSL functions we need
@@ -57,7 +67,11 @@ static bool load_openssl() {
       NULL};
 
   for (int i = 0; openssl_names[i] != NULL; i++) {
+#ifdef _WIN32
+    openssl_handle = LoadLibraryA(openssl_names[i]);
+#else
     openssl_handle = dlopen(openssl_names[i], RTLD_LAZY);
+#endif
     if (openssl_handle != NULL) {
       JSRT_Debug("JSRT_Crypto: Successfully loaded OpenSSL from %s", openssl_names[i]);
       break;
@@ -65,17 +79,30 @@ static bool load_openssl() {
   }
 
   if (openssl_handle == NULL) {
+#ifdef _WIN32
+    JSRT_Debug("JSRT_Crypto: Failed to load OpenSSL library: Error %lu", GetLastError());
+#else
     JSRT_Debug("JSRT_Crypto: Failed to load OpenSSL library: %s", dlerror());
+#endif
     return false;
   }
 
   // Load required functions
+#ifdef _WIN32
+  openssl_RAND_bytes = (RAND_bytes_func)GetProcAddress(openssl_handle, "RAND_bytes");
+  openssl_OpenSSL_version = (OpenSSL_version_func)GetProcAddress(openssl_handle, "OpenSSL_version");
+#else
   openssl_RAND_bytes = (RAND_bytes_func)dlsym(openssl_handle, "RAND_bytes");
   openssl_OpenSSL_version = (OpenSSL_version_func)dlsym(openssl_handle, "OpenSSL_version");
+#endif
 
   if (openssl_RAND_bytes == NULL) {
     JSRT_Debug("JSRT_Crypto: Failed to load RAND_bytes function");
+#ifdef _WIN32
+    FreeLibrary(openssl_handle);
+#else
     dlclose(openssl_handle);
+#endif
     openssl_handle = NULL;
     return false;
   }

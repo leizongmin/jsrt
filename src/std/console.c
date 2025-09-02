@@ -4,12 +4,47 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <sys/time.h>
 #include <time.h>
+
+// Platform-specific includes
+#ifdef _WIN32
+#include <windows.h>
+#include <winsock2.h>  // For struct timeval
+#else
+#include <sys/time.h>
 #include <unistd.h>
+#endif
 
 #include "../util/colorize.h"
 #include "../util/dbuf.h"
+
+// Platform-specific function implementations
+#ifdef _WIN32
+// Windows equivalent of gettimeofday()
+static int jsrt_console_gettimeofday(struct timeval *tv, void *tz) {
+  FILETIME ft;
+  unsigned __int64 tmpres = 0;
+
+  if (NULL != tv) {
+    GetSystemTimeAsFileTime(&ft);
+
+    tmpres |= ft.dwHighDateTime;
+    tmpres <<= 32;
+    tmpres |= ft.dwLowDateTime;
+
+    tmpres /= 10;  // convert into microseconds
+    // converting file time to unix epoch
+    tmpres -= 11644473600000000ULL;
+    tv->tv_sec = (long)(tmpres / 1000000UL);
+    tv->tv_usec = (long)(tmpres % 1000000UL);
+  }
+
+  return 0;
+}
+#define JSRT_GETTIMEOFDAY(tv, tz) jsrt_console_gettimeofday(tv, tz)
+#else
+#define JSRT_GETTIMEOFDAY(tv, tz) gettimeofday(tv, tz)
+#endif
 
 // Forward declarations
 static JSValue jsrt_console_log(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv);
@@ -82,7 +117,7 @@ static void jsrt_init_dbuf(JSContext *ctx, DynBuf *s) {
 // Get current time in milliseconds
 static double jsrt_get_time_ms() {
   struct timeval tv;
-  gettimeofday(&tv, NULL);
+  JSRT_GETTIMEOFDAY(&tv, NULL);
   return tv.tv_sec * 1000.0 + tv.tv_usec / 1000.0;
 }
 

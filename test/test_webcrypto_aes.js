@@ -1,6 +1,12 @@
 // WebCrypto AES-CBC tests
 console.log('=== Starting WebCrypto AES-CBC Tests ===');
 
+// Check if crypto is available (skip if OpenSSL not found)
+if (typeof crypto === 'undefined' || !crypto.subtle) {
+  console.log('❌ SKIP: WebCrypto not available (OpenSSL not found)');
+  console.log('=== WebCrypto AES-CBC Tests Completed (Skipped) ===');
+} else {
+
 // Test 1: crypto.subtle.generateKey for AES-CBC
 console.log('Test 1: AES key generation');
 try {
@@ -140,4 +146,6 @@ function testDifferentKeySizes() {
   }
   
   testNextKeySize();
+
+} // End of crypto availability check
 }

@@ -1,6 +1,12 @@
 // WebCrypto AES-GCM tests
 console.log('=== Starting WebCrypto AES-GCM Tests ===');
 
+// Check if crypto is available (skip if OpenSSL not found)
+if (typeof crypto === 'undefined' || !crypto.subtle) {
+  console.log('❌ SKIP: WebCrypto not available (OpenSSL not found)');
+  console.log('=== WebCrypto AES-GCM Tests Completed (Skipped) ===');
+} else {
+
 // Test 1: crypto.subtle.generateKey for AES-GCM
 console.log('Test 1: AES-GCM key generation');
 try {
@@ -232,4 +238,6 @@ function testDifferentKeySizes() {
   }
   
   testNextKeySize();
+
+} // End of crypto availability check
 }

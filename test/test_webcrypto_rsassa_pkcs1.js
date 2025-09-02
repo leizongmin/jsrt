@@ -1,6 +1,12 @@
 // Test RSASSA-PKCS1-v1_5 signature/verification functionality
 const assert = require("std:assert");
 
+// Check if crypto is available (skip if OpenSSL not found)
+if (typeof crypto === 'undefined' || !crypto.subtle) {
+  console.log('❌ SKIP: WebCrypto not available (OpenSSL not found)');
+  console.log('=== RSASSA-PKCS1-v1_5 Tests Completed (Skipped) ===');
+} else {
+
 function testRSASSAPKCS1v15KeyGeneration() {
   console.log('Testing RSASSA-PKCS1-v1_5 key generation...');
   
@@ -187,3 +193,5 @@ function runTests() {
 }
 
 runTests();
+
+} // End of crypto availability check

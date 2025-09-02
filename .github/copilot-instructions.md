@@ -81,8 +81,152 @@ jsrt integrates:
 - libuv for asynchronous I/O operations and event loop
 - Custom standard library implementations for console, timers, etc.
 
+## Cross-Platform Handling
+
+The project supports multiple platforms (Linux, macOS, Windows) and requires careful attention to platform-specific differences:
+
+### Dynamic Loading
+- **Unix/Linux/macOS**: Use `dlopen()`, `dlsym()`, `dlclose()`, `dlerror()` from `<dlfcn.h>`
+- **Windows**: Use `LoadLibraryA()`, `GetProcAddress()`, `FreeLibrary()`, `GetLastError()` from `<windows.h>`
+
+**Key Issue**: `GetProcAddress()` returns `FARPROC` (specific function signature) while `dlsym()` returns `void*` (generic pointer). 
+
+**Solution**: Cast Windows result to `void*` for compatibility:
+```c
+#ifdef _WIN32
+#define JSRT_DLSYM(handle, name) ((void*)GetProcAddress(handle, name))
+#else
+#define JSRT_DLSYM(handle, name) dlsym(handle, name)
+#endif
+```
+
+### Platform-Specific Headers
+```c
+#ifdef _WIN32
+#include <windows.h>
+extern HMODULE openssl_handle;
+#else
+#include <dlfcn.h>
+extern void *openssl_handle;
+#endif
+```
+
+### Library Linking
+The CMakeLists.txt handles platform-specific libraries:
+- **Windows**: No need for `dl`, `m`, `pthread` (handled by MSVCRT/libuv)
+- **Unix**: Requires `dl m pthread` libraries
+
+### Process and System Functions
+Cross-platform implementations needed for process-related functionality:
+
+**Unix/Linux/macOS**: Use standard POSIX functions
+```c
+#include <unistd.h>
+#include <sys/time.h>
+// getpid(), getppid(), gettimeofday() available directly
+```
+
+**Windows**: Implement equivalents using Win32 APIs
+```c
+#include <windows.h>
+#include <tlhelp32.h>
+#include <process.h>      // For getpid()
+#include <winsock2.h>     // For struct timeval
+
+// IMPORTANT: Avoid redefinition conflicts!
+// Windows already provides getpid() in <process.h>
+// Use system getpid() directly: getpid()
+
+// Only implement getppid() since Windows doesn't have it
+static int jsrt_getppid(void) {
+  HANDLE hSnapshot;
+  PROCESSENTRY32 pe32;
+  DWORD dwParentPID = 0;
+  DWORD dwCurrentPID = GetCurrentProcessId();
+  
+  hSnapshot = CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0);
+  if (hSnapshot == INVALID_HANDLE_VALUE) return 0;
+  
+  pe32.dwSize = sizeof(PROCESSENTRY32);
+  if (Process32First(hSnapshot, &pe32)) {
+    do {
+      if (pe32.th32ProcessID == dwCurrentPID) {
+        dwParentPID = pe32.th32ParentProcessID;
+        break;
+      }
+    } while (Process32Next(hSnapshot, &pe32));
+  }
+  
+  CloseHandle(hSnapshot);
+  return (int)dwParentPID;
+}
+
+// Windows gettimeofday() implementation
+// IMPORTANT: Use unique name to avoid conflicts with system headers
+static int jsrt_gettimeofday(struct timeval *tv, void *tz) {
+  FILETIME ft;
+  unsigned __int64 tmpres = 0;
+  
+  if (NULL != tv) {
+    GetSystemTimeAsFileTime(&ft);
+    tmpres |= ft.dwHighDateTime;
+    tmpres <<= 32;
+    tmpres |= ft.dwLowDateTime;
+    tmpres /= 10; // convert to microseconds
+    tmpres -= 11644473600000000ULL; // convert to Unix epoch
+    tv->tv_sec = (long)(tmpres / 1000000UL);
+    tv->tv_usec = (long)(tmpres % 1000000UL);
+  }
+  
+  return 0;
+}
+
+// Cross-platform macros for consistent API
+#define JSRT_GETPID() getpid()                    // Use system function
+#define JSRT_GETPPID() jsrt_getppid()            // Use our implementation
+#define JSRT_GETTIMEOFDAY(tv, tz) jsrt_gettimeofday(tv, tz)  // Use our implementation
+```
+
+**Critical Notes:**
+- **DO NOT redefine system functions** like `getpid()` or `gettimeofday()` on Windows - this causes compilation errors
+- **Use system-provided struct timeval** from `<winsock2.h>` instead of defining your own
+- **Prefix custom functions** with `jsrt_` to avoid naming conflicts
+- **Use cross-platform macros** to provide consistent API across platforms
+
+## Windows Testing Considerations
+
+**Dependency Availability on Windows:**
+- **OpenSSL/Crypto**: Often not available on Windows CI environments
+- **Test files MUST check for crypto availability** before using `crypto.subtle`
+- **Pattern for crypto tests**:
+```javascript
+// Check if crypto is available (skip if OpenSSL not found)
+if (typeof crypto === 'undefined' || !crypto.subtle) {
+  console.log('❌ SKIP: WebCrypto not available (OpenSSL not found)');
+  console.log('=== Tests Completed (Skipped) ===');
+} else {
+  // ... crypto tests here ...
+}
+```
+
+**Test Suite Best Practices:**
+- **Always gracefully handle missing dependencies** in JavaScript test files
+- **Use availability checks** for platform-specific APIs like crypto, network features
+- **Test runner should continue on failure** to identify all failing tests (not just the first one)
+- **Debug builds show helpful messages** about which dependencies are missing
+
+**Common Windows Test Failures:**
+1. **Crypto tests failing** due to OpenSSL unavailability → Add availability checks
+2. **Path separator issues** → Use consistent forward slashes or handle both
+3. **Timing-sensitive tests** → Allow for different timing characteristics
+4. **Process behavior differences** → Handle platform-specific process APIs
+
 When suggesting code changes:
 - Maintain compatibility with the existing API
 - Keep memory management patterns consistent
 - Follow the error handling patterns used throughout the codebase
 - Consider cross-platform compatibility
+- Test changes on multiple platforms when dealing with platform-specific code
+- **CRITICAL**: Never redefine system functions on Windows - use unique prefixed names (e.g., `jsrt_function_name()`)
+- **CRITICAL**: Always check for existing system headers before defining structs or functions
+- **CRITICAL**: Use cross-platform macros for consistent API across different platforms

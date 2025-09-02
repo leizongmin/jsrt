@@ -1,10 +1,25 @@
 #include "crypto_hmac.h"
 
+// Platform-specific includes for dynamic loading
+#ifdef _WIN32
+#include <windows.h>
+#else
 #include <dlfcn.h>
+#endif
+
 #include <string.h>
 
 #include "../util/debug.h"
 #include "crypto.h"
+
+// Cross-platform dynamic loading abstractions
+#ifdef _WIN32
+extern HMODULE openssl_handle;
+#define JSRT_DLSYM(handle, name) ((void *)GetProcAddress(handle, name))
+#else
+extern void *openssl_handle;
+#define JSRT_DLSYM(handle, name) dlsym(handle, name)
+#endif
 
 // OpenSSL function pointers for HMAC
 typedef struct {
@@ -31,23 +46,22 @@ static bool load_hmac_functions(void) {
     return openssl_hmac_funcs.HMAC != NULL;
   }
 
-  extern void *openssl_handle;
   if (!openssl_handle) {
     JSRT_Debug("JSRT_Crypto_HMAC: OpenSSL handle not available");
     return false;
   }
 
   // Load HMAC function
-  openssl_hmac_funcs.HMAC = dlsym(openssl_handle, "HMAC");
+  openssl_hmac_funcs.HMAC = JSRT_DLSYM(openssl_handle, "HMAC");
 
   // Load hash algorithm functions
-  openssl_hmac_funcs.EVP_sha1 = dlsym(openssl_handle, "EVP_sha1");
-  openssl_hmac_funcs.EVP_sha256 = dlsym(openssl_handle, "EVP_sha256");
-  openssl_hmac_funcs.EVP_sha384 = dlsym(openssl_handle, "EVP_sha384");
-  openssl_hmac_funcs.EVP_sha512 = dlsym(openssl_handle, "EVP_sha512");
+  openssl_hmac_funcs.EVP_sha1 = JSRT_DLSYM(openssl_handle, "EVP_sha1");
+  openssl_hmac_funcs.EVP_sha256 = JSRT_DLSYM(openssl_handle, "EVP_sha256");
+  openssl_hmac_funcs.EVP_sha384 = JSRT_DLSYM(openssl_handle, "EVP_sha384");
+  openssl_hmac_funcs.EVP_sha512 = JSRT_DLSYM(openssl_handle, "EVP_sha512");
 
   // Load random function for key generation
-  openssl_hmac_funcs.RAND_bytes = dlsym(openssl_handle, "RAND_bytes");
+  openssl_hmac_funcs.RAND_bytes = JSRT_DLSYM(openssl_handle, "RAND_bytes");
 
   hmac_funcs_loaded = true;
 

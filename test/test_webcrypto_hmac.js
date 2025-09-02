@@ -1,6 +1,12 @@
 // WebCrypto HMAC tests
 console.log('=== Starting WebCrypto HMAC Tests ===');
 
+// Check if crypto is available (skip if OpenSSL not found)
+if (typeof crypto === 'undefined' || !crypto.subtle) {
+  console.log('❌ SKIP: WebCrypto not available (OpenSSL not found)');
+  console.log('=== WebCrypto HMAC Tests Completed (Skipped) ===');
+} else {
+
 // Test 1: crypto.subtle.generateKey for HMAC
 console.log('Test 1: HMAC key generation');
 try {
@@ -173,4 +179,6 @@ function testDifferentHashAlgorithms() {
   }
   
   testNextHashAlgorithm();
+
+} // End of crypto availability check
 }

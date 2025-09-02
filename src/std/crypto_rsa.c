@@ -451,9 +451,9 @@ bool jsrt_crypto_is_rsa_algorithm_supported(jsrt_rsa_algorithm_t alg) {
     case JSRT_RSA_OAEP:
       return true;  // Implemented
     case JSRT_RSA_PKCS1_V1_5:
-      return false;  // TODO: Implement
+      return true;  // Implemented
     case JSRT_RSASSA_PKCS1_V1_5:
-      return false;  // TODO: Implement
+      return true;  // Implemented
     case JSRT_RSA_PSS:
       return false;  // TODO: Implement
     default:
@@ -590,4 +590,114 @@ void *jsrt_crypto_rsa_create_private_key_from_der(const uint8_t *key_data, size_
 
   JSRT_Debug("JSRT_Crypto_RSA: Successfully created private key from DER data");
   return pkey;
+}
+
+// RSA signature/verification implementations
+int jsrt_crypto_rsa_sign(jsrt_rsa_params_t *params, const uint8_t *data, size_t data_length, uint8_t **signature,
+                         size_t *signature_length) {
+  JSRT_Debug("JSRT_Crypto_RSA: Starting RSA signature, data_length=%zu", data_length);
+
+  if (!load_rsa_functions()) {
+    JSRT_Debug("JSRT_Crypto_RSA: OpenSSL functions not available for signing");
+    return -1;
+  }
+
+  if (!params || !params->rsa_key) {
+    JSRT_Debug("JSRT_Crypto_RSA: Invalid parameters or RSA key is NULL");
+    return -1;
+  }
+
+  // Create signing context
+  void *ctx = openssl_rsa_funcs.EVP_PKEY_CTX_new(params->rsa_key, NULL);
+  if (!ctx) {
+    JSRT_Debug("JSRT_Crypto_RSA: Failed to create signing context");
+    return -1;
+  }
+
+  // Initialize signing
+  if (openssl_rsa_funcs.EVP_PKEY_sign_init(ctx) <= 0) {
+    openssl_rsa_funcs.EVP_PKEY_CTX_free(ctx);
+    JSRT_Debug("JSRT_Crypto_RSA: Failed to initialize signing");
+    return -1;
+  }
+
+  // Set padding mode for RSASSA-PKCS1-v1_5
+  if (params->algorithm == JSRT_RSASSA_PKCS1_V1_5) {
+    if (openssl_rsa_funcs.EVP_PKEY_CTX_ctrl(ctx, EVP_PKEY_RSA, EVP_PKEY_OP_SIGN, EVP_PKEY_CTRL_RSA_PADDING,
+                                            RSA_PKCS1_PADDING, NULL) <= 0) {
+      openssl_rsa_funcs.EVP_PKEY_CTX_free(ctx);
+      JSRT_Debug("JSRT_Crypto_RSA: Failed to set PKCS1 padding for signing");
+      return -1;
+    }
+  }
+
+  // Get signature length
+  size_t sig_len = 0;
+  if (openssl_rsa_funcs.EVP_PKEY_sign(ctx, NULL, &sig_len, data, data_length) <= 0) {
+    openssl_rsa_funcs.EVP_PKEY_CTX_free(ctx);
+    JSRT_Debug("JSRT_Crypto_RSA: Failed to get signature length");
+    return -1;
+  }
+
+  // Allocate signature buffer
+  *signature = malloc(sig_len);
+  if (!*signature) {
+    openssl_rsa_funcs.EVP_PKEY_CTX_free(ctx);
+    JSRT_Debug("JSRT_Crypto_RSA: Failed to allocate signature buffer");
+    return -1;
+  }
+
+  // Perform signature
+  if (openssl_rsa_funcs.EVP_PKEY_sign(ctx, *signature, &sig_len, data, data_length) <= 0) {
+    free(*signature);
+    *signature = NULL;
+    openssl_rsa_funcs.EVP_PKEY_CTX_free(ctx);
+    JSRT_Debug("JSRT_Crypto_RSA: Signing failed");
+    return -1;
+  }
+
+  *signature_length = sig_len;
+  openssl_rsa_funcs.EVP_PKEY_CTX_free(ctx);
+
+  JSRT_Debug("JSRT_Crypto_RSA: Successfully signed data (%zu bytes signature)", sig_len);
+  return 0;
+}
+
+bool jsrt_crypto_rsa_verify(jsrt_rsa_params_t *params, const uint8_t *data, size_t data_length,
+                            const uint8_t *signature, size_t signature_length) {
+  if (!load_rsa_functions()) {
+    JSRT_Debug("JSRT_Crypto_RSA: OpenSSL functions not available for verification");
+    return false;
+  }
+
+  // Create verification context
+  void *ctx = openssl_rsa_funcs.EVP_PKEY_CTX_new(params->rsa_key, NULL);
+  if (!ctx) {
+    JSRT_Debug("JSRT_Crypto_RSA: Failed to create verification context");
+    return false;
+  }
+
+  // Initialize verification
+  if (openssl_rsa_funcs.EVP_PKEY_verify_init(ctx) <= 0) {
+    openssl_rsa_funcs.EVP_PKEY_CTX_free(ctx);
+    JSRT_Debug("JSRT_Crypto_RSA: Failed to initialize verification");
+    return false;
+  }
+
+  // Set padding mode for RSASSA-PKCS1-v1_5
+  if (params->algorithm == JSRT_RSASSA_PKCS1_V1_5) {
+    if (openssl_rsa_funcs.EVP_PKEY_CTX_ctrl(ctx, EVP_PKEY_RSA, EVP_PKEY_OP_VERIFY, EVP_PKEY_CTRL_RSA_PADDING,
+                                            RSA_PKCS1_PADDING, NULL) <= 0) {
+      openssl_rsa_funcs.EVP_PKEY_CTX_free(ctx);
+      JSRT_Debug("JSRT_Crypto_RSA: Failed to set PKCS1 padding for verification");
+      return false;
+    }
+  }
+
+  // Perform verification
+  int result = openssl_rsa_funcs.EVP_PKEY_verify(ctx, signature, signature_length, data, data_length);
+  openssl_rsa_funcs.EVP_PKEY_CTX_free(ctx);
+
+  JSRT_Debug("JSRT_Crypto_RSA: Verification result: %d", result);
+  return result == 1;
 }

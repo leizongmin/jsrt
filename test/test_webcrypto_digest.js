@@ -1,4 +1,5 @@
 // WebCrypto SubtleCrypto.digest tests
+const assert = require("std:assert");
 console.log('=== Starting WebCrypto SubtleCrypto Digest Tests ===');
 
 // Test 1: crypto.subtle object existence

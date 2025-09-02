@@ -12,8 +12,21 @@ console.log('process.arch:', process.arch);
 console.log('process.uptime():', process.uptime());
 
 // Test CommonJS require
+const assert = require("std:assert");
 const process2 = require('std:process');
 console.log('\nTesting std:process module with CommonJS require:');
+
+// Basic assertions for process object properties
+assert.ok(Array.isArray(process2.argv), 'process.argv should be an array');
+assert.strictEqual(typeof process2.argv0, 'string', 'process.argv0 should be a string');
+assert.strictEqual(typeof process2.pid, 'number', 'process.pid should be a number');
+assert.strictEqual(typeof process2.ppid, 'number', 'process.ppid should be a number');
+assert.strictEqual(typeof process2.version, 'string', 'process.version should be a string');
+assert.strictEqual(typeof process2.platform, 'string', 'process.platform should be a string');
+assert.strictEqual(typeof process2.arch, 'string', 'process.arch should be a string');
+assert.strictEqual(typeof process2.uptime, 'function', 'process.uptime should be a function');
+assert.strictEqual(typeof process2.uptime(), 'number', 'process.uptime() should return a number');
+
 console.log('process.argv:', process2.argv);
 console.log('process.argv0:', process2.argv0);
 console.log('process.pid:', process2.pid);

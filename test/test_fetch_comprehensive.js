@@ -1,11 +1,12 @@
 // Comprehensive Fetch API Unit Tests
+const assert = require("std:assert");
 console.log('=== Comprehensive Fetch API Unit Tests ===');
 
 let testCount = 0;
 let passCount = 0;
 let failCount = 0;
 
-function assert(condition, message) {
+function testAssert(condition, message) {
   testCount++;
   if (condition) {
     console.log(`✅ PASS: ${message}`);
@@ -14,6 +15,8 @@ function assert(condition, message) {
     console.log(`❌ FAIL: ${message}`);
     failCount++;
   }
+  // Use std:assert for actual assertion
+  assert.ok(condition, message);
 }
 
 // Test 1: Headers Class Functionality
@@ -23,30 +26,30 @@ function testHeaders() {
   const headers = new Headers();
   
   // Test creation
-  assert(typeof headers === 'object', 'Headers constructor creates object');
-  assert(typeof headers.set === 'function', 'Headers has set method');
-  assert(typeof headers.get === 'function', 'Headers has get method');
-  assert(typeof headers.has === 'function', 'Headers has has method');
-  assert(typeof headers.delete === 'function', 'Headers has delete method');
+  testAssert(typeof headers === 'object', 'Headers constructor creates object');
+  testAssert(typeof headers.set === 'function', 'Headers has set method');
+  testAssert(typeof headers.get === 'function', 'Headers has get method');
+  testAssert(typeof headers.has === 'function', 'Headers has has method');
+  testAssert(typeof headers.delete === 'function', 'Headers has delete method');
   
   // Test basic operations
   headers.set('Content-Type', 'application/json');
-  assert(headers.get('Content-Type') === 'application/json', 'Headers set/get works');
-  assert(headers.has('Content-Type') === true, 'Headers has method works');
+  testAssert(headers.get('Content-Type') === 'application/json', 'Headers set/get works');
+  testAssert(headers.has('Content-Type') === true, 'Headers has method works');
   
   // Test case insensitivity
-  assert(headers.get('content-type') === 'application/json', 'Headers get is case-insensitive');
-  assert(headers.has('CONTENT-TYPE') === true, 'Headers has is case-insensitive');
+  testAssert(headers.get('content-type') === 'application/json', 'Headers get is case-insensitive');
+  testAssert(headers.has('CONTENT-TYPE') === true, 'Headers has is case-insensitive');
   
   // Test deletion
   headers.delete('Content-Type');
-  assert(headers.has('Content-Type') === false, 'Headers delete works');
-  assert(headers.get('Content-Type') === null, 'Deleted header returns null');
+  testAssert(headers.has('Content-Type') === false, 'Headers delete works');
+  testAssert(headers.get('Content-Type') === null, 'Deleted header returns null');
   
   // Test overwriting
   headers.set('User-Agent', 'jsrt/1.0');
   headers.set('User-Agent', 'jsrt/2.0');
-  assert(headers.get('User-Agent') === 'jsrt/2.0', 'Headers overwrite works');
+  testAssert(headers.get('User-Agent') === 'jsrt/2.0', 'Headers overwrite works');
 }
 
 // Test 2: Request Class Functionality
@@ -55,20 +58,20 @@ console.log('\nTest Group 2: Request Class');
 function testRequest() {
   // Test basic GET request
   const getReq = new Request('http://example.com/api');
-  assert(typeof getReq === 'object', 'Request constructor creates object');
-  assert(getReq.method === 'GET', 'Default method is GET');
-  assert(getReq.url === 'http://example.com/api', 'URL property is correct');
+  testAssert(typeof getReq === 'object', 'Request constructor creates object');
+  testAssert(getReq.method === 'GET', 'Default method is GET');
+  testAssert(getReq.url === 'http://example.com/api', 'URL property is correct');
   
   // Test POST request with options
   const postReq = new Request('http://example.com/api', {
     method: 'POST'
   });
-  assert(postReq.method === 'POST', 'Method option sets correctly');
-  assert(postReq.url === 'http://example.com/api', 'URL preserved with options');
+  testAssert(postReq.method === 'POST', 'Method option sets correctly');
+  testAssert(postReq.url === 'http://example.com/api', 'URL preserved with options');
   
   // Test property types
-  assert(typeof getReq.method === 'string', 'Method property is string');
-  assert(typeof getReq.url === 'string', 'URL property is string');
+  testAssert(typeof getReq.method === 'string', 'Method property is string');
+  testAssert(typeof getReq.url === 'string', 'URL property is string');
 }
 
 // Test 3: Response Class Functionality
@@ -78,17 +81,17 @@ function testResponse() {
   const response = new Response();
   
   // Test basic properties
-  assert(typeof response === 'object', 'Response constructor creates object');
-  assert(typeof response.status === 'number', 'Status property is number');
-  assert(typeof response.ok === 'boolean', 'OK property is boolean');
-  assert(response.status === 200, 'Default status is 200');
-  assert(response.ok === true, 'Default ok is true');
+  testAssert(typeof response === 'object', 'Response constructor creates object');
+  testAssert(typeof response.status === 'number', 'Status property is number');
+  testAssert(typeof response.ok === 'boolean', 'OK property is boolean');
+  testAssert(response.status === 200, 'Default status is 200');
+  testAssert(response.ok === true, 'Default ok is true');
   
   // Test method existence
-  assert(typeof response.text === 'function', 'Response has text method');
-  assert(typeof response.json === 'function', 'Response has json method');
-  assert(typeof response.arrayBuffer === 'function', 'Response has arrayBuffer method');
-  assert(typeof response.blob === 'function', 'Response has blob method');
+  testAssert(typeof response.text === 'function', 'Response has text method');
+  testAssert(typeof response.json === 'function', 'Response has json method');
+  testAssert(typeof response.arrayBuffer === 'function', 'Response has arrayBuffer method');
+  testAssert(typeof response.blob === 'function', 'Response has blob method');
 }
 
 // Test 4: Response Methods Return Promises
@@ -103,36 +106,36 @@ async function testResponsePromises() {
   const bufferPromise = response.arrayBuffer();
   const blobPromise = response.blob();
   
-  assert(typeof textPromise === 'object', 'text() returns object');
-  assert(typeof textPromise.then === 'function', 'text() returns Promise (has then)');
-  assert(typeof textPromise.catch === 'function', 'text() returns Promise (has catch)');
+  testAssert(typeof textPromise === 'object', 'text() returns object');
+  testAssert(typeof textPromise.then === 'function', 'text() returns Promise (has then)');
+  testAssert(typeof textPromise.catch === 'function', 'text() returns Promise (has catch)');
   
-  assert(typeof jsonPromise.then === 'function', 'json() returns Promise');
-  assert(typeof bufferPromise.then === 'function', 'arrayBuffer() returns Promise');
-  assert(typeof blobPromise.then === 'function', 'blob() returns Promise');
+  testAssert(typeof jsonPromise.then === 'function', 'json() returns Promise');
+  testAssert(typeof bufferPromise.then === 'function', 'arrayBuffer() returns Promise');
+  testAssert(typeof blobPromise.then === 'function', 'blob() returns Promise');
   
   // Test promise resolution
   try {
     const text = await textPromise;
-    assert(typeof text !== 'function', 'text() resolves to value, not function');
+    testAssert(typeof text !== 'function', 'text() resolves to value, not function');
   } catch (e) {
-    assert(true, 'text() promise can reject (acceptable for empty response)');
+    testAssert(true, 'text() promise can reject (acceptable for empty response)');
   }
   
   try {
     const buffer = await bufferPromise;
-    assert(buffer && buffer.constructor.name === 'ArrayBuffer', 'arrayBuffer() resolves to ArrayBuffer');
-    assert(typeof buffer.byteLength === 'number', 'ArrayBuffer has byteLength property');
+    testAssert(buffer && buffer.constructor.name === 'ArrayBuffer', 'arrayBuffer() resolves to ArrayBuffer');
+    testAssert(typeof buffer.byteLength === 'number', 'ArrayBuffer has byteLength property');
   } catch (e) {
-    assert(false, 'arrayBuffer() should not reject: ' + e.message);
+    testAssert(false, 'arrayBuffer() should not reject: ' + e.message);
   }
   
   try {
     const blob = await blobPromise;
-    assert(blob && typeof blob.size === 'number', 'blob() resolves to object with size');
-    assert(typeof blob.type === 'string', 'blob() resolves to object with type');
+    testAssert(blob && typeof blob.size === 'number', 'blob() resolves to object with size');
+    testAssert(typeof blob.type === 'string', 'blob() resolves to object with type');
   } catch (e) {
-    assert(false, 'blob() should not reject: ' + e.message);
+    testAssert(false, 'blob() should not reject: ' + e.message);
   }
 }
 
@@ -141,13 +144,13 @@ console.log('\nTest Group 5: Fetch Function');
 
 function testFetch() {
   // Test function exists
-  assert(typeof fetch === 'function', 'fetch is a function');
+  testAssert(typeof fetch === 'function', 'fetch is a function');
   
   // Test basic fetch call
   const fetchPromise = fetch('http://example.com');
-  assert(typeof fetchPromise === 'object', 'fetch() returns object');
-  assert(typeof fetchPromise.then === 'function', 'fetch() returns Promise');
-  assert(typeof fetchPromise.catch === 'function', 'fetch() Promise has catch method');
+  testAssert(typeof fetchPromise === 'object', 'fetch() returns object');
+  testAssert(typeof fetchPromise.then === 'function', 'fetch() returns Promise');
+  testAssert(typeof fetchPromise.catch === 'function', 'fetch() Promise has catch method');
   
   // Test fetch with options
   const headers = new Headers();
@@ -159,8 +162,8 @@ function testFetch() {
     body: JSON.stringify({ test: 'data' })
   });
   
-  assert(typeof postPromise === 'object', 'fetch() with options returns object');
-  assert(typeof postPromise.then === 'function', 'fetch() with options returns Promise');
+  testAssert(typeof postPromise === 'object', 'fetch() with options returns object');
+  testAssert(typeof postPromise.then === 'function', 'fetch() with options returns Promise');
   
   // Test fetch with plain object headers
   const plainPromise = fetch('http://example.com/api', {
@@ -172,8 +175,8 @@ function testFetch() {
     body: '{"update": true}'
   });
   
-  assert(typeof plainPromise === 'object', 'fetch() with plain object headers returns object');
-  assert(typeof plainPromise.then === 'function', 'fetch() with plain headers returns Promise');
+  testAssert(typeof plainPromise === 'object', 'fetch() with plain object headers returns object');
+  testAssert(typeof plainPromise.then === 'function', 'fetch() with plain headers returns Promise');
 }
 
 // Test 6: Error Handling
@@ -183,17 +186,17 @@ function testErrorHandling() {
   try {
     // Test missing URL
     fetch();
-    assert(false, 'fetch() without URL should throw');
+    testAssert(false, 'fetch() without URL should throw');
   } catch (e) {
-    assert(true, 'fetch() without URL throws error');
+    testAssert(true, 'fetch() without URL throws error');
   }
   
   try {
     // Test invalid Request construction
     new Request();
-    assert(false, 'Request() without URL should throw');
+    testAssert(false, 'Request() without URL should throw');
   } catch (e) {
-    assert(true, 'Request() without URL throws error');
+    testAssert(true, 'Request() without URL throws error');
   }
 }
 
@@ -211,8 +214,8 @@ async function testIntegration() {
   });
   
   // Test the objects work together
-  assert(request.method === 'POST', 'Request method set correctly');
-  assert(headers.get('content-type') === 'application/json', 'Headers work with request');
+  testAssert(request.method === 'POST', 'Request method set correctly');
+  testAssert(headers.get('content-type') === 'application/json', 'Headers work with request');
   
   const fetchPromise = fetch(request.url, {
     method: request.method,
@@ -220,7 +223,7 @@ async function testIntegration() {
     body: JSON.stringify({ integration: 'test' })
   });
   
-  assert(typeof fetchPromise.then === 'function', 'Integration: fetch returns Promise');
+  testAssert(typeof fetchPromise.then === 'function', 'Integration: fetch returns Promise');
   
   // Test response handling pattern
   const response = new Response();
@@ -231,7 +234,7 @@ async function testIntegration() {
     response.blob()
   ];
   
-  assert(methods.every(p => typeof p.then === 'function'), 'Integration: all response methods return Promises');
+  testAssert(methods.every(p => typeof p.then === 'function'), 'Integration: all response methods return Promises');
 }
 
 // Run all tests

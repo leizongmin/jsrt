@@ -51,6 +51,9 @@ The project uses CMake as the primary build system with Make as a convenient wra
 - C test runner is `test/test_js.c`
 - Use `make test` to run all tests
 - Tests can be run individually with `./target/release/jsrt_test_js test/test_file.js`
+- **MANDATORY: All JavaScript test files MUST use the std:assert module for assertions instead of manual console.log checks**
+- **MANDATORY: Import assert module with `const assert = require("std:assert")` at the beginning of test files**
+- **MANDATORY: Use proper assert methods like `assert.strictEqual()`, `assert.throws()`, etc. instead of manual if/throw patterns**
 
 ## Key Files to Understand
 

@@ -1,16 +1,22 @@
 // Cross-platform compatible runtime tests
+const assert = require("std:assert");
 const testValue = 123;
 
 console.log('Runtime test - basic functionality check');
 console.log('Test value:', testValue);
-console.log('Arithmetic test:', 1 + 2 === 3 ? 'PASS' : 'FAIL');
+
+// Test arithmetic
+assert.strictEqual(1 + 2, 3, 'Basic arithmetic should work');
+console.log('Arithmetic test: PASS');
 
 // Test basic object creation
 const testObj = { key: 'value' };
-console.log('Object test:', testObj.key === 'value' ? 'PASS' : 'FAIL');
+assert.strictEqual(testObj.key, 'value', 'Object property access should work');
+console.log('Object test: PASS');
 
 // Test basic array functionality
 const testArray = [1, 2, 3];
-console.log('Array test:', testArray.length === 3 ? 'PASS' : 'FAIL');
+assert.strictEqual(testArray.length, 3, 'Array length should be correct');
+console.log('Array test: PASS');
 
 console.log('Runtime tests completed successfully');

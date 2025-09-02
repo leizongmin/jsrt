@@ -97,13 +97,13 @@ console.log('UUID:', uuid);
 
 | Module | Description | Usage |
 |--------|-------------|-------|
-| `std:console` | Enhanced console logging | `require('std:console')` |
+| `console` | Enhanced console logging | Global `console` object |
 | `std:process` | Process information and control | `import process from 'std:process'` |
 | `std:assert` | Testing assertions | `const assert = require('std:assert')` |
-| `std:crypto` | Cryptographic functions | Global `crypto` object |
-| `std:fetch` | HTTP client (Fetch API) | Global `fetch` function |
-| `std:encoding` | Text encoding/decoding | `require('std:encoding')` |
-| `std:timer` | Timer functions | Global `setTimeout`, `setInterval` |
+| `crypto` | Cryptographic functions | Global `crypto` object |
+| `fetch` | HTTP client (Fetch API) | Global `fetch` function |
+| `encoding` | Text encoding/decoding | Global `TextEncoder`, `TextDecoder`, `btoa`, `atob` |
+| `timer` | Timer functions | Global `setTimeout`, `setInterval` |
 
 ### Available APIs
 

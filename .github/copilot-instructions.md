@@ -193,6 +193,34 @@ static int jsrt_gettimeofday(struct timeval *tv, void *tz) {
 - **Prefix custom functions** with `jsrt_` to avoid naming conflicts
 - **Use cross-platform macros** to provide consistent API across platforms
 
+## Windows Testing Considerations
+
+**Dependency Availability on Windows:**
+- **OpenSSL/Crypto**: Often not available on Windows CI environments
+- **Test files MUST check for crypto availability** before using `crypto.subtle`
+- **Pattern for crypto tests**:
+```javascript
+// Check if crypto is available (skip if OpenSSL not found)
+if (typeof crypto === 'undefined' || !crypto.subtle) {
+  console.log('❌ SKIP: WebCrypto not available (OpenSSL not found)');
+  console.log('=== Tests Completed (Skipped) ===');
+} else {
+  // ... crypto tests here ...
+}
+```
+
+**Test Suite Best Practices:**
+- **Always gracefully handle missing dependencies** in JavaScript test files
+- **Use availability checks** for platform-specific APIs like crypto, network features
+- **Test runner should continue on failure** to identify all failing tests (not just the first one)
+- **Debug builds show helpful messages** about which dependencies are missing
+
+**Common Windows Test Failures:**
+1. **Crypto tests failing** due to OpenSSL unavailability → Add availability checks
+2. **Path separator issues** → Use consistent forward slashes or handle both
+3. **Timing-sensitive tests** → Allow for different timing characteristics
+4. **Process behavior differences** → Handle platform-specific process APIs
+
 When suggesting code changes:
 - Maintain compatibility with the existing API
 - Keep memory management patterns consistent

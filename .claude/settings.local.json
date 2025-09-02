@@ -9,7 +9,8 @@
       "Read(//usr/lib/**)",
       "Read(//opt/homebrew/lib/**)",
       "Bash(git add:*)",
-      "Bash(JSRT_DEBUG=1 ./target/release/jsrt:*)"
+      "Bash(JSRT_DEBUG=1 ./target/release/jsrt:*)",
+      "Bash(./jsrt_test_js:*)"
     ],
     "deny": [],
     "ask": []

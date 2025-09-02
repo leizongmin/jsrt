@@ -172,10 +172,12 @@ const encrypted = await crypto.subtle.encrypt(
 - 修复了segmentation fault和测试基础设施问题
 - 完成了RSA密钥在WebCrypto对象中的存储和检索机制
 
+**已完成功能** ✅：
+- ✅ RSA-OAEP 加密/解密操作完整测试验证 - 功能完整
+- ✅ RSA-PKCS1-v1_5 (加密/解密) - 完整实现，全部测试通过
+- ✅ RSASSA-PKCS1-v1_5 (签名/验证) - 完整实现，支持多种哈希算法
+
 **待完成功能**：
-- ✅ RSA-OAEP 加密/解密操作完整测试验证 - 基础功能已完成
-- ✅ RSA-PKCS1-v1_5 (加密/解密) - 实现完成，待测试验证  
-- 🚧 RSASSA-PKCS1-v1_5 (签名/验证) - WebCrypto API集成完成，需修复哈希处理
 - 🚧 RSA-PSS (签名/验证) - 架构已准备，待实现
 
 **密钥长度支持**：1024, 2048, 3072, 4096位 ✅
@@ -208,22 +210,23 @@ const keyPair = await crypto.subtle.generateKey(
 - 实现灵活的哈希算法解析 (支持字符串和对象格式)
 - 完整的动态库加载和内存管理
 
-**实际工作量**：3天 (预估5-7天)  
-**实现复杂度**：🔴 非常困难 → ✅ 已突破核心难点
+**实际工作量**：4天 (预估5-7天)  
+**实现复杂度**：🔴 非常困难 → ✅ 完全实现，所有测试通过
 
 **最新进展** (2025-09-02)：
-- ✅ **RSA-PKCS1-v1_5架构** - 完成WebCrypto API集成和基础架构
-- ✅ **RSASSA-PKCS1-v1_5架构** - 完成签名/验证API集成，支持算法识别  
-- ✅ **OpenSSL签名函数** - 实现`jsrt_crypto_rsa_sign`和`jsrt_crypto_rsa_verify`
-- ✅ **测试基础设施** - 创建综合测试用例，支持不同哈希算法
-- 🚧 **哈希处理修复** - 需要修复RSASSA-PKCS1-v1_5的数据哈希处理逻辑
-- 🚧 **调试和优化** - 需要解决签名操作中的OpenSSL集成问题
+- ✅ **RSA-PKCS1-v1_5完整实现** - 加密/解密功能完全实现，全部测试通过
+- ✅ **RSASSA-PKCS1-v1_5完整实现** - 签名/验证功能完全实现，支持SHA-256/384/512
+- ✅ **OpenSSL签名函数优化** - 使用EVP_DigestSign/EVP_DigestVerify正确实现签名
+- ✅ **填充模式修复** - 解决RSA-PKCS1-v1_5默认填充问题，无需显式设置
+- ✅ **哈希处理修复** - 修复RSASSA-PKCS1-v1_5的消息摘要处理，支持所有安全哈希算法
+- ✅ **综合测试验证** - 所有RSA算法变体通过完整测试，包括错误场景和不同哈希算法
 
 **技术突破** 🎯：
-- 完成了RSA算法的WebCrypto API完整集成
-- 实现了`jsrt_crypto_is_algorithm_supported`的正确更新
-- 建立了RSA签名/验证的完整代码路径
-- 创建了模块化的测试框架，支持不同RSA变体
+- ✅ 完成RSA算法的WebCrypto API完整集成 (3个算法变体全部支持)
+- ✅ 解决OpenSSL EVP_PKEY_CTX_ctrl填充设置问题 (PKCS1默认填充)
+- ✅ 实现正确的消息摘要签名流程 (EVP_DigestSign/EVP_DigestVerify)
+- ✅ 建立完整的RSA密钥生命周期管理 (生成->序列化->使用->清理)
+- ✅ 创建模块化测试框架，支持多种哈希算法和错误场景测试
 
 #### 2.2 椭圆曲线算法 (ECDSA/ECDH)
 **目标**：实现椭圆曲线加密和签名
@@ -447,10 +450,12 @@ JSValue jsrt_crypto_throw_error(JSContext *ctx,
 **实际完成时间**：3天  
 **核心成果**：完整的对称加密和消息认证码实现，包括AES-CBC、AES-GCM和HMAC算法
 
-### Phase 3: 非对称加密 ⏳ **进行中** (2-3周)
-8. **RSA算法族** - 🚧 **3/7天** (RSA-OAEP✅, RSA-PKCS1-v1_5🚧, RSASSA-PKCS1-v1_5🚧)
-9. **椭圆曲线** - 4-6天  
-10. **密钥管理** - 3-4天
+### Phase 3: 非对称加密 ✅ **RSA算法族完成** (2-3周)
+8. **RSA算法族** - ✅ **完成** (RSA-OAEP✅, RSA-PKCS1-v1_5✅, RSASSA-PKCS1-v1_5✅)
+   - **实际完成时间**: 4天 (预估5-7天)
+   - **核心成果**: 完整的RSA加密和签名实现，支持多种填充模式和哈希算法
+9. **椭圆曲线** - 4-6天 (待开始)
+10. **密钥管理** - 3-4天 (待开始)
 
 ### Phase 4: 高级功能 (1-2周)
 11. **密钥派生** - 2-3天
@@ -509,11 +514,11 @@ option(JSRT_CRYPTO_REQUIRE_OPENSSL "Require OpenSSL (fail if not found)" OFF)
 
 ### 功能完整性
 - [x] 支持所有主要对称加密算法 (AES-CBC, AES-GCM, HMAC)
-- [x] 支持主要非对称加密算法 (RSA-OAEP, RSA-PKCS1-v1_5✅, RSASSA-PKCS1-v1_5🚧)
-- [x] 支持基础密钥生命周期管理 (generateKey)
+- [x] 支持主要非对称加密算法 (RSA-OAEP✅, RSA-PKCS1-v1_5✅, RSASSA-PKCS1-v1_5✅)
+- [x] 支持基础密钥生命周期管理 (generateKey, encrypt, decrypt, sign, verify)
 - [x] 通过核心对称加密W3C测试用例
-- [x] RSA密钥生成和基础设施 (2048位密钥生成✅)
-- [ ] RSA签名/验证完全通过测试
+- [x] RSA密钥生成和基础设施 (支持1024-4096位密钥)
+- [x] RSA签名/验证完全通过测试 (支持SHA-256/384/512)
 
 ### 性能指标
 - [ ] 加密操作延迟 < 10ms (AES-256, 1KB数据)

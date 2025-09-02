@@ -689,6 +689,51 @@ JSValue jsrt_subtle_encrypt(JSContext *ctx, JSValueConst this_val, int argc, JSV
     return create_resolved_promise(ctx, result_buffer);
   }
 
+  // RSA-PKCS1-v1_5 encryption
+  if (alg == JSRT_CRYPTO_ALG_RSA_PKCS1_V1_5) {
+    // Create EVP_PKEY from DER-encoded key data
+    void *rsa_key = jsrt_crypto_rsa_create_public_key_from_der(key_data, key_data_size);
+    if (!rsa_key) {
+      JS_FreeValue(ctx, key_data_val);
+      JSValue error = jsrt_crypto_throw_error(ctx, "OperationError", "Invalid RSA public key");
+      return create_rejected_promise(ctx, error);
+    }
+
+    // Setup RSA parameters for PKCS1 v1.5
+    jsrt_rsa_params_t params;
+    params.algorithm = JSRT_RSA_PKCS1_V1_5;
+    params.hash_algorithm = JSRT_RSA_HASH_SHA256;  // Default hash (not used for PKCS1 v1.5 encryption)
+    params.rsa_key = rsa_key;
+
+    // Perform RSA encryption
+    uint8_t *ciphertext_data = NULL;
+    size_t ciphertext_size = 0;
+    int result = jsrt_crypto_rsa_encrypt(&params, plaintext_data, plaintext_size, &ciphertext_data, &ciphertext_size);
+
+    // Cleanup
+    JS_FreeValue(ctx, key_data_val);
+
+    // Free the created EVP_PKEY
+    if (rsa_key) {
+      extern void *openssl_handle;
+      if (openssl_handle) {
+        void (*EVP_PKEY_free)(void *) = dlsym(openssl_handle, "EVP_PKEY_free");
+        if (EVP_PKEY_free) {
+          EVP_PKEY_free(rsa_key);
+        }
+      }
+    }
+
+    if (result != 0 || !ciphertext_data) {
+      JSValue error = jsrt_crypto_throw_error(ctx, "OperationError", "RSA-PKCS1-v1_5 encryption failed");
+      return create_rejected_promise(ctx, error);
+    }
+
+    // Return the ciphertext as ArrayBuffer
+    JSValue result_buffer = JS_NewArrayBuffer(ctx, ciphertext_data, ciphertext_size, NULL, NULL, 0);
+    return create_resolved_promise(ctx, result_buffer);
+  }
+
   JS_FreeValue(ctx, key_data_val);
   JSValue error = jsrt_crypto_throw_error(ctx, "NotSupportedError", "Algorithm mode not yet implemented");
   return create_rejected_promise(ctx, error);
@@ -714,7 +759,7 @@ JSValue jsrt_subtle_decrypt(JSContext *ctx, JSValueConst this_val, int argc, JSV
 
   // Validate that this is an encryption algorithm
   if (alg != JSRT_CRYPTO_ALG_AES_CBC && alg != JSRT_CRYPTO_ALG_AES_GCM && alg != JSRT_CRYPTO_ALG_AES_CTR &&
-      alg != JSRT_CRYPTO_ALG_RSA_OAEP) {
+      alg != JSRT_CRYPTO_ALG_RSA_OAEP && alg != JSRT_CRYPTO_ALG_RSA_PKCS1_V1_5) {
     JSValue error = jsrt_crypto_throw_error(ctx, "InvalidAccessError", "Algorithm not suitable for decryption");
     return create_rejected_promise(ctx, error);
   }
@@ -1098,6 +1143,51 @@ JSValue jsrt_subtle_decrypt(JSContext *ctx, JSValueConst this_val, int argc, JSV
 
     if (result != 0 || !plaintext_data) {
       JSValue error = jsrt_crypto_throw_error(ctx, "OperationError", "RSA decryption failed");
+      return create_rejected_promise(ctx, error);
+    }
+
+    // Create result ArrayBuffer
+    JSValue result_buffer = JS_NewArrayBuffer(ctx, plaintext_data, plaintext_size, NULL, NULL, 0);
+    return create_resolved_promise(ctx, result_buffer);
+  }
+
+  // RSA-PKCS1-v1_5 decryption
+  if (alg == JSRT_CRYPTO_ALG_RSA_PKCS1_V1_5) {
+    // Create EVP_PKEY from DER-encoded key data
+    void *rsa_key = jsrt_crypto_rsa_create_private_key_from_der(key_data, key_data_size);
+    if (!rsa_key) {
+      JS_FreeValue(ctx, key_data_val);
+      JSValue error = jsrt_crypto_throw_error(ctx, "OperationError", "Invalid RSA private key");
+      return create_rejected_promise(ctx, error);
+    }
+
+    // Setup RSA parameters for PKCS1 v1.5
+    jsrt_rsa_params_t params;
+    params.algorithm = JSRT_RSA_PKCS1_V1_5;
+    params.hash_algorithm = JSRT_RSA_HASH_SHA256;  // Default hash (not used for PKCS1 v1.5 encryption)
+    params.rsa_key = rsa_key;
+
+    // Perform RSA decryption
+    uint8_t *plaintext_data = NULL;
+    size_t plaintext_size = 0;
+    int result = jsrt_crypto_rsa_decrypt(&params, ciphertext_data, ciphertext_size, &plaintext_data, &plaintext_size);
+
+    // Cleanup
+    JS_FreeValue(ctx, key_data_val);
+
+    // Free the created EVP_PKEY
+    if (rsa_key) {
+      extern void *openssl_handle;
+      if (openssl_handle) {
+        void (*EVP_PKEY_free)(void *) = dlsym(openssl_handle, "EVP_PKEY_free");
+        if (EVP_PKEY_free) {
+          EVP_PKEY_free(rsa_key);
+        }
+      }
+    }
+
+    if (result != 0 || !plaintext_data) {
+      JSValue error = jsrt_crypto_throw_error(ctx, "OperationError", "RSA-PKCS1-v1_5 decryption failed");
       return create_rejected_promise(ctx, error);
     }
 
@@ -1608,7 +1698,8 @@ JSValue jsrt_subtle_generateKey(JSContext *ctx, JSValueConst this_val, int argc,
   }
 
   // RSA key generation
-  if (alg == JSRT_CRYPTO_ALG_RSA_OAEP || alg == JSRT_CRYPTO_ALG_RSA_PSS || alg == JSRT_CRYPTO_ALG_RSASSA_PKCS1_V1_5) {
+  if (alg == JSRT_CRYPTO_ALG_RSA_OAEP || alg == JSRT_CRYPTO_ALG_RSA_PKCS1_V1_5 || alg == JSRT_CRYPTO_ALG_RSA_PSS ||
+      alg == JSRT_CRYPTO_ALG_RSASSA_PKCS1_V1_5) {
     // Get modulus length from algorithm object
     JSValue modulus_length_val = JS_GetPropertyStr(ctx, argv[0], "modulusLength");
     int32_t modulus_length = 2048;  // Default to 2048 bits

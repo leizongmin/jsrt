@@ -45,19 +45,19 @@ clang-format:
 
 .PHONY: test
 test: jsrt
-	make test -C target/release
+	cd target/release && ctest --verbose
 
 .PHONY: test_g
 test_g: jsrt_g
-	make test -C target/debug
+	cd target/debug && ctest --verbose
 
 .PHONY: test_m
 test_m: jsrt_m
-	make test -C target/asan
+	cd target/asan && ctest --verbose
 
 .PHONY: test_cov
 test_cov: jsrt_cov
-	make test -C target/coverage
+	cd target/coverage && ctest --verbose
 
 .PHONY: coverage
 coverage: test_cov

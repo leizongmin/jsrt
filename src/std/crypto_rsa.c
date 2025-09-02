@@ -30,11 +30,29 @@ typedef struct {
   int (*EVP_PKEY_verify_init)(void *ctx);
   int (*EVP_PKEY_verify)(void *ctx, const unsigned char *sig, size_t siglen, const unsigned char *tbs, size_t tbslen);
 
+  // Digest signature/verification
+  int (*EVP_DigestSignInit)(void *ctx, void **pctx, const void *type, void *e, void *pkey);
+  int (*EVP_DigestSign)(void *ctx, unsigned char *sigret, size_t *siglen, const unsigned char *tbs, size_t tbslen);
+  int (*EVP_DigestVerifyInit)(void *ctx, void **pctx, const void *type, void *e, void *pkey);
+  int (*EVP_DigestVerify)(void *ctx, const unsigned char *sigret, size_t siglen, const unsigned char *tbs,
+                          size_t tbslen);
+
   // Hash functions
   const void *(*EVP_sha1)(void);
   const void *(*EVP_sha256)(void);
   const void *(*EVP_sha384)(void);
   const void *(*EVP_sha512)(void);
+
+  // Digest context functions
+  void *(*EVP_MD_CTX_new)(void);
+  void (*EVP_MD_CTX_free)(void *ctx);
+  int (*EVP_DigestInit_ex)(void *ctx, const void *type, void *impl);
+  int (*EVP_DigestUpdate)(void *ctx, const void *d, size_t cnt);
+  int (*EVP_DigestFinal_ex)(void *ctx, unsigned char *md, unsigned int *s);
+  int (*EVP_PKEY_CTX_set_signature_md)(void *ctx, const void *md);
+
+  // Additional control function
+  int (*EVP_PKEY_CTX_ctrl_str)(void *ctx, const char *type, const char *value);
 
   // Random number generation
   int (*RAND_bytes)(unsigned char *buf, int num);
@@ -55,9 +73,14 @@ static bool rsa_funcs_loaded = false;
 #define EVP_PKEY_OP_DECRYPT (1 << 1)
 #define EVP_PKEY_OP_SIGN (1 << 2)
 #define EVP_PKEY_OP_VERIFY (1 << 3)
+// OpenSSL 1.1.1+ control values - these might need adjustment
 #define EVP_PKEY_CTRL_RSA_PADDING -4
 #define EVP_PKEY_CTRL_RSA_OAEP_MD -5
 #define EVP_PKEY_CTRL_RSA_OAEP_LABEL -6
+// Alternative control values to try
+#define EVP_PKEY_CTRL_RSA_PADDING_ALT 0x1001
+#define EVP_PKEY_CTRL_GET_RSA_PADDING 0x1002
+#define EVP_PKEY_CTRL_MD 1
 #define RSA_PKCS1_PADDING 1
 #define RSA_PKCS1_OAEP_PADDING 4
 // Correct OpenSSL 1.1.1+ values for RSA key generation controls
@@ -101,11 +124,26 @@ static bool load_rsa_functions(void) {
   openssl_rsa_funcs.EVP_PKEY_verify_init = dlsym(openssl_handle, "EVP_PKEY_verify_init");
   openssl_rsa_funcs.EVP_PKEY_verify = dlsym(openssl_handle, "EVP_PKEY_verify");
 
+  // Load digest signature/verification functions
+  openssl_rsa_funcs.EVP_DigestSignInit = dlsym(openssl_handle, "EVP_DigestSignInit");
+  openssl_rsa_funcs.EVP_DigestSign = dlsym(openssl_handle, "EVP_DigestSign");
+  openssl_rsa_funcs.EVP_DigestVerifyInit = dlsym(openssl_handle, "EVP_DigestVerifyInit");
+  openssl_rsa_funcs.EVP_DigestVerify = dlsym(openssl_handle, "EVP_DigestVerify");
+
   // Load hash functions
   openssl_rsa_funcs.EVP_sha1 = dlsym(openssl_handle, "EVP_sha1");
   openssl_rsa_funcs.EVP_sha256 = dlsym(openssl_handle, "EVP_sha256");
   openssl_rsa_funcs.EVP_sha384 = dlsym(openssl_handle, "EVP_sha384");
   openssl_rsa_funcs.EVP_sha512 = dlsym(openssl_handle, "EVP_sha512");
+
+  // Load digest context functions
+  openssl_rsa_funcs.EVP_MD_CTX_new = dlsym(openssl_handle, "EVP_MD_CTX_new");
+  openssl_rsa_funcs.EVP_MD_CTX_free = dlsym(openssl_handle, "EVP_MD_CTX_free");
+  openssl_rsa_funcs.EVP_DigestInit_ex = dlsym(openssl_handle, "EVP_DigestInit_ex");
+  openssl_rsa_funcs.EVP_DigestUpdate = dlsym(openssl_handle, "EVP_DigestUpdate");
+  openssl_rsa_funcs.EVP_DigestFinal_ex = dlsym(openssl_handle, "EVP_DigestFinal_ex");
+  openssl_rsa_funcs.EVP_PKEY_CTX_set_signature_md = dlsym(openssl_handle, "EVP_PKEY_CTX_set_signature_md");
+  openssl_rsa_funcs.EVP_PKEY_CTX_ctrl_str = dlsym(openssl_handle, "EVP_PKEY_CTX_ctrl_str");
 
   // Load random function
   openssl_rsa_funcs.RAND_bytes = dlsym(openssl_handle, "RAND_bytes");
@@ -149,7 +187,13 @@ static const void *get_openssl_hash_func(jsrt_rsa_hash_algorithm_t hash_alg) {
 
   switch (hash_alg) {
     case JSRT_RSA_HASH_SHA1:
-      return openssl_rsa_funcs.EVP_sha1 ? openssl_rsa_funcs.EVP_sha1() : NULL;
+      if (openssl_rsa_funcs.EVP_sha1) {
+        const void *sha1_func = openssl_rsa_funcs.EVP_sha1();
+        JSRT_Debug("JSRT_Crypto_RSA: SHA-1 function: %p", sha1_func);
+        return sha1_func;
+      }
+      JSRT_Debug("JSRT_Crypto_RSA: SHA-1 function not loaded");
+      return NULL;
     case JSRT_RSA_HASH_SHA256:
       return openssl_rsa_funcs.EVP_sha256 ? openssl_rsa_funcs.EVP_sha256() : NULL;
     case JSRT_RSA_HASH_SHA384:
@@ -263,13 +307,15 @@ int jsrt_crypto_rsa_encrypt(jsrt_rsa_params_t *params, const uint8_t *plaintext,
     return -1;
   }
 
-  // Set padding mode
-  int padding = (params->algorithm == JSRT_RSA_OAEP) ? RSA_PKCS1_OAEP_PADDING : RSA_PKCS1_PADDING;
-  if (openssl_rsa_funcs.EVP_PKEY_CTX_ctrl(ctx, EVP_PKEY_RSA, EVP_PKEY_OP_ENCRYPT, EVP_PKEY_CTRL_RSA_PADDING, padding,
-                                          NULL) <= 0) {
-    openssl_rsa_funcs.EVP_PKEY_CTX_free(ctx);
-    JSRT_Debug("JSRT_Crypto_RSA: Failed to set padding mode");
-    return -1;
+  // Set padding mode - only for OAEP, PKCS1 v1.5 is default
+  if (params->algorithm == JSRT_RSA_OAEP) {
+    int padding = RSA_PKCS1_OAEP_PADDING;
+    if (openssl_rsa_funcs.EVP_PKEY_CTX_ctrl(ctx, EVP_PKEY_RSA, EVP_PKEY_OP_ENCRYPT, EVP_PKEY_CTRL_RSA_PADDING, padding,
+                                            NULL) <= 0) {
+      openssl_rsa_funcs.EVP_PKEY_CTX_free(ctx);
+      JSRT_Debug("JSRT_Crypto_RSA: Failed to set OAEP padding mode");
+      return -1;
+    }
   }
 
   // For OAEP, set hash function
@@ -337,13 +383,15 @@ int jsrt_crypto_rsa_decrypt(jsrt_rsa_params_t *params, const uint8_t *ciphertext
     return -1;
   }
 
-  // Set padding mode
-  int padding = (params->algorithm == JSRT_RSA_OAEP) ? RSA_PKCS1_OAEP_PADDING : RSA_PKCS1_PADDING;
-  if (openssl_rsa_funcs.EVP_PKEY_CTX_ctrl(ctx, EVP_PKEY_RSA, EVP_PKEY_OP_DECRYPT, EVP_PKEY_CTRL_RSA_PADDING, padding,
-                                          NULL) <= 0) {
-    openssl_rsa_funcs.EVP_PKEY_CTX_free(ctx);
-    JSRT_Debug("JSRT_Crypto_RSA: Failed to set padding mode");
-    return -1;
+  // Set padding mode - only for OAEP, PKCS1 v1.5 might be default
+  if (params->algorithm == JSRT_RSA_OAEP) {
+    int padding = RSA_PKCS1_OAEP_PADDING;
+    if (openssl_rsa_funcs.EVP_PKEY_CTX_ctrl(ctx, EVP_PKEY_RSA, EVP_PKEY_OP_DECRYPT, EVP_PKEY_CTRL_RSA_PADDING, padding,
+                                            NULL) <= 0) {
+      openssl_rsa_funcs.EVP_PKEY_CTX_free(ctx);
+      JSRT_Debug("JSRT_Crypto_RSA: Failed to set OAEP padding mode for decryption");
+      return -1;
+    }
   }
 
   // For OAEP, set hash function
@@ -592,10 +640,55 @@ void *jsrt_crypto_rsa_create_private_key_from_der(const uint8_t *key_data, size_
   return pkey;
 }
 
+// Helper function to compute hash
+static int compute_hash(const uint8_t *data, size_t data_length, jsrt_rsa_hash_algorithm_t hash_alg,
+                        uint8_t *hash_output, size_t *hash_length) {
+  if (!openssl_rsa_funcs.EVP_MD_CTX_new || !openssl_rsa_funcs.EVP_DigestInit_ex ||
+      !openssl_rsa_funcs.EVP_DigestUpdate || !openssl_rsa_funcs.EVP_DigestFinal_ex) {
+    JSRT_Debug("JSRT_Crypto_RSA: Hash functions not available");
+    return -1;
+  }
+
+  const void *md = get_openssl_hash_func(hash_alg);
+  if (!md) {
+    JSRT_Debug("JSRT_Crypto_RSA: Unknown hash algorithm: %d", hash_alg);
+    return -1;
+  }
+
+  void *md_ctx = openssl_rsa_funcs.EVP_MD_CTX_new();
+  if (!md_ctx) {
+    JSRT_Debug("JSRT_Crypto_RSA: Failed to create hash context");
+    return -1;
+  }
+
+  if (openssl_rsa_funcs.EVP_DigestInit_ex(md_ctx, md, NULL) <= 0) {
+    openssl_rsa_funcs.EVP_MD_CTX_free(md_ctx);
+    JSRT_Debug("JSRT_Crypto_RSA: Failed to initialize hash");
+    return -1;
+  }
+
+  if (openssl_rsa_funcs.EVP_DigestUpdate(md_ctx, data, data_length) <= 0) {
+    openssl_rsa_funcs.EVP_MD_CTX_free(md_ctx);
+    JSRT_Debug("JSRT_Crypto_RSA: Failed to update hash");
+    return -1;
+  }
+
+  unsigned int final_hash_length = 0;
+  if (openssl_rsa_funcs.EVP_DigestFinal_ex(md_ctx, hash_output, &final_hash_length) <= 0) {
+    openssl_rsa_funcs.EVP_MD_CTX_free(md_ctx);
+    JSRT_Debug("JSRT_Crypto_RSA: Failed to finalize hash");
+    return -1;
+  }
+
+  *hash_length = final_hash_length;
+  openssl_rsa_funcs.EVP_MD_CTX_free(md_ctx);
+  return 0;
+}
+
 // RSA signature/verification implementations
 int jsrt_crypto_rsa_sign(jsrt_rsa_params_t *params, const uint8_t *data, size_t data_length, uint8_t **signature,
                          size_t *signature_length) {
-  JSRT_Debug("JSRT_Crypto_RSA: Starting RSA signature, data_length=%zu", data_length);
+  JSRT_Debug("JSRT_Crypto_RSA: Starting RSA signature, algorithm=%d, data_length=%zu", params->algorithm, data_length);
 
   if (!load_rsa_functions()) {
     JSRT_Debug("JSRT_Crypto_RSA: OpenSSL functions not available for signing");
@@ -607,6 +700,66 @@ int jsrt_crypto_rsa_sign(jsrt_rsa_params_t *params, const uint8_t *data, size_t 
     return -1;
   }
 
+  // For RSASSA-PKCS1-v1_5, use EVP_DigestSign
+  if (params->algorithm == JSRT_RSASSA_PKCS1_V1_5) {
+    if (!openssl_rsa_funcs.EVP_DigestSignInit || !openssl_rsa_funcs.EVP_DigestSign) {
+      JSRT_Debug("JSRT_Crypto_RSA: EVP_DigestSign functions not available");
+      return -1;
+    }
+
+    const void *md = get_openssl_hash_func(params->hash_algorithm);
+    if (!md) {
+      JSRT_Debug("JSRT_Crypto_RSA: Hash function not available: %d", params->hash_algorithm);
+      return -1;
+    }
+
+    // Create message digest context
+    void *md_ctx = openssl_rsa_funcs.EVP_MD_CTX_new();
+    if (!md_ctx) {
+      JSRT_Debug("JSRT_Crypto_RSA: Failed to create message digest context");
+      return -1;
+    }
+
+    // Initialize digest signing
+    if (openssl_rsa_funcs.EVP_DigestSignInit(md_ctx, NULL, md, NULL, params->rsa_key) <= 0) {
+      openssl_rsa_funcs.EVP_MD_CTX_free(md_ctx);
+      JSRT_Debug("JSRT_Crypto_RSA: Failed to initialize digest signing");
+      return -1;
+    }
+
+    // Get signature length
+    size_t sig_len = 0;
+    if (openssl_rsa_funcs.EVP_DigestSign(md_ctx, NULL, &sig_len, data, data_length) <= 0) {
+      openssl_rsa_funcs.EVP_MD_CTX_free(md_ctx);
+      JSRT_Debug("JSRT_Crypto_RSA: Failed to get signature length");
+      return -1;
+    }
+
+    // Allocate signature buffer
+    *signature = malloc(sig_len);
+    if (!*signature) {
+      openssl_rsa_funcs.EVP_MD_CTX_free(md_ctx);
+      JSRT_Debug("JSRT_Crypto_RSA: Failed to allocate signature buffer");
+      return -1;
+    }
+
+    // Perform signature
+    if (openssl_rsa_funcs.EVP_DigestSign(md_ctx, *signature, &sig_len, data, data_length) <= 0) {
+      free(*signature);
+      *signature = NULL;
+      openssl_rsa_funcs.EVP_MD_CTX_free(md_ctx);
+      JSRT_Debug("JSRT_Crypto_RSA: Digest signing failed");
+      return -1;
+    }
+
+    *signature_length = sig_len;
+    openssl_rsa_funcs.EVP_MD_CTX_free(md_ctx);
+
+    JSRT_Debug("JSRT_Crypto_RSA: Successfully signed data with EVP_DigestSign (%zu bytes signature)", sig_len);
+    return 0;
+  }
+
+  // For other algorithms, use standard EVP_PKEY_sign
   // Create signing context
   void *ctx = openssl_rsa_funcs.EVP_PKEY_CTX_new(params->rsa_key, NULL);
   if (!ctx) {
@@ -619,16 +772,6 @@ int jsrt_crypto_rsa_sign(jsrt_rsa_params_t *params, const uint8_t *data, size_t 
     openssl_rsa_funcs.EVP_PKEY_CTX_free(ctx);
     JSRT_Debug("JSRT_Crypto_RSA: Failed to initialize signing");
     return -1;
-  }
-
-  // Set padding mode for RSASSA-PKCS1-v1_5
-  if (params->algorithm == JSRT_RSASSA_PKCS1_V1_5) {
-    if (openssl_rsa_funcs.EVP_PKEY_CTX_ctrl(ctx, EVP_PKEY_RSA, EVP_PKEY_OP_SIGN, EVP_PKEY_CTRL_RSA_PADDING,
-                                            RSA_PKCS1_PADDING, NULL) <= 0) {
-      openssl_rsa_funcs.EVP_PKEY_CTX_free(ctx);
-      JSRT_Debug("JSRT_Crypto_RSA: Failed to set PKCS1 padding for signing");
-      return -1;
-    }
   }
 
   // Get signature length
@@ -665,11 +808,50 @@ int jsrt_crypto_rsa_sign(jsrt_rsa_params_t *params, const uint8_t *data, size_t 
 
 bool jsrt_crypto_rsa_verify(jsrt_rsa_params_t *params, const uint8_t *data, size_t data_length,
                             const uint8_t *signature, size_t signature_length) {
+  JSRT_Debug("JSRT_Crypto_RSA: Starting RSA verification, algorithm=%d, data_length=%zu", params->algorithm,
+             data_length);
+
   if (!load_rsa_functions()) {
     JSRT_Debug("JSRT_Crypto_RSA: OpenSSL functions not available for verification");
     return false;
   }
 
+  // For RSASSA-PKCS1-v1_5, use EVP_DigestVerify
+  if (params->algorithm == JSRT_RSASSA_PKCS1_V1_5) {
+    if (!openssl_rsa_funcs.EVP_DigestVerifyInit || !openssl_rsa_funcs.EVP_DigestVerify) {
+      JSRT_Debug("JSRT_Crypto_RSA: EVP_DigestVerify functions not available");
+      return false;
+    }
+
+    const void *md = get_openssl_hash_func(params->hash_algorithm);
+    if (!md) {
+      JSRT_Debug("JSRT_Crypto_RSA: Hash function not available: %d", params->hash_algorithm);
+      return false;
+    }
+
+    // Create message digest context
+    void *md_ctx = openssl_rsa_funcs.EVP_MD_CTX_new();
+    if (!md_ctx) {
+      JSRT_Debug("JSRT_Crypto_RSA: Failed to create message digest context");
+      return false;
+    }
+
+    // Initialize digest verification
+    if (openssl_rsa_funcs.EVP_DigestVerifyInit(md_ctx, NULL, md, NULL, params->rsa_key) <= 0) {
+      openssl_rsa_funcs.EVP_MD_CTX_free(md_ctx);
+      JSRT_Debug("JSRT_Crypto_RSA: Failed to initialize digest verification");
+      return false;
+    }
+
+    // Perform verification
+    int result = openssl_rsa_funcs.EVP_DigestVerify(md_ctx, signature, signature_length, data, data_length);
+    openssl_rsa_funcs.EVP_MD_CTX_free(md_ctx);
+
+    JSRT_Debug("JSRT_Crypto_RSA: Digest verification result: %d", result);
+    return result == 1;
+  }
+
+  // For other algorithms, use standard EVP_PKEY_verify
   // Create verification context
   void *ctx = openssl_rsa_funcs.EVP_PKEY_CTX_new(params->rsa_key, NULL);
   if (!ctx) {
@@ -682,16 +864,6 @@ bool jsrt_crypto_rsa_verify(jsrt_rsa_params_t *params, const uint8_t *data, size
     openssl_rsa_funcs.EVP_PKEY_CTX_free(ctx);
     JSRT_Debug("JSRT_Crypto_RSA: Failed to initialize verification");
     return false;
-  }
-
-  // Set padding mode for RSASSA-PKCS1-v1_5
-  if (params->algorithm == JSRT_RSASSA_PKCS1_V1_5) {
-    if (openssl_rsa_funcs.EVP_PKEY_CTX_ctrl(ctx, EVP_PKEY_RSA, EVP_PKEY_OP_VERIFY, EVP_PKEY_CTRL_RSA_PADDING,
-                                            RSA_PKCS1_PADDING, NULL) <= 0) {
-      openssl_rsa_funcs.EVP_PKEY_CTX_free(ctx);
-      JSRT_Debug("JSRT_Crypto_RSA: Failed to set PKCS1 padding for verification");
-      return false;
-    }
   }
 
   // Perform verification

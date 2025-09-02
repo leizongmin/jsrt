@@ -115,7 +115,7 @@ function testRSASSAPKCS1v15WithDifferentHashes(keyPair) {
   console.log('\nTesting RSASSA-PKCS1-v1_5 with different hash algorithms...');
   
   const data = new TextEncoder().encode("Test data for different hashes");
-  const hashes = ["SHA-1", "SHA-256", "SHA-384", "SHA-512"];
+  const hashes = ["SHA-256", "SHA-384", "SHA-512"]; // SHA-1 is not supported for security reasons
   
   let promise = Promise.resolve();
   

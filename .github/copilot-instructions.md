@@ -116,6 +116,70 @@ The CMakeLists.txt handles platform-specific libraries:
 - **Windows**: No need for `dl`, `m`, `pthread` (handled by MSVCRT/libuv)
 - **Unix**: Requires `dl m pthread` libraries
 
+### Process and System Functions
+Cross-platform implementations needed for process-related functionality:
+
+**Unix/Linux/macOS**: Use standard POSIX functions
+```c
+#include <unistd.h>
+#include <sys/time.h>
+// getpid(), getppid(), gettimeofday() available directly
+```
+
+**Windows**: Implement equivalents using Win32 APIs
+```c
+#include <windows.h>
+#include <tlhelp32.h>
+
+// getpid() → GetCurrentProcessId()
+static int getpid(void) {
+  return (int)GetCurrentProcessId();
+}
+
+// getppid() → Process enumeration with CreateToolhelp32Snapshot()
+static int getppid(void) {
+  HANDLE hSnapshot;
+  PROCESSENTRY32 pe32;
+  DWORD dwParentPID = 0;
+  DWORD dwCurrentPID = GetCurrentProcessId();
+  
+  hSnapshot = CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0);
+  if (hSnapshot == INVALID_HANDLE_VALUE) return 0;
+  
+  pe32.dwSize = sizeof(PROCESSENTRY32);
+  if (Process32First(hSnapshot, &pe32)) {
+    do {
+      if (pe32.th32ProcessID == dwCurrentPID) {
+        dwParentPID = pe32.th32ParentProcessID;
+        break;
+      }
+    } while (Process32Next(hSnapshot, &pe32));
+  }
+  
+  CloseHandle(hSnapshot);
+  return (int)dwParentPID;
+}
+
+// gettimeofday() → GetSystemTimeAsFileTime() with epoch conversion
+static int gettimeofday(struct timeval *tv, void *tz) {
+  FILETIME ft;
+  unsigned __int64 tmpres = 0;
+  
+  if (NULL != tv) {
+    GetSystemTimeAsFileTime(&ft);
+    tmpres |= ft.dwHighDateTime;
+    tmpres <<= 32;
+    tmpres |= ft.dwLowDateTime;
+    tmpres /= 10; // convert to microseconds
+    tmpres -= 11644473600000000ULL; // convert to Unix epoch
+    tv->tv_sec = (long)(tmpres / 1000000UL);
+    tv->tv_usec = (long)(tmpres % 1000000UL);
+  }
+  
+  return 0;
+}
+```
+
 When suggesting code changes:
 - Maintain compatibility with the existing API
 - Keep memory management patterns consistent

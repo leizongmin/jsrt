@@ -2,8 +2,10 @@
 
 // Platform-specific includes
 #ifdef _WIN32
+#include <process.h>
 #include <tlhelp32.h>
 #include <windows.h>
+#include <winsock2.h>  // For struct timeval
 #else
 #include <sys/time.h>
 #include <unistd.h>
@@ -22,10 +24,9 @@
 // Platform-specific function implementations
 #ifdef _WIN32
 // Windows equivalent of gettimeofday()
-static int gettimeofday(struct timeval *tv, void *tz) {
+static int jsrt_gettimeofday(struct timeval *tv, void *tz) {
   FILETIME ft;
   unsigned __int64 tmpres = 0;
-  static int tzflag = 0;
 
   if (NULL != tv) {
     GetSystemTimeAsFileTime(&ft);
@@ -44,11 +45,8 @@ static int gettimeofday(struct timeval *tv, void *tz) {
   return 0;
 }
 
-// Windows equivalent of getpid()
-static int getpid(void) { return (int)GetCurrentProcessId(); }
-
 // Windows equivalent of getppid()
-static int getppid(void) {
+static int jsrt_getppid(void) {
   HANDLE hSnapshot;
   PROCESSENTRY32 pe32;
   DWORD dwParentPID = 0;
@@ -74,14 +72,16 @@ static int getppid(void) {
   return (int)dwParentPID;
 }
 
-// Define struct timeval for Windows
-#ifndef _STRUCT_TIMEVAL_DEFINED
-#define _STRUCT_TIMEVAL_DEFINED
-struct timeval {
-  long tv_sec;
-  long tv_usec;
-};
-#endif
+// Cross-platform wrappers
+#define JSRT_GETPID() getpid()
+#define JSRT_GETPPID() jsrt_getppid()
+#define JSRT_GETTIMEOFDAY(tv, tz) jsrt_gettimeofday(tv, tz)
+
+#else
+// Unix/Linux wrappers
+#define JSRT_GETPID() getpid()
+#define JSRT_GETPPID() getppid()
+#define JSRT_GETTIMEOFDAY(tv, tz) gettimeofday(tv, tz)
 
 #endif
 
@@ -96,7 +96,7 @@ static bool g_process_start_time_initialized = false;
 // Initialize start time
 static void init_process_start_time() {
   if (!g_process_start_time_initialized) {
-    gettimeofday(&g_process_start_time, NULL);
+    JSRT_GETTIMEOFDAY(&g_process_start_time, NULL);
     g_process_start_time_initialized = true;
   }
 }
@@ -117,7 +117,7 @@ static JSValue jsrt_process_uptime(JSContext *ctx, JSValueConst this_val, int ar
   init_process_start_time();
 
   struct timeval current_time;
-  gettimeofday(&current_time, NULL);
+  JSRT_GETTIMEOFDAY(&current_time, NULL);
 
   double uptime_seconds = (current_time.tv_sec - g_process_start_time.tv_sec) +
                           (current_time.tv_usec - g_process_start_time.tv_usec) / 1000000.0;
@@ -127,12 +127,12 @@ static JSValue jsrt_process_uptime(JSContext *ctx, JSValueConst this_val, int ar
 
 // process.pid getter
 static JSValue jsrt_process_get_pid(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv) {
-  return JS_NewInt32(ctx, (int32_t)getpid());
+  return JS_NewInt32(ctx, (int32_t)JSRT_GETPID());
 }
 
 // process.ppid getter
 static JSValue jsrt_process_get_ppid(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv) {
-  return JS_NewInt32(ctx, (int32_t)getppid());
+  return JS_NewInt32(ctx, (int32_t)JSRT_GETPPID());
 }
 
 // process.argv0 getter

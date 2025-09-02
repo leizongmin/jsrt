@@ -145,10 +145,10 @@ static bool load_rsa_functions(void) {
   openssl_rsa_funcs.EVP_PKEY_verify = JSRT_DLSYM(openssl_handle, "EVP_PKEY_verify");
 
   // Load digest signature/verification functions
-  openssl_rsa_funcs.EVP_DigestSignInit = dlsym(openssl_handle, "EVP_DigestSignInit");
-  openssl_rsa_funcs.EVP_DigestSign = dlsym(openssl_handle, "EVP_DigestSign");
-  openssl_rsa_funcs.EVP_DigestVerifyInit = dlsym(openssl_handle, "EVP_DigestVerifyInit");
-  openssl_rsa_funcs.EVP_DigestVerify = dlsym(openssl_handle, "EVP_DigestVerify");
+  openssl_rsa_funcs.EVP_DigestSignInit = JSRT_DLSYM(openssl_handle, "EVP_DigestSignInit");
+  openssl_rsa_funcs.EVP_DigestSign = JSRT_DLSYM(openssl_handle, "EVP_DigestSign");
+  openssl_rsa_funcs.EVP_DigestVerifyInit = JSRT_DLSYM(openssl_handle, "EVP_DigestVerifyInit");
+  openssl_rsa_funcs.EVP_DigestVerify = JSRT_DLSYM(openssl_handle, "EVP_DigestVerify");
 
   // Load hash functions
   openssl_rsa_funcs.EVP_sha1 = JSRT_DLSYM(openssl_handle, "EVP_sha1");
@@ -157,13 +157,13 @@ static bool load_rsa_functions(void) {
   openssl_rsa_funcs.EVP_sha512 = JSRT_DLSYM(openssl_handle, "EVP_sha512");
 
   // Load digest context functions
-  openssl_rsa_funcs.EVP_MD_CTX_new = dlsym(openssl_handle, "EVP_MD_CTX_new");
-  openssl_rsa_funcs.EVP_MD_CTX_free = dlsym(openssl_handle, "EVP_MD_CTX_free");
-  openssl_rsa_funcs.EVP_DigestInit_ex = dlsym(openssl_handle, "EVP_DigestInit_ex");
-  openssl_rsa_funcs.EVP_DigestUpdate = dlsym(openssl_handle, "EVP_DigestUpdate");
-  openssl_rsa_funcs.EVP_DigestFinal_ex = dlsym(openssl_handle, "EVP_DigestFinal_ex");
-  openssl_rsa_funcs.EVP_PKEY_CTX_set_signature_md = dlsym(openssl_handle, "EVP_PKEY_CTX_set_signature_md");
-  openssl_rsa_funcs.EVP_PKEY_CTX_ctrl_str = dlsym(openssl_handle, "EVP_PKEY_CTX_ctrl_str");
+  openssl_rsa_funcs.EVP_MD_CTX_new = JSRT_DLSYM(openssl_handle, "EVP_MD_CTX_new");
+  openssl_rsa_funcs.EVP_MD_CTX_free = JSRT_DLSYM(openssl_handle, "EVP_MD_CTX_free");
+  openssl_rsa_funcs.EVP_DigestInit_ex = JSRT_DLSYM(openssl_handle, "EVP_DigestInit_ex");
+  openssl_rsa_funcs.EVP_DigestUpdate = JSRT_DLSYM(openssl_handle, "EVP_DigestUpdate");
+  openssl_rsa_funcs.EVP_DigestFinal_ex = JSRT_DLSYM(openssl_handle, "EVP_DigestFinal_ex");
+  openssl_rsa_funcs.EVP_PKEY_CTX_set_signature_md = JSRT_DLSYM(openssl_handle, "EVP_PKEY_CTX_set_signature_md");
+  openssl_rsa_funcs.EVP_PKEY_CTX_ctrl_str = JSRT_DLSYM(openssl_handle, "EVP_PKEY_CTX_ctrl_str");
 
   // Load random function
   openssl_rsa_funcs.RAND_bytes = JSRT_DLSYM(openssl_handle, "RAND_bytes");

@@ -1,138 +1,278 @@
-# jsrt
+<div align="center">
+  <h1>🚀 JSRT</h1>
+  <p><strong>A lightweight, fast JavaScript runtime built on QuickJS and libuv</strong></p>
 
-[![CI](https://github.com/leizongmin/jsrt/actions/workflows/ci.yml/badge.svg)](https://github.com/leizongmin/jsrt/actions/workflows/ci.yml)
-[![Coverage](https://img.shields.io/badge/coverage-70.8%25-yellow)](https://github.com/leizongmin/jsrt/actions/workflows/coverage.yml)
+  [![CI](https://github.com/leizongmin/jsrt/actions/workflows/ci.yml/badge.svg)](https://github.com/leizongmin/jsrt/actions/workflows/ci.yml)
+  [![Coverage](https://img.shields.io/badge/coverage-70.8%25-yellow)](https://github.com/leizongmin/jsrt/actions/workflows/coverage.yml)
+  [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](https://opensource.org/licenses/MIT)
+</div>
 
-A small JavaScript runtime.
+---
 
-## Setup up development environment
+## ✨ Features
 
-### Requirements
+- **🏃‍♂️ Fast & Lightweight**: Minimal footprint JavaScript runtime
+- **🌐 Web Standards**: Support for Fetch API, WebCrypto, Streams, and more
+- **⚡ Async Support**: Full async/await and Promise support with libuv event loop
+- **📦 Module System**: CommonJS and ES modules support
+- **🔧 Built-in APIs**: Console, timers, process information, and encoding utilities
+- **🧪 Testing Ready**: Built-in assertion module for testing
+- **🔒 Security**: WebCrypto API with RSA, AES, HMAC, and digest support
+- **🌍 Cross-platform**: Builds on Linux, macOS, and Windows
 
-- **gcc**
-- **make**
-- **cmake**
-- **clang-format**
+## 🚀 Quick Start
 
-### `launch.json` for VSCode
+### Installation
+
+```bash
+# Clone the repository
+git clone https://github.com/leizongmin/jsrt.git
+cd jsrt
+
+# Build the runtime
+make
+```
+
+### Hello World
+
+```bash
+# Create a simple JavaScript file
+echo 'console.log("Hello from JSRT! 🎉");' > hello.js
+
+# Run it
+./bin/jsrt hello.js
+```
+
+## 📖 Usage Examples
+
+### Basic JavaScript
+```javascript
+// Basic computation
+const result = [1, 2, 3, 4, 5].reduce((sum, n) => sum + n, 0);
+console.log('Sum:', result);
+```
+
+### Async Operations
+```javascript
+// Timer example
+console.log('Starting timer...');
+setTimeout(() => {
+  console.log('Timer completed!');
+}, 1000);
+```
+
+### Fetch API
+```javascript
+// HTTP requests
+fetch('https://httpbin.org/json')
+  .then(response => response.json())
+  .then(data => console.log('Response:', data))
+  .catch(error => console.error('Error:', error));
+```
+
+### Process Information
+```javascript
+import process from 'std:process';
+
+console.log(`PID: ${process.pid}`);
+console.log(`Platform: ${process.platform}`);
+console.log(`Arguments:`, process.argv);
+```
+
+### WebCrypto
+```javascript
+// Generate random values
+const randomBytes = new Uint8Array(16);
+crypto.getRandomValues(randomBytes);
+console.log('Random bytes:', randomBytes);
+
+// Generate UUID
+const uuid = crypto.randomUUID();
+console.log('UUID:', uuid);
+```
+
+## 🛠️ API Reference
+
+### Standard Modules
+
+| Module | Description | Usage |
+|--------|-------------|-------|
+| `std:console` | Enhanced console logging | `require('std:console')` |
+| `std:process` | Process information and control | `import process from 'std:process'` |
+| `std:assert` | Testing assertions | `const assert = require('std:assert')` |
+| `std:crypto` | Cryptographic functions | Global `crypto` object |
+| `std:fetch` | HTTP client (Fetch API) | Global `fetch` function |
+| `std:encoding` | Text encoding/decoding | `require('std:encoding')` |
+| `std:timer` | Timer functions | Global `setTimeout`, `setInterval` |
+
+### Available APIs
+
+- **Console**: `log`, `error`, `warn`, `info`, `debug`, `assert`, `time`, `timeEnd`
+- **WebCrypto**: `getRandomValues`, `randomUUID`, `subtle.*`
+- **Fetch**: Full Fetch API with `Request`, `Response`, `Headers`
+- **Process**: `argv`, `pid`, `ppid`, `platform`, `arch`, `version`, `uptime`
+- **Streams**: `ReadableStream`, `WritableStream`, `TransformStream`
+- **Encoding**: `TextEncoder`, `TextDecoder`, `btoa`, `atob`
+
+## 🏗️ Development
+
+### Prerequisites
+
+| Tool | Version | Purpose |
+|------|---------|---------|
+| **GCC** | 7.0+ | C compiler |
+| **Make** | 3.81+ | Build system |
+| **CMake** | 3.16+ | Build configuration |
+| **clang-format** | Latest | Code formatting |
+
+
+## 🚀 Advanced Usage
+
+### Cross-Compilation with Zig
+
+Install Zig compiler for cross-platform builds:
+
+```bash
+# Install Zig (version 0.13.0+)
+wget https://ziglang.org/download/0.13.0/zig-linux-x86_64-0.13.0.tar.xz
+tar -xf zig-linux-x86_64-0.13.0.tar.xz
+sudo mv zig-linux-x86_64-0.13.0 /opt/zig
+sudo ln -s /opt/zig/zig /usr/local/bin/zig
+```
+
+Cross-compile for different targets:
+
+```bash
+# Linux musl (static linking)
+CC="zig cc -target x86_64-linux-musl" make clean all
+
+# Windows
+CC="zig cc -target x86_64-windows-gnu" make clean all
+
+# macOS
+CC="zig cc -target x86_64-macos-none" make clean all
+
+# ARM64 Linux
+CC="zig cc -target aarch64-linux-gnu" make clean all
+```
+
+### Performance Tuning
+
+```bash
+# Release build with optimizations
+CFLAGS="-O3 -DNDEBUG" make jsrt
+
+# Profile-guided optimization
+CFLAGS="-fprofile-generate" make jsrt
+./bin/jsrt examples/benchmark.js  # Run representative workload
+CFLAGS="-fprofile-use" make clean jsrt
+```
+
+
+### 🔨 Building
+
+```bash
+# Clone and build
+git clone https://github.com/leizongmin/jsrt.git
+cd jsrt
+make
+
+# Or build specific variants
+make jsrt      # Release build (default)
+make jsrt_g    # Debug build with symbols
+make jsrt_m    # Debug build with AddressSanitizer
+make jsrt_cov  # Coverage instrumentation build
+```
+
+### 🧪 Testing
+
+```bash
+# Run all tests
+make test
+
+# Generate coverage report
+make coverage
+# Report available at: target/coverage/html/index.html
+```
+
+### 🎯 Code Quality
+
+```bash
+# Format code (required before commits)
+make clang-format
+
+# Clean build artifacts
+make clean
+```
+
+### 🐛 Debugging with VSCode
+
+Create `.vscode/launch.json`:
 
 ```json
 {
-  // Ref: https://go.microsoft.com/fwlink/?linkid=830387
   "version": "0.2.0",
   "configurations": [
     {
-        "type": "lldb",
-        "request": "launch",
-        "name": "Launch JS File",
-        "program": "${workspaceFolder}/bin/jsrt_g",
-        "args": ["${file}"],
-        "cwd": "${workspaceFolder}"
+      "type": "lldb",
+      "request": "launch",
+      "name": "Debug JavaScript File",
+      "program": "${workspaceFolder}/bin/jsrt_g",
+      "args": ["${file}"],
+      "cwd": "${workspaceFolder}"
     }
   ]
 }
 ```
 
-### Use Zig C Compiler
 
-Run the following command to [download and install the latest Zig](https://ziglang.org/download/) or [install Zig from a package manager](https://github.com/ziglang/zig/wiki/Install-Zig-from-a-Package-Manager):
+## 🏗️ Architecture
 
-```bash
-export install_zig_version=0.13.0
-cd /tmp
-wget https://ziglang.org/download/$install_zig_version/zig-linux-x86_64-$install_zig_version.tar.xz
-tar -xvf zig-linux-x86_64-$install_zig_version.tar.xz
-sudo mv zig-linux-x86_64-$install_zig_version /opt/zig
-sudo ln -s /opt/zig/zig /usr/local/bin/zig
-```
+JSRT is built on proven technologies:
 
-Use Zig C compiler to build the project:
-
-```bash
-make clean && CC="zig cc" CXX="zig c++" make all
-```
-
-Here is a cross-compiling example (runs `zig targets | jq .libc` to get the available targets):
-
-```bash
-make clean && CC="zig cc -target x86_64-linux-musl" CXX="zig c++ -target x86_64-linux-musl" make all
-# probably may not work
-make clean && CC="zig cc -target aarch64_be-linux-gnu" CXX="zig c++ -target aarch64_be-linux-gnu" make all
-make clean && CC="zig cc -target x86_64-windows-gnu" CXX="zig c++ -target x86_64-windows-gnu" make all
-make clean && CC="zig cc -target x86_64-macos-none" CXX="zig c++ -target x86_64-macos-none" make all
-```
-
-
-# Build and Run
-
-Run the following command to build the project:
-
-```bash
-make
-```
-
-Run the following command to run a JavaScript file:
-
-```bash
-./bin/jsrt test.js
-```
-
-## Development Builds
-
-Different build targets are available:
-
-- `make jsrt` - Release build
-- `make jsrt_g` - Debug build
-- `make jsrt_m` - Debug build with AddressSanitizer
-- `make jsrt_cov` - Debug build with coverage instrumentation
-
-## Testing
-
-Run tests with:
-
-```bash
-make test
-```
-
-## Coverage
-
-Generate test coverage report:
-
-```bash
-make coverage
-```
-
-This will:
-1. Build the project with coverage instrumentation
-2. Run all tests
-3. Generate coverage report in `target/coverage/html/`
-4. Display overall coverage summary
-
-The coverage report shows line and function coverage for all source files in the `src/` directory.
-
-
-# License
+- **[QuickJS](https://bellard.org/quickjs/)** - Fast, small JavaScript engine
+- **[libuv](https://libuv.org/)** - Cross-platform asynchronous I/O library
+- **Custom Standard Library** - Web standards compliant APIs
 
 ```
-MIT License
-
-Copyright (c) 2024 LEI Zongmin
-
-Permission is hereby granted, free of charge, to any person obtaining a copy
-of this software and associated documentation files (the "Software"), to deal
-in the Software without restriction, including without limitation the rights
-to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
-copies of the Software, and to permit persons to whom the Software is
-furnished to do so, subject to the following conditions:
-
-The above copyright notice and this permission notice shall be included in all
-copies or substantial portions of the Software.
-
-THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
-IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
-FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
-AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
-LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
-SOFTWARE.
+┌─────────────────┐
+│   JavaScript    │
+│     Code        │
+├─────────────────┤
+│  JSRT Runtime   │
+│   (std lib)     │
+├─────────────────┤
+│    QuickJS      │
+│   (JS engine)   │
+├─────────────────┤
+│     libuv       │
+│   (async I/O)   │
+├─────────────────┤
+│   OS Platform   │
+└─────────────────┘
 ```
+
+## 🤝 Contributing
+
+We welcome contributions! Here's how to get started:
+
+1. **Fork** the repository
+2. **Create** a feature branch: `git checkout -b feature/amazing-feature`
+3. **Make** your changes and ensure tests pass: `make test`
+4. **Format** your code: `make clang-format`
+5. **Commit** with a clear message: `git commit -m "Add amazing feature"`
+6. **Push** to your branch: `git push origin feature/amazing-feature`
+7. **Open** a Pull Request
+
+### Development Guidelines
+
+- Follow existing code style and conventions
+- Add tests for new features
+- Update documentation as needed
+- Ensure `make test` and `make clang-format` pass
+
+## 📄 License
+
+**MIT License** - see [LICENSE](LICENSE) file for details
+
+Copyright © 2024-2025 [LEI Zongmin](https://github.com/leizongmin)

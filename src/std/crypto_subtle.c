@@ -123,7 +123,7 @@ bool jsrt_crypto_is_algorithm_supported(jsrt_crypto_algorithm_t alg) {
     case JSRT_CRYPTO_ALG_RSASSA_PKCS1_V1_5:
       return true;  // Implemented
     case JSRT_CRYPTO_ALG_RSA_PSS:
-      return false;  // TODO: Implement
+      return false;  // TODO: Fix OpenSSL 3.x compatibility
 
     default:
       return false;
@@ -1395,6 +1395,66 @@ JSValue jsrt_subtle_sign(JSContext *ctx, JSValueConst this_val, int argc, JSValu
     return create_resolved_promise(ctx, result_buffer);
   }
 
+  // RSA-PSS signature
+  if (alg == JSRT_CRYPTO_ALG_RSA_PSS) {
+    JSRT_Debug("JSRT_Crypto_Subtle: Starting RSA signature for RSA-PSS");
+
+    // Create RSA key from DER-encoded key data
+    void *rsa_private_key = jsrt_crypto_rsa_create_private_key_from_der(key_data, key_data_size);
+    if (!rsa_private_key) {
+      JSRT_Debug("JSRT_Crypto_Subtle: Failed to create RSA private key from DER data");
+      JS_FreeValue(ctx, key_data_val);
+      JSValue error = jsrt_crypto_throw_error(ctx, "OperationError", "Failed to create RSA private key");
+      return create_rejected_promise(ctx, error);
+    }
+
+    JSRT_Debug("JSRT_Crypto_Subtle: RSA private key created successfully");
+
+    // Set up RSA-PSS signature parameters
+    jsrt_rsa_params_t params;
+    params.algorithm = JSRT_RSA_PSS;
+    params.rsa_key = rsa_private_key;
+    params.hash_algorithm = JSRT_RSA_HASH_SHA256;  // Default to SHA-256
+
+    // Parse salt length from algorithm if provided
+    params.params.pss.salt_length = 0;  // Default to digest length
+    JSValue salt_length_val = JS_GetPropertyStr(ctx, argv[0], "saltLength");
+    if (!JS_IsUndefined(salt_length_val)) {
+      uint32_t salt_length;
+      if (JS_ToUint32(ctx, &salt_length, salt_length_val) == 0) {
+        params.params.pss.salt_length = salt_length;
+        JSRT_Debug("JSRT_Crypto_Subtle: RSA-PSS salt_length=%zu", params.params.pss.salt_length);
+      }
+    }
+    JS_FreeValue(ctx, salt_length_val);
+
+    // Perform RSA-PSS signature
+    uint8_t *signature_data = NULL;
+    size_t signature_size = 0;
+    int sign_result = jsrt_crypto_rsa_sign(&params, data, data_size, &signature_data, &signature_size);
+
+    // Cleanup the RSA key
+    if (rsa_private_key) {
+      if (openssl_handle) {
+        void (*EVP_PKEY_free)(void *pkey) = JSRT_DLSYM(openssl_handle, "EVP_PKEY_free");
+        if (EVP_PKEY_free) {
+          EVP_PKEY_free(rsa_private_key);
+        }
+      }
+    }
+
+    JS_FreeValue(ctx, key_data_val);
+
+    if (sign_result != 0 || !signature_data) {
+      JSValue error = jsrt_crypto_throw_error(ctx, "OperationError", "RSA-PSS signature failed");
+      return create_rejected_promise(ctx, error);
+    }
+
+    // Create result ArrayBuffer
+    JSValue result_buffer = JS_NewArrayBuffer(ctx, signature_data, signature_size, NULL, NULL, 0);
+    return create_resolved_promise(ctx, result_buffer);
+  }
+
   JS_FreeValue(ctx, key_data_val);
   JSValue error = jsrt_crypto_throw_error(ctx, "NotSupportedError", "Algorithm mode not yet implemented");
   return create_rejected_promise(ctx, error);
@@ -1576,6 +1636,56 @@ JSValue jsrt_subtle_verify(JSContext *ctx, JSValueConst this_val, int argc, JSVa
     params.hash_algorithm = JSRT_RSA_HASH_SHA256;  // Default to SHA-256
 
     // Perform RSA signature verification
+    bool verification_result = jsrt_crypto_rsa_verify(&params, data, data_size, signature_data, signature_size);
+
+    // Cleanup the RSA key
+    if (rsa_public_key) {
+      if (openssl_handle) {
+        void (*EVP_PKEY_free)(void *pkey) = JSRT_DLSYM(openssl_handle, "EVP_PKEY_free");
+        if (EVP_PKEY_free) {
+          EVP_PKEY_free(rsa_public_key);
+        }
+      }
+    }
+
+    JS_FreeValue(ctx, key_data_val);
+
+    // Return verification result as boolean
+    JSValue result_bool = JS_NewBool(ctx, verification_result);
+    return create_resolved_promise(ctx, result_bool);
+  }
+
+  // RSA-PSS signature verification
+  if (alg == JSRT_CRYPTO_ALG_RSA_PSS) {
+    JSRT_Debug("JSRT_Crypto_Subtle: Starting RSA verification for RSA-PSS");
+
+    // Create RSA key from DER-encoded key data
+    void *rsa_public_key = jsrt_crypto_rsa_create_public_key_from_der(key_data, key_data_size);
+    if (!rsa_public_key) {
+      JS_FreeValue(ctx, key_data_val);
+      JSValue error = jsrt_crypto_throw_error(ctx, "OperationError", "Failed to create RSA public key");
+      return create_rejected_promise(ctx, error);
+    }
+
+    // Set up RSA-PSS verification parameters
+    jsrt_rsa_params_t params;
+    params.algorithm = JSRT_RSA_PSS;
+    params.rsa_key = rsa_public_key;
+    params.hash_algorithm = JSRT_RSA_HASH_SHA256;  // Default to SHA-256
+
+    // Parse salt length from algorithm if provided
+    params.params.pss.salt_length = 0;  // Default to digest length
+    JSValue salt_length_val = JS_GetPropertyStr(ctx, argv[0], "saltLength");
+    if (!JS_IsUndefined(salt_length_val)) {
+      uint32_t salt_length;
+      if (JS_ToUint32(ctx, &salt_length, salt_length_val) == 0) {
+        params.params.pss.salt_length = salt_length;
+        JSRT_Debug("JSRT_Crypto_Subtle: RSA-PSS salt_length=%zu", params.params.pss.salt_length);
+      }
+    }
+    JS_FreeValue(ctx, salt_length_val);
+
+    // Perform RSA-PSS signature verification
     bool verification_result = jsrt_crypto_rsa_verify(&params, data, data_size, signature_data, signature_size);
 
     // Cleanup the RSA key

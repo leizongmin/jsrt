@@ -229,15 +229,16 @@ const keyPair = await crypto.subtle.generateKey(
 - ✅ 建立完整的RSA密钥生命周期管理 (生成->序列化->使用->清理)
 - ✅ 创建模块化测试框架，支持多种哈希算法和错误场景测试
 
-#### 2.2 椭圆曲线算法 (ECDSA/ECDH) - ⚠️ 部分实现
+#### 2.2 椭圆曲线算法 (ECDSA/ECDH) - ✅ 完整实现
 **目标**：实现椭圆曲线加密和签名
 
-**已实现功能** ⚠️：
+**已完成功能** ✅：
 - ✅ ECDSA/ECDH 密钥对生成 (P-256, P-384, P-521曲线)
 - ✅ EC算法基础架构和OpenSSL集成
 - ✅ WebCrypto API集成 (generateKey方法)
-- ⚠️ ECDSA签名/验证 - 基础代码完成，但需要sign/verify方法集成
-- ⚠️ ECDH密钥派生 - 基础代码完成，但需要deriveBits方法集成
+- ✅ ECDSA签名/验证 - 完整实现，支持SHA-256/384/512哈希算法
+- ✅ ECDH密钥派生 - deriveBits方法完整实现，支持密钥协商
+- ✅ 支持算法标记 - 已添加到jsrt_crypto_is_algorithm_supported
 
 **支持曲线**：
 - P-256 (secp256r1) ✅
@@ -248,32 +249,53 @@ const keyPair = await crypto.subtle.generateKey(
 - `EVP_PKEY_EC`
 - `NID_X9_62_prime256v1`, `NID_secp384r1`, `NID_secp521r1`
 
-**API示例**：
+**成功测试示例**：
 ```javascript
+// ECDSA签名/验证
 const keyPair = await crypto.subtle.generateKey(
   {name: "ECDSA", namedCurve: "P-256"},
   true,
   ["sign", "verify"]
 );
+const signature = await crypto.subtle.sign(
+  {name: "ECDSA", hash: "SHA-256"},
+  keyPair.privateKey,
+  data
+);
+// ✅ 测试通过：所有曲线和哈希算法组合
+
+// ECDH密钥协商
+const aliceKey = await crypto.subtle.generateKey(
+  {name: "ECDH", namedCurve: "P-256"},
+  true,
+  ["deriveBits"]
+);
+const sharedSecret = await crypto.subtle.deriveBits(
+  {name: "ECDH", public: bobKey.publicKey},
+  aliceKey.privateKey,
+  256
+);
+// ✅ 测试通过：密钥派生成功
 ```
 
-**技术实现** ⚠️：
+**技术实现** ✅：
 - **文件**: `src/std/crypto_ec.h`, `src/std/crypto_ec.c`
 - **OpenSSL函数**:
-  - `EVP_PKEY_CTX_new_id()`, `EVP_PKEY_keygen()` (密钥生成)
-  - `EVP_DigestSign()`, `EVP_DigestVerify()` (ECDSA签名/验证)
-  - `EVP_PKEY_derive()` (ECDH密钥派生)
-  - `EC_KEY_new_by_curve_name()` (兼容性支持)
+  - `EVP_PKEY_CTX_new_id()`, `EVP_PKEY_keygen()` (密钥生成) ✅
+  - `EVP_DigestSign()`, `EVP_DigestVerify()` (ECDSA签名/验证) ✅
+  - `EVP_PKEY_derive()` (ECDH密钥派生) ✅
+  - `EC_KEY_new_by_curve_name()` (兼容性支持) ✅
 
-**实际工作量**：1天 (预估4-6天)
-**实现复杂度**：🔴 非常困难 → ⚠️ 部分完成
+**实际工作量**：1.5天 (预估4-6天)
+**实现复杂度**：🔴 非常困难 → ✅ 完全实现
 
 **最新进展** (2025-09-03)：
 - ✅ **EC密钥生成完成** - 支持P-256, P-384, P-521曲线
 - ✅ **基础架构搭建** - 完成crypto_ec模块和OpenSSL函数加载
-- ✅ **测试用例创建** - ECDSA和ECDH完整测试覆盖
-- ⚠️ **待完成集成** - sign/verify/deriveBits方法需要在crypto_subtle.c中连接
-- ⚠️ **当前状态** - 核心功能已实现，需要完成WebCrypto API方法集成
+- ✅ **ECDSA签名/验证集成** - 完整实现并通过所有测试
+- ✅ **ECDH密钥派生集成** - deriveBits方法完整实现
+- ✅ **测试验证** - ECDSA和ECDH全部测试通过
+- ✅ **API集成完成** - sign/verify/deriveBits方法完全集成到crypto_subtle.c
 
 ### 第三阶段：密钥管理和派生 (优先级：中)
 
@@ -469,13 +491,13 @@ JSValue jsrt_crypto_throw_error(JSContext *ctx,
 **实际完成时间**：3天  
 **核心成果**：完整的对称加密和消息认证码实现，包括AES-CBC、AES-GCM和HMAC算法
 
-### Phase 3: 非对称加密 ⚠️ **进行中** (2-3周)
+### Phase 3: 非对称加密 ✅ **已完成** (2-3周)
 8. **RSA算法族** - ✅ **完成** (RSA-OAEP✅, RSA-PKCS1-v1_5✅, RSASSA-PKCS1-v1_5✅)
    - **实际完成时间**: 4天 (预估5-7天)
    - **核心成果**: 完整的RSA加密和签名实现，支持多种填充模式和哈希算法
-9. **椭圆曲线** - ⚠️ **部分完成** (ECDSA/ECDH密钥生成✅，签名/派生待集成)
-   - **实际完成时间**: 1天 (预估4-6天)
-   - **核心成果**: EC密钥生成和基础架构完成，需要完成API集成
+9. **椭圆曲线** - ✅ **完成** (ECDSA签名/验证✅, ECDH密钥派生✅)
+   - **实际完成时间**: 1.5天 (预估4-6天)
+   - **核心成果**: 完整的EC算法实现，包括签名验证和密钥协商
 10. **密钥管理** - 3-4天 (待开始)
 
 ### Phase 4: 高级功能 (1-2周)

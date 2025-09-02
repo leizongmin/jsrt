@@ -126,6 +126,12 @@ bool jsrt_crypto_is_algorithm_supported(jsrt_crypto_algorithm_t alg) {
     case JSRT_CRYPTO_ALG_RSA_PSS:
       return false;  // TODO: Fix OpenSSL 3.x compatibility
 
+    // Elliptic curve algorithms
+    case JSRT_CRYPTO_ALG_ECDSA:
+      return true;  // Implemented
+    case JSRT_CRYPTO_ALG_ECDH:
+      return true;  // Implemented
+
     default:
       return false;
   }
@@ -1237,7 +1243,8 @@ JSValue jsrt_subtle_sign(JSContext *ctx, JSValueConst this_val, int argc, JSValu
   }
 
   // Validate that this is a signing algorithm
-  if (alg != JSRT_CRYPTO_ALG_HMAC && alg != JSRT_CRYPTO_ALG_RSASSA_PKCS1_V1_5 && alg != JSRT_CRYPTO_ALG_RSA_PSS) {
+  if (alg != JSRT_CRYPTO_ALG_HMAC && alg != JSRT_CRYPTO_ALG_RSASSA_PKCS1_V1_5 && alg != JSRT_CRYPTO_ALG_RSA_PSS &&
+      alg != JSRT_CRYPTO_ALG_ECDSA) {
     JSValue error = jsrt_crypto_throw_error(ctx, "InvalidAccessError", "Algorithm not suitable for signing");
     return create_rejected_promise(ctx, error);
   }
@@ -1456,6 +1463,66 @@ JSValue jsrt_subtle_sign(JSContext *ctx, JSValueConst this_val, int argc, JSValu
     return create_resolved_promise(ctx, result_buffer);
   }
 
+  // ECDSA signature
+  if (alg == JSRT_CRYPTO_ALG_ECDSA) {
+    JSRT_Debug("JSRT_Crypto_Subtle: Starting ECDSA signature");
+
+    // Create EC key from DER-encoded key data
+    const unsigned char *key_ptr = key_data;
+    void *ec_private_key = NULL;
+
+    if (openssl_handle) {
+      void *(*d2i_AutoPrivateKey)(void **a, const unsigned char **pp, long length) =
+          JSRT_DLSYM(openssl_handle, "d2i_AutoPrivateKey");
+      if (d2i_AutoPrivateKey) {
+        ec_private_key = d2i_AutoPrivateKey(NULL, &key_ptr, key_data_size);
+      }
+    }
+
+    if (!ec_private_key) {
+      JSRT_Debug("JSRT_Crypto_Subtle: Failed to create EC private key from DER data");
+      JS_FreeValue(ctx, key_data_val);
+      JSValue error = jsrt_crypto_throw_error(ctx, "OperationError", "Failed to create EC private key");
+      return create_rejected_promise(ctx, error);
+    }
+
+    // Get hash algorithm from parameters
+    JSValue hash_val = JS_GetPropertyStr(ctx, argv[0], "hash");
+    const char *hash_name = JS_ToCString(ctx, hash_val);
+    if (!hash_name) {
+      hash_name = "SHA-256";  // Default
+    }
+
+    // Setup ECDSA parameters
+    jsrt_ecdsa_sign_params_t ecdsa_params;
+    ecdsa_params.hash = hash_name;
+
+    // Perform ECDSA signature
+    JSValue signature_result = jsrt_ec_sign(ctx, ec_private_key, data, data_size, &ecdsa_params);
+
+    // Cleanup
+    if (hash_name && strcmp(hash_name, "SHA-256") != 0) {
+      JS_FreeCString(ctx, hash_name);
+    }
+    JS_FreeValue(ctx, hash_val);
+
+    // Free the EC key
+    if (ec_private_key && openssl_handle) {
+      void (*EVP_PKEY_free)(void *pkey) = JSRT_DLSYM(openssl_handle, "EVP_PKEY_free");
+      if (EVP_PKEY_free) {
+        EVP_PKEY_free(ec_private_key);
+      }
+    }
+
+    JS_FreeValue(ctx, key_data_val);
+
+    if (JS_IsException(signature_result)) {
+      return create_rejected_promise(ctx, signature_result);
+    }
+
+    return create_resolved_promise(ctx, signature_result);
+  }
+
   JS_FreeValue(ctx, key_data_val);
   JSValue error = jsrt_crypto_throw_error(ctx, "NotSupportedError", "Algorithm mode not yet implemented");
   return create_rejected_promise(ctx, error);
@@ -1480,7 +1547,8 @@ JSValue jsrt_subtle_verify(JSContext *ctx, JSValueConst this_val, int argc, JSVa
   }
 
   // Validate that this is a verification algorithm
-  if (alg != JSRT_CRYPTO_ALG_HMAC && alg != JSRT_CRYPTO_ALG_RSASSA_PKCS1_V1_5 && alg != JSRT_CRYPTO_ALG_RSA_PSS) {
+  if (alg != JSRT_CRYPTO_ALG_HMAC && alg != JSRT_CRYPTO_ALG_RSASSA_PKCS1_V1_5 && alg != JSRT_CRYPTO_ALG_RSA_PSS &&
+      alg != JSRT_CRYPTO_ALG_ECDSA) {
     JSValue error = jsrt_crypto_throw_error(ctx, "InvalidAccessError", "Algorithm not suitable for verification");
     return create_rejected_promise(ctx, error);
   }
@@ -1704,6 +1772,66 @@ JSValue jsrt_subtle_verify(JSContext *ctx, JSValueConst this_val, int argc, JSVa
     // Return verification result as boolean
     JSValue result_bool = JS_NewBool(ctx, verification_result);
     return create_resolved_promise(ctx, result_bool);
+  }
+
+  // ECDSA verification
+  if (alg == JSRT_CRYPTO_ALG_ECDSA) {
+    JSRT_Debug("JSRT_Crypto_Subtle: Starting ECDSA verification");
+
+    // Create EC key from DER-encoded key data (public key)
+    const unsigned char *key_ptr = key_data;
+    void *ec_public_key = NULL;
+
+    if (openssl_handle) {
+      void *(*d2i_PUBKEY)(void **a, const unsigned char **pp, long length) = JSRT_DLSYM(openssl_handle, "d2i_PUBKEY");
+      if (d2i_PUBKEY) {
+        ec_public_key = d2i_PUBKEY(NULL, &key_ptr, key_data_size);
+      }
+    }
+
+    if (!ec_public_key) {
+      JSRT_Debug("JSRT_Crypto_Subtle: Failed to create EC public key from DER data");
+      JS_FreeValue(ctx, key_data_val);
+      JSValue error = jsrt_crypto_throw_error(ctx, "OperationError", "Failed to create EC public key");
+      return create_rejected_promise(ctx, error);
+    }
+
+    // Get hash algorithm from parameters
+    JSValue hash_val = JS_GetPropertyStr(ctx, argv[0], "hash");
+    const char *hash_name = JS_ToCString(ctx, hash_val);
+    if (!hash_name) {
+      hash_name = "SHA-256";  // Default
+    }
+
+    // Setup ECDSA parameters
+    jsrt_ecdsa_sign_params_t ecdsa_params;
+    ecdsa_params.hash = hash_name;
+
+    // Perform ECDSA verification
+    JSValue verify_result =
+        jsrt_ec_verify(ctx, ec_public_key, signature_data, signature_size, data, data_size, &ecdsa_params);
+
+    // Cleanup
+    if (hash_name && strcmp(hash_name, "SHA-256") != 0) {
+      JS_FreeCString(ctx, hash_name);
+    }
+    JS_FreeValue(ctx, hash_val);
+
+    // Free the EC key
+    if (ec_public_key && openssl_handle) {
+      void (*EVP_PKEY_free)(void *pkey) = JSRT_DLSYM(openssl_handle, "EVP_PKEY_free");
+      if (EVP_PKEY_free) {
+        EVP_PKEY_free(ec_public_key);
+      }
+    }
+
+    JS_FreeValue(ctx, key_data_val);
+
+    if (JS_IsException(verify_result)) {
+      return create_rejected_promise(ctx, verify_result);
+    }
+
+    return create_resolved_promise(ctx, verify_result);
   }
 
   JS_FreeValue(ctx, key_data_val);
@@ -2025,8 +2153,147 @@ JSValue jsrt_subtle_deriveKey(JSContext *ctx, JSValueConst this_val, int argc, J
 }
 
 JSValue jsrt_subtle_deriveBits(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv) {
-  JSValue error = jsrt_crypto_throw_error(ctx, "NotSupportedError", "deriveBits not yet implemented");
-  return create_rejected_promise(ctx, error);
+  if (argc < 3) {
+    JSValue error = jsrt_crypto_throw_error(ctx, "TypeError", "deriveBits requires 3 arguments");
+    return create_rejected_promise(ctx, error);
+  }
+
+  // Parse algorithm (first argument)
+  jsrt_crypto_algorithm_t alg = jsrt_crypto_parse_algorithm(ctx, argv[0]);
+  if (alg == JSRT_CRYPTO_ALG_UNKNOWN) {
+    JSValue error = jsrt_crypto_throw_error(ctx, "NotSupportedError", "Unsupported algorithm");
+    return create_rejected_promise(ctx, error);
+  }
+
+  // Check if algorithm is ECDH
+  if (alg != JSRT_CRYPTO_ALG_ECDH) {
+    JSValue error = jsrt_crypto_throw_error(ctx, "InvalidAccessError", "Algorithm not suitable for key derivation");
+    return create_rejected_promise(ctx, error);
+  }
+
+  // Get private key data from CryptoKey object (second argument)
+  JSValue priv_key_data_val = JS_GetPropertyStr(ctx, argv[1], "__keyData");
+  if (JS_IsUndefined(priv_key_data_val)) {
+    JS_FreeValue(ctx, priv_key_data_val);
+    JSValue error = jsrt_crypto_throw_error(ctx, "InvalidAccessError", "Invalid private CryptoKey object");
+    return create_rejected_promise(ctx, error);
+  }
+
+  size_t priv_key_data_size;
+  uint8_t *priv_key_data = JS_GetArrayBuffer(ctx, &priv_key_data_size, priv_key_data_val);
+  if (!priv_key_data) {
+    JS_FreeValue(ctx, priv_key_data_val);
+    JSValue error = jsrt_crypto_throw_error(ctx, "InvalidAccessError", "Invalid private key data");
+    return create_rejected_promise(ctx, error);
+  }
+
+  // Get public key from algorithm parameter
+  JSValue pub_key_val = JS_GetPropertyStr(ctx, argv[0], "public");
+  if (JS_IsUndefined(pub_key_val)) {
+    JS_FreeValue(ctx, priv_key_data_val);
+    JS_FreeValue(ctx, pub_key_val);
+    JSValue error = jsrt_crypto_throw_error(ctx, "TypeError", "ECDH requires public key parameter");
+    return create_rejected_promise(ctx, error);
+  }
+
+  // Get public key data
+  JSValue pub_key_data_val = JS_GetPropertyStr(ctx, pub_key_val, "__keyData");
+  if (JS_IsUndefined(pub_key_data_val)) {
+    JS_FreeValue(ctx, priv_key_data_val);
+    JS_FreeValue(ctx, pub_key_val);
+    JS_FreeValue(ctx, pub_key_data_val);
+    JSValue error = jsrt_crypto_throw_error(ctx, "InvalidAccessError", "Invalid public CryptoKey object");
+    return create_rejected_promise(ctx, error);
+  }
+
+  size_t pub_key_data_size;
+  uint8_t *pub_key_data = JS_GetArrayBuffer(ctx, &pub_key_data_size, pub_key_data_val);
+  if (!pub_key_data) {
+    JS_FreeValue(ctx, priv_key_data_val);
+    JS_FreeValue(ctx, pub_key_val);
+    JS_FreeValue(ctx, pub_key_data_val);
+    JSValue error = jsrt_crypto_throw_error(ctx, "InvalidAccessError", "Invalid public key data");
+    return create_rejected_promise(ctx, error);
+  }
+
+  // Get length parameter (third argument) - number of bits to derive
+  uint32_t length_bits = 256;  // Default
+  if (!JS_IsUndefined(argv[2])) {
+    JS_ToUint32(ctx, &length_bits, argv[2]);
+  }
+
+  // Convert bits to bytes (round up)
+  size_t length_bytes = (length_bits + 7) / 8;
+
+  // Create EC keys from DER-encoded key data
+  const unsigned char *priv_key_ptr = priv_key_data;
+  const unsigned char *pub_key_ptr = pub_key_data;
+  void *ec_private_key = NULL;
+  void *ec_public_key = NULL;
+
+  if (openssl_handle) {
+    void *(*d2i_AutoPrivateKey)(void **a, const unsigned char **pp, long length) =
+        JSRT_DLSYM(openssl_handle, "d2i_AutoPrivateKey");
+    void *(*d2i_PUBKEY)(void **a, const unsigned char **pp, long length) = JSRT_DLSYM(openssl_handle, "d2i_PUBKEY");
+
+    if (d2i_AutoPrivateKey) {
+      ec_private_key = d2i_AutoPrivateKey(NULL, &priv_key_ptr, priv_key_data_size);
+    }
+    if (d2i_PUBKEY) {
+      ec_public_key = d2i_PUBKEY(NULL, &pub_key_ptr, pub_key_data_size);
+    }
+  }
+
+  JS_FreeValue(ctx, priv_key_data_val);
+  JS_FreeValue(ctx, pub_key_val);
+  JS_FreeValue(ctx, pub_key_data_val);
+
+  if (!ec_private_key || !ec_public_key) {
+    if (ec_private_key && openssl_handle) {
+      void (*EVP_PKEY_free)(void *pkey) = JSRT_DLSYM(openssl_handle, "EVP_PKEY_free");
+      if (EVP_PKEY_free) EVP_PKEY_free(ec_private_key);
+    }
+    if (ec_public_key && openssl_handle) {
+      void (*EVP_PKEY_free)(void *pkey) = JSRT_DLSYM(openssl_handle, "EVP_PKEY_free");
+      if (EVP_PKEY_free) EVP_PKEY_free(ec_public_key);
+    }
+    JSValue error = jsrt_crypto_throw_error(ctx, "OperationError", "Failed to create EC keys");
+    return create_rejected_promise(ctx, error);
+  }
+
+  // Setup ECDH parameters
+  jsrt_ecdh_derive_params_t ecdh_params;
+  ecdh_params.public_key = ec_public_key;
+  ecdh_params.public_key_len = pub_key_data_size;
+
+  // Perform ECDH key derivation
+  JSValue derived_bits = jsrt_ec_derive_bits(ctx, ec_private_key, &ecdh_params);
+
+  // Free the EC keys
+  if (ec_private_key && openssl_handle) {
+    void (*EVP_PKEY_free)(void *pkey) = JSRT_DLSYM(openssl_handle, "EVP_PKEY_free");
+    if (EVP_PKEY_free) EVP_PKEY_free(ec_private_key);
+  }
+  if (ec_public_key && openssl_handle) {
+    void (*EVP_PKEY_free)(void *pkey) = JSRT_DLSYM(openssl_handle, "EVP_PKEY_free");
+    if (EVP_PKEY_free) EVP_PKEY_free(ec_public_key);
+  }
+
+  if (JS_IsException(derived_bits)) {
+    return create_rejected_promise(ctx, derived_bits);
+  }
+
+  // If the requested length is different from what we got, truncate or error
+  size_t derived_size;
+  uint8_t *derived_data = JS_GetArrayBuffer(ctx, &derived_size, derived_bits);
+  if (derived_data && length_bytes < derived_size) {
+    // Truncate to requested length
+    JSValue truncated = JS_NewArrayBufferCopy(ctx, derived_data, length_bytes);
+    JS_FreeValue(ctx, derived_bits);
+    return create_resolved_promise(ctx, truncated);
+  }
+
+  return create_resolved_promise(ctx, derived_bits);
 }
 
 // Create SubtleCrypto object

@@ -1,6 +1,6 @@
 #include "crypto_digest.h"
 
-// Platform-specific includes for dynamic loading  
+// Platform-specific includes for dynamic loading
 #ifdef _WIN32
 #include <windows.h>
 #else

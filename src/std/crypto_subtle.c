@@ -1,6 +1,6 @@
 #include "crypto_subtle.h"
 
-// Platform-specific includes for dynamic loading  
+// Platform-specific includes for dynamic loading
 #ifdef _WIN32
 #include <windows.h>
 #else
@@ -685,7 +685,6 @@ JSValue jsrt_subtle_encrypt(JSContext *ctx, JSValueConst this_val, int argc, JSV
 
     // Free the created EVP_PKEY
     if (rsa_key) {
-      
       if (openssl_handle) {
         void (*EVP_PKEY_free)(void *) = JSRT_DLSYM(openssl_handle, "EVP_PKEY_free");
         if (EVP_PKEY_free) {
@@ -1102,7 +1101,6 @@ JSValue jsrt_subtle_decrypt(JSContext *ctx, JSValueConst this_val, int argc, JSV
 
     // Free the created EVP_PKEY
     if (rsa_key) {
-      
       if (openssl_handle) {
         void (*EVP_PKEY_free)(void *) = JSRT_DLSYM(openssl_handle, "EVP_PKEY_free");
         if (EVP_PKEY_free) {
@@ -1286,7 +1284,7 @@ JSValue jsrt_subtle_sign(JSContext *ctx, JSValueConst this_val, int argc, JSValu
     // Cleanup the RSA key
     if (rsa_private_key) {
       // Note: Need to add proper OpenSSL EVP_PKEY_free here
-      
+
       if (openssl_handle) {
         void (*EVP_PKEY_free)(void *pkey) = JSRT_DLSYM(openssl_handle, "EVP_PKEY_free");
         if (EVP_PKEY_free) {
@@ -1492,7 +1490,6 @@ JSValue jsrt_subtle_verify(JSContext *ctx, JSValueConst this_val, int argc, JSVa
 
     // Cleanup the RSA key
     if (rsa_public_key) {
-      
       if (openssl_handle) {
         void (*EVP_PKEY_free)(void *pkey) = JSRT_DLSYM(openssl_handle, "EVP_PKEY_free");
         if (EVP_PKEY_free) {

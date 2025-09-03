@@ -7,6 +7,7 @@
 
 #include "build.h"
 #include "jsrt.h"
+#include "repl.h"
 #include "runtime.h"
 #include "util/file.h"
 
@@ -34,8 +35,8 @@ int main(int argc, char** argv) {
       return ret;
     }
 
-    PrintHelp(true);
-    return 1;
+    // No embedded bytecode and no piped input - start REPL
+    return JSRT_CmdRunREPL(argc, argv);
   }
 
   const char* command = argv[1];
@@ -60,6 +61,10 @@ int main(int argc, char** argv) {
     const char* filename = argv[2];
     const char* target = argc >= 4 ? argv[3] : NULL;
     return BuildExecutable(argv[0], filename, target);
+  }
+
+  if (strcmp(command, "repl") == 0) {
+    return JSRT_CmdRunREPL(argc, argv);
   }
 
   // If no embedded bytecode, handle regular file execution

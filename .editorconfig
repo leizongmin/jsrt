@@ -19,3 +19,6 @@ indent_size = 2
 
 [*.h]
 indent_size = 2
+
+[VERSION]
+insert_final_newline = false

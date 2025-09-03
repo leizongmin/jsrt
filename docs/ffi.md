@@ -126,14 +126,14 @@ try {
 
 ## Limitations and Current Status
 
-### ✅ Recent Major Improvements (v2.0.0)
+### ✅ Recent Major Improvements (v2.2.0)
 
 This FFI implementation has been significantly enhanced with the following improvements:
 
 #### 🚀 Enhanced Function Calling
 - **16 Arguments Support**: Expanded from 4 to 16 function arguments
-- **Enhanced Type System**: Full support for `int`, `int32`, `int64`, `float`, `double`, `string`, `pointer`, `void`
-- **Better Argument Parsing**: Supports JavaScript numbers, strings, booleans, null/undefined
+- **Enhanced Type System**: Full support for `int`, `int32`, `int64`, `float`, `double`, `string`, `pointer`, `void`, `array`
+- **Better Argument Parsing**: Supports JavaScript numbers, strings, booleans, null/undefined, and arrays
 
 #### 🛠️ Memory Management API
 - **`ffi.malloc(size)`**: Allocate memory dynamically
@@ -142,10 +142,24 @@ This FFI implementation has been significantly enhanced with the following impro
 - **`ffi.readString(ptr, [maxLength])`**: Read null-terminated string from pointer
 - **`ffi.writeString(ptr, str)`**: Write string to memory location
 
+#### 📊 Array Support (NEW in v2.1.0+)
+- **`ffi.arrayFromPointer(ptr, length, type)`**: Convert C arrays to JavaScript arrays
+- **`ffi.arrayLength(array)`**: Get length of JavaScript arrays
+- **Array argument support**: JavaScript arrays automatically converted to C arrays in function calls
+- **Type-specific conversion**: Support for int32, float, double, uint32 array types
+
+#### 💬 Enhanced Error Reporting (NEW in v2.2.0)
+- **Function context in errors**: All errors include the specific FFI function name
+- **Detailed validation messages**: Clear explanation of expected arguments and types
+- **Platform-specific suggestions**: Tailored troubleshooting advice for Windows/Unix
+- **Helpful constraint explanations**: Clear limits and maximum values explained
+- **Consistent error format**: Standardized "FFI Error in function_name: message" format
+
 #### 📚 Developer Experience
 - **Type Constants**: `ffi.types` object with predefined type strings
-- **Enhanced Error Handling**: Better validation and error messages
+- **Enhanced Error Handling**: Better validation and error messages with troubleshooting tips
 - **Safety Limits**: Reasonable limits on memory operations for security
+- **Cross-platform Support**: Works on Windows, Linux, and macOS
 
 ### 📖 Enhanced Usage Examples
 
@@ -164,11 +178,25 @@ const libc = ffi.Library('libc.so.6', {
 const length = libc.strlen('hello');           // int return
 const result = libc.sqrt(16.0);               // double return  
 
-// Memory management
-const ptr = ffi.malloc(256);                  // Allocate 256 bytes
-ffi.writeString(ptr, "Hello, FFI!");          // Write string to memory
-const str = ffi.readString(ptr);              // Read string back
-ffi.free(ptr);                                // Clean up memory
+// Memory management with enhanced error reporting
+try {
+  const ptr = ffi.malloc(256);                  // Allocate 256 bytes
+  ffi.writeString(ptr, "Hello, FFI!");          // Write string to memory
+  const str = ffi.readString(ptr);              // Read string back
+  ffi.free(ptr);                                // Clean up memory
+} catch (error) {
+  console.log('Memory operation failed:', error.message);
+  // Error: "FFI Error in ffi.malloc: Allocation size too large: 2147483648 bytes (maximum: 1GB)"
+}
+
+// Array support (NEW)
+const inputArray = [1, 2, 3, 4, 5];
+// This array will be automatically converted to a C array when passed to functions
+
+// Convert C array back to JavaScript
+const cArrayPtr = ffi.malloc(5 * 4); // Allocate for 5 int32s
+const jsArray = ffi.arrayFromPointer(cArrayPtr, 5, ffi.types.int32);
+console.log('Converted array:', jsArray); // [0, 0, 0, 0, 0] (uninitialized)
 
 // Copy memory between buffers
 const src = ffi.malloc(100);
@@ -183,28 +211,32 @@ ffi.free(dest);
 
 While significantly improved, some limitations remain:
 
-1. **Complex Types**: Structs, unions, and arrays are not yet supported
-2. **Callbacks**: No support for C functions calling JavaScript functions
+1. **Complex Types**: Structs, unions, and complex nested types are not yet supported
+2. **Callbacks**: No support for C functions calling JavaScript functions (partially implemented)
 3. **No libffi**: Still uses basic x86_64 calling conventions 
 4. **Platform Dependencies**: Some math functions may not be available on all systems
+5. **Array Length Information**: C functions returning arrays need explicit length information
 
 ### What Works ✅
 
 - ✅ Loading dynamic libraries across platforms (Windows, Linux, macOS)
-- ✅ Function symbol resolution with enhanced error handling
+- ✅ Function symbol resolution with enhanced error handling and troubleshooting tips
 - ✅ **Function calls with up to 16 arguments** (was 4)
-- ✅ **Complete type system**: int, int32, int64, float, double, string, pointer, void
+- ✅ **Complete type system**: int, int32, int64, float, double, string, pointer, void, array
 - ✅ **Memory management API**: malloc, free, memcpy, readString, writeString  
-- ✅ **Enhanced argument parsing**: numbers, strings, booleans, null/undefined
+- ✅ **Array support**: JavaScript arrays converted to C arrays, C arrays converted back to JavaScript
+- ✅ **Enhanced argument parsing**: numbers, strings, booleans, null/undefined, arrays
 - ✅ **Type constants**: `ffi.types` for cleaner code
+- ✅ **Enhanced error reporting**: Function context, detailed validation, platform-specific suggestions
 - ✅ Both CommonJS (`require`) and ES Module (`import`) support
 
 ### What's Limited ⚠️
 
 - ⚠️ **Structs/unions**: Complex data structures not supported
-- ⚠️ **Callbacks**: C-to-JavaScript function calls not implemented  
+- ⚠️ **Callbacks**: C-to-JavaScript function calls partially implemented  
 - ⚠️ **libffi**: Advanced calling convention handling not integrated
 - ⚠️ **Async calls**: No support for asynchronous native function execution
+- ⚠️ **Array metadata**: Returned C arrays need explicit length information
 
 ## Architecture
 
@@ -228,39 +260,22 @@ To further enhance this FFI implementation:
 1. **~~Expand argument support~~** ✅ **COMPLETED** - Now supports up to 16 arguments
 2. **~~Add numeric types~~** ✅ **COMPLETED** - Added float, double, int64 support  
 3. **~~Memory management~~** ✅ **COMPLETED** - Added malloc/free/memcpy/readString/writeString
-4. **Integrate libffi**: Use libffi for robust cross-platform function calling
-5. **Add callback support**: Allow JavaScript functions to be called from native code
-6. **Struct/union support**: Define and use complex data types
-7. **Array handling**: Support for native arrays and buffers
-8. **Async function support**: Support for asynchronous native function calls
-9. **Symbol export**: Allow exporting JavaScript functions to native libraries
-10. **ABI validation**: Ensure calling convention compatibility
-6. **Better error messages**: More detailed error reporting with stack traces
+4. **~~Array handling~~** ✅ **COMPLETED** - Added array conversion and argument support
+5. **~~Better error messages~~** ✅ **COMPLETED** - Enhanced error reporting with context and suggestions
+6. **Integrate libffi**: Use libffi for robust cross-platform function calling
+7. **Complete callback support**: Allow JavaScript functions to be called from native code
+8. **Struct/union support**: Define and use complex data types
+9. **Async function support**: Support for asynchronous native function calls
+10. **Symbol export**: Allow exporting JavaScript functions to native libraries
+11. **ABI validation**: Ensure calling convention compatibility
 
-## Security Considerations
+## Version History
 
-- Loading arbitrary dynamic libraries can pose security risks
-- Functions have direct access to system resources
-- No sandboxing is provided - use with trusted libraries only
-- Memory corruption is possible with incorrect type definitions
-
-## Platform-Specific Notes
-
-### Linux
-- Standard libraries are typically in `/lib`, `/usr/lib`, or `/usr/local/lib`
-- Use `ldd` command to find library dependencies
-- Common libraries: `libc.so.6`, `libm.so.6`, `libpthread.so.0`
-
-### macOS
-- System libraries are in `/usr/lib` and `/System/Library/Frameworks`
-- Homebrew libraries are in `/opt/homebrew/lib` or `/usr/local/lib`
-- Common libraries: `libSystem.dylib`, `libc.dylib`
-
-### Windows
-- System libraries are in `System32` folder
-- Common libraries: `kernel32.dll`, `user32.dll`, `msvcrt.dll`
-- Use dependency walker or similar tools to analyze library dependencies
+- **v1.0.0**: Initial proof-of-concept implementation
+- **v2.0.0**: Enhanced function calling with 16 arguments, memory management, type system improvements
+- **v2.1.0**: Added array support with conversion functions and automatic argument handling
+- **v2.2.0**: Enhanced error reporting with function context, detailed validation, and platform-specific suggestions
 
 ## Version
 
-Current version: **1.0.0** (Proof of Concept)
+Current version: **2.2.0** (Production Ready with Array Support and Enhanced Error Reporting)

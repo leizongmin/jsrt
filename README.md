@@ -29,6 +29,9 @@
 git clone https://github.com/leizongmin/jsrt.git
 cd jsrt
 
+# Init submodule
+git submodule update --init --recursive
+
 # Build the runtime
 make
 ```

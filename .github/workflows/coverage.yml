@@ -21,7 +21,7 @@ jobs:
     - name: Install dependencies
       run: |
         sudo apt-get update
-        sudo apt-get install -y build-essential cmake clang-format lcov
+        sudo apt-get install -y build-essential cmake lcov
     
     - name: Build with coverage
       env:

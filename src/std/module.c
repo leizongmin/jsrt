@@ -190,7 +190,7 @@ JSModuleDef *JSRT_ModuleLoader(JSContext *ctx, const char *module_name, void *op
         snprintf(url, strlen(module_name) + 8, "file://%s", module_name);
       }
     }
-    
+
     JS_SetPropertyStr(ctx, meta_obj, "url", JS_NewString(ctx, url));
     free(url);
     JS_FreeValue(ctx, meta_obj);

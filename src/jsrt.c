@@ -408,6 +408,111 @@ static char *jsrt_get_repl_history_path() {
   return path;
 }
 
+// Check if JavaScript code is syntactically complete
+static bool jsrt_is_code_complete(JSContext *ctx, const char *code, size_t code_len) {
+  // First, try to compile the code without executing it
+  JSValue result = JS_Eval(ctx, code, code_len, "<repl-check>", JS_EVAL_FLAG_COMPILE_ONLY);
+
+  if (JS_IsException(result)) {
+    JS_FreeValue(ctx, result);
+
+    // If compilation failed, do a simple brace/bracket/paren counting check
+    // to see if the code is obviously incomplete
+    int braces = 0, brackets = 0, parens = 0;
+    bool in_string = false, in_comment = false;
+    char string_char = 0;
+
+    for (size_t i = 0; i < code_len; i++) {
+      char c = code[i];
+
+      if (in_comment) {
+        // Handle single-line comments
+        if (c == '\n') {
+          in_comment = false;
+        }
+        continue;
+      }
+
+      if (in_string) {
+        // Handle string escaping
+        if (c == '\\' && i + 1 < code_len) {
+          i++;  // Skip next character
+          continue;
+        }
+        if (c == string_char) {
+          in_string = false;
+          string_char = 0;
+        }
+        continue;
+      }
+
+      // Check for comment start
+      if (c == '/' && i + 1 < code_len && code[i + 1] == '/') {
+        in_comment = true;
+        i++;  // Skip next '/'
+        continue;
+      }
+
+      // Check for string start
+      if (c == '"' || c == '\'' || c == '`') {
+        in_string = true;
+        string_char = c;
+        continue;
+      }
+
+      // Count brackets and braces
+      switch (c) {
+        case '{':
+          braces++;
+          break;
+        case '}':
+          braces--;
+          break;
+        case '[':
+          brackets++;
+          break;
+        case ']':
+          brackets--;
+          break;
+        case '(':
+          parens++;
+          break;
+        case ')':
+          parens--;
+          break;
+      }
+    }
+
+    // If we're in a string or have unmatched brackets, the code is incomplete
+    if (in_string || braces > 0 || brackets > 0 || parens > 0) {
+      return false;  // Incomplete
+    }
+
+    // If brackets are balanced but compilation failed, try some specific error patterns
+    JSValue exception = JS_GetException(ctx);
+    const char *exception_str = JS_ToCString(ctx, exception);
+    bool is_incomplete = false;
+
+    if (exception_str) {
+      // Only check for very specific incomplete patterns to avoid false positives
+      if (strstr(exception_str, "unexpected token in expression: ''") ||
+          strstr(exception_str, "unexpected end of input") || strstr(exception_str, "unterminated string literal") ||
+          strstr(exception_str, "unterminated comment")) {
+        is_incomplete = true;
+      }
+
+      JS_FreeCString(ctx, exception_str);
+    }
+
+    JS_FreeValue(ctx, exception);
+    return !is_incomplete;
+  }
+
+  // Code compiles successfully - it's complete
+  JS_FreeValue(ctx, result);
+  return true;
+}
+
 // Process REPL shortcuts
 static bool jsrt_process_repl_shortcut(const char *input) {
   if (strcmp(input, "/exit") == 0 || strcmp(input, "/quit") == 0) {
@@ -462,86 +567,169 @@ int JSRT_CmdRunREPL(int argc, char **argv) {
   printf("Press Ctrl+C twice or Ctrl+D to exit\n");
   printf("\n");
 
-  char *input;
+  char *input_line;
+  char *accumulated_input = NULL;
+  size_t accumulated_size = 0;
   int line_number = 1;
+  bool is_continuation = false;
 
   while (true) {
     // Reset CTRL-C counter at each prompt
     g_ctrl_c_count = 0;
 
-    // Create prompt with line number
+    // Create prompt (main or continuation)
     char prompt[32];
-    snprintf(prompt, sizeof(prompt), "jsrt:%d> ", line_number);
+    if (is_continuation) {
+      snprintf(prompt, sizeof(prompt), "...   ");
+    } else {
+      snprintf(prompt, sizeof(prompt), "jsrt:%d> ", line_number);
+    }
 
     // Read input with readline (handles history, arrow keys, etc.)
-    input = readline(prompt);
+    input_line = readline(prompt);
 
     // Handle EOF (Ctrl+D)
-    if (!input) {
+    if (!input_line) {
+      // If we have accumulated input, try to evaluate it before exiting
+      if (accumulated_input && accumulated_size > 1) {
+        char filename[32];
+        snprintf(filename, sizeof(filename), "<repl:%d>", line_number);
+
+        JSRT_EvalResult res = JSRT_RuntimeEval(rt, filename, accumulated_input, accumulated_size - 1);
+        if (res.is_error) {
+          fprintf(stderr, "Error: %s\n", res.error);
+        } else {
+          // Await result if it's a promise
+          JSRT_EvalResult res2 = JSRT_RuntimeAwaitEvalResult(rt, &res);
+          if (res2.is_error) {
+            fprintf(stderr, "Error: %s\n", res2.error);
+          } else {
+            // Print the result like Node.js REPL
+            JSValue result_val = res2.value.tag != JS_TAG_UNDEFINED ? res2.value : res.value;
+            if (!JS_IsUndefined(result_val) && !JS_IsNull(result_val)) {
+              DynBuf dbuf;
+              dbuf_init(&dbuf);
+              JSRT_GetJSValuePrettyString(&dbuf, rt->ctx, result_val, NULL, true);
+              if (dbuf.buf && dbuf.size > 0) {
+                // Remove trailing newline if present
+                char *output = (char *)dbuf.buf;
+                if (output[dbuf.size - 1] == '\n') {
+                  output[dbuf.size - 1] = '\0';
+                }
+                printf("%s\n", output);
+              }
+              dbuf_free(&dbuf);
+            }
+          }
+          JSRT_EvalResultFree(&res2);
+        }
+        JSRT_EvalResultFree(&res);
+        JSRT_RuntimeRunTicket(rt);
+      }
+
+      if (accumulated_input) {
+        free(accumulated_input);
+        accumulated_input = NULL;
+      }
       printf("\nGoodbye!\n");
       break;
     }
 
-    // Skip empty lines
-    if (strlen(input) == 0) {
-      free(input);
+    // If this is first line and it's empty, skip
+    if (!is_continuation && strlen(input_line) == 0) {
+      free(input_line);
       continue;
     }
 
-    // Add to history
-    add_history(input);
-
-    // Process shortcuts
-    if (jsrt_process_repl_shortcut(input)) {
-      free(input);
-      break;  // Exit REPL
-    }
-
-    // Skip shortcut lines that didn't exit
-    if (input[0] == '/') {
-      free(input);
-      continue;
-    }
-
-    // Evaluate JavaScript code
-    char filename[32];
-    snprintf(filename, sizeof(filename), "<repl:%d>", line_number);
-
-    JSRT_EvalResult res = JSRT_RuntimeEval(rt, filename, input, strlen(input));
-    if (res.is_error) {
-      fprintf(stderr, "Error: %s\n", res.error);
-    } else {
-      // Await result if it's a promise
-      JSRT_EvalResult res2 = JSRT_RuntimeAwaitEvalResult(rt, &res);
-      if (res2.is_error) {
-        fprintf(stderr, "Error: %s\n", res2.error);
-      } else {
-        // Print the result like Node.js REPL
-        JSValue result_val = res2.value.tag != JS_TAG_UNDEFINED ? res2.value : res.value;
-        if (!JS_IsUndefined(result_val) && !JS_IsNull(result_val)) {
-          DynBuf dbuf;
-          dbuf_init(&dbuf);
-          JSRT_GetJSValuePrettyString(&dbuf, rt->ctx, result_val, NULL, true);
-          if (dbuf.buf && dbuf.size > 0) {
-            // Remove trailing newline if present
-            char *output = (char *)dbuf.buf;
-            if (output[dbuf.size - 1] == '\n') {
-              output[dbuf.size - 1] = '\0';
-            }
-            printf("%s\n", output);
-          }
-          dbuf_free(&dbuf);
-        }
+    // If not in continuation mode, check for shortcuts first
+    if (!is_continuation) {
+      if (jsrt_process_repl_shortcut(input_line)) {
+        free(input_line);
+        break;  // Exit REPL
       }
-      JSRT_EvalResultFree(&res2);
+
+      // Skip shortcut lines that didn't exit
+      if (input_line[0] == '/') {
+        free(input_line);
+        continue;
+      }
     }
-    JSRT_EvalResultFree(&res);
 
-    // Run pending async operations
-    JSRT_RuntimeRunTicket(rt);
+    // Accumulate input (first line or continuation)
+    if (!accumulated_input) {
+      // First line
+      accumulated_size = strlen(input_line) + 1;
+      accumulated_input = malloc(accumulated_size);
+      strcpy(accumulated_input, input_line);
+    } else {
+      // Continuation line - append with newline
+      size_t line_len = strlen(input_line);
+      size_t new_size = accumulated_size + line_len + 1;  // +1 for newline (null terminator reused)
+      accumulated_input = realloc(accumulated_input, new_size);
+      accumulated_input[accumulated_size - 1] = '\n';  // Replace null terminator with newline
+      strcpy(accumulated_input + accumulated_size, input_line);
+      accumulated_size = new_size;
+    }
 
-    free(input);
-    line_number++;
+    free(input_line);
+
+    // Check if the accumulated code is complete
+    if (jsrt_is_code_complete(rt->ctx, accumulated_input, accumulated_size - 1)) {
+      // Code is complete - add to history and evaluate
+      add_history(accumulated_input);
+      is_continuation = false;
+
+      // Evaluate JavaScript code
+      char filename[32];
+      snprintf(filename, sizeof(filename), "<repl:%d>", line_number);
+
+      JSRT_EvalResult res = JSRT_RuntimeEval(rt, filename, accumulated_input, accumulated_size - 1);
+      if (res.is_error) {
+        fprintf(stderr, "Error: %s\n", res.error);
+      } else {
+        // Await result if it's a promise
+        JSRT_EvalResult res2 = JSRT_RuntimeAwaitEvalResult(rt, &res);
+        if (res2.is_error) {
+          fprintf(stderr, "Error: %s\n", res2.error);
+        } else {
+          // Print the result like Node.js REPL
+          JSValue result_val = res2.value.tag != JS_TAG_UNDEFINED ? res2.value : res.value;
+          if (!JS_IsUndefined(result_val) && !JS_IsNull(result_val)) {
+            DynBuf dbuf;
+            dbuf_init(&dbuf);
+            JSRT_GetJSValuePrettyString(&dbuf, rt->ctx, result_val, NULL, true);
+            if (dbuf.buf && dbuf.size > 0) {
+              // Remove trailing newline if present
+              char *output = (char *)dbuf.buf;
+              if (output[dbuf.size - 1] == '\n') {
+                output[dbuf.size - 1] = '\0';
+              }
+              printf("%s\n", output);
+            }
+            dbuf_free(&dbuf);
+          }
+        }
+        JSRT_EvalResultFree(&res2);
+      }
+      JSRT_EvalResultFree(&res);
+
+      // Run pending async operations
+      JSRT_RuntimeRunTicket(rt);
+
+      // Clean up and advance to next line
+      free(accumulated_input);
+      accumulated_input = NULL;
+      accumulated_size = 0;
+      line_number++;
+    } else {
+      // Code is incomplete - continue to next line
+      is_continuation = true;
+    }
+  }
+
+  // Clean up any remaining accumulated input
+  if (accumulated_input) {
+    free(accumulated_input);
   }
 
   // Save history

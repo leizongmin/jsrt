@@ -126,6 +126,32 @@ static JSValue jsrt_process_uptime(JSContext* ctx, JSValueConst this_val, int ar
   return JS_NewFloat64(ctx, uptime_seconds);
 }
 
+// process.exit(code)
+static JSValue jsrt_process_exit(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
+  int exit_code = 0;
+
+  // Get exit code from first argument, default to 0
+  if (argc > 0) {
+    if (JS_ToInt32(ctx, &exit_code, argv[0]) < 0) {
+      // If conversion fails, use default exit code 0
+      exit_code = 0;
+    }
+  }
+
+  // Ensure exit code is in valid range (0-255 on most platforms)
+  if (exit_code < 0) {
+    exit_code = 1;  // Convert negative codes to 1
+  } else if (exit_code > 255) {
+    exit_code = exit_code & 0xFF;  // Truncate to 8 bits
+  }
+
+  // Exit the process immediately
+  exit(exit_code);
+
+  // This line should never be reached, but return undefined for completeness
+  return JS_UNDEFINED;
+}
+
 // Helper function to get jsrt version from compile-time macro
 static char* get_jsrt_version() {
   static char* cached_version = NULL;
@@ -278,6 +304,9 @@ JSValue JSRT_CreateProcessModule(JSContext* ctx) {
 
   // process.uptime()
   JS_SetPropertyStr(ctx, process_obj, "uptime", JS_NewCFunction(ctx, jsrt_process_uptime, "uptime", 0));
+
+  // process.exit()
+  JS_SetPropertyStr(ctx, process_obj, "exit", JS_NewCFunction(ctx, jsrt_process_exit, "exit", 1));
 
   return process_obj;
 }

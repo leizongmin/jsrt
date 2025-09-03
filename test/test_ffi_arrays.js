@@ -9,7 +9,7 @@ assert.strictEqual(typeof ffi, 'object', 'FFI module should be an object');
 assert.strictEqual(typeof ffi.Library, 'function', 'ffi.Library should be a function');
 assert.strictEqual(typeof ffi.arrayFromPointer, 'function', 'ffi.arrayFromPointer should be a function');
 assert.strictEqual(typeof ffi.arrayLength, 'function', 'ffi.arrayLength should be a function');
-assert.strictEqual(ffi.version, '2.2.0', 'FFI version should be 2.2.0');
+assert.strictEqual(ffi.version, '3.0.0', 'FFI version should be 3.0.0');
 console.log('✓ FFI module with array support loaded successfully');
 
 // Test 2: Array type constant

@@ -15,6 +15,14 @@
 #include <stdlib.h>
 #include <string.h>
 
+// Include libffi if available for robust calling conventions
+#ifdef HAVE_LIBFFI
+#include <ffi.h>
+#define FFI_ENABLED 1
+#else
+#define FFI_ENABLED 0
+#endif
+
 #include "../util/debug.h"
 #include "../util/jsutils.h"
 
@@ -33,31 +41,37 @@ typedef HMODULE jsrt_dl_handle_t;
 typedef void *jsrt_dl_handle_t;
 #endif
 
-// FFI data types
+// FFI data types - prefixed to avoid conflicts with libffi
 typedef enum {
-  FFI_TYPE_VOID,
-  FFI_TYPE_INT,
-  FFI_TYPE_UINT,
-  FFI_TYPE_INT32,
-  FFI_TYPE_UINT32,
-  FFI_TYPE_INT64,
-  FFI_TYPE_UINT64,
-  FFI_TYPE_FLOAT,
-  FFI_TYPE_DOUBLE,
-  FFI_TYPE_POINTER,
-  FFI_TYPE_STRING,
-  FFI_TYPE_ARRAY,
-  FFI_TYPE_CALLBACK,
-  FFI_TYPE_STRUCT
-} ffi_type_t;
+  JSRT_FFI_TYPE_VOID,
+  JSRT_FFI_TYPE_INT,
+  JSRT_FFI_TYPE_UINT,
+  JSRT_FFI_TYPE_INT32,
+  JSRT_FFI_TYPE_UINT32,
+  JSRT_FFI_TYPE_INT64,
+  JSRT_FFI_TYPE_UINT64,
+  JSRT_FFI_TYPE_FLOAT,
+  JSRT_FFI_TYPE_DOUBLE,
+  JSRT_FFI_TYPE_POINTER,
+  JSRT_FFI_TYPE_STRING,
+  JSRT_FFI_TYPE_ARRAY,
+  JSRT_FFI_TYPE_CALLBACK,
+  JSRT_FFI_TYPE_STRUCT
+} jsrt_ffi_type_t;
 
-// Function signature structure
+// Function signature structure with libffi support
 typedef struct {
-  ffi_type_t return_type;
+  jsrt_ffi_type_t return_type;
   int arg_count;
-  ffi_type_t *arg_types;
+  jsrt_ffi_type_t *arg_types;
   void *func_ptr;
-} ffi_function_t;
+#ifdef HAVE_LIBFFI
+  ffi_cif cif;        // libffi call interface
+  ffi_type **ffi_arg_types; // libffi argument types
+  ffi_type *ffi_return_type; // libffi return type
+  bool cif_prepared;  // whether CIF has been prepared
+#endif
+} jsrt_ffi_function_t;
 
 // Global storage for FFI function metadata  
 static JSValue ffi_functions_map = JS_UNINITIALIZED;
@@ -79,9 +93,9 @@ typedef struct {
 typedef struct {
   JSContext *ctx;
   JSValue js_function;
-  ffi_type_t return_type;
+  jsrt_ffi_type_t return_type;
   int arg_count;
-  ffi_type_t *arg_types;
+  jsrt_ffi_type_t *arg_types;
   void *callback_ptr;  // Generated trampoline function pointer
 } ffi_callback_t;
 
@@ -90,13 +104,13 @@ typedef struct {
   char *name;
   int field_count;
   char **field_names;
-  ffi_type_t *field_types;
+  jsrt_ffi_type_t *field_types;
   size_t *field_offsets;
   size_t total_size;
 } ffi_struct_def_t;
 
 // Store function metadata for lookup during calls
-static int store_function_metadata(JSContext *ctx, ffi_function_t *func) {
+static int store_function_metadata(JSContext *ctx, jsrt_ffi_function_t *func) {
   if (JS_IsUninitialized(ffi_functions_map)) {
     ffi_functions_map = JS_NewObject(ctx);
   }
@@ -116,7 +130,7 @@ static int store_function_metadata(JSContext *ctx, ffi_function_t *func) {
 }
 
 // Retrieve function metadata during calls
-static bool get_function_metadata_by_id(JSContext *ctx, int function_id, ffi_function_t *func) {
+static bool get_function_metadata_by_id(JSContext *ctx, int function_id, jsrt_ffi_function_t *func) {
   if (JS_IsUninitialized(ffi_functions_map)) {
     return false;
   }
@@ -141,7 +155,7 @@ static bool get_function_metadata_by_id(JSContext *ctx, int function_id, ffi_fun
                  (JS_ToInt64(ctx, &stored_ptr, func_ptr_val) == 0);
   
   if (success) {
-    func->return_type = (ffi_type_t)return_type;
+    func->return_type = (jsrt_ffi_type_t)return_type;
     func->arg_count = arg_count;
     func->arg_types = NULL;
     func->func_ptr = (void*)(intptr_t)stored_ptr;
@@ -156,23 +170,180 @@ static bool get_function_metadata_by_id(JSContext *ctx, int function_id, ffi_fun
 }
 
 // Convert string to FFI type
-static ffi_type_t string_to_ffi_type(const char *type_str) {
-  if (strcmp(type_str, "void") == 0) return FFI_TYPE_VOID;
-  if (strcmp(type_str, "int") == 0) return FFI_TYPE_INT;
-  if (strcmp(type_str, "uint") == 0) return FFI_TYPE_UINT;
-  if (strcmp(type_str, "int32") == 0) return FFI_TYPE_INT32;
-  if (strcmp(type_str, "uint32") == 0) return FFI_TYPE_UINT32;
-  if (strcmp(type_str, "int64") == 0) return FFI_TYPE_INT64;
-  if (strcmp(type_str, "uint64") == 0) return FFI_TYPE_UINT64;
-  if (strcmp(type_str, "float") == 0) return FFI_TYPE_FLOAT;
-  if (strcmp(type_str, "double") == 0) return FFI_TYPE_DOUBLE;
-  if (strcmp(type_str, "pointer") == 0) return FFI_TYPE_POINTER;
-  if (strcmp(type_str, "string") == 0) return FFI_TYPE_STRING;
-  if (strcmp(type_str, "array") == 0) return FFI_TYPE_ARRAY;
-  if (strcmp(type_str, "callback") == 0) return FFI_TYPE_CALLBACK;
-  if (strcmp(type_str, "struct") == 0) return FFI_TYPE_STRUCT;
-  return FFI_TYPE_VOID;  // Default to void for unknown types
+static jsrt_ffi_type_t string_to_ffi_type(const char *type_str) {
+  if (strcmp(type_str, "void") == 0) return JSRT_FFI_TYPE_VOID;
+  if (strcmp(type_str, "int") == 0) return JSRT_FFI_TYPE_INT;
+  if (strcmp(type_str, "uint") == 0) return JSRT_FFI_TYPE_UINT;
+  if (strcmp(type_str, "int32") == 0) return JSRT_FFI_TYPE_INT32;
+  if (strcmp(type_str, "uint32") == 0) return JSRT_FFI_TYPE_UINT32;
+  if (strcmp(type_str, "int64") == 0) return JSRT_FFI_TYPE_INT64;
+  if (strcmp(type_str, "uint64") == 0) return JSRT_FFI_TYPE_UINT64;
+  if (strcmp(type_str, "float") == 0) return JSRT_FFI_TYPE_FLOAT;
+  if (strcmp(type_str, "double") == 0) return JSRT_FFI_TYPE_DOUBLE;
+  if (strcmp(type_str, "pointer") == 0) return JSRT_FFI_TYPE_POINTER;
+  if (strcmp(type_str, "string") == 0) return JSRT_FFI_TYPE_STRING;
+  if (strcmp(type_str, "array") == 0) return JSRT_FFI_TYPE_ARRAY;
+  if (strcmp(type_str, "callback") == 0) return JSRT_FFI_TYPE_CALLBACK;
+  if (strcmp(type_str, "struct") == 0) return JSRT_FFI_TYPE_STRUCT;
+  return JSRT_FFI_TYPE_VOID;  // Default to void for unknown types
 }
+
+#ifdef HAVE_LIBFFI
+// Convert our FFI types to libffi types
+static ffi_type* jsrt_ffi_type_to_libffi(jsrt_ffi_type_t type) {
+  switch (type) {
+    case JSRT_FFI_TYPE_VOID: return &ffi_type_void;
+    case JSRT_FFI_TYPE_INT: return &ffi_type_sint;
+    case JSRT_FFI_TYPE_UINT: return &ffi_type_uint;
+    case JSRT_FFI_TYPE_INT32: return &ffi_type_sint32;
+    case JSRT_FFI_TYPE_UINT32: return &ffi_type_uint32;
+    case JSRT_FFI_TYPE_INT64: return &ffi_type_sint64;
+    case JSRT_FFI_TYPE_UINT64: return &ffi_type_uint64;
+    case JSRT_FFI_TYPE_FLOAT: return &ffi_type_float;
+    case JSRT_FFI_TYPE_DOUBLE: return &ffi_type_double;
+    case JSRT_FFI_TYPE_POINTER:
+    case JSRT_FFI_TYPE_STRING:
+    case JSRT_FFI_TYPE_ARRAY:
+    case JSRT_FFI_TYPE_CALLBACK:
+    case JSRT_FFI_TYPE_STRUCT:
+      return &ffi_type_pointer; // All these are essentially pointers
+    default: return &ffi_type_void;
+  }
+}
+
+// Prepare libffi CIF (Call InterFace) for a function
+static bool prepare_libffi_cif(jsrt_ffi_function_t *func) {
+  if (func->cif_prepared) {
+    return true; // Already prepared
+  }
+  
+  // Allocate libffi argument types array
+  func->ffi_arg_types = malloc(func->arg_count * sizeof(ffi_type*));
+  if (!func->ffi_arg_types && func->arg_count > 0) {
+    return false;
+  }
+  
+  // Convert argument types
+  for (int i = 0; i < func->arg_count; i++) {
+    func->ffi_arg_types[i] = jsrt_ffi_type_to_libffi(func->arg_types[i]);
+  }
+  
+  // Convert return type
+  func->ffi_return_type = jsrt_ffi_type_to_libffi(func->return_type);
+  
+  // Prepare the call interface
+  ffi_status status = ffi_prep_cif(&func->cif, FFI_DEFAULT_ABI, func->arg_count,
+                                   func->ffi_return_type, func->ffi_arg_types);
+  
+  if (status == FFI_OK) {
+    func->cif_prepared = true;
+    return true;
+  }
+  
+  // Cleanup on failure
+  free(func->ffi_arg_types);
+  func->ffi_arg_types = NULL;
+  return false;
+}
+
+// Cleanup libffi resources
+static void cleanup_libffi_cif(jsrt_ffi_function_t *func) {
+#ifdef HAVE_LIBFFI
+  if (func->ffi_arg_types) {
+    free(func->ffi_arg_types);
+    func->ffi_arg_types = NULL;
+  }
+  func->cif_prepared = false;
+#endif
+}
+
+#ifdef HAVE_LIBFFI
+// Enhanced function calling using libffi for robust calling conventions
+static JSValue call_function_with_libffi(JSContext *ctx, jsrt_ffi_function_t *func, uint64_t *args, void **array_args, int argc) {
+  // Prepare the CIF if not already done
+  if (!prepare_libffi_cif(func)) {
+    return JS_ThrowTypeError(ctx, "Failed to prepare libffi call interface");
+  }
+  
+  // Prepare argument values for libffi
+  void **ffi_args = malloc(argc * sizeof(void*));
+  if (!ffi_args && argc > 0) {
+    return JS_ThrowTypeError(ctx, "Failed to allocate libffi arguments");
+  }
+  
+  // Convert arguments to libffi format
+  for (int i = 0; i < argc; i++) {
+    ffi_args[i] = &args[i]; // Use address of the argument value
+  }
+  
+  // Prepare result storage
+  union {
+    int32_t i32;
+    int64_t i64;
+    uint32_t u32;
+    uint64_t u64;
+    float f;
+    double d;
+    void* ptr;
+  } result_storage;
+  
+  // Make the call using libffi
+  ffi_call(&func->cif, func->func_ptr, &result_storage, ffi_args);
+  
+  free(ffi_args);
+  
+  // Convert result back to JavaScript value
+  JSValue result = JS_UNDEFINED;
+  switch (func->return_type) {
+    case JSRT_FFI_TYPE_VOID:
+      result = JS_UNDEFINED;
+      break;
+    case JSRT_FFI_TYPE_INT:
+    case JSRT_FFI_TYPE_INT32:
+      result = JS_NewInt32(ctx, result_storage.i32);
+      break;
+    case JSRT_FFI_TYPE_UINT:
+    case JSRT_FFI_TYPE_UINT32:
+      result = JS_NewUint32(ctx, result_storage.u32);
+      break;
+    case JSRT_FFI_TYPE_INT64:
+      result = JS_NewInt64(ctx, result_storage.i64);
+      break;
+    case JSRT_FFI_TYPE_UINT64:
+      result = JS_NewBigUint64(ctx, result_storage.u64);
+      break;
+    case JSRT_FFI_TYPE_FLOAT:
+      result = JS_NewFloat64(ctx, (double)result_storage.f);
+      break;
+    case JSRT_FFI_TYPE_DOUBLE:
+      result = JS_NewFloat64(ctx, result_storage.d);
+      break;
+    case JSRT_FFI_TYPE_POINTER:
+      result = JS_NewInt64(ctx, (intptr_t)result_storage.ptr);
+      break;
+    case JSRT_FFI_TYPE_STRING:
+      if (result_storage.ptr) {
+        result = JS_NewString(ctx, (const char*)result_storage.ptr);
+      } else {
+        result = JS_NULL;
+      }
+      break;
+    case JSRT_FFI_TYPE_ARRAY:
+    case JSRT_FFI_TYPE_CALLBACK:
+    case JSRT_FFI_TYPE_STRUCT:
+      // These return pointers
+      result = JS_NewInt64(ctx, (intptr_t)result_storage.ptr);
+      break;
+    default:
+      result = JS_UNDEFINED;
+      break;
+  }
+  
+  return result;
+}
+#endif
+#endif
+
 
 // Enhanced error creation with stack trace support
 static JSValue create_ffi_error_with_stack(JSContext *ctx, const char *message, const char *function_name) {
@@ -353,63 +524,63 @@ static JSClassDef JSRT_FFIFunctionClass = {
 };
 
 // Convert JS value to native value based on FFI type
-static bool js_to_native(JSContext *ctx, JSValue val, ffi_type_t type, void *result) {
+static bool js_to_native(JSContext *ctx, JSValue val, jsrt_ffi_type_t type, void *result) {
   switch (type) {
-    case FFI_TYPE_VOID:
+    case JSRT_FFI_TYPE_VOID:
       return true;
 
-    case FFI_TYPE_INT:
-    case FFI_TYPE_INT32: {
+    case JSRT_FFI_TYPE_INT:
+    case JSRT_FFI_TYPE_INT32: {
       int32_t i;
       if (JS_ToInt32(ctx, &i, val) < 0) return false;
       *(int32_t *)result = i;
       return true;
     }
 
-    case FFI_TYPE_UINT:
-    case FFI_TYPE_UINT32: {
+    case JSRT_FFI_TYPE_UINT:
+    case JSRT_FFI_TYPE_UINT32: {
       uint32_t u;
       if (JS_ToUint32(ctx, &u, val) < 0) return false;
       *(uint32_t *)result = u;
       return true;
     }
 
-    case FFI_TYPE_INT64: {
+    case JSRT_FFI_TYPE_INT64: {
       int64_t i;
       if (JS_ToInt64(ctx, &i, val) < 0) return false;
       *(int64_t *)result = i;
       return true;
     }
 
-    case FFI_TYPE_UINT64: {
+    case JSRT_FFI_TYPE_UINT64: {
       uint64_t u;
       if (JS_ToIndex(ctx, &u, val) < 0) return false;
       *(uint64_t *)result = u;
       return true;
     }
 
-    case FFI_TYPE_FLOAT: {
+    case JSRT_FFI_TYPE_FLOAT: {
       double d;
       if (JS_ToFloat64(ctx, &d, val) < 0) return false;
       *(float *)result = (float)d;
       return true;
     }
 
-    case FFI_TYPE_DOUBLE: {
+    case JSRT_FFI_TYPE_DOUBLE: {
       double d;
       if (JS_ToFloat64(ctx, &d, val) < 0) return false;
       *(double *)result = d;
       return true;
     }
 
-    case FFI_TYPE_STRING: {
+    case JSRT_FFI_TYPE_STRING: {
       const char *str = JS_ToCString(ctx, val);
       if (!str) return false;
       *(const char **)result = str;
       return true;
     }
 
-    case FFI_TYPE_ARRAY: {
+    case JSRT_FFI_TYPE_ARRAY: {
       if (!JS_IsArray(ctx, val)) {
         // Not an array - treat as null pointer
         *(void **)result = NULL;
@@ -453,7 +624,7 @@ static bool js_to_native(JSContext *ctx, JSValue val, ffi_type_t type, void *res
       return true;
     }
 
-    case FFI_TYPE_POINTER: {
+    case JSRT_FFI_TYPE_POINTER: {
       // For now, treat pointers as null
       *(void **)result = NULL;
       return true;
@@ -465,37 +636,37 @@ static bool js_to_native(JSContext *ctx, JSValue val, ffi_type_t type, void *res
 }
 
 // Convert native value to JS value based on FFI type
-static JSValue native_to_js(JSContext *ctx, ffi_type_t type, void *value) {
+static JSValue native_to_js(JSContext *ctx, jsrt_ffi_type_t type, void *value) {
   switch (type) {
-    case FFI_TYPE_VOID:
+    case JSRT_FFI_TYPE_VOID:
       return JS_UNDEFINED;
 
-    case FFI_TYPE_INT:
-    case FFI_TYPE_INT32:
+    case JSRT_FFI_TYPE_INT:
+    case JSRT_FFI_TYPE_INT32:
       return JS_NewInt32(ctx, *(int32_t *)value);
 
-    case FFI_TYPE_UINT:
-    case FFI_TYPE_UINT32:
+    case JSRT_FFI_TYPE_UINT:
+    case JSRT_FFI_TYPE_UINT32:
       return JS_NewUint32(ctx, *(uint32_t *)value);
 
-    case FFI_TYPE_INT64:
+    case JSRT_FFI_TYPE_INT64:
       return JS_NewInt64(ctx, *(int64_t *)value);
 
-    case FFI_TYPE_UINT64:
+    case JSRT_FFI_TYPE_UINT64:
       return JS_NewBigUint64(ctx, *(uint64_t *)value);
 
-    case FFI_TYPE_FLOAT:
+    case JSRT_FFI_TYPE_FLOAT:
       return JS_NewFloat64(ctx, *(float *)value);
 
-    case FFI_TYPE_DOUBLE:
+    case JSRT_FFI_TYPE_DOUBLE:
       return JS_NewFloat64(ctx, *(double *)value);
 
-    case FFI_TYPE_STRING: {
+    case JSRT_FFI_TYPE_STRING: {
       const char *str = *(const char **)value;
       return str ? JS_NewString(ctx, str) : JS_NULL;
     }
 
-    case FFI_TYPE_ARRAY: {
+    case JSRT_FFI_TYPE_ARRAY: {
       // For arrays returned from C functions, we need length information
       // This is a limitation - we can't know the array length without additional metadata
       // For now, return the pointer as a number that can be used with other FFI functions
@@ -503,7 +674,7 @@ static JSValue native_to_js(JSContext *ctx, ffi_type_t type, void *value) {
       return ptr ? JS_NewInt64(ctx, (intptr_t)ptr) : JS_NULL;
     }
 
-    case FFI_TYPE_POINTER: {
+    case JSRT_FFI_TYPE_POINTER: {
       void *ptr = *(void **)value;
       return ptr ? JS_NewInt64(ctx, (intptr_t)ptr) : JS_NULL;
     }
@@ -524,7 +695,7 @@ static JSValue ffi_function_call(JSContext *ctx, JSValueConst func_obj, JSValueC
   }
   
   // Get metadata from global storage
-  ffi_function_t func_metadata;
+  jsrt_ffi_function_t func_metadata;
   if (!get_function_metadata_by_id(ctx, wrapper->function_id, &func_metadata)) {
     return JS_ThrowTypeError(ctx, "FFI function metadata not found");
   }
@@ -628,11 +799,11 @@ static JSValue ffi_function_call(JSContext *ctx, JSValueConst func_obj, JSValueC
 
   // Perform the function call based on signature with enhanced type support
   JSValue result = JS_UNDEFINED;
-  ffi_type_t return_type = func_metadata.return_type;
+  jsrt_ffi_type_t return_type = func_metadata.return_type;
   void *func_ptr = func_metadata.func_ptr;
 
   // Handle different return types with expanded argument support
-  if (return_type == FFI_TYPE_INT || return_type == FFI_TYPE_INT32) {
+  if (return_type == JSRT_FFI_TYPE_INT || return_type == JSRT_FFI_TYPE_INT32) {
     int32_t ret_val = 0;
     switch (argc) {
       case 0: ret_val = ((int32_t(*)())func_ptr)(); break;
@@ -654,7 +825,7 @@ static JSValue ffi_function_call(JSContext *ctx, JSValueConst func_obj, JSValueC
       case 16: ret_val = ((int32_t(*)(uintptr_t, uintptr_t, uintptr_t, uintptr_t, uintptr_t, uintptr_t, uintptr_t, uintptr_t, uintptr_t, uintptr_t, uintptr_t, uintptr_t, uintptr_t, uintptr_t, uintptr_t, uintptr_t))func_ptr)(args[0], args[1], args[2], args[3], args[4], args[5], args[6], args[7], args[8], args[9], args[10], args[11], args[12], args[13], args[14], args[15]); break;
     }
     result = JS_NewInt32(ctx, ret_val);
-  } else if (return_type == FFI_TYPE_INT64) {
+  } else if (return_type == JSRT_FFI_TYPE_INT64) {
     int64_t ret_val = 0;
     switch (argc) {
       case 0: ret_val = ((int64_t(*)())func_ptr)(); break;
@@ -670,7 +841,7 @@ static JSValue ffi_function_call(JSContext *ctx, JSValueConst func_obj, JSValueC
       default: ret_val = 0; // Fallback, should not reach here due to earlier check
     }
     result = JS_NewInt64(ctx, ret_val);
-  } else if (return_type == FFI_TYPE_DOUBLE) {
+  } else if (return_type == JSRT_FFI_TYPE_DOUBLE) {
     double ret_val = 0.0;
     switch (argc) {
       case 0: ret_val = ((double(*)())func_ptr)(); break;
@@ -686,7 +857,7 @@ static JSValue ffi_function_call(JSContext *ctx, JSValueConst func_obj, JSValueC
       default: ret_val = 0.0; // Fallback
     }
     result = JS_NewFloat64(ctx, ret_val);
-  } else if (return_type == FFI_TYPE_FLOAT) {
+  } else if (return_type == JSRT_FFI_TYPE_FLOAT) {
     float ret_val = 0.0f;
     switch (argc) {
       case 0: ret_val = ((float(*)())func_ptr)(); break;
@@ -702,7 +873,7 @@ static JSValue ffi_function_call(JSContext *ctx, JSValueConst func_obj, JSValueC
       default: ret_val = 0.0f; // Fallback
     }
     result = JS_NewFloat64(ctx, (double)ret_val);
-  } else if (return_type == FFI_TYPE_STRING) {
+  } else if (return_type == JSRT_FFI_TYPE_STRING) {
     const char *ret_str = NULL;
     switch (argc) {
       case 0: ret_str = ((const char *(*)())func_ptr)(); break;
@@ -718,7 +889,7 @@ static JSValue ffi_function_call(JSContext *ctx, JSValueConst func_obj, JSValueC
       default: ret_str = NULL; // Fallback
     }
     result = ret_str ? JS_NewString(ctx, ret_str) : JS_NULL;
-  } else if (return_type == FFI_TYPE_POINTER) {
+  } else if (return_type == JSRT_FFI_TYPE_POINTER) {
     void *ret_ptr = NULL;
     switch (argc) {
       case 0: ret_ptr = ((void *(*)())func_ptr)(); break;
@@ -734,7 +905,7 @@ static JSValue ffi_function_call(JSContext *ctx, JSValueConst func_obj, JSValueC
       default: ret_ptr = NULL; // Fallback
     }
     result = ret_ptr ? JS_NewInt64(ctx, (intptr_t)ret_ptr) : JS_NULL;
-  } else if (return_type == FFI_TYPE_VOID) {
+  } else if (return_type == JSRT_FFI_TYPE_VOID) {
     switch (argc) {
       case 0: ((void (*)())func_ptr)(); break;
       case 1: ((void (*)(uintptr_t))func_ptr)(args[0]); break;
@@ -904,7 +1075,7 @@ static JSValue ffi_library(JSContext *ctx, JSValueConst this_val, int argc, JSVa
     JS_FreeValue(ctx, args_length_val);
 
     // Create function metadata structure and store it globally
-    ffi_function_t func_metadata;
+    jsrt_ffi_function_t func_metadata;
     func_metadata.return_type = string_to_ffi_type(return_type_str);
     func_metadata.arg_count = args_length;
     func_metadata.arg_types = NULL; // TODO: parse argument types if needed
@@ -1131,8 +1302,8 @@ static JSValue ffi_array_from_pointer(JSContext *ctx, JSValueConst this_val, int
   }
 
   // Validate type
-  ffi_type_t type = string_to_ffi_type(type_str);
-  if (type == FFI_TYPE_VOID || type == FFI_TYPE_STRING || type == FFI_TYPE_ARRAY) {
+  jsrt_ffi_type_t type = string_to_ffi_type(type_str);
+  if (type == JSRT_FFI_TYPE_VOID || type == JSRT_FFI_TYPE_STRING || type == JSRT_FFI_TYPE_ARRAY) {
     JS_FreeCString(ctx, type_str);
     char message[128];
     snprintf(message, sizeof(message), "Invalid array element type: '%s' (use int32, float, double, etc.)", type_str);
@@ -1147,23 +1318,23 @@ static JSValue ffi_array_from_pointer(JSContext *ctx, JSValueConst this_val, int
     JSValue element;
     
     switch (type) {
-      case FFI_TYPE_INT:
-      case FFI_TYPE_INT32: {
+      case JSRT_FFI_TYPE_INT:
+      case JSRT_FFI_TYPE_INT32: {
         int32_t *int_array = (int32_t *)ptr;
         element = JS_NewInt32(ctx, int_array[i]);
         break;
       }
-      case FFI_TYPE_FLOAT: {
+      case JSRT_FFI_TYPE_FLOAT: {
         float *float_array = (float *)ptr;
         element = JS_NewFloat64(ctx, (double)float_array[i]);
         break;
       }
-      case FFI_TYPE_DOUBLE: {
+      case JSRT_FFI_TYPE_DOUBLE: {
         double *double_array = (double *)ptr;
         element = JS_NewFloat64(ctx, double_array[i]);
         break;
       }
-      case FFI_TYPE_UINT32: {
+      case JSRT_FFI_TYPE_UINT32: {
         uint32_t *uint_array = (uint32_t *)ptr;
         element = JS_NewUint32(ctx, uint_array[i]);
         break;
@@ -1243,26 +1414,26 @@ static uintptr_t handle_callback(int callback_id, int argc, uintptr_t *args) {
   for (int i = 0; i < argc && i < callback->arg_count; i++) {
     if (i < callback->arg_count) {
       switch (callback->arg_types[i]) {
-        case FFI_TYPE_INT:
-        case FFI_TYPE_INT32:
+        case JSRT_FFI_TYPE_INT:
+        case JSRT_FFI_TYPE_INT32:
           js_args[i] = JS_NewInt32(callback->ctx, (int32_t)args[i]);
           break;
-        case FFI_TYPE_UINT32:
+        case JSRT_FFI_TYPE_UINT32:
           js_args[i] = JS_NewUint32(callback->ctx, (uint32_t)args[i]);
           break;
-        case FFI_TYPE_INT64:
+        case JSRT_FFI_TYPE_INT64:
           js_args[i] = JS_NewInt64(callback->ctx, (int64_t)args[i]);
           break;
-        case FFI_TYPE_FLOAT:
+        case JSRT_FFI_TYPE_FLOAT:
           js_args[i] = JS_NewFloat64(callback->ctx, *(float*)&args[i]);
           break;
-        case FFI_TYPE_DOUBLE:
+        case JSRT_FFI_TYPE_DOUBLE:
           js_args[i] = JS_NewFloat64(callback->ctx, *(double*)&args[i]);
           break;
-        case FFI_TYPE_STRING:
+        case JSRT_FFI_TYPE_STRING:
           js_args[i] = args[i] ? JS_NewString(callback->ctx, (const char*)args[i]) : JS_NULL;
           break;
-        case FFI_TYPE_POINTER:
+        case JSRT_FFI_TYPE_POINTER:
           js_args[i] = JS_NewInt64(callback->ctx, (intptr_t)args[i]);
           break;
         default:
@@ -1284,45 +1455,45 @@ static uintptr_t handle_callback(int callback_id, int argc, uintptr_t *args) {
   uintptr_t ret_val = 0;
   if (!JS_IsException(result)) {
     switch (callback->return_type) {
-      case FFI_TYPE_INT:
-      case FFI_TYPE_INT32: {
+      case JSRT_FFI_TYPE_INT:
+      case JSRT_FFI_TYPE_INT32: {
         int32_t int_val;
         JS_ToInt32(callback->ctx, &int_val, result);
         ret_val = (uintptr_t)int_val;
         break;
       }
-      case FFI_TYPE_UINT32: {
+      case JSRT_FFI_TYPE_UINT32: {
         uint32_t uint_val;
         JS_ToUint32(callback->ctx, &uint_val, result);
         ret_val = (uintptr_t)uint_val;
         break;
       }
-      case FFI_TYPE_INT64: {
+      case JSRT_FFI_TYPE_INT64: {
         int64_t int64_val;
         JS_ToInt64(callback->ctx, &int64_val, result);
         ret_val = (uintptr_t)int64_val;
         break;
       }
-      case FFI_TYPE_FLOAT: {
+      case JSRT_FFI_TYPE_FLOAT: {
         double double_val;
         JS_ToFloat64(callback->ctx, &double_val, result);
         float float_val = (float)double_val;
         ret_val = *(uintptr_t*)&float_val;
         break;
       }
-      case FFI_TYPE_DOUBLE: {
+      case JSRT_FFI_TYPE_DOUBLE: {
         double double_val;
         JS_ToFloat64(callback->ctx, &double_val, result);
         ret_val = *(uintptr_t*)&double_val;
         break;
       }
-      case FFI_TYPE_POINTER: {
+      case JSRT_FFI_TYPE_POINTER: {
         int64_t ptr_val;
         JS_ToInt64(callback->ctx, &ptr_val, result);
         ret_val = (uintptr_t)ptr_val;
         break;
       }
-      case FFI_TYPE_VOID:
+      case JSRT_FFI_TYPE_VOID:
       default:
         ret_val = 0;
         break;
@@ -1410,7 +1581,7 @@ static JSValue ffi_callback(JSContext *ctx, JSValueConst this_val, int argc, JSV
   callback->js_function = JS_DupValue(ctx, argv[0]);
   callback->return_type = string_to_ffi_type(return_type_str);
   callback->arg_count = arg_count;
-  callback->arg_types = arg_count > 0 ? malloc(arg_count * sizeof(ffi_type_t)) : NULL;
+  callback->arg_types = arg_count > 0 ? malloc(arg_count * sizeof(jsrt_ffi_type_t)) : NULL;
   
   // Parse argument types
   for (uint32_t i = 0; i < arg_count; i++) {
@@ -1420,7 +1591,7 @@ static JSValue ffi_callback(JSContext *ctx, JSValueConst this_val, int argc, JSV
       callback->arg_types[i] = string_to_ffi_type(arg_type_str);
       JS_FreeCString(ctx, arg_type_str);
     } else {
-      callback->arg_types[i] = FFI_TYPE_VOID;
+      callback->arg_types[i] = JSRT_FFI_TYPE_VOID;
     }
     JS_FreeValue(ctx, arg_type_val);
   }
@@ -1462,7 +1633,7 @@ typedef struct {
   JSValue promise_resolve;
   JSValue promise_reject;
   void *func_ptr;
-  ffi_type_t return_type;
+  jsrt_ffi_type_t return_type;
   int arg_count;
   uintptr_t *args;
   char **string_args;
@@ -1488,7 +1659,7 @@ static void* async_call_thread(void* arg) {
   JSValue result = JS_UNDEFINED;
   bool call_success = true;
   
-  if (async_call->return_type == FFI_TYPE_INT || async_call->return_type == FFI_TYPE_INT32) {
+  if (async_call->return_type == JSRT_FFI_TYPE_INT || async_call->return_type == JSRT_FFI_TYPE_INT32) {
     int ret_val = 0;
     switch (async_call->arg_count) {
       case 0: ret_val = ((int (*)())async_call->func_ptr)(); break;
@@ -1501,7 +1672,7 @@ static void* async_call_thread(void* arg) {
     if (call_success) {
       result = JS_NewInt32(async_call->ctx, ret_val);
     }
-  } else if (async_call->return_type == FFI_TYPE_STRING) {
+  } else if (async_call->return_type == JSRT_FFI_TYPE_STRING) {
     const char *ret_str = NULL;
     switch (async_call->arg_count) {
       case 0: ret_str = ((const char *(*)())async_call->func_ptr)(); break;
@@ -1514,7 +1685,7 @@ static void* async_call_thread(void* arg) {
     if (call_success) {
       result = ret_str ? JS_NewString(async_call->ctx, ret_str) : JS_NULL;
     }
-  } else if (async_call->return_type == FFI_TYPE_VOID) {
+  } else if (async_call->return_type == JSRT_FFI_TYPE_VOID) {
     switch (async_call->arg_count) {
       case 0: ((void (*)())async_call->func_ptr)(); break;
       case 1: ((void (*)(uintptr_t))async_call->func_ptr)(async_call->args[0]); break;
@@ -1591,7 +1762,7 @@ static JSValue ffi_call_async(JSContext *ctx, JSValueConst this_val, int argc, J
   if (!return_type_str) {
     return create_ffi_error(ctx, "Return type must be a string", "ffi.callAsync");
   }
-  ffi_type_t return_type = string_to_ffi_type(return_type_str);
+  jsrt_ffi_type_t return_type = string_to_ffi_type(return_type_str);
   
   // Parse argument types
   if (!JS_IsArray(ctx, argv[2])) {
@@ -1733,18 +1904,18 @@ static ffi_struct_def_t* find_struct(const char *name) {
 }
 
 // Calculate size and alignment for basic types
-static size_t get_type_size(ffi_type_t type) {
+static size_t get_type_size(jsrt_ffi_type_t type) {
   switch (type) {
-    case FFI_TYPE_INT:
-    case FFI_TYPE_INT32:
-    case FFI_TYPE_UINT32:
-    case FFI_TYPE_FLOAT:
+    case JSRT_FFI_TYPE_INT:
+    case JSRT_FFI_TYPE_INT32:
+    case JSRT_FFI_TYPE_UINT32:
+    case JSRT_FFI_TYPE_FLOAT:
       return 4;
-    case FFI_TYPE_INT64:
-    case FFI_TYPE_UINT64:
-    case FFI_TYPE_DOUBLE:
-    case FFI_TYPE_POINTER:
-    case FFI_TYPE_STRING:
+    case JSRT_FFI_TYPE_INT64:
+    case JSRT_FFI_TYPE_UINT64:
+    case JSRT_FFI_TYPE_DOUBLE:
+    case JSRT_FFI_TYPE_POINTER:
+    case JSRT_FFI_TYPE_STRING:
       return 8;
     default:
       return 1;
@@ -1802,7 +1973,7 @@ static JSValue ffi_struct(JSContext *ctx, JSValueConst this_val, int argc, JSVal
   struct_def->name = strdup(struct_name);
   struct_def->field_count = tab_len;
   struct_def->field_names = malloc(tab_len * sizeof(char*));
-  struct_def->field_types = malloc(tab_len * sizeof(ffi_type_t));
+  struct_def->field_types = malloc(tab_len * sizeof(jsrt_ffi_type_t));
   struct_def->field_offsets = malloc(tab_len * sizeof(size_t));
   
   if (!struct_def->field_names || !struct_def->field_types || !struct_def->field_offsets) {
@@ -1838,7 +2009,7 @@ static JSValue ffi_struct(JSContext *ctx, JSValueConst this_val, int argc, JSVal
       
       JS_FreeCString(ctx, field_type_str);
     } else {
-      struct_def->field_types[i] = FFI_TYPE_VOID;
+      struct_def->field_types[i] = JSRT_FFI_TYPE_VOID;
       struct_def->field_offsets[i] = current_offset;
     }
     

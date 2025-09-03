@@ -7,5 +7,5 @@ const data = { count: 100 };
 
 module.exports = {
   greet,
-  data
+  data,
 };

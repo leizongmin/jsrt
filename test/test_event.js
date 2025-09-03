@@ -1,5 +1,5 @@
 // Test Event and EventTarget implementation
-const assert = require("std:assert");
+const assert = require('std:assert');
 console.log('=== Event/EventTarget API Tests ===');
 
 // Test 1: Basic Event construction
@@ -8,11 +8,23 @@ const event1 = new Event('test');
 console.log('Event type:', event1.type);
 assert.strictEqual(event1.type, 'test', 'Event type should be "test"');
 console.log('Event bubbles:', event1.bubbles);
-assert.strictEqual(event1.bubbles, false, 'Event bubbles should default to false');
+assert.strictEqual(
+  event1.bubbles,
+  false,
+  'Event bubbles should default to false'
+);
 console.log('Event cancelable:', event1.cancelable);
-assert.strictEqual(event1.cancelable, false, 'Event cancelable should default to false');
+assert.strictEqual(
+  event1.cancelable,
+  false,
+  'Event cancelable should default to false'
+);
 console.log('Event defaultPrevented:', event1.defaultPrevented);
-assert.strictEqual(event1.defaultPrevented, false, 'Event defaultPrevented should default to false');
+assert.strictEqual(
+  event1.defaultPrevented,
+  false,
+  'Event defaultPrevented should default to false'
+);
 
 // Test 2: Event with options
 console.log('\nTest 2: Event with options');
@@ -28,10 +40,18 @@ assert.strictEqual(event2.cancelable, true, 'Event cancelable should be true');
 console.log('\nTest 3: Event preventDefault');
 const event3 = new Event('cancel', { cancelable: true });
 console.log('Before preventDefault:', event3.defaultPrevented);
-assert.strictEqual(event3.defaultPrevented, false, 'defaultPrevented should be false before preventDefault');
+assert.strictEqual(
+  event3.defaultPrevented,
+  false,
+  'defaultPrevented should be false before preventDefault'
+);
 event3.preventDefault();
 console.log('After preventDefault:', event3.defaultPrevented);
-assert.strictEqual(event3.defaultPrevented, true, 'defaultPrevented should be true after preventDefault');
+assert.strictEqual(
+  event3.defaultPrevented,
+  true,
+  'defaultPrevented should be true after preventDefault'
+);
 
 // Test 4: Basic EventTarget
 console.log('\nTest 4: Basic EventTarget');
@@ -39,7 +59,7 @@ const target = new EventTarget();
 let called = false;
 let eventData = null;
 
-target.addEventListener('test', function(e) {
+target.addEventListener('test', function (e) {
   called = true;
   eventData = e;
   console.log('Event listener called with event type:', e.type);
@@ -53,15 +73,32 @@ const result = target.dispatchEvent(testEvent);
 console.log('After dispatch - called:', called);
 assert.strictEqual(called, true, 'Event listener should be called');
 console.log('Dispatch result:', result);
-assert.strictEqual(typeof result, 'boolean', 'dispatchEvent should return boolean');
-console.log('Event target set correctly:', eventData && eventData.target === target);
-assert.strictEqual(eventData.target, target, 'Event target should be set correctly');
+assert.strictEqual(
+  typeof result,
+  'boolean',
+  'dispatchEvent should return boolean'
+);
+console.log(
+  'Event target set correctly:',
+  eventData && eventData.target === target
+);
+assert.strictEqual(
+  eventData.target,
+  target,
+  'Event target should be set correctly'
+);
 
 // Test 6: Multiple listeners
 console.log('\nTest 6: Multiple listeners');
 let count = 0;
-target.addEventListener('multi', () => { count++; console.log('Listener 1'); });
-target.addEventListener('multi', () => { count++; console.log('Listener 2'); });
+target.addEventListener('multi', () => {
+  count++;
+  console.log('Listener 1');
+});
+target.addEventListener('multi', () => {
+  count++;
+  console.log('Listener 2');
+});
 
 const multiEvent = new Event('multi');
 target.dispatchEvent(multiEvent);
@@ -81,7 +118,14 @@ console.log('Removed listener test completed (should see no message above)');
 // Test 8: Once option
 console.log('\nTest 8: Once option');
 let onceCount = 0;
-target.addEventListener('once', () => { onceCount++; console.log('Once listener called'); }, { once: true });
+target.addEventListener(
+  'once',
+  () => {
+    onceCount++;
+    console.log('Once listener called');
+  },
+  { once: true }
+);
 
 target.dispatchEvent(new Event('once'));
 console.log('First dispatch, count:', onceCount);

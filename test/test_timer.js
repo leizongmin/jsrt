@@ -1,5 +1,5 @@
 // Cross-platform compatible timer tests
-const assert = require("std:assert");
+const assert = require('std:assert');
 console.log('Starting timer tests...');
 
 // Test 1: Basic setTimeout functionality
@@ -11,11 +11,16 @@ setTimeout(() => {
 
 // Test 2: setTimeout with arguments
 console.log('Test 2: setTimeout with arguments');
-setTimeout((msg, num) => {
-  console.log('setTimeout with args:', msg, num);
-  assert.strictEqual(msg, 'hello', 'First argument should be "hello"');
-  assert.strictEqual(num, 123, 'Second argument should be 123');
-}, 0, 'hello', 123);
+setTimeout(
+  (msg, num) => {
+    console.log('setTimeout with args:', msg, num);
+    assert.strictEqual(msg, 'hello', 'First argument should be "hello"');
+    assert.strictEqual(num, 123, 'Second argument should be 123');
+  },
+  0,
+  'hello',
+  123
+);
 
 // Test 3: Timer return value validation
 console.log('Test 3: Timer return value');
@@ -28,7 +33,7 @@ assert.strictEqual(typeof timer1, 'object', 'Timer should return an object');
 assert.strictEqual('id' in timer1, true, 'Timer should have an id property');
 
 // Test 4: Clear timeout functionality
-console.log('Test 4: clearTimeout test');  
+console.log('Test 4: clearTimeout test');
 const timer2 = setTimeout(() => {
   console.log('This should NOT appear - timer was cleared');
 }, 100);

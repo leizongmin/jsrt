@@ -1,5 +1,5 @@
 // Test CommonJS require
-const assert = require("std:assert");
+const assert = require('std:assert');
 console.log('=== CommonJS Module Tests ===');
 
 // Test 1: Basic require
@@ -16,8 +16,16 @@ console.log('data:', data);
 console.log('\nTest 2: Nested require');
 const mod2 = require('./test/commonjs_module.js');
 const greeting2 = mod2.greet('Again');
-assert.strictEqual(typeof mod2.greet, 'function', 'mod2.greet should be a function');
-assert.strictEqual(typeof greeting2, 'string', 'mod2.greet should return a string');
+assert.strictEqual(
+  typeof mod2.greet,
+  'function',
+  'mod2.greet should be a function'
+);
+assert.strictEqual(
+  typeof greeting2,
+  'string',
+  'mod2.greet should return a string'
+);
 assert.strictEqual(typeof mod2.data, 'object', 'mod2.data should be an object');
 console.log('mod2.greet("Again"):', greeting2);
 console.log('mod2.data:', mod2.data);

@@ -23,7 +23,7 @@ if (typeof crypto !== 'undefined') {
   if (crypto.subtle) {
     console.log('crypto.subtle.digest:', typeof crypto.subtle.digest);
   }
-  
+
   // Test getRandomValues to see if crypto works at all
   try {
     const arr = new Uint8Array(4);

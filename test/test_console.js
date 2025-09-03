@@ -1,18 +1,34 @@
 // Cross-platform compatible console tests
-const assert = require("std:assert");
+const assert = require('std:assert');
 console.log('hello, world!');
 
 // Test logging different data types (safe references only)
-console.log(123, 456, true, false, null, undefined, [1,2,3]);
+console.log(123, 456, true, false, null, undefined, [1, 2, 3]);
 
 // Test logging complex objects (avoiding function references)
-console.log({ a: 123, b: 456, c: true, d: false, e: null, f: undefined, g: [1,2,3] });
+console.log({
+  a: 123,
+  b: 456,
+  c: true,
+  d: false,
+  e: null,
+  f: undefined,
+  g: [1, 2, 3],
+});
 
 // Test function existence checks (safe way)
 console.log('setTimeout exists:', typeof setTimeout === 'function');
 console.log('console.log exists:', typeof console.log === 'function');
-assert.strictEqual(typeof setTimeout, 'function', 'setTimeout should be a function');
-assert.strictEqual(typeof console.log, 'function', 'console.log should be a function');
+assert.strictEqual(
+  typeof setTimeout,
+  'function',
+  'setTimeout should be a function'
+);
+assert.strictEqual(
+  typeof console.log,
+  'function',
+  'console.log should be a function'
+);
 
 // Test console.log with no arguments
 console.log();
@@ -24,20 +40,27 @@ console.log('');
 console.log('', '', '');
 
 // Test console.log with nested objects (simple nesting)
-console.log({ 
-  level1: { 
-    level2: { 
+console.log({
+  level1: {
+    level2: {
       value: 'nested',
-      array: [1, 2, { inner: true }]
-    }
-  }
+      array: [1, 2, { inner: true }],
+    },
+  },
 });
 
 // Test console.log with different number types
 console.log('Numbers:', 0, -1, 1.5, -1.5, Infinity, -Infinity, NaN);
 
 // Test console.log with arrays of different types
-console.log('Mixed array:', [1, 'string', true, null, undefined, {key: 'value'}]);
+console.log('Mixed array:', [
+  1,
+  'string',
+  true,
+  null,
+  undefined,
+  { key: 'value' },
+]);
 
 // Test console.log with empty array and object
 console.log('Empty structures:', [], {});

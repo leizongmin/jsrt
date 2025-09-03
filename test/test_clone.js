@@ -1,5 +1,5 @@
 // Test structuredClone implementation
-const assert = require("std:assert");
+const assert = require('std:assert');
 console.log('=== Structured Clone API Tests ===');
 
 // Test 1: Primitive values
@@ -9,7 +9,11 @@ console.log('Clone number:', clonedNumber);
 assert.strictEqual(clonedNumber, 42, 'Cloned number should equal original');
 const clonedString = structuredClone('hello');
 console.log('Clone string:', clonedString);
-assert.strictEqual(clonedString, 'hello', 'Cloned string should equal original');
+assert.strictEqual(
+  clonedString,
+  'hello',
+  'Cloned string should equal original'
+);
 const clonedBoolean = structuredClone(true);
 console.log('Clone boolean:', clonedBoolean);
 assert.strictEqual(clonedBoolean, true, 'Cloned boolean should equal original');
@@ -18,7 +22,11 @@ console.log('Clone null:', clonedNull);
 assert.strictEqual(clonedNull, null, 'Cloned null should equal original');
 const clonedUndefined = structuredClone(undefined);
 console.log('Clone undefined:', clonedUndefined);
-assert.strictEqual(clonedUndefined, undefined, 'Cloned undefined should equal original');
+assert.strictEqual(
+  clonedUndefined,
+  undefined,
+  'Cloned undefined should equal original'
+);
 
 // Test 2: Simple objects
 console.log('\nTest 2: Simple objects');
@@ -28,21 +36,38 @@ console.log('Original object:', JSON.stringify(obj1));
 console.log('Cloned object:', JSON.stringify(cloned_obj1));
 console.log('Are different objects:', obj1 !== cloned_obj1);
 assert(obj1 !== cloned_obj1, 'Cloned object should be a different reference');
-console.log('Have same content:', JSON.stringify(obj1) === JSON.stringify(cloned_obj1));
-assert.deepEqual(cloned_obj1, obj1, 'Cloned object should have same content as original');
+console.log(
+  'Have same content:',
+  JSON.stringify(obj1) === JSON.stringify(cloned_obj1)
+);
+assert.deepEqual(
+  cloned_obj1,
+  obj1,
+  'Cloned object should have same content as original'
+);
 
 // Test 3: Nested objects
 console.log('\nTest 3: Nested objects');
-const nested = { 
-  user: { name: 'John', age: 30 }, 
-  settings: { theme: 'dark', lang: 'en' }
+const nested = {
+  user: { name: 'John', age: 30 },
+  settings: { theme: 'dark', lang: 'en' },
 };
 const cloned_nested = structuredClone(nested);
 console.log('Original nested:', JSON.stringify(nested));
 console.log('Cloned nested:', JSON.stringify(cloned_nested));
-console.log('Nested objects are different:', nested.user !== cloned_nested.user);
-assert(nested.user !== cloned_nested.user, 'Nested objects should be different references');
-assert.deepEqual(cloned_nested, nested, 'Cloned nested object should have same content');
+console.log(
+  'Nested objects are different:',
+  nested.user !== cloned_nested.user
+);
+assert(
+  nested.user !== cloned_nested.user,
+  'Nested objects should be different references'
+);
+assert.deepEqual(
+  cloned_nested,
+  nested,
+  'Cloned nested object should have same content'
+);
 
 // Modify original to verify deep clone
 nested.user.name = 'Jane';
@@ -59,7 +84,11 @@ console.log('Are different arrays:', arr1 !== cloned_arr1);
 
 // Test 5: Nested arrays
 console.log('\nTest 5: Nested arrays');
-const nested_arr = [[1, 2], [3, 4], ['a', 'b']];
+const nested_arr = [
+  [1, 2],
+  [3, 4],
+  ['a', 'b'],
+];
 const cloned_nested_arr = structuredClone(nested_arr);
 console.log('Original nested array:', JSON.stringify(nested_arr));
 console.log('Cloned nested array:', JSON.stringify(cloned_nested_arr));
@@ -71,7 +100,7 @@ console.log('Cloned remains unchanged:', JSON.stringify(cloned_nested_arr));
 console.log('\nTest 6: Mixed objects and arrays');
 const mixed = {
   numbers: [1, 2, 3],
-  person: { name: 'Alice', hobbies: ['reading', 'swimming'] }
+  person: { name: 'Alice', hobbies: ['reading', 'swimming'] },
 };
 const cloned_mixed = structuredClone(mixed);
 console.log('Original mixed:', JSON.stringify(mixed));
@@ -106,7 +135,10 @@ try {
   console.log('Cloned circular object successfully');
   console.log('Cloned has name:', cloned_circular.name);
   console.log('Cloned has self reference:', cloned_circular.self !== undefined);
-  console.log('Self reference points to same object:', cloned_circular.self === cloned_circular);
+  console.log(
+    'Self reference points to same object:',
+    cloned_circular.self === cloned_circular
+  );
   console.log('But different from original:', cloned_circular !== circular);
 } catch (e) {
   console.log('Error cloning circular reference:', e.message);
@@ -124,8 +156,14 @@ try {
   console.log('Cloned complex circular structure successfully');
   console.log('Parent name:', cloned_parent.name);
   console.log('Children count:', cloned_parent.children.length);
-  console.log('Child1 parent reference points to parent:', cloned_parent.children[0].parent === cloned_parent);
-  console.log('Child2 parent reference points to parent:', cloned_parent.children[1].parent === cloned_parent);
+  console.log(
+    'Child1 parent reference points to parent:',
+    cloned_parent.children[0].parent === cloned_parent
+  );
+  console.log(
+    'Child2 parent reference points to parent:',
+    cloned_parent.children[1].parent === cloned_parent
+  );
 } catch (e) {
   console.log('Error cloning complex circular reference:', e.message);
 }
@@ -139,7 +177,10 @@ try {
   const cloned_container = structuredClone(container);
   console.log('Cloned container with circular array successfully');
   console.log('Items length:', cloned_container.items.length);
-  console.log('First item is container itself:', cloned_container.items[0] === cloned_container);
+  console.log(
+    'First item is container itself:',
+    cloned_container.items[0] === cloned_container
+  );
 } catch (e) {
   console.log('Error cloning container with circular array:', e.message);
 }

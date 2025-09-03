@@ -11,14 +11,16 @@ console.log('🔧 Type of Library function:', typeof ffi.Library);
 try {
   console.log('\n🧪 Testing library loading via ES import...');
   const lib = ffi.Library('libc.so.6', {
-    'strlen': ['int', ['string']]
+    strlen: ['int', ['string']],
   });
-  
+
   console.log('✅ Library loaded via ES import!');
   console.log('🎯 strlen function type:', typeof lib.strlen);
-  
 } catch (error) {
-  console.log('⚠️ Library loading failed (expected on some systems):', error.message);
+  console.log(
+    '⚠️ Library loading failed (expected on some systems):',
+    error.message
+  );
 }
 
 console.log('\n✅ ES module import test completed successfully!');

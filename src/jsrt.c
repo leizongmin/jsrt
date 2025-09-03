@@ -12,7 +12,9 @@
 #include <uv.h>
 
 #include "runtime.h"
+#include "std/console.h"
 #include "std/process.h"
+#include "util/dbuf.h"
 #include "util/file.h"
 #include "util/http_client.h"
 
@@ -513,6 +515,23 @@ int JSRT_CmdRunREPL(int argc, char **argv) {
       JSRT_EvalResult res2 = JSRT_RuntimeAwaitEvalResult(rt, &res);
       if (res2.is_error) {
         fprintf(stderr, "Error: %s\n", res2.error);
+      } else {
+        // Print the result like Node.js REPL
+        JSValue result_val = res2.value.tag != JS_TAG_UNDEFINED ? res2.value : res.value;
+        if (!JS_IsUndefined(result_val) && !JS_IsNull(result_val)) {
+          DynBuf dbuf;
+          dbuf_init(&dbuf);
+          JSRT_GetJSValuePrettyString(&dbuf, rt->ctx, result_val, NULL, true);
+          if (dbuf.buf && dbuf.size > 0) {
+            // Remove trailing newline if present
+            char *output = (char *)dbuf.buf;
+            if (output[dbuf.size - 1] == '\n') {
+              output[dbuf.size - 1] = '\0';
+            }
+            printf("%s\n", output);
+          }
+          dbuf_free(&dbuf);
+        }
       }
       JSRT_EvalResultFree(&res2);
     }

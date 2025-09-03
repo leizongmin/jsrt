@@ -1661,7 +1661,7 @@ static JSValue ffi_callback(JSContext *ctx, JSValueConst this_val, int argc, JSV
   return JS_NewInt64(ctx, (intptr_t)callback->callback_ptr);
 }
 
-// Enhanced async function call structure for production use
+// Enhanced async function call structure for production use  
 typedef struct {
   JSContext *ctx;
   JSValue promise_resolve;
@@ -1669,35 +1669,14 @@ typedef struct {
   void *func_ptr;
   jsrt_ffi_type_t return_type;
   int arg_count;
-  jsrt_ffi_type_t *arg_types;  // Argument types for libffi
   uintptr_t *args;
   char **string_args;
   void **array_args;
-  
-  // Production hardening features
-  uint32_t timeout_ms;     // Timeout in milliseconds (0 = no timeout)
-  bool completed;          // Thread completion flag
-  bool timed_out;          // Timeout flag
-  int error_code;          // Error code if call failed
-  char *error_message;     // Error message
-  
-#ifdef HAVE_LIBFFI
-  jsrt_ffi_function_t ffi_func;  // libffi function metadata
-#endif
-
-#ifdef _WIN32
-  HANDLE thread_handle;    // Thread handle for cleanup
-  CRITICAL_SECTION lock;   // Thread synchronization
-#else
-  pthread_t thread_id;     // Thread ID for cleanup
-  pthread_mutex_t lock;    // Thread synchronization
-  bool thread_started;     // Track if thread was created
-#endif
-} enhanced_ffi_async_call_t;
+} ffi_async_call_t;
 
 // Thread pool management for production async calls
 #define MAX_ASYNC_THREADS 8
-static enhanced_ffi_async_call_t *active_async_calls[MAX_ASYNC_THREADS];
+static ffi_async_call_t *active_async_calls[MAX_ASYNC_THREADS];
 static int active_call_count = 0;
 
 #ifdef _WIN32
@@ -1744,7 +1723,7 @@ static int find_available_async_slot() {
 }
 
 // Register async call in thread pool
-static bool register_async_call(enhanced_ffi_async_call_t *call, int slot) {
+static bool register_async_call(ffi_async_call_t *call, int slot) {
 #ifdef _WIN32
   EnterCriticalSection(&thread_pool_lock);
 #else
@@ -2043,6 +2022,10 @@ static int register_struct(ffi_struct_def_t *struct_def) {
   return g_struct_count++;
 }
 
+// Forward declarations
+static ffi_struct_def_t* find_struct(const char *name);
+static size_t get_type_size(jsrt_ffi_type_t type);
+
 // Parse complex type descriptor (supports nested types)
 // Format examples:
 //   "int" - basic type
@@ -2236,45 +2219,50 @@ static JSValue ffi_struct(JSContext *ctx, JSValueConst this_val, int argc, JSVal
   
   struct_def->name = strdup(struct_name);
   struct_def->field_count = tab_len;
-  struct_def->field_names = malloc(tab_len * sizeof(char*));
-  struct_def->field_types = malloc(tab_len * sizeof(jsrt_ffi_type_t));
-  struct_def->field_offsets = malloc(tab_len * sizeof(size_t));
+  struct_def->fields = malloc(tab_len * sizeof(jsrt_field_descriptor_t));
+  struct_def->alignment = 8; // Default alignment
+  struct_def->dependency_count = 0;
+  struct_def->dependencies = NULL;
   
-  if (!struct_def->field_names || !struct_def->field_types || !struct_def->field_offsets) {
-    free(struct_def->field_names);
-    free(struct_def->field_types);
-    free(struct_def->field_offsets);
+  if (!struct_def->fields) {
     free(struct_def->name);
     free(struct_def);
     js_free(ctx, tab);
     JS_FreeCString(ctx, struct_name);
-    return create_ffi_error(ctx, "Failed to allocate struct field arrays", "ffi.Struct");
+    return create_ffi_error(ctx, "Failed to allocate struct field descriptors", "ffi.Struct");
   }
   
-  // Calculate field offsets and total size
+  // Calculate field offsets and total size with enhanced type support
   size_t current_offset = 0;
   for (uint32_t i = 0; i < tab_len; i++) {
     const char *field_name = JS_AtomToCString(ctx, tab[i].atom);
-    struct_def->field_names[i] = strdup(field_name);
+    struct_def->fields[i].name = strdup(field_name);
     
     JSValue field_type_val = JS_GetProperty(ctx, argv[1], tab[i].atom);
     const char *field_type_str = JS_ToCString(ctx, field_type_val);
     
     if (field_type_str) {
-      struct_def->field_types[i] = string_to_ffi_type(field_type_str);
+      // Parse complex type descriptor
+      if (!parse_complex_type(field_type_str, &struct_def->fields[i])) {
+        // Default to void on parse failure
+        struct_def->fields[i].base_type = JSRT_FFI_TYPE_VOID;
+        struct_def->fields[i].category = JSRT_FIELD_TYPE_PRIMITIVE;
+      }
       
       // Calculate alignment and offset
-      size_t field_size = get_type_size(struct_def->field_types[i]);
-      size_t field_alignment = field_size; // Simple alignment rule
+      size_t field_size = calculate_complex_field_size(&struct_def->fields[i]);
+      size_t field_alignment = field_size > 8 ? 8 : field_size; // Max 8-byte alignment
       
       current_offset = calculate_aligned_offset(current_offset, field_alignment);
-      struct_def->field_offsets[i] = current_offset;
+      struct_def->fields[i].offset = current_offset;
       current_offset += field_size;
       
       JS_FreeCString(ctx, field_type_str);
     } else {
-      struct_def->field_types[i] = JSRT_FFI_TYPE_VOID;
-      struct_def->field_offsets[i] = current_offset;
+      // Default field setup
+      struct_def->fields[i].base_type = JSRT_FFI_TYPE_VOID;
+      struct_def->fields[i].category = JSRT_FIELD_TYPE_PRIMITIVE;
+      struct_def->fields[i].offset = current_offset;
     }
     
     JS_FreeCString(ctx, field_name);
@@ -2287,13 +2275,11 @@ static JSValue ffi_struct(JSContext *ctx, JSValueConst this_val, int argc, JSVal
   // Register struct
   int struct_id = register_struct(struct_def);
   if (struct_id < 0) {
-    // Cleanup on failure
+    // Cleanup on failure  
     for (uint32_t i = 0; i < tab_len; i++) {
-      free(struct_def->field_names[i]);
+      free(struct_def->fields[i].name);
     }
-    free(struct_def->field_names);
-    free(struct_def->field_types);
-    free(struct_def->field_offsets);
+    free(struct_def->fields);
     free(struct_def->name);
     free(struct_def);
     js_free(ctx, tab);

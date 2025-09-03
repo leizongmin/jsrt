@@ -5,18 +5,18 @@
 #include <string.h>
 
 #ifdef _WIN32
+#include <windows.h>
 #include <winsock2.h>
 #include <ws2tcpip.h>
-#include <windows.h>
 #pragma comment(lib, "ws2_32.lib")
 #define close closesocket
 typedef int socklen_t;
 #else
+#include <arpa/inet.h>
 #include <netdb.h>
+#include <netinet/in.h>
 #include <sys/socket.h>
 #include <unistd.h>
-#include <arpa/inet.h>
-#include <netinet/in.h>
 #endif
 
 // Internal function to parse URLs
@@ -213,12 +213,12 @@ JSRT_HttpResponse JSRT_HttpGet(const char* url) {
   memset(&hints, 0, sizeof(hints));
   hints.ai_family = AF_INET;
   hints.ai_socktype = SOCK_STREAM;
-  
+
   if (getaddrinfo(host, NULL, &hints, &result) != 0 || !result) {
     response.error = JSRT_HTTP_ERROR_NETWORK;
     goto cleanup;
   }
-  
+
   struct sockaddr_in* addr_in = (struct sockaddr_in*)result->ai_addr;
   serv_addr.sin_addr = addr_in->sin_addr;
   freeaddrinfo(result);

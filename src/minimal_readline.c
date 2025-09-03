@@ -10,9 +10,9 @@
 #include <string.h>
 
 #ifdef _WIN32
-#include <windows.h>
-#include <io.h>
 #include <conio.h>
+#include <io.h>
+#include <windows.h>
 #define STDIN_FILENO 0
 #define isatty _isatty
 #else
@@ -52,14 +52,14 @@ static void init_terminal(void) {
   if (console_handle == INVALID_HANDLE_VALUE) {
     return;
   }
-  
+
   if (!GetConsoleMode(console_handle, &orig_console_mode)) {
     return;
   }
-  
+
   DWORD new_mode = orig_console_mode;
   new_mode &= ~(ENABLE_ECHO_INPUT | ENABLE_LINE_INPUT);
-  
+
   if (!SetConsoleMode(console_handle, new_mode)) {
     return;
   }
@@ -85,7 +85,7 @@ static void init_terminal(void) {
 static void restore_terminal(void) {
   if (!terminal_initialized)
     return;
-    
+
 #ifdef _WIN32
   SetConsoleMode(console_handle, orig_console_mode);
 #else

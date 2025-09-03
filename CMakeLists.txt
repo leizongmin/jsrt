@@ -197,15 +197,22 @@ add_executable(jsrt src/main.c src/build.c)
 target_compile_definitions(jsrt PRIVATE JSRT_VERSION="${JSRT_VERSION}")
 target_link_libraries(jsrt ${JSRT_LINK_LIBS})
 
-# build jsrt test
+# build jsrt tests using individual jsrt runs
 enable_testing()
-file(GLOB_RECURSE JSRT_TEST_LIB_FILES "test/*.c")
-add_executable(jsrt_test_js ${JSRT_TEST_LIB_FILES})
 # testing js files - include both .js and .mjs files
 file(GLOB_RECURSE JSRT_TEST_JS_FILES "test/test_*.js" "test/test_*.mjs")
-target_compile_definitions(jsrt_test_js PRIVATE JSRT_VERSION="${JSRT_VERSION}")
-target_link_libraries(jsrt_test_js PRIVATE ${JSRT_LINK_LIBS})
-add_test(NAME jsrt_test_js COMMAND jsrt_test_js ${JSRT_TEST_JS_FILES})
-set_tests_properties(jsrt_test_js PROPERTIES
-    WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
-    OUTPUT_ON_FAILURE ON)
+
+# Create individual test cases for each test file
+foreach(test_file ${JSRT_TEST_JS_FILES})
+    # Get relative path for test name
+    file(RELATIVE_PATH test_name ${CMAKE_SOURCE_DIR} ${test_file})
+    # Replace path separators with underscores to create valid test names
+    string(REPLACE "/" "_" test_name ${test_name})
+    string(REPLACE "\\" "_" test_name ${test_name})
+    
+    # Add test that runs jsrt on individual test file
+    add_test(NAME ${test_name} COMMAND jsrt ${test_file})
+    set_tests_properties(${test_name} PROPERTIES
+        WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
+        OUTPUT_ON_FAILURE ON)
+endforeach()

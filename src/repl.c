@@ -1,7 +1,7 @@
 #include "repl.h"
 
-#include <history.h>
-#include <readline.h>
+#include <readline/history.h>
+#include <readline/readline.h>
 #include <signal.h>
 #include <stdbool.h>
 #include <stdint.h>
@@ -25,13 +25,17 @@ static void jsrt_repl_sigint_handler(int sig) {
   if (g_ctrl_c_count >= 2) {
     printf("\n(To exit, press ^C again or ^D or type /exit)\n");
     rl_on_new_line();
-    rl_replace_line("", 0);
+    // Clear the line buffer manually
+    rl_line_buffer[0] = '\0';
+    rl_point = rl_end = 0;
     rl_redisplay();
     exit(0);
   } else {
     printf("\n(To exit, press ^C again or ^D or type /exit)\n");
     rl_on_new_line();
-    rl_replace_line("", 0);
+    // Clear the line buffer manually
+    rl_line_buffer[0] = '\0';
+    rl_point = rl_end = 0;
     rl_redisplay();
   }
 }

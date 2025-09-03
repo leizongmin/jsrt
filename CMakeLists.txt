@@ -65,118 +65,45 @@ endif()
 # build libuv
 add_subdirectory(deps/libuv)
 
-# build readline
-set(READLINE_SOURCES
-    deps/readline/readline.c
-    deps/readline/vi_mode.c
-    deps/readline/funmap.c
-    deps/readline/keymaps.c
-    deps/readline/parens.c
-    deps/readline/search.c
-    deps/readline/rltty.c
-    deps/readline/complete.c
-    deps/readline/bind.c
-    deps/readline/isearch.c
-    deps/readline/display.c
-    deps/readline/signals.c
-    deps/readline/util.c
-    deps/readline/kill.c
-    deps/readline/undo.c
-    deps/readline/macro.c
-    deps/readline/input.c
-    deps/readline/callback.c
-    deps/readline/terminal.c
-    deps/readline/text.c
-    deps/readline/nls.c
-    deps/readline/misc.c
-    deps/readline/history.c
-    deps/readline/histexpand.c
-    deps/readline/histfile.c
-    deps/readline/histsearch.c
-    deps/readline/shell.c
-    deps/readline/mbutil.c
-    deps/readline/tilde.c
-    deps/readline/colors.c
-    deps/readline/parse-colors.c
-    deps/readline/xmalloc.c
-    deps/readline/xfree.c
-    deps/readline/compat.c
-    deps/readline/savestring.c
-)
-add_library(readline STATIC ${READLINE_SOURCES})
-target_compile_definitions(readline PRIVATE READLINE_LIBRARY)
-# Define essential readline macros without requiring config.h
-target_compile_definitions(readline PRIVATE
-    HAVE_STDLIB_H=1
-    HAVE_STRING_H=1
-    HAVE_UNISTD_H=1
-    HAVE_STDIO_H=1
-    HAVE_FCNTL_H=1
-    HAVE_SYS_TYPES_H=1
-    HAVE_SYS_STAT_H=1
-    HAVE_DIRENT_H=1
-    HAVE_PWD_H=1
-    HAVE_LIMITS_H=1
-    HAVE_MEMORY_H=1
-    HAVE_STDARG_H=1
-    HAVE_STDINT_H=1
-    HAVE_STRINGS_H=1
-    HAVE_TERMIOS_H=1
-    HAVE_SYS_TIME_H=1
-    HAVE_SYS_SELECT_H=1
-    HAVE_SYS_FILE_H=1
-    HAVE_SYS_IOCTL_H=1
-    HAVE_LOCALE_H=1
-    HAVE_STRUCT_TIMEVAL=1
-    HAVE_TIMEVAL=1
-    HAVE_STRCASECMP=1
-    HAVE_STRNCASECMP=1
-    HAVE_STRCOLL=1
-    HAVE_STRDUP=1
-    HAVE_STRERROR=1
-    HAVE_STRPBRK=1
-    HAVE_STRSTR=1
-    HAVE_STRTOD=1
-    HAVE_STRTOL=1
-    HAVE_STRTOUL=1
-    HAVE_MEMMOVE=1
-    HAVE_GETPWENT=1
-    HAVE_GETPWNAM=1
-    HAVE_GETPWUID=1
-    HAVE_GETCWD=1
-    HAVE_GETTIMEOFDAY=1
-    HAVE_KILL=1
-    HAVE_LSTAT=1
-    HAVE_SELECT=1
-    HAVE_SETLOCALE=1
-    HAVE_TCGETATTR=1
-    HAVE_TTYNAME=1
-    HAVE_WAITPID=1
-    HAVE_POSIX_SIGNALS=1
-    HAVE_POSIX_SIGSETJMP=1
-    HAVE_STRUCT_DIRENT_D_INO=1
-    HAVE_STRUCT_DIRENT_D_FILENO=1
-    HANDLE_MULTIBYTE=1
-    HAVE_MBSTATE_T=1
-    HAVE_WCHAR_H=1
-    HAVE_WCTYPE_H=1
-    HAVE_MBRLEN=1
-    HAVE_MBRTOWC=1
-    HAVE_MBSRTOWCS=1
-    HAVE_WCRTOMB=1
-    HAVE_WCSRTOMBS=1
-    HAVE_WCSCOLL=1
-    HAVE_WCWIDTH=1
-    HAVE_WCTOMB=1
-    HAVE_INTTYPES_H=1
-    HAVE_LANGINFO_H=1
-    HAVE_ISASCII=1
-    HAVE_ISXDIGIT=1
-    HAVE_GETPAGESIZE=1
-    RETSIGTYPE=void
-    VOID_SIGHANDLER=1
-)
-target_include_directories(readline PUBLIC deps/readline)
+# Try to find system readline first
+find_package(PkgConfig QUIET)
+if(PkgConfig_FOUND)
+    pkg_check_modules(READLINE QUIET readline)
+endif()
+
+# Check if we can use system readline
+if(NOT READLINE_FOUND)
+    # Try to find readline manually
+    find_library(READLINE_LIBRARY NAMES readline)
+    find_path(READLINE_INCLUDE_DIR readline/readline.h)
+    if(READLINE_LIBRARY AND READLINE_INCLUDE_DIR)
+        set(READLINE_FOUND TRUE)
+        set(READLINE_LIBRARIES ${READLINE_LIBRARY})
+        set(READLINE_INCLUDE_DIRS ${READLINE_INCLUDE_DIR})
+        # Also try to find termcap/ncurses which readline usually depends on
+        find_library(TERMCAP_LIBRARY NAMES termcap ncurses)
+        if(TERMCAP_LIBRARY)
+            list(APPEND READLINE_LIBRARIES ${TERMCAP_LIBRARY})
+        endif()
+    endif()
+endif()
+
+if(READLINE_FOUND)
+    # Use system readline
+    message(STATUS "Using system readline")
+    add_library(readline INTERFACE)
+    target_link_libraries(readline INTERFACE ${READLINE_LIBRARIES})
+    target_include_directories(readline INTERFACE ${READLINE_INCLUDE_DIRS})
+    target_compile_definitions(readline INTERFACE HAVE_READLINE=1)
+else()
+    # Provide a minimal readline replacement
+    message(STATUS "System readline not found, using minimal fallback")
+    add_library(readline STATIC src/minimal_readline.c)
+    target_include_directories(readline PUBLIC src)
+    target_compile_definitions(readline PUBLIC MINIMAL_READLINE=1)
+    # Also need to define this for dependent targets
+    add_compile_definitions(MINIMAL_READLINE=1)
+endif()
 
 # Platform-specific libraries
 if(WIN32)

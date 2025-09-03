@@ -8,9 +8,17 @@
 #include <string.h>
 #include <unistd.h>
 
-#include "history.h"
+// Conditional readline includes
+#ifdef HAVE_READLINE
+#include <readline/history.h>
+#include <readline/readline.h>
+#elif defined(MINIMAL_READLINE)
+#include "minimal_readline.h"
+#else
+#error "Either HAVE_READLINE or MINIMAL_READLINE must be defined"
+#endif
+
 #include "jsrt.h"
-#include "readline.h"
 #include "runtime.h"
 #include "std/console.h"
 #include "util/dbuf.h"

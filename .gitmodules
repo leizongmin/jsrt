@@ -4,6 +4,3 @@
 [submodule "deps/libuv"]
 	path = deps/libuv
 	url = https://github.com/libuv/libuv.git
-[submodule "deps/readline"]
-	path = deps/readline
-	url = https://git.savannah.gnu.org/git/readline.git

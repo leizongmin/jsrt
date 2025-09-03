@@ -17,6 +17,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <time.h>
+#include <uv.h>
 
 #include "../util/debug.h"
 #include "crypto.h"
@@ -125,6 +126,26 @@ static JSValue jsrt_process_uptime(JSContext *ctx, JSValueConst this_val, int ar
   return JS_NewFloat64(ctx, uptime_seconds);
 }
 
+// Helper function to get jsrt version from compile-time macro
+static char *get_jsrt_version() {
+  static char *cached_version = NULL;
+  static bool version_loaded = false;
+
+  if (version_loaded) {
+    return cached_version;
+  }
+
+  version_loaded = true;
+
+#ifdef JSRT_VERSION
+  cached_version = strdup(JSRT_VERSION);
+#else
+  cached_version = strdup("1.0.0");  // Fallback
+#endif
+
+  return cached_version;
+}
+
 // process.pid getter
 static JSValue jsrt_process_get_pid(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv) {
   return JS_NewInt32(ctx, (int32_t)JSRT_GETPID());
@@ -145,7 +166,14 @@ static JSValue jsrt_process_get_argv0(JSContext *ctx, JSValueConst this_val, int
 
 // process.version getter
 static JSValue jsrt_process_get_version(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv) {
-  return JS_NewString(ctx, "v1.0.0");
+  char *version = get_jsrt_version();
+  if (version != NULL) {
+    // Add 'v' prefix to version
+    char version_with_prefix[256];
+    snprintf(version_with_prefix, sizeof(version_with_prefix), "v%s", version);
+    return JS_NewString(ctx, version_with_prefix);
+  }
+  return JS_NewString(ctx, "v1.0.0");  // Fallback
 }
 
 // process.platform getter
@@ -186,8 +214,19 @@ static JSValue jsrt_process_get_arch(JSContext *ctx, JSValueConst this_val, int 
 static JSValue jsrt_process_get_versions(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv) {
   JSValue versions_obj = JS_NewObject(ctx);
 
-  // Add jsrt version
-  JS_SetPropertyStr(ctx, versions_obj, "jsrt", JS_NewString(ctx, "1.0.0"));
+  // Add jsrt version from VERSION file
+  char *version = get_jsrt_version();
+  if (version != NULL) {
+    JS_SetPropertyStr(ctx, versions_obj, "jsrt", JS_NewString(ctx, version));
+  } else {
+    JS_SetPropertyStr(ctx, versions_obj, "jsrt", JS_NewString(ctx, "1.0.0"));  // Fallback
+  }
+
+  // Add libuv version
+  const char *uv_version = uv_version_string();
+  if (uv_version != NULL) {
+    JS_SetPropertyStr(ctx, versions_obj, "uv", JS_NewString(ctx, uv_version));
+  }
 
   // Add OpenSSL version if available
   const char *openssl_version = JSRT_GetOpenSSLVersion();

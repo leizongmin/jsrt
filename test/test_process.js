@@ -27,6 +27,18 @@ assert.strictEqual(typeof process2.arch, 'string', 'process.arch should be a str
 assert.strictEqual(typeof process2.uptime, 'function', 'process.uptime should be a function');
 assert.strictEqual(typeof process2.uptime(), 'number', 'process.uptime() should return a number');
 
+// Test process.versions object
+assert.strictEqual(typeof process2.versions, 'object', 'process.versions should be an object');
+assert.ok(process2.versions !== null, 'process.versions should not be null');
+assert.strictEqual(typeof process2.versions.jsrt, 'string', 'process.versions.jsrt should be a string');
+assert.strictEqual(typeof process2.versions.uv, 'string', 'process.versions.uv should be a string');
+assert.ok(process2.versions.jsrt.length > 0, 'process.versions.jsrt should not be empty');
+assert.ok(process2.versions.uv.length > 0, 'process.versions.uv should not be empty');
+
+// Validate version format consistency
+assert.ok(process2.version.startsWith('v'), 'process.version should start with "v"');
+assert.strictEqual(process2.version.slice(1), process2.versions.jsrt, 'process.version should be "v" + process.versions.jsrt');
+
 console.log('process.argv:', process2.argv);
 console.log('process.argv0:', process2.argv0);
 console.log('process.pid:', process2.pid);
@@ -35,6 +47,7 @@ console.log('process.version:', process2.version);
 console.log('process.platform:', process2.platform);
 console.log('process.arch:', process2.arch);
 console.log('process.uptime():', process2.uptime());
+console.log('process.versions:', JSON.stringify(process2.versions, null, 2));
 
 // Test uptime changes over time
 setTimeout(() => {

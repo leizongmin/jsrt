@@ -1,4 +1,3 @@
-#include <libgen.h>
 #include <stdbool.h>
 #include <stdint.h>
 #include <stdio.h>
@@ -85,58 +84,17 @@ void PrintHelp(bool is_error) {
           "\n");
 }
 
-char* GetExecutableDir(const char* executable_path) {
-  // Find the directory containing the executable
-  char* path_copy = strdup(executable_path);
-  char* dir = dirname(path_copy);
-  char* result = strdup(dir);
-  free(path_copy);
-  return result;
-}
-
 void PrintVersion(const char* executable_path) {
+#ifdef JSRT_VERSION
+  const char* version = JSRT_VERSION;
+#else
   const char* version = "unknown";
-  JSRT_ReadFileResult version_file = JSRT_ReadFileResultDefault();
-
-  // Try to find VERSION file relative to executable
-  char* exe_dir = GetExecutableDir(executable_path);
-
-  // Try VERSION in the same directory as executable first
-  char version_path[1024];
-  snprintf(version_path, sizeof(version_path), "%s/VERSION", exe_dir);
-  version_file = JSRT_ReadFile(version_path);
-
-  // If not found, try one directory up (for bin/jsrt layout)
-  if (version_file.error != JSRT_READ_FILE_OK) {
-    snprintf(version_path, sizeof(version_path), "%s/../VERSION", exe_dir);
-    version_file = JSRT_ReadFile(version_path);
-  }
-
-  // If still not found, try current directory as fallback
-  if (version_file.error != JSRT_READ_FILE_OK) {
-    version_file = JSRT_ReadFile("VERSION");
-  }
-
-  if (version_file.error == JSRT_READ_FILE_OK && version_file.data != NULL) {
-    // Remove trailing newline if present
-    char* version_str = version_file.data;
-    size_t len = strlen(version_str);
-    if (len > 0 && version_str[len - 1] == '\n') {
-      version_str[len - 1] = '\0';
-    }
-    version = version_str;
-  }
+#endif
 
   printf("jsrt v%s\n", version);
   printf("A lightweight, fast JavaScript runtime built on QuickJS and libuv\n");
   printf("Copyright © 2024-2025 LEI Zongmin\n");
   printf("License: MIT\n");
-
-  // Clean up
-  if (version_file.error == JSRT_READ_FILE_OK) {
-    JSRT_ReadFileResultFree(&version_file);
-  }
-  free(exe_dir);
 }
 
 int BuildExecutable(const char* filename, const char* target) {

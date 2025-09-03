@@ -455,6 +455,14 @@ static void jsrt_evp_pkey_free(void* pkey) {
   }
 }
 
+// Public wrapper for external use
+void jsrt_evp_pkey_free_wrapper(void* pkey) {
+  if (!jsrt_ec_init()) {
+    return;
+  }
+  jsrt_evp_pkey_free(pkey);
+}
+
 static void* jsrt_evp_md_ctx_new(void) {
   if (evp_md_ctx_new) {
     return evp_md_ctx_new();
@@ -514,8 +522,18 @@ static JSValue jsrt_create_key_pair(JSContext* ctx, void* pkey, const char* algo
   if (i2d_privatekey) {
     priv_len = i2d_privatekey(pkey, &priv_der);
     if (priv_len <= 0) {
-      if (pub_der)
-        free(pub_der);
+      if (pub_der) {
+        if (openssl_handle) {
+          void (*OPENSSL_free)(void*) = JSRT_DLSYM(openssl_handle, "OPENSSL_free");
+          if (OPENSSL_free) {
+            OPENSSL_free(pub_der);
+          } else {
+            free(pub_der);
+          }
+        } else {
+          free(pub_der);
+        }
+      }
       jsrt_evp_pkey_free(pkey);
       return JS_ThrowInternalError(ctx, "Failed to serialize private key");
     }
@@ -561,11 +579,31 @@ static JSValue jsrt_create_key_pair(JSContext* ctx, void* pkey, const char* algo
   JS_SetPropertyStr(ctx, keypair_obj, "publicKey", public_key_obj);
   JS_SetPropertyStr(ctx, keypair_obj, "privateKey", private_key_obj);
 
-  // Cleanup
-  if (pub_der)
-    free(pub_der);
-  if (priv_der)
-    free(priv_der);
+  // Cleanup - OpenSSL allocates with OPENSSL_malloc, need to use OPENSSL_free
+  if (pub_der) {
+    if (openssl_handle) {
+      void (*OPENSSL_free)(void*) = JSRT_DLSYM(openssl_handle, "OPENSSL_free");
+      if (OPENSSL_free) {
+        OPENSSL_free(pub_der);
+      } else {
+        free(pub_der);  // Fallback
+      }
+    } else {
+      free(pub_der);
+    }
+  }
+  if (priv_der) {
+    if (openssl_handle) {
+      void (*OPENSSL_free)(void*) = JSRT_DLSYM(openssl_handle, "OPENSSL_free");
+      if (OPENSSL_free) {
+        OPENSSL_free(priv_der);
+      } else {
+        free(priv_der);  // Fallback
+      }
+    } else {
+      free(priv_der);
+    }
+  }
   jsrt_evp_pkey_free(pkey);
 
   return keypair_obj;

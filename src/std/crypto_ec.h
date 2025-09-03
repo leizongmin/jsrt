@@ -39,4 +39,7 @@ int jsrt_ec_curve_from_string(const char* curve_name, jsrt_ec_curve_t* curve);
 const char* jsrt_ec_curve_to_string(jsrt_ec_curve_t curve);
 int jsrt_ec_get_openssl_nid(jsrt_ec_curve_t curve);
 
+// Memory management
+void jsrt_evp_pkey_free_wrapper(void* pkey);
+
 #endif  // JSRT_CRYPTO_EC_H

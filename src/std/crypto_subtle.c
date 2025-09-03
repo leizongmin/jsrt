@@ -1695,11 +1695,8 @@ JSValue jsrt_subtle_sign(JSContext* ctx, JSValueConst this_val, int argc, JSValu
     JS_FreeValue(ctx, hash_val);
 
     // Free the EC key
-    if (ec_private_key && openssl_handle) {
-      void (*EVP_PKEY_free)(void* pkey) = JSRT_DLSYM(openssl_handle, "EVP_PKEY_free");
-      if (EVP_PKEY_free) {
-        EVP_PKEY_free(ec_private_key);
-      }
+    if (ec_private_key) {
+      jsrt_evp_pkey_free_wrapper(ec_private_key);
     }
 
     JS_FreeValue(ctx, key_data_val);
@@ -2006,11 +2003,8 @@ JSValue jsrt_subtle_verify(JSContext* ctx, JSValueConst this_val, int argc, JSVa
     JS_FreeValue(ctx, hash_val);
 
     // Free the EC key
-    if (ec_public_key && openssl_handle) {
-      void (*EVP_PKEY_free)(void* pkey) = JSRT_DLSYM(openssl_handle, "EVP_PKEY_free");
-      if (EVP_PKEY_free) {
-        EVP_PKEY_free(ec_public_key);
-      }
+    if (ec_public_key) {
+      jsrt_evp_pkey_free_wrapper(ec_public_key);
     }
 
     JS_FreeValue(ctx, key_data_val);
@@ -2665,15 +2659,11 @@ JSValue jsrt_subtle_deriveBits(JSContext* ctx, JSValueConst this_val, int argc, 
   JS_FreeValue(ctx, pub_key_data_val);
 
   if (!ec_private_key || !ec_public_key) {
-    if (ec_private_key && openssl_handle) {
-      void (*EVP_PKEY_free)(void* pkey) = JSRT_DLSYM(openssl_handle, "EVP_PKEY_free");
-      if (EVP_PKEY_free)
-        EVP_PKEY_free(ec_private_key);
+    if (ec_private_key) {
+      jsrt_evp_pkey_free_wrapper(ec_private_key);
     }
-    if (ec_public_key && openssl_handle) {
-      void (*EVP_PKEY_free)(void* pkey) = JSRT_DLSYM(openssl_handle, "EVP_PKEY_free");
-      if (EVP_PKEY_free)
-        EVP_PKEY_free(ec_public_key);
+    if (ec_public_key) {
+      jsrt_evp_pkey_free_wrapper(ec_public_key);
     }
     JSValue error = jsrt_crypto_throw_error(ctx, "OperationError", "Failed to create EC keys");
     return create_rejected_promise(ctx, error);
@@ -2688,15 +2678,11 @@ JSValue jsrt_subtle_deriveBits(JSContext* ctx, JSValueConst this_val, int argc, 
   JSValue derived_bits = jsrt_ec_derive_bits(ctx, ec_private_key, &ecdh_params);
 
   // Free the EC keys
-  if (ec_private_key && openssl_handle) {
-    void (*EVP_PKEY_free)(void* pkey) = JSRT_DLSYM(openssl_handle, "EVP_PKEY_free");
-    if (EVP_PKEY_free)
-      EVP_PKEY_free(ec_private_key);
+  if (ec_private_key) {
+    jsrt_evp_pkey_free_wrapper(ec_private_key);
   }
-  if (ec_public_key && openssl_handle) {
-    void (*EVP_PKEY_free)(void* pkey) = JSRT_DLSYM(openssl_handle, "EVP_PKEY_free");
-    if (EVP_PKEY_free)
-      EVP_PKEY_free(ec_public_key);
+  if (ec_public_key) {
+    jsrt_evp_pkey_free_wrapper(ec_public_key);
   }
 
   if (JS_IsException(derived_bits)) {

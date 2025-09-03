@@ -246,9 +246,10 @@ static JSValue validate_ffi_arguments(JSContext *ctx, const char *function_name,
   return JS_UNDEFINED; // No error
 }
 
-// Enhanced library loading error with system information
+// Enhanced library loading error with ReferenceError type
 static JSValue create_library_load_error(JSContext *ctx, const char *lib_name) {
   char message[512];
+  char full_message[600];
   
 #ifdef _WIN32
   DWORD error_code = GetLastError();
@@ -268,6 +269,30 @@ static JSValue create_library_load_error(JSContext *ctx, const char *lib_name) {
            lib_name, dlerror_msg ? dlerror_msg : "Unknown error");
 #endif
   
+  // Create ReferenceError instead of generic Error for library loading failures
+  snprintf(full_message, sizeof(full_message), "FFI Error in ffi.Library: %s", message);
+  
+  JSValue error_ctor = JS_GetGlobalObject(ctx);
+  JSValue ref_error_obj = JS_GetPropertyStr(ctx, error_ctor, "ReferenceError");
+  JS_FreeValue(ctx, error_ctor);
+  
+  if (JS_IsConstructor(ctx, ref_error_obj)) {
+    JSValue message_val = JS_NewString(ctx, full_message);
+    JSValue error_instance = JS_CallConstructor(ctx, ref_error_obj, 1, &message_val);
+    JS_FreeValue(ctx, message_val);
+    JS_FreeValue(ctx, ref_error_obj);
+    
+    if (!JS_IsException(error_instance)) {
+      // Add additional properties for debugging
+      JS_SetPropertyStr(ctx, error_instance, "ffiFunction", JS_NewString(ctx, "ffi.Library"));
+      JS_SetPropertyStr(ctx, error_instance, "ffiModule", JS_NewString(ctx, "std:ffi"));
+      return JS_Throw(ctx, error_instance);
+    }
+    JS_FreeValue(ctx, error_instance);
+  }
+  JS_FreeValue(ctx, ref_error_obj);
+  
+  // Fallback to original method
   return create_ffi_error(ctx, message, "ffi.Library");
 }
 

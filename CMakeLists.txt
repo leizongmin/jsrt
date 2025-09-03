@@ -84,6 +84,8 @@ if(WIN32)
     # Windows doesn't need dl, m is built into MSVCRT, pthread is handled by libuv
     set(JSRT_PLATFORM_LIBS)
 else()
+    # Unix/Linux/macOS need these libraries
+    set(JSRT_PLATFORM_LIBS dl m pthread)
     include_directories(src deps/quickjs deps/libuv/include deps/libuv/src)
 endif()
 
@@ -99,7 +101,8 @@ set(JSRT_LINK_LIBS
     jsrtcore
     quickjs
     uv_a
-    ${JSRT_PLATFORM_LIBS})
+    ${JSRT_PLATFORM_LIBS}
+    ${FFI_LIBRARIES})
 add_library(jsrtcore STATIC ${JSRT_LIB_FILES})
 add_executable(jsrt src/main.c)
 target_link_libraries(jsrt ${JSRT_LINK_LIBS})

@@ -1,7 +1,7 @@
 cpu_count := $(shell nproc 2>/dev/null || sysctl -n hw.logicalcpu 2>/dev/null || echo 4)
 
 .PHONY: all
-all: clang-format jsrt
+all: clang-format prettier jsrt
 
 .PHONY: jsrt
 jsrt:
@@ -42,6 +42,10 @@ clean:
 clang-format:
 	find src -type f -name "*.c" -o -name "*.h" | xargs clang-format -i
 	find test -type f -name "*.c" -o -name "*.h" | xargs clang-format -i
+
+.PHONY: prettier
+prettier:
+	npx prettier --write 'examples/**/*.{js,mjs}' 'test/**/*.{js,mjs}'
 
 .PHONY: test
 test: jsrt

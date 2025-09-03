@@ -10,11 +10,11 @@ console.log('value:', value);
 // Test 2: Dynamic import
 console.log('\nTest 2: Dynamic import');
 import('./test_module.mjs')
-  .then(mod => {
+  .then((mod) => {
     console.log('Dynamic hello("Dynamic"):', mod.hello('Dynamic'));
     console.log('Dynamic value:', mod.value);
   })
-  .catch(err => {
+  .catch((err) => {
     console.error('Dynamic import failed:', err);
   });
 

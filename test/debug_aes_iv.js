@@ -8,16 +8,15 @@ try {
   console.log('IV byteOffset:', iv.byteOffset);
   console.log('IV byteLength:', iv.byteLength);
   console.log('IV data:', Array.from(iv));
-  
+
   // Test the algorithm object
   const algorithm = {
-    name: "AES-CBC",
-    iv: iv
+    name: 'AES-CBC',
+    iv: iv,
   };
-  
+
   console.log('Algorithm IV:', typeof algorithm.iv);
   console.log('Algorithm IV constructor:', algorithm.iv.constructor.name);
-  
 } catch (error) {
   console.error('Error:', error);
 }

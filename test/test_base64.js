@@ -1,5 +1,5 @@
 // Base64 Utilities tests for WinterCG compliance
-const assert = require("std:assert");
+const assert = require('std:assert');
 console.log('=== Starting Base64 Utilities Tests ===');
 
 // Test 1: Basic btoa functionality
@@ -7,10 +7,14 @@ console.log('Test 1: btoa basic functionality');
 assert.strictEqual(typeof btoa, 'function', 'btoa should be a function');
 const result = btoa('hello');
 console.log('btoa("hello") =', result);
-assert.strictEqual(result, 'aGVsbG8=', 'btoa("hello") should return "aGVsbG8="');
+assert.strictEqual(
+  result,
+  'aGVsbG8=',
+  'btoa("hello") should return "aGVsbG8="'
+);
 console.log('✅ PASS: Basic btoa encoding works correctly');
 
-// Test 2: Basic atob functionality  
+// Test 2: Basic atob functionality
 console.log('Test 2: atob basic functionality');
 assert.strictEqual(typeof atob, 'function', 'atob should be a function');
 const result2 = atob('aGVsbG8=');
@@ -26,13 +30,17 @@ const testStrings = [
   'hello',
   'Hello World!',
   'JavaScript Runtime',
-  'The quick brown fox jumps over the lazy dog'
+  'The quick brown fox jumps over the lazy dog',
 ];
 
 for (const testStr of testStrings) {
   const encoded = btoa(testStr);
   const decoded = atob(encoded);
-  assert.strictEqual(decoded, testStr, `Round-trip for "${testStr}" should work correctly`);
+  assert.strictEqual(
+    decoded,
+    testStr,
+    `Round-trip for "${testStr}" should work correctly`
+  );
   console.log(`✅ PASS: "${testStr}" round-trip successful`);
 }
 
@@ -43,9 +51,17 @@ try {
   const binaryStr = String.fromCharCode(65, 66, 67); // 'ABC'
   const encoded = btoa(binaryStr);
   const decoded = atob(encoded);
-  
-  assert.strictEqual(decoded.length, binaryStr.length, 'Decoded binary data should have same length');
-  assert.strictEqual(decoded, binaryStr, 'Round trip should work for binary data');
+
+  assert.strictEqual(
+    decoded.length,
+    binaryStr.length,
+    'Decoded binary data should have same length'
+  );
+  assert.strictEqual(
+    decoded,
+    binaryStr,
+    'Round trip should work for binary data'
+  );
   console.log('✅ PASS: Binary data encoding works correctly');
 } catch (e) {
   console.log('❌ FAIL: Binary data encoding threw error:', e.message);
@@ -54,9 +70,9 @@ try {
 // Test 5: Error handling - invalid Base64 input
 console.log('Test 5: Error handling - invalid Base64 input');
 const invalidInputs = [
-  'invalid!',       // Invalid character
-  'abc',           // Invalid length
-  'ab==cd==',      // Invalid padding
+  'invalid!', // Invalid character
+  'abc', // Invalid length
+  'ab==cd==', // Invalid padding
 ];
 
 for (const invalid of invalidInputs) {
@@ -64,7 +80,10 @@ for (const invalid of invalidInputs) {
     atob(invalid);
     console.log(`❌ FAIL: atob("${invalid}") should have thrown an error`);
   } catch (e) {
-    console.log(`✅ PASS: atob("${invalid}") correctly threw error:`, e.message);
+    console.log(
+      `✅ PASS: atob("${invalid}") correctly threw error:`,
+      e.message
+    );
   }
 }
 
@@ -85,16 +104,24 @@ const testVectors = [
   { input: 'foo', output: 'Zm9v' },
   { input: 'foob', output: 'Zm9vYg==' },
   { input: 'fooba', output: 'Zm9vYmE=' },
-  { input: 'foobar', output: 'Zm9vYmFy' }
+  { input: 'foobar', output: 'Zm9vYmFy' },
 ];
 
 for (const vector of testVectors) {
   const encoded = btoa(vector.input);
-  assert.strictEqual(encoded, vector.output, `btoa("${vector.input}") should equal "${vector.output}"`);
+  assert.strictEqual(
+    encoded,
+    vector.output,
+    `btoa("${vector.input}") should equal "${vector.output}"`
+  );
   console.log(`✅ PASS: btoa("${vector.input}") = "${encoded}"`);
-  
+
   const decoded = atob(vector.output);
-  assert.strictEqual(decoded, vector.input, `atob("${vector.output}") should equal "${vector.input}"`);
+  assert.strictEqual(
+    decoded,
+    vector.input,
+    `atob("${vector.output}") should equal "${vector.input}"`
+  );
   console.log(`✅ PASS: atob("${vector.output}") = "${decoded}"`);
 }
 

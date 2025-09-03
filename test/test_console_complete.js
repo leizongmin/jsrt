@@ -1,15 +1,19 @@
 // Comprehensive Console API tests for WinterCG compliance
-const assert = require("std:assert");
+const assert = require('std:assert');
 console.log('=== Starting Complete Console API Tests ===');
 
 // Test basic logging methods
 console.log('Test 1: console.log - basic functionality');
 console.log('This is a log message with', 123, true, null, undefined);
 
-console.log('Test 2: console.error - error messages');  
+console.log('Test 2: console.error - error messages');
 if (typeof console.error === 'function') {
   console.error('This is an error message with', 456, false);
-  assert.strictEqual(typeof console.error, 'function', 'console.error should be a function');
+  assert.strictEqual(
+    typeof console.error,
+    'function',
+    'console.error should be a function'
+  );
 } else {
   console.log('console.error NOT IMPLEMENTED');
 }
@@ -17,7 +21,11 @@ if (typeof console.error === 'function') {
 console.log('Test 3: console.warn - warning messages');
 if (typeof console.warn === 'function') {
   console.warn('This is a warning message with', 789, 'warning');
-  assert.strictEqual(typeof console.warn, 'function', 'console.warn should be a function');
+  assert.strictEqual(
+    typeof console.warn,
+    'function',
+    'console.warn should be a function'
+  );
 } else {
   console.log('console.warn NOT IMPLEMENTED');
 }
@@ -25,15 +33,23 @@ if (typeof console.warn === 'function') {
 console.log('Test 4: console.info - info messages');
 if (typeof console.info === 'function') {
   console.info('This is an info message with', { info: true });
-  assert.strictEqual(typeof console.info, 'function', 'console.info should be a function');
+  assert.strictEqual(
+    typeof console.info,
+    'function',
+    'console.info should be a function'
+  );
 } else {
   console.log('console.info NOT IMPLEMENTED');
 }
 
-console.log('Test 5: console.debug - debug messages');  
+console.log('Test 5: console.debug - debug messages');
 if (typeof console.debug === 'function') {
   console.debug('This is a debug message with', [1, 2, 3]);
-  assert.strictEqual(typeof console.debug, 'function', 'console.debug should be a function');
+  assert.strictEqual(
+    typeof console.debug,
+    'function',
+    'console.debug should be a function'
+  );
 } else {
   console.log('console.debug NOT IMPLEMENTED');
 }
@@ -55,9 +71,20 @@ if (typeof console.assert === 'function') {
 }
 
 console.log('Test 8: console.time/timeEnd - timing');
-if (typeof console.time === 'function' && typeof console.timeEnd === 'function') {
-  assert.strictEqual(typeof console.time, 'function', 'console.time should be a function');
-  assert.strictEqual(typeof console.timeEnd, 'function', 'console.timeEnd should be a function');
+if (
+  typeof console.time === 'function' &&
+  typeof console.timeEnd === 'function'
+) {
+  assert.strictEqual(
+    typeof console.time,
+    'function',
+    'console.time should be a function'
+  );
+  assert.strictEqual(
+    typeof console.timeEnd,
+    'function',
+    'console.timeEnd should be a function'
+  );
   console.time('test-timer');
   // Simple computation to measure
   let sum = 0;
@@ -65,7 +92,7 @@ if (typeof console.time === 'function' && typeof console.timeEnd === 'function')
     sum += i;
   }
   console.timeEnd('test-timer');
-  
+
   console.time('another-timer');
   console.timeEnd('another-timer');
 } else {
@@ -73,11 +100,22 @@ if (typeof console.time === 'function' && typeof console.timeEnd === 'function')
 }
 
 console.log('Test 9: console.count/countReset - counting');
-if (typeof console.count === 'function' && typeof console.countReset === 'function') {
-  assert.strictEqual(typeof console.count, 'function', 'console.count should be a function');
-  assert.strictEqual(typeof console.countReset, 'function', 'console.countReset should be a function');
+if (
+  typeof console.count === 'function' &&
+  typeof console.countReset === 'function'
+) {
+  assert.strictEqual(
+    typeof console.count,
+    'function',
+    'console.count should be a function'
+  );
+  assert.strictEqual(
+    typeof console.countReset,
+    'function',
+    'console.countReset should be a function'
+  );
   console.count('test-counter');
-  console.count('test-counter'); 
+  console.count('test-counter');
   console.count('test-counter');
   console.count('another-counter');
   console.count('another-counter');
@@ -88,7 +126,10 @@ if (typeof console.count === 'function' && typeof console.countReset === 'functi
 }
 
 console.log('Test 10: console.group/groupEnd - grouping');
-if (typeof console.group === 'function' && typeof console.groupEnd === 'function') {
+if (
+  typeof console.group === 'function' &&
+  typeof console.groupEnd === 'function'
+) {
   console.group('Group 1');
   console.log('Inside group 1');
   console.group('Nested group');
@@ -123,14 +164,14 @@ if (typeof console.table === 'function') {
   console.table([
     { name: 'Alice', age: 30, city: 'New York' },
     { name: 'Bob', age: 25, city: 'Los Angeles' },
-    { name: 'Charlie', age: 35, city: 'Chicago' }
+    { name: 'Charlie', age: 35, city: 'Chicago' },
   ]);
   console.table({ a: 1, b: 2, c: 3 });
 } else {
   console.log('console.table NOT IMPLEMENTED');
 }
 
-console.log('Test 14: console.clear - clear console');  
+console.log('Test 14: console.clear - clear console');
 if (typeof console.clear === 'function') {
   console.log('This message should be cleared');
   console.clear();

@@ -4,4 +4,3 @@ function main() {
 }
 
 main();
-

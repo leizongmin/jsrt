@@ -12,35 +12,36 @@ console.log('🔧 Available methods:', Object.keys(ffi));
 // Demo: Loading a library (without actually calling functions)
 try {
   console.log('\n📚 Loading system library...');
-  
+
   // Try to load a common system library
   const lib = ffi.Library('libc.so.6', {
-    'strlen': ['int', ['string']],
-    'strcmp': ['int', ['string', 'string']],
-    'malloc': ['pointer', ['int']],
-    'free': ['void', ['pointer']]
+    strlen: ['int', ['string']],
+    strcmp: ['int', ['string', 'string']],
+    malloc: ['pointer', ['int']],
+    free: ['void', ['pointer']],
   });
-  
+
   console.log('✅ Library loaded successfully!');
   console.log('🎯 Available functions:');
-  
+
   // List the functions that were successfully loaded
   for (const key of Object.keys(lib)) {
     if (typeof lib[key] === 'function') {
       console.log(`   - ${key}(): ${typeof lib[key]}`);
     }
   }
-  
 } catch (error) {
   console.log('⚠️ Library loading failed:', error.message);
-  console.log('   This is normal on some systems without the exact library name');
+  console.log(
+    '   This is normal on some systems without the exact library name'
+  );
 }
 
 // Demo: Show error handling for non-existent library
 console.log('\n🧪 Testing error handling...');
 try {
   ffi.Library('nonexistent_library.so', {
-    'dummy': ['void', []]
+    dummy: ['void', []],
   });
   console.log('❌ This should not succeed');
 } catch (error) {

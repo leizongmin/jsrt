@@ -11,6 +11,7 @@
 #include <unistd.h>
 #endif
 
+#include <libgen.h>
 #include <quickjs.h>
 #include <stdbool.h>
 #include <stdio.h>
@@ -127,7 +128,17 @@ static JSValue jsrt_process_uptime(JSContext *ctx, JSValueConst this_val, int ar
   return JS_NewFloat64(ctx, uptime_seconds);
 }
 
-// Helper function to read and cache the VERSION file
+// Helper function to get executable directory (same as main.c)
+static char *GetExecutableDir(const char *executable_path) {
+  // Find the directory containing the executable
+  char *path_copy = strdup(executable_path);
+  char *dir = dirname(path_copy);
+  char *result = strdup(dir);
+  free(path_copy);
+  return result;
+}
+
+// Helper function to read and cache the VERSION file (same logic as jsrt version command)
 static char *get_jsrt_version() {
   static char *cached_version = NULL;
   static bool version_loaded = false;
@@ -137,19 +148,31 @@ static char *get_jsrt_version() {
   }
 
   version_loaded = true;
+  const char *version = NULL;
   JSRT_ReadFileResult version_file = JSRT_ReadFileResultDefault();
 
-  // Try VERSION in current directory first
-  version_file = JSRT_ReadFile("VERSION");
+  // Use the same logic as PrintVersion in main.c
+  if (g_jsrt_argc > 0 && g_jsrt_argv && g_jsrt_argv[0]) {
+    // Try to find VERSION file relative to executable
+    char *exe_dir = GetExecutableDir(g_jsrt_argv[0]);
 
-  // If not found, try relative paths that might work depending on working directory
-  if (version_file.error != JSRT_READ_FILE_OK) {
-    version_file = JSRT_ReadFile("../VERSION");
+    // Try VERSION in the same directory as executable first
+    char version_path[1024];
+    snprintf(version_path, sizeof(version_path), "%s/VERSION", exe_dir);
+    version_file = JSRT_ReadFile(version_path);
+
+    // If not found, try one directory up (for bin/jsrt layout)
+    if (version_file.error != JSRT_READ_FILE_OK) {
+      snprintf(version_path, sizeof(version_path), "%s/../VERSION", exe_dir);
+      version_file = JSRT_ReadFile(version_path);
+    }
+
+    free(exe_dir);
   }
 
-  // Also try from build directory structure
+  // If still not found, try current directory as fallback
   if (version_file.error != JSRT_READ_FILE_OK) {
-    version_file = JSRT_ReadFile("../../VERSION");
+    version_file = JSRT_ReadFile("VERSION");
   }
 
   if (version_file.error == JSRT_READ_FILE_OK && version_file.data != NULL) {

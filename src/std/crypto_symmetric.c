@@ -468,6 +468,128 @@ static int jsrt_crypto_aes_gcm_decrypt(jsrt_symmetric_params_t* params, const ui
   return 0;
 }
 
+// AES-CTR encryption
+static int jsrt_crypto_aes_ctr_encrypt(jsrt_symmetric_params_t* params, const uint8_t* plaintext,
+                                       size_t plaintext_length, uint8_t** ciphertext, size_t* ciphertext_length) {
+  const void* cipher = get_openssl_cipher(JSRT_SYMMETRIC_AES_CTR, params->key_length);
+  if (!cipher) {
+    JSRT_Debug("JSRT_Crypto_Symmetric: Unsupported AES-CTR key length: %zu", params->key_length);
+    return -1;
+  }
+
+  void* ctx = openssl_symmetric_funcs.EVP_CIPHER_CTX_new();
+  if (!ctx) {
+    JSRT_Debug("JSRT_Crypto_Symmetric: Failed to create cipher context");
+    return -1;
+  }
+
+  // Initialize encryption
+  if (openssl_symmetric_funcs.EVP_EncryptInit_ex(ctx, cipher, NULL, params->key_data, params->params.ctr.counter) !=
+      1) {
+    openssl_symmetric_funcs.EVP_CIPHER_CTX_free(ctx);
+    JSRT_Debug("JSRT_Crypto_Symmetric: Failed to initialize AES-CTR encryption");
+    return -1;
+  }
+
+  // Allocate output buffer (CTR mode doesn't expand the size)
+  *ciphertext = malloc(plaintext_length);
+  if (!*ciphertext) {
+    openssl_symmetric_funcs.EVP_CIPHER_CTX_free(ctx);
+    JSRT_Debug("JSRT_Crypto_Symmetric: Failed to allocate ciphertext buffer");
+    return -1;
+  }
+
+  // Encrypt
+  int len;
+  if (openssl_symmetric_funcs.EVP_EncryptUpdate(ctx, *ciphertext, &len, plaintext, plaintext_length) != 1) {
+    free(*ciphertext);
+    *ciphertext = NULL;
+    openssl_symmetric_funcs.EVP_CIPHER_CTX_free(ctx);
+    JSRT_Debug("JSRT_Crypto_Symmetric: Failed to encrypt data");
+    return -1;
+  }
+
+  *ciphertext_length = len;
+
+  // Finalize encryption (CTR mode doesn't use padding)
+  int final_len;
+  if (openssl_symmetric_funcs.EVP_EncryptFinal_ex(ctx, *ciphertext + len, &final_len) != 1) {
+    free(*ciphertext);
+    *ciphertext = NULL;
+    openssl_symmetric_funcs.EVP_CIPHER_CTX_free(ctx);
+    JSRT_Debug("JSRT_Crypto_Symmetric: Failed to finalize encryption");
+    return -1;
+  }
+
+  *ciphertext_length += final_len;
+  openssl_symmetric_funcs.EVP_CIPHER_CTX_free(ctx);
+
+  JSRT_Debug("JSRT_Crypto_Symmetric: Successfully encrypted %zu bytes to %zu bytes (AES-CTR)", plaintext_length,
+             *ciphertext_length);
+  return 0;
+}
+
+// AES-CTR decryption
+static int jsrt_crypto_aes_ctr_decrypt(jsrt_symmetric_params_t* params, const uint8_t* ciphertext,
+                                       size_t ciphertext_length, uint8_t** plaintext, size_t* plaintext_length) {
+  const void* cipher = get_openssl_cipher(JSRT_SYMMETRIC_AES_CTR, params->key_length);
+  if (!cipher) {
+    JSRT_Debug("JSRT_Crypto_Symmetric: Unsupported AES-CTR key length: %zu", params->key_length);
+    return -1;
+  }
+
+  void* ctx = openssl_symmetric_funcs.EVP_CIPHER_CTX_new();
+  if (!ctx) {
+    JSRT_Debug("JSRT_Crypto_Symmetric: Failed to create cipher context");
+    return -1;
+  }
+
+  // Initialize decryption (CTR mode is symmetric - encryption and decryption are the same)
+  if (openssl_symmetric_funcs.EVP_DecryptInit_ex(ctx, cipher, NULL, params->key_data, params->params.ctr.counter) !=
+      1) {
+    openssl_symmetric_funcs.EVP_CIPHER_CTX_free(ctx);
+    JSRT_Debug("JSRT_Crypto_Symmetric: Failed to initialize AES-CTR decryption");
+    return -1;
+  }
+
+  // Allocate output buffer
+  *plaintext = malloc(ciphertext_length);
+  if (!*plaintext) {
+    openssl_symmetric_funcs.EVP_CIPHER_CTX_free(ctx);
+    JSRT_Debug("JSRT_Crypto_Symmetric: Failed to allocate plaintext buffer");
+    return -1;
+  }
+
+  // Decrypt
+  int len;
+  if (openssl_symmetric_funcs.EVP_DecryptUpdate(ctx, *plaintext, &len, ciphertext, ciphertext_length) != 1) {
+    free(*plaintext);
+    *plaintext = NULL;
+    openssl_symmetric_funcs.EVP_CIPHER_CTX_free(ctx);
+    JSRT_Debug("JSRT_Crypto_Symmetric: Failed to decrypt data");
+    return -1;
+  }
+
+  *plaintext_length = len;
+
+  // Finalize decryption
+  int final_len;
+  if (openssl_symmetric_funcs.EVP_DecryptFinal_ex(ctx, *plaintext + len, &final_len) != 1) {
+    free(*plaintext);
+    *plaintext = NULL;
+    openssl_symmetric_funcs.EVP_CIPHER_CTX_free(ctx);
+    JSRT_Debug("JSRT_Crypto_Symmetric: Failed to finalize decryption");
+    return -1;
+  }
+
+  *plaintext_length += final_len;
+  openssl_symmetric_funcs.EVP_CIPHER_CTX_free(ctx);
+
+  JSRT_Debug("JSRT_Crypto_Symmetric: Successfully decrypted %zu bytes to %zu bytes (AES-CTR)", ciphertext_length,
+             *plaintext_length);
+  return 0;
+}
+
 // AES-CBC decryption
 static int jsrt_crypto_aes_cbc_decrypt(jsrt_symmetric_params_t* params, const uint8_t* ciphertext,
                                        size_t ciphertext_length, uint8_t** plaintext, size_t* plaintext_length) {
@@ -542,9 +664,7 @@ int jsrt_crypto_aes_encrypt(jsrt_symmetric_params_t* params, const uint8_t* plai
     case JSRT_SYMMETRIC_AES_GCM:
       return jsrt_crypto_aes_gcm_encrypt(params, plaintext, plaintext_length, ciphertext, ciphertext_length);
     case JSRT_SYMMETRIC_AES_CTR:
-      // TODO: Implement CTR
-      JSRT_Debug("JSRT_Crypto_Symmetric: AES-CTR not yet implemented");
-      return -1;
+      return jsrt_crypto_aes_ctr_encrypt(params, plaintext, plaintext_length, ciphertext, ciphertext_length);
     default:
       JSRT_Debug("JSRT_Crypto_Symmetric: Unsupported algorithm: %d", params->algorithm);
       return -1;
@@ -565,9 +685,7 @@ int jsrt_crypto_aes_decrypt(jsrt_symmetric_params_t* params, const uint8_t* ciph
     case JSRT_SYMMETRIC_AES_GCM:
       return jsrt_crypto_aes_gcm_decrypt(params, ciphertext, ciphertext_length, plaintext, plaintext_length);
     case JSRT_SYMMETRIC_AES_CTR:
-      // TODO: Implement CTR
-      JSRT_Debug("JSRT_Crypto_Symmetric: AES-CTR not yet implemented");
-      return -1;
+      return jsrt_crypto_aes_ctr_decrypt(params, ciphertext, ciphertext_length, plaintext, plaintext_length);
     default:
       JSRT_Debug("JSRT_Crypto_Symmetric: Unsupported algorithm: %d", params->algorithm);
       return -1;
@@ -606,7 +724,7 @@ bool jsrt_crypto_is_symmetric_algorithm_supported(jsrt_symmetric_algorithm_t alg
     case JSRT_SYMMETRIC_AES_GCM:
       return true;  // Implemented
     case JSRT_SYMMETRIC_AES_CTR:
-      return false;  // TODO: Implement
+      return true;  // Implemented
     default:
       return false;
   }

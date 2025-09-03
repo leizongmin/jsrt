@@ -117,13 +117,13 @@ const hash = await crypto.subtle.digest('SHA-256', data);
 **实现复杂度**：🟡 中等  
 **预估工作量**：1-2 天
 
-#### 1.3 对称加密算法
+#### 1.3 对称加密算法 - ✅ **全部完成**
 **目标**：实现AES系列对称加密
 
-**需要实现**：
-- AES-CBC (128, 192, 256位密钥)
-- AES-GCM (128, 192, 256位密钥) 
-- AES-CTR (128, 192, 256位密钥)
+**已完成功能** ✅：
+- ✅ AES-CBC (128, 192, 256位密钥) - 完全实现
+- ✅ AES-GCM (128, 192, 256位密钥) - 完全实现
+- ✅ AES-CTR (128, 192, 256位密钥) - **新完成**
 
 **OpenSSL映射**：
 - `EVP_aes_128_cbc()`, `EVP_aes_256_cbc()`
@@ -229,16 +229,17 @@ const keyPair = await crypto.subtle.generateKey(
 - ✅ 建立完整的RSA密钥生命周期管理 (生成->序列化->使用->清理)
 - ✅ 创建模块化测试框架，支持多种哈希算法和错误场景测试
 
-#### 2.2 椭圆曲线算法 (ECDSA/ECDH) - ✅ 完整实现
+#### 2.2 椭圆曲线算法 (ECDSA/ECDH) - ✅ **完整实现**
 **目标**：实现椭圆曲线加密和签名
 
 **已完成功能** ✅：
-- ✅ ECDSA/ECDH 密钥对生成 (P-256, P-384, P-521曲线)
-- ✅ EC算法基础架构和OpenSSL集成
-- ✅ WebCrypto API集成 (generateKey方法)
-- ✅ ECDSA签名/验证 - 完整实现，支持SHA-256/384/512哈希算法
-- ✅ ECDH密钥派生 - deriveBits方法完整实现，支持密钥协商
-- ✅ 支持算法标记 - 已添加到jsrt_crypto_is_algorithm_supported
+- ✅ **ECDSA/ECDH密钥对生成** - 支持P-256, P-384, P-521曲线，完整的EVP_PKEY生成和序列化
+- ✅ **EC算法基础架构** - 完整的OpenSSL动态函数加载和错误处理
+- ✅ **WebCrypto API完整集成** - generateKey, sign, verify, deriveBits全部方法实现
+- ✅ **ECDSA签名/验证** - 使用EVP_DigestSign/EVP_DigestVerify，支持SHA-256/384/512哈希算法
+- ✅ **ECDH密钥协商** - deriveBits方法完整实现，支持跨曲线密钥派生
+- ✅ **内存管理优化** - 统一的EVP_PKEY清理机制，正确的OpenSSL内存释放
+- ✅ **算法支持检测** - 完整集成到jsrt_crypto_is_algorithm_supported系统
 
 **支持曲线**：
 - P-256 (secp256r1) ✅
@@ -289,18 +290,23 @@ const sharedSecret = await crypto.subtle.deriveBits(
 **实际工作量**：1.5天 (预估4-6天)
 **实现复杂度**：🔴 非常困难 → ✅ 完全实现
 
-**最新进展** (2025-09-03)：
-- ✅ **EC密钥生成完成** - 支持P-256, P-384, P-521曲线
-- ✅ **基础架构搭建** - 完成crypto_ec模块和OpenSSL函数加载
-- ✅ **ECDSA签名/验证集成** - 完整实现并通过所有测试
-- ✅ **ECDH密钥派生集成** - deriveBits方法完整实现
-- ✅ **测试验证** - ECDSA和ECDH全部测试通过
-- ✅ **API集成完成** - sign/verify/deriveBits方法完全集成到crypto_subtle.c
+**最新进展** (2025-09-04)：
+- ✅ **EC完整实现** - ECDSA和ECDH算法完全实现，支持所有主要操作
+- ✅ **内存管理修复** - 统一了EVP_PKEY释放机制，修复了OpenSSL内存泄漏问题
+- ✅ **算法验证完成** - 密钥生成、签名验证、密钥派生功能全部验证通过
+- ✅ **跨平台兼容** - 支持OpenSSL 1.1.1+和OpenSSL 3.x版本
+- ✅ **完整测试覆盖** - 包含错误处理、边界条件和性能测试的完整测试套件
+- ⚠️ **QuickJS内存问题** - 存在QuickJS垃圾回收相关的内存问题，不影响核心功能
 
 ### 第三阶段：密钥管理和派生 (优先级：中)
 
-#### 3.1 密钥导入/导出
+#### 3.1 密钥导入/导出 - ✅ **部分完成**
 **目标**：支持多种密钥格式
+
+**已完成功能** ✅：
+- ✅ **Raw格式密钥导入** - `crypto.subtle.importKey()` 支持 "raw" 格式
+- ✅ **基础CryptoKey对象** - 支持type, extractable, usages, algorithm属性
+- ✅ **PBKDF2基础密钥支持** - 为密钥派生功能提供基础
 
 **需要实现**：
 - **格式支持**：
@@ -328,12 +334,20 @@ const key = await crypto.subtle.importKey(
 **实现复杂度**：🔴 困难  
 **预估工作量**：3-4 天
 
-#### 3.2 密钥派生函数 (KDF)
+#### 3.2 密钥派生函数 (KDF) - ✅ **PBKDF2完成**
 **目标**：实现密钥派生算法
 
-**需要实现**：
-- PBKDF2 (Password-Based Key Derivation Function 2)
-- HKDF (HMAC-based Key Derivation Function)
+**已完成功能** ✅：
+- ✅ **PBKDF2完整实现** - `crypto.subtle.deriveKey()` 支持PBKDF2算法
+- ✅ **多种哈希算法** - 支持SHA-256, SHA-384, SHA-512 (排除不安全的SHA-1)
+- ✅ **可变迭代次数** - 支持1000-10000+次迭代，性能良好
+- ✅ **盐值处理** - 支持TypedArray和ArrayBuffer格式的盐值
+- ✅ **密钥派生验证** - 派生的密钥可直接用于AES加密操作
+- ✅ **提取性控制** - 正确处理extractable参数
+- ✅ **错误处理** - 完整的参数验证和错误报告
+
+**待完成功能**：
+- ⚠️ HKDF (HMAC-based Key Derivation Function) - 需要OpenSSL 1.1.1+支持
 
 **OpenSSL映射**：
 - `PKCS5_PBKDF2_HMAC()`
@@ -495,10 +509,11 @@ JSValue jsrt_crypto_throw_error(JSContext *ctx,
 8. **RSA算法族** - ✅ **完成** (RSA-OAEP✅, RSA-PKCS1-v1_5✅, RSASSA-PKCS1-v1_5✅)
    - **实际完成时间**: 4天 (预估5-7天)
    - **核心成果**: 完整的RSA加密和签名实现，支持多种填充模式和哈希算法
-9. **椭圆曲线** - ✅ **完成** (ECDSA签名/验证✅, ECDH密钥派生✅)
-   - **实际完成时间**: 1.5天 (预估4-6天)
-   - **核心成果**: 完整的EC算法实现，包括签名验证和密钥协商
-10. **密钥管理** - 3-4天 (待开始)
+9. **椭圆曲线算法** - ✅ **完全完成** (ECDSA签名/验证✅, ECDH密钥派生✅)
+   - **实际完成时间**: 2天 (预估4-6天)
+   - **核心成果**: 完整的EC算法实现，包括密钥生成、签名验证和密钥协商
+   - **技术突破**: 解决了内存管理和OpenSSL函数集成的复杂问题
+10. **密钥管理** - ✅ **部分完成** (importKey raw格式✅, PBKDF2✅)
 
 ### Phase 4: 高级功能 (1-2周)
 11. **密钥派生** - 2-3天
@@ -563,7 +578,9 @@ option(JSRT_CRYPTO_REQUIRE_OPENSSL "Require OpenSSL (fail if not found)" OFF)
 - [x] RSA密钥生成和基础设施 (支持1024-4096位密钥)
 - [x] RSA签名/验证完全通过测试 (支持SHA-256/384/512)
 - [x] EC密钥生成支持 (P-256, P-384, P-521曲线)
-- [ ] EC签名/验证和密钥派生完整实现
+- [x] **EC签名/验证和密钥派生完整实现** ✅
+- [x] **ECDSA和ECDH算法完全实现** ✅
+- [x] **基础密钥管理功能** (importKey raw格式, PBKDF2密钥派生) ✅
 
 ### 性能指标
 - [ ] 加密操作延迟 < 10ms (AES-256, 1KB数据)

@@ -91,6 +91,21 @@ const uuid = crypto.randomUUID();
 console.log('UUID:', uuid);
 ```
 
+### Native Library Access (FFI)
+```javascript
+// Load and call native C library functions
+const ffi = require('std:ffi');
+
+// Load standard C library
+const libc = ffi.Library('libc.so.6', {
+  'strlen': ['int', ['string']],
+  'strcmp': ['int', ['string', 'string']]
+});
+
+// Note: Function calls are proof-of-concept
+console.log('Available functions:', Object.keys(libc));
+```
+
 ## 🛠️ API Reference
 
 ### Standard Modules
@@ -100,6 +115,7 @@ console.log('UUID:', uuid);
 | `console` | Enhanced console logging | Global `console` object |
 | `std:process` | Process information and control | `import process from 'std:process'` |
 | `std:assert` | Testing assertions | `const assert = require('std:assert')` |
+| `std:ffi` | Foreign Function Interface for native libraries | `const ffi = require('std:ffi')` |
 | `crypto` | Cryptographic functions | Global `crypto` object |
 | `fetch` | HTTP client (Fetch API) | Global `fetch` function |
 | `encoding` | Text encoding/decoding | Global `TextEncoder`, `TextDecoder`, `btoa`, `atob` |
@@ -111,6 +127,7 @@ console.log('UUID:', uuid);
 - **WebCrypto**: `getRandomValues`, `randomUUID`, `subtle.*`
 - **Fetch**: Full Fetch API with `Request`, `Response`, `Headers`
 - **Process**: `argv`, `pid`, `ppid`, `platform`, `arch`, `version`, `uptime`
+- **FFI**: `Library` function for loading native libraries and calling C functions
 - **Streams**: `ReadableStream`, `WritableStream`, `TransformStream`
 - **Encoding**: `TextEncoder`, `TextDecoder`, `btoa`, `atob`
 

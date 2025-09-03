@@ -29,6 +29,9 @@ endif()
 
 include_directories(src deps/quickjs deps/libuv/include deps/libuv/src)
 
+# Read jsrt version from VERSION file
+file(STRINGS VERSION JSRT_VERSION)
+
 # build libquickjs
 set(QUICKJS_LIB_FILES
     deps/quickjs/cutils.c
@@ -85,7 +88,9 @@ set(JSRT_LINK_LIBS
     uv_a
     ${JSRT_PLATFORM_LIBS})
 add_library(jsrtcore STATIC ${JSRT_LIB_FILES})
+target_compile_definitions(jsrtcore PRIVATE JSRT_VERSION="${JSRT_VERSION}")
 add_executable(jsrt src/main.c)
+target_compile_definitions(jsrt PRIVATE JSRT_VERSION="${JSRT_VERSION}")
 target_link_libraries(jsrt ${JSRT_LINK_LIBS})
 
 # build jsrt test
@@ -94,6 +99,7 @@ file(GLOB_RECURSE JSRT_TEST_LIB_FILES "test/*.c")
 add_executable(jsrt_test_js ${JSRT_TEST_LIB_FILES})
 # testing js files - include both .js and .mjs files
 file(GLOB_RECURSE JSRT_TEST_JS_FILES "test/test_*.js" "test/test_*.mjs")
+target_compile_definitions(jsrt_test_js PRIVATE JSRT_VERSION="${JSRT_VERSION}")
 target_link_libraries(jsrt_test_js PRIVATE ${JSRT_LINK_LIBS})
 add_test(NAME jsrt_test_js COMMAND jsrt_test_js ${JSRT_TEST_JS_FILES})
 set_tests_properties(jsrt_test_js PROPERTIES

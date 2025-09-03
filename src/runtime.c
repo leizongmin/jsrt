@@ -6,6 +6,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <unistd.h>
 #include <uv.h>
 
 #include "std/abort.h"
@@ -167,6 +168,13 @@ JSRT_EvalResult JSRT_RuntimeEval(JSRT_Runtime *rt, const char *filename, const c
 
   result.value = JS_Eval(rt->ctx, code, length, filename, eval_flags);
 
+  // Set up import.meta for modules loaded directly (not through import)
+  // Note: For modules, we need a different approach since JS_Eval behavior differs
+  if (is_module && !JS_IsException(result.value)) {
+    // For now, we'll implement this when we support import() or explicit module loading
+    // The challenge is that directly evaluated modules don't expose their JSModuleDef easily
+  }
+
   if (JS_IsException(result.value)) {
     result.is_error = true;
     JSValue e = JS_GetException(result.rt->ctx);
@@ -316,4 +324,52 @@ bool JSRT_RuntimeProcessUnhandledExceptionValues(JSRT_Runtime *rt) {
   }
   rt->exception_values_length = 0;
   return true;
+}
+
+JSRT_CompileResult JSRT_RuntimeCompileToBytecode(JSRT_Runtime *rt, const char *filename, const char *code,
+                                                 size_t length) {
+  JSRT_CompileResult result = {0};
+
+  // Detect if this is a module or script
+  bool is_module = JSRT_PathHasSuffix(filename, ".mjs") || JS_DetectModule((const char *)code, length);
+
+  // Compile the JavaScript code with appropriate type
+  int eval_flags = JS_EVAL_FLAG_COMPILE_ONLY | (is_module ? JS_EVAL_TYPE_MODULE : JS_EVAL_TYPE_GLOBAL);
+  JSValue val = JS_Eval(rt->ctx, code, length, filename, eval_flags);
+
+  if (JS_IsException(val)) {
+    // Get exception string
+    JSValue exception = JS_GetException(rt->ctx);
+    result.error = JSRT_RuntimeGetExceptionString(rt, exception);
+    JS_FreeValue(rt->ctx, exception);
+    return result;
+  }
+
+  // Write the compiled function to bytecode
+  size_t out_buf_len;
+  uint8_t *out_buf = JS_WriteObject(rt->ctx, &out_buf_len, val, JS_WRITE_OBJ_BYTECODE);
+  JS_FreeValue(rt->ctx, val);
+
+  if (!out_buf) {
+    result.error = strdup("Failed to write bytecode");
+    return result;
+  }
+
+  result.data = out_buf;
+  result.size = out_buf_len;
+  return result;
+}
+
+void JSRT_CompileResultFree(JSRT_CompileResult *result) {
+  if (result->data) {
+    // QuickJS allocated memory needs to be freed with js_free_rt or regular free
+    // Since JS_WriteObject allocates with js_malloc which uses malloc internally
+    free(result->data);
+    result->data = NULL;
+  }
+  if (result->error) {
+    free(result->error);
+    result->error = NULL;
+  }
+  result->size = 0;
 }

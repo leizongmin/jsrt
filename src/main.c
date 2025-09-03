@@ -1,4 +1,3 @@
-#include <libgen.h>
 #include <stdbool.h>
 #include <stdint.h>
 #include <stdio.h>
@@ -6,35 +5,38 @@
 #include <string.h>
 #include <unistd.h>
 
+#include "build.h"
 #include "jsrt.h"
+#include "repl.h"
+#include "runtime.h"
 #include "util/file.h"
 
 void PrintHelp(bool is_error);
 void PrintVersion(const char* executable_path);
-int BuildExecutable(const char* filename, const char* target);
 
 int main(int argc, char** argv) {
-  // Handle explicit stdin flag first
+  // Always check if this executable contains embedded bytecode first
+  // This handles self-contained executables with or without arguments
+  int ret = JSRT_CmdRunEmbeddedBytecode(argv[0], argc, argv);
+  if (ret == 0) {
+    return ret;  // Successfully executed embedded bytecode
+  }
+
+  // Handle explicit stdin flag
   if (argc == 2 && strcmp(argv[1], "-") == 0) {
-    int ret = JSRT_CmdRunStdin(argc, argv);
+    ret = JSRT_CmdRunStdin(argc, argv);
     return ret;
   }
-  if (argc < 2) {
-    // Check if this executable contains embedded bytecode when no args provided
-    // This handles the case when the executable is self-contained
-    int ret = JSRT_CmdRunEmbeddedBytecode(argv[0], argc, argv);
-    if (ret == 0) {
-      return ret;  // Successfully executed embedded bytecode
-    }
 
-    // If no embedded bytecode, check for piped stdin input
+  if (argc < 2) {
+    // If no embedded bytecode and no arguments, check for piped stdin input
     if (!isatty(STDIN_FILENO)) {
       ret = JSRT_CmdRunStdin(argc, argv);
       return ret;
     }
 
-    PrintHelp(true);
-    return 1;
+    // No embedded bytecode and no piped input - start REPL
+    return JSRT_CmdRunREPL(argc, argv);
   }
 
   const char* command = argv[1];
@@ -58,11 +60,15 @@ int main(int argc, char** argv) {
     }
     const char* filename = argv[2];
     const char* target = argc >= 4 ? argv[3] : NULL;
-    return BuildExecutable(filename, target);
+    return BuildExecutable(argv[0], filename, target);
+  }
+
+  if (strcmp(command, "repl") == 0) {
+    return JSRT_CmdRunREPL(argc, argv);
   }
 
   // If no embedded bytecode, handle regular file execution
-  int ret = JSRT_CmdRunFile(command, argc, argv);
+  ret = JSRT_CmdRunFile(command, argc, argv);
 
   return ret;
 }
@@ -85,255 +91,15 @@ void PrintHelp(bool is_error) {
           "\n");
 }
 
-char* GetExecutableDir(const char* executable_path) {
-  // Find the directory containing the executable
-  char* path_copy = strdup(executable_path);
-  char* dir = dirname(path_copy);
-  char* result = strdup(dir);
-  free(path_copy);
-  return result;
-}
-
 void PrintVersion(const char* executable_path) {
+#ifdef JSRT_VERSION
+  const char* version = JSRT_VERSION;
+#else
   const char* version = "unknown";
-  JSRT_ReadFileResult version_file = JSRT_ReadFileResultDefault();
-
-  // Try to find VERSION file relative to executable
-  char* exe_dir = GetExecutableDir(executable_path);
-
-  // Try VERSION in the same directory as executable first
-  char version_path[1024];
-  snprintf(version_path, sizeof(version_path), "%s/VERSION", exe_dir);
-  version_file = JSRT_ReadFile(version_path);
-
-  // If not found, try one directory up (for bin/jsrt layout)
-  if (version_file.error != JSRT_READ_FILE_OK) {
-    snprintf(version_path, sizeof(version_path), "%s/../VERSION", exe_dir);
-    version_file = JSRT_ReadFile(version_path);
-  }
-
-  // If still not found, try current directory as fallback
-  if (version_file.error != JSRT_READ_FILE_OK) {
-    version_file = JSRT_ReadFile("VERSION");
-  }
-
-  if (version_file.error == JSRT_READ_FILE_OK && version_file.data != NULL) {
-    // Remove trailing newline if present
-    char* version_str = version_file.data;
-    size_t len = strlen(version_str);
-    if (len > 0 && version_str[len - 1] == '\n') {
-      version_str[len - 1] = '\0';
-    }
-    version = version_str;
-  }
+#endif
 
   printf("jsrt v%s\n", version);
   printf("A lightweight, fast JavaScript runtime built on QuickJS and libuv\n");
   printf("Copyright © 2024-2025 LEI Zongmin\n");
   printf("License: MIT\n");
-
-  // Clean up
-  if (version_file.error == JSRT_READ_FILE_OK) {
-    JSRT_ReadFileResultFree(&version_file);
-  }
-  free(exe_dir);
-}
-
-int BuildExecutable(const char* filename, const char* target) {
-  printf("Building self-contained executable from %s...\n", filename);
-
-  // Determine output filename
-  char output_name[256];
-  if (target) {
-    strncpy(output_name, target, sizeof(output_name) - 1);
-    output_name[sizeof(output_name) - 1] = '\0';
-  } else {
-    // Default: use input filename without extension
-    const char* dot = strrchr(filename, '.');
-    if (dot) {
-      size_t len = dot - filename;
-      len = len < sizeof(output_name) - 1 ? len : sizeof(output_name) - 1;
-      strncpy(output_name, filename, len);
-      output_name[len] = '\0';
-    } else {
-      strncpy(output_name, filename, sizeof(output_name) - 1);
-      output_name[sizeof(output_name) - 1] = '\0';
-    }
-  }
-
-  printf("Output target: %s\n", output_name);
-
-  // Check if input file exists
-  JSRT_ReadFileResult input_file = JSRT_ReadFile(filename);
-  if (input_file.error != JSRT_READ_FILE_OK) {
-    fprintf(stderr, "Error: Cannot read input file '%s': %s\n", filename, JSRT_ReadFileErrorToString(input_file.error));
-    return 1;
-  }
-  JSRT_ReadFileResultFree(&input_file);
-
-  // Step 1: Find qjsc binary
-  char qjsc_path[1024] = {0};
-
-  if (access("./qjsc", X_OK) == 0) {
-    strcpy(qjsc_path, "./qjsc");
-  } else if (access("../qjsc", X_OK) == 0) {
-    strcpy(qjsc_path, "../qjsc");
-  } else if (access("target/release/qjsc", X_OK) == 0) {
-    strcpy(qjsc_path, "target/release/qjsc");
-  } else {
-    fprintf(stderr, "Error: qjsc compiler not found. Please build with BUILD_QJS=ON.\n");
-    return 1;
-  }
-
-  printf("Using qjsc: %s\n", qjsc_path);
-
-  // Step 2: Compile JavaScript to bytecode using qjsc
-  char temp_bytecode_file[256];
-  snprintf(temp_bytecode_file, sizeof(temp_bytecode_file), "/tmp/jsrt_build_%d.bin", (int)getpid());
-
-  char qjsc_command[2048];
-  char temp_c_file[256];
-  snprintf(temp_c_file, sizeof(temp_c_file), "/tmp/jsrt_build_%d.c", (int)getpid());
-  snprintf(qjsc_command, sizeof(qjsc_command), "%s -c -o %s %s", qjsc_path, temp_c_file, filename);
-
-  printf("Compiling JavaScript to bytecode...\n");
-  int qjsc_result = system(qjsc_command);
-  if (qjsc_result != 0) {
-    fprintf(stderr, "Error: qjsc compilation failed\n");
-    unlink(temp_c_file);
-    return 1;
-  }
-
-  // Extract bytecode from the generated C file
-  JSRT_ReadFileResult c_file = JSRT_ReadFile(temp_c_file);
-  if (c_file.error != JSRT_READ_FILE_OK) {
-    fprintf(stderr, "Error: Cannot read generated C file\n");
-    unlink(temp_c_file);
-    return 1;
-  }
-
-  // Parse the bytecode array from C file and write binary file
-  char* array_start = strstr(c_file.data, "= {");
-  char* size_line = strstr(c_file.data, "const uint32_t qjsc_");
-  size_t bytecode_size = 0;
-
-  if (size_line) {
-    char* size_start = strstr(size_line, " = ");
-    if (size_start) {
-      sscanf(size_start + 3, "%zu", &bytecode_size);
-    }
-  }
-
-  if (!array_start || bytecode_size == 0) {
-    fprintf(stderr, "Error: Cannot parse bytecode from C file\n");
-    JSRT_ReadFileResultFree(&c_file);
-    unlink(temp_c_file);
-    return 1;
-  }
-
-  // Create binary bytecode file
-  FILE* bytecode_file_fp = fopen(temp_bytecode_file, "wb");
-  if (!bytecode_file_fp) {
-    fprintf(stderr, "Error: Cannot create bytecode file\n");
-    JSRT_ReadFileResultFree(&c_file);
-    unlink(temp_c_file);
-    return 1;
-  }
-
-  // Parse and write hex values
-  array_start += 3;  // Skip "= {"
-  char* array_end = strstr(array_start, "};");
-  char* pos = array_start;
-  size_t bytes_written = 0;
-
-  while (pos < array_end && bytes_written < bytecode_size) {
-    while (*pos && (*pos == ' ' || *pos == '\n' || *pos == '\t' || *pos == ',')) pos++;
-    if (*pos == '0' && *(pos + 1) == 'x') {
-      unsigned int hex_val;
-      if (sscanf(pos, "0x%02x", &hex_val) == 1) {
-        unsigned char byte_val = (unsigned char)hex_val;
-        fwrite(&byte_val, 1, 1, bytecode_file_fp);
-        bytes_written++;
-        pos += 4;  // Skip "0xXX"
-      } else {
-        pos++;
-      }
-    } else {
-      pos++;
-    }
-  }
-
-  fclose(bytecode_file_fp);
-  JSRT_ReadFileResultFree(&c_file);
-  unlink(temp_c_file);
-
-  if (bytes_written != bytecode_size) {
-    fprintf(stderr, "Error: Bytecode size mismatch (expected %zu, got %zu)\n", bytecode_size, bytes_written);
-    unlink(temp_bytecode_file);
-    return 1;
-  }
-
-  // Step 3: Copy current jsrt executable as base
-  char cp_command[1024];
-  snprintf(cp_command, sizeof(cp_command), "cp ./bin/jsrt %s", output_name);
-  printf("Creating self-contained executable...\n");
-
-  int cp_result = system(cp_command);
-  if (cp_result != 0) {
-    fprintf(stderr, "Error: Failed to copy jsrt executable\n");
-    unlink(temp_bytecode_file);
-    return 1;
-  }
-
-  // Step 4: Append bytecode to the executable with a signature
-  FILE* output_file = fopen(output_name, "ab");  // Append mode
-  FILE* bytecode_file = fopen(temp_bytecode_file, "rb");
-
-  if (!output_file || !bytecode_file) {
-    fprintf(stderr, "Error: Failed to open files for bytecode embedding\n");
-    if (output_file) fclose(output_file);
-    if (bytecode_file) fclose(bytecode_file);
-    unlink(temp_bytecode_file);
-    unlink(output_name);
-    return 1;
-  }
-
-  // Get file size for the binary bytecode file
-  fseek(bytecode_file, 0, SEEK_END);
-  long file_bytecode_size = ftell(bytecode_file);
-  fseek(bytecode_file, 0, SEEK_SET);
-
-  // Write bytecode
-  char buffer[4096];
-  size_t bytes;
-  while ((bytes = fread(buffer, 1, sizeof(buffer), bytecode_file)) > 0) {
-    fwrite(buffer, 1, bytes, output_file);
-  }
-
-  // Write boundary and bytecode size as 8-byte big-endian for runtime detection
-  const char* boundary = "JSRT_BYTECODE_BOUNDARY";
-  fwrite(boundary, 1, strlen(boundary), output_file);
-
-  // Write bytecode size as 8-byte big-endian
-  uint64_t size_be = 0;
-  for (int i = 0; i < 8; i++) {
-    size_be = (size_be << 8) | ((file_bytecode_size >> (8 * (7 - i))) & 0xFF);
-  }
-  fwrite(&size_be, 1, 8, output_file);
-
-  fclose(output_file);
-  fclose(bytecode_file);
-  unlink(temp_bytecode_file);
-
-  // Make executable
-  char chmod_command[512];
-  snprintf(chmod_command, sizeof(chmod_command), "chmod +x %s", output_name);
-  system(chmod_command);
-
-  printf("✓ Build completed successfully: %s\n", output_name);
-  printf("  Type: Self-contained executable with embedded bytecode\n");
-  printf("  Size: Original + %ld bytes bytecode\n", file_bytecode_size);
-  printf("  Usage: ./%s [args]\n", output_name);
-
-  return 0;
 }

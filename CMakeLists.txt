@@ -46,6 +46,11 @@ else()
     set(FFI_LIBRARIES "")
 endif()
 
+include_directories(src deps/quickjs deps/libuv/include deps/libuv/src deps/readline)
+
+# Read jsrt version from VERSION file
+file(STRINGS VERSION JSRT_VERSION)
+
 # build libquickjs
 set(QUICKJS_LIB_FILES
     deps/quickjs/cutils.c
@@ -79,13 +84,95 @@ endif()
 # build libuv
 add_subdirectory(deps/libuv)
 
+# Try to find system readline with robust detection
+set(READLINE_WORKING FALSE)
+
+# First try pkg-config
+find_package(PkgConfig QUIET)
+if(PkgConfig_FOUND)
+    pkg_check_modules(READLINE QUIET readline)
+    if(READLINE_FOUND)
+        set(READLINE_TEST_LIBRARIES ${READLINE_LIBRARIES})
+        set(READLINE_TEST_INCLUDE_DIRS ${READLINE_INCLUDE_DIRS})
+    endif()
+endif()
+
+# If pkg-config didn't work, try manual detection
+if(NOT READLINE_FOUND)
+    find_library(READLINE_LIBRARY NAMES readline)
+    find_path(READLINE_INCLUDE_DIR readline/readline.h)
+    if(READLINE_LIBRARY AND READLINE_INCLUDE_DIR)
+        set(READLINE_TEST_LIBRARIES ${READLINE_LIBRARY})
+        set(READLINE_TEST_INCLUDE_DIRS ${READLINE_INCLUDE_DIR})
+        
+        # Also try to find termcap/ncurses which readline usually depends on
+        find_library(TERMCAP_LIBRARY NAMES termcap ncurses)
+        if(TERMCAP_LIBRARY)
+            list(APPEND READLINE_TEST_LIBRARIES ${TERMCAP_LIBRARY})
+        endif()
+        
+        set(READLINE_FOUND TRUE)
+    endif()
+endif()
+
+# If we found readline candidates, test if they actually work
+if(READLINE_FOUND)
+    include(CheckCSourceCompiles)
+    set(CMAKE_REQUIRED_LIBRARIES ${READLINE_TEST_LIBRARIES})
+    set(CMAKE_REQUIRED_INCLUDES ${READLINE_TEST_INCLUDE_DIRS})
+    
+    check_c_source_compiles("
+        #include <stdio.h>
+        #include <readline/readline.h>
+        #include <readline/history.h>
+        int main() {
+            char *line = readline(\"test: \");
+            if (line) {
+                add_history(line);
+                rl_on_new_line();
+                rl_redisplay();
+                free(line);
+            }
+            return 0;
+        }
+    " READLINE_COMPILES_AND_LINKS)
+    
+    if(READLINE_COMPILES_AND_LINKS)
+        set(READLINE_WORKING TRUE)
+        set(READLINE_LIBRARIES ${READLINE_TEST_LIBRARIES})
+        set(READLINE_INCLUDE_DIRS ${READLINE_TEST_INCLUDE_DIRS})
+        message(STATUS "Using system readline (verified working)")
+    else()
+        message(STATUS "System readline found but doesn't work properly")
+        set(READLINE_WORKING FALSE)
+    endif()
+    
+    # Clean up test variables
+    unset(CMAKE_REQUIRED_LIBRARIES)
+    unset(CMAKE_REQUIRED_INCLUDES)
+endif()
+
+if(READLINE_WORKING)
+    # Use system readline
+    add_library(readline INTERFACE)
+    target_link_libraries(readline INTERFACE ${READLINE_LIBRARIES})
+    target_include_directories(readline INTERFACE ${READLINE_INCLUDE_DIRS})
+    target_compile_definitions(readline INTERFACE HAVE_READLINE=1)
+else()
+    # Provide a minimal readline replacement
+    message(STATUS "Using minimal readline fallback")
+    add_library(readline STATIC src/minimal_readline.c)
+    target_include_directories(readline PUBLIC src)
+    target_compile_definitions(readline PUBLIC MINIMAL_READLINE=1)
+endif()
+
 # Platform-specific libraries
 if(WIN32)
     # Windows doesn't need dl, m is built into MSVCRT, pthread is handled by libuv
     set(JSRT_PLATFORM_LIBS)
 else()
     # Unix/Linux/macOS need these libraries
-    set(JSRT_PLATFORM_LIBS dl m pthread)
+    set(JSRT_PLATFORM_LIBS dl m pthread termcap)
     include_directories(src deps/quickjs deps/libuv/include deps/libuv/src)
 endif()
 
@@ -96,15 +183,22 @@ set(JSRT_LIB_FILES
     ${JSRT_STD_FILES}
     ${JSRT_UTIL_FILES}
     src/jsrt.c
+    src/repl.c
     src/runtime.c)
 set(JSRT_LINK_LIBS
     jsrtcore
     quickjs
     uv_a
+    readline
     ${JSRT_PLATFORM_LIBS}
     ${FFI_LIBRARIES})
 add_library(jsrtcore STATIC ${JSRT_LIB_FILES})
-add_executable(jsrt src/main.c)
+target_compile_definitions(jsrtcore PRIVATE READLINE_LIBRARY)
+target_include_directories(jsrtcore PRIVATE deps/readline)
+target_compile_definitions(jsrtcore PRIVATE JSRT_VERSION="${JSRT_VERSION}")
+target_link_libraries(jsrtcore PRIVATE readline)
+add_executable(jsrt src/main.c src/build.c)
+target_compile_definitions(jsrt PRIVATE JSRT_VERSION="${JSRT_VERSION}")
 target_link_libraries(jsrt ${JSRT_LINK_LIBS})
 
 # build jsrt test
@@ -113,6 +207,7 @@ file(GLOB_RECURSE JSRT_TEST_LIB_FILES "test/*.c")
 add_executable(jsrt_test_js ${JSRT_TEST_LIB_FILES})
 # testing js files - include both .js and .mjs files
 file(GLOB_RECURSE JSRT_TEST_JS_FILES "test/test_*.js" "test/test_*.mjs")
+target_compile_definitions(jsrt_test_js PRIVATE JSRT_VERSION="${JSRT_VERSION}")
 target_link_libraries(jsrt_test_js PRIVATE ${JSRT_LINK_LIBS})
 add_test(NAME jsrt_test_js COMMAND jsrt_test_js ${JSRT_TEST_JS_FILES})
 set_tests_properties(jsrt_test_js PROPERTIES

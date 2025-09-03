@@ -61,4 +61,14 @@ void JSRT_RuntimeAddExceptionValue(JSRT_Runtime *rt, JSValue e);
 void JSRT_RuntimeFreeExceptionValues(JSRT_Runtime *rt);
 bool JSRT_RuntimeProcessUnhandledExceptionValues(JSRT_Runtime *rt);
 
+typedef struct {
+  uint8_t *data;
+  size_t size;
+  char *error;
+} JSRT_CompileResult;
+
+JSRT_CompileResult JSRT_RuntimeCompileToBytecode(JSRT_Runtime *rt, const char *filename, const char *code,
+                                                 size_t length);
+void JSRT_CompileResultFree(JSRT_CompileResult *result);
+
 #endif

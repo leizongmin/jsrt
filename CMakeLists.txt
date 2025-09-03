@@ -71,7 +71,7 @@ if(WIN32)
     set(JSRT_PLATFORM_LIBS)
 else()
     # Unix/Linux systems need these libraries
-    set(JSRT_PLATFORM_LIBS dl m pthread)
+    set(JSRT_PLATFORM_LIBS dl m pthread readline)
 endif()
 
 # build jsrt

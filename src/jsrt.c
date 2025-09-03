@@ -1,5 +1,8 @@
 #include "jsrt.h"
 
+#include <readline/history.h>
+#include <readline/readline.h>
+#include <signal.h>
 #include <stdbool.h>
 #include <stdint.h>
 #include <stdio.h>
@@ -363,4 +366,170 @@ end:
   JSRT_EvalResultFree(&res);
   JSRT_RuntimeFree(rt);
   return ret;
+}
+// Global variable to track CTRL-C count for REPL exit
+static volatile int g_ctrl_c_count = 0;
+
+// Signal handler for CTRL-C in REPL
+static void jsrt_repl_sigint_handler(int sig) {
+  (void)sig;  // Suppress unused parameter warning
+  g_ctrl_c_count++;
+  if (g_ctrl_c_count >= 2) {
+    printf("\n(To exit, press ^C again or ^D or type /exit)\n");
+    rl_on_new_line();
+    rl_replace_line("", 0);
+    rl_redisplay();
+    exit(0);
+  } else {
+    printf("\n(To exit, press ^C again or ^D or type /exit)\n");
+    rl_on_new_line();
+    rl_replace_line("", 0);
+    rl_redisplay();
+  }
+}
+
+// Get REPL history file path
+static char *jsrt_get_repl_history_path() {
+  char *history_path = getenv("JSRT_REPL_HISTORY");
+  if (history_path && strlen(history_path) > 0) {
+    return strdup(history_path);
+  }
+
+  char *home = getenv("HOME");
+  if (!home) {
+    return strdup(".jsrt_repl");
+  }
+
+  size_t len = strlen(home) + strlen("/.jsrt_repl") + 1;
+  char *path = malloc(len);
+  snprintf(path, len, "%s/.jsrt_repl", home);
+  return path;
+}
+
+// Process REPL shortcuts
+static bool jsrt_process_repl_shortcut(const char *input) {
+  if (strcmp(input, "/exit") == 0 || strcmp(input, "/quit") == 0) {
+    printf("Goodbye!\n");
+    return true;  // Exit REPL
+  }
+
+  if (strcmp(input, "/help") == 0) {
+    printf("JSRT REPL Commands:\n");
+    printf("  /help     - Show this help message\n");
+    printf("  /exit     - Exit REPL (also Ctrl+C twice or Ctrl+D)\n");
+    printf("  /quit     - Exit REPL (same as /exit)\n");
+    printf("  /clear    - Clear screen\n");
+    printf("\nEnvironment Variables:\n");
+    printf("  JSRT_REPL_HISTORY - Custom path for history file (default: ~/.jsrt_repl)\n");
+    printf("\nKeyboard shortcuts:\n");
+    printf("  Ctrl+C    - Interrupt current operation (twice to exit)\n");
+    printf("  Ctrl+D    - Exit REPL\n");
+    printf("  Up/Down   - Navigate command history\n");
+    printf("  Left/Right- Navigate within current line\n");
+    return false;  // Don't exit REPL
+  }
+
+  if (strcmp(input, "/clear") == 0) {
+    printf("\033[2J\033[H");  // Clear screen and move cursor to top
+    return false;             // Don't exit REPL
+  }
+
+  // If not a recognized shortcut, return false to process as JavaScript
+  return false;
+}
+
+int JSRT_CmdRunREPL(int argc, char **argv) {
+  // Store command line arguments for process module
+  g_jsrt_argc = argc;
+  g_jsrt_argv = argv;
+
+  // Initialize runtime
+  JSRT_Runtime *rt = JSRT_RuntimeNew();
+
+  // Setup signal handler for CTRL-C
+  signal(SIGINT, jsrt_repl_sigint_handler);
+
+  // Get history file path
+  char *history_path = jsrt_get_repl_history_path();
+
+  // Load history
+  read_history(history_path);
+
+  printf("Welcome to jsrt REPL!\n");
+  printf("Type JavaScript code or use shortcuts like /help, /exit\n");
+  printf("Press Ctrl+C twice or Ctrl+D to exit\n");
+  printf("\n");
+
+  char *input;
+  int line_number = 1;
+
+  while (true) {
+    // Reset CTRL-C counter at each prompt
+    g_ctrl_c_count = 0;
+
+    // Create prompt with line number
+    char prompt[32];
+    snprintf(prompt, sizeof(prompt), "jsrt:%d> ", line_number);
+
+    // Read input with readline (handles history, arrow keys, etc.)
+    input = readline(prompt);
+
+    // Handle EOF (Ctrl+D)
+    if (!input) {
+      printf("\nGoodbye!\n");
+      break;
+    }
+
+    // Skip empty lines
+    if (strlen(input) == 0) {
+      free(input);
+      continue;
+    }
+
+    // Add to history
+    add_history(input);
+
+    // Process shortcuts
+    if (jsrt_process_repl_shortcut(input)) {
+      free(input);
+      break;  // Exit REPL
+    }
+
+    // Skip shortcut lines that didn't exit
+    if (input[0] == '/') {
+      free(input);
+      continue;
+    }
+
+    // Evaluate JavaScript code
+    char filename[32];
+    snprintf(filename, sizeof(filename), "<repl:%d>", line_number);
+
+    JSRT_EvalResult res = JSRT_RuntimeEval(rt, filename, input, strlen(input));
+    if (res.is_error) {
+      fprintf(stderr, "Error: %s\n", res.error);
+    } else {
+      // Await result if it's a promise
+      JSRT_EvalResult res2 = JSRT_RuntimeAwaitEvalResult(rt, &res);
+      if (res2.is_error) {
+        fprintf(stderr, "Error: %s\n", res2.error);
+      }
+      JSRT_EvalResultFree(&res2);
+    }
+    JSRT_EvalResultFree(&res);
+
+    // Run pending async operations
+    JSRT_RuntimeRunTicket(rt);
+
+    free(input);
+    line_number++;
+  }
+
+  // Save history
+  write_history(history_path);
+
+  // Cleanup
+  free(history_path);
+  JSRT_RuntimeFree(rt);
+  return 0;
 }

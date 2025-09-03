@@ -232,29 +232,183 @@ static JSValue native_to_js(JSContext *ctx, ffi_type_t type, void *value) {
 
 // FFI function call implementation
 static JSValue ffi_function_call(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv) {
-  // Since we're not using opaque data anymore, just return a placeholder
-  // This is a proof-of-concept implementation
-
   // Get function metadata from properties
   JSValue return_type_val = JS_GetPropertyStr(ctx, this_val, "_ffi_return_type");
   JSValue arg_count_val = JS_GetPropertyStr(ctx, this_val, "_ffi_arg_count");
+  JSValue func_ptr_val = JS_GetPropertyStr(ctx, this_val, "_ffi_func_ptr");
 
-  const char *return_type = JS_ToCString(ctx, return_type_val);
+  const char *return_type_str = JS_ToCString(ctx, return_type_val);
   int32_t expected_argc;
-  JS_ToInt32(ctx, &expected_argc, arg_count_val);
+  int64_t func_ptr_addr;
+
+  if (JS_ToInt32(ctx, &expected_argc, arg_count_val) < 0) {
+    expected_argc = 0;
+  }
+
+  // Try to get the function pointer address as a float first, then convert to int64
+  double func_ptr_float;
+  if (JS_ToFloat64(ctx, &func_ptr_float, func_ptr_val) < 0) {
+    func_ptr_addr = 0;
+  } else {
+    func_ptr_addr = (int64_t)func_ptr_float;
+  }
+
+  JSRT_Debug("FFI Call: return_type_str=%s, expected_argc=%d, func_ptr_addr=%lld",
+             return_type_str ? return_type_str : "NULL", expected_argc, (long long)func_ptr_addr);
+
+  if (!return_type_str) {
+    JS_FreeValue(ctx, return_type_val);
+    JS_FreeValue(ctx, arg_count_val);
+    JS_FreeValue(ctx, func_ptr_val);
+    return JS_ThrowTypeError(ctx, "Invalid FFI function metadata - missing return type");
+  }
+
+  if (func_ptr_addr == 0) {
+    // Add a console.log to debug what func_ptr_addr is
+    JSValue global = JS_GetGlobalObject(ctx);
+    JSValue console = JS_GetPropertyStr(ctx, global, "console");
+    JSValue log_func = JS_GetPropertyStr(ctx, console, "log");
+    char debug_buf[256];
+    snprintf(debug_buf, sizeof(debug_buf), "DEBUG: func_ptr_addr = %lld", (long long)func_ptr_addr);
+    JSValue debug_msg = JS_NewString(ctx, debug_buf);
+    JS_Call(ctx, log_func, console, 1, &debug_msg);
+    JS_FreeValue(ctx, debug_msg);
+    JS_FreeValue(ctx, log_func);
+    JS_FreeValue(ctx, console);
+    JS_FreeValue(ctx, global);
+
+    JS_FreeCString(ctx, return_type_str);
+    JS_FreeValue(ctx, return_type_val);
+    JS_FreeValue(ctx, arg_count_val);
+    JS_FreeValue(ctx, func_ptr_val);
+    return JS_ThrowTypeError(ctx, "Invalid FFI function metadata - missing function pointer");
+  }
 
   JS_FreeValue(ctx, return_type_val);
   JS_FreeValue(ctx, arg_count_val);
+  JS_FreeValue(ctx, func_ptr_val);
 
-  if (return_type) {
-    JSValue result = JS_ThrowTypeError(ctx,
-                                       "FFI function calls not fully implemented - this is a proof-of-concept. Calling "
-                                       "native functions may cause crashes.");
-    JS_FreeCString(ctx, return_type);
-    return result;
+  if (argc != expected_argc) {
+    JS_FreeCString(ctx, return_type_str);
+    return JS_ThrowTypeError(ctx, "FFI function expects %d arguments, got %d", expected_argc, argc);
   }
 
-  return JS_ThrowTypeError(ctx, "FFI function call failed - invalid function metadata");
+  // Basic implementation for simple function calls
+  // This supports up to 4 arguments for demonstration purposes
+  if (expected_argc > 4) {
+    JS_FreeCString(ctx, return_type_str);
+    return JS_ThrowTypeError(ctx, "FFI functions with more than 4 arguments not supported in basic implementation");
+  }
+
+  void *func_ptr = (void *)(intptr_t)func_ptr_addr;
+
+  // Convert arguments to native values
+  uint64_t args[4] = {0};
+  const char *string_args[4] = {NULL};
+
+  for (int i = 0; i < argc; i++) {
+    if (JS_IsString(argv[i])) {
+      string_args[i] = JS_ToCString(ctx, argv[i]);
+      args[i] = (uint64_t)(uintptr_t)string_args[i];
+    } else if (JS_IsNumber(argv[i])) {
+      int32_t num;
+      if (JS_ToInt32(ctx, &num, argv[i]) < 0) {
+        // Clean up allocated strings
+        for (int j = 0; j < i; j++) {
+          if (string_args[j]) JS_FreeCString(ctx, string_args[j]);
+        }
+        JS_FreeCString(ctx, return_type_str);
+        return JS_ThrowTypeError(ctx, "Failed to convert argument %d to number", i);
+      }
+      args[i] = (uint64_t)num;
+    } else {
+      // Clean up allocated strings
+      for (int j = 0; j < i; j++) {
+        if (string_args[j]) JS_FreeCString(ctx, string_args[j]);
+      }
+      JS_FreeCString(ctx, return_type_str);
+      return JS_ThrowTypeError(ctx, "Unsupported argument type at position %d", i);
+    }
+  }
+
+  // Perform the function call based on signature
+  JSValue result = JS_UNDEFINED;
+  ffi_type_t return_type = string_to_ffi_type(return_type_str);
+
+  if (return_type == FFI_TYPE_INT || return_type == FFI_TYPE_INT32) {
+    int32_t ret_val = 0;
+    switch (argc) {
+      case 0:
+        ret_val = ((int32_t(*)())func_ptr)();
+        break;
+      case 1:
+        ret_val = ((int32_t(*)(uintptr_t))func_ptr)(args[0]);
+        break;
+      case 2:
+        ret_val = ((int32_t(*)(uintptr_t, uintptr_t))func_ptr)(args[0], args[1]);
+        break;
+      case 3:
+        ret_val = ((int32_t(*)(uintptr_t, uintptr_t, uintptr_t))func_ptr)(args[0], args[1], args[2]);
+        break;
+      case 4:
+        ret_val =
+            ((int32_t(*)(uintptr_t, uintptr_t, uintptr_t, uintptr_t))func_ptr)(args[0], args[1], args[2], args[3]);
+        break;
+    }
+    result = JS_NewInt32(ctx, ret_val);
+  } else if (return_type == FFI_TYPE_STRING) {
+    const char *ret_str = NULL;
+    switch (argc) {
+      case 0:
+        ret_str = ((const char *(*)())func_ptr)();
+        break;
+      case 1:
+        ret_str = ((const char *(*)(uintptr_t))func_ptr)(args[0]);
+        break;
+      case 2:
+        ret_str = ((const char *(*)(uintptr_t, uintptr_t))func_ptr)(args[0], args[1]);
+        break;
+      case 3:
+        ret_str = ((const char *(*)(uintptr_t, uintptr_t, uintptr_t))func_ptr)(args[0], args[1], args[2]);
+        break;
+      case 4:
+        ret_str =
+            ((const char *(*)(uintptr_t, uintptr_t, uintptr_t, uintptr_t))func_ptr)(args[0], args[1], args[2], args[3]);
+        break;
+    }
+    result = ret_str ? JS_NewString(ctx, ret_str) : JS_NULL;
+  } else if (return_type == FFI_TYPE_VOID) {
+    switch (argc) {
+      case 0:
+        ((void (*)())func_ptr)();
+        break;
+      case 1:
+        ((void (*)(uintptr_t))func_ptr)(args[0]);
+        break;
+      case 2:
+        ((void (*)(uintptr_t, uintptr_t))func_ptr)(args[0], args[1]);
+        break;
+      case 3:
+        ((void (*)(uintptr_t, uintptr_t, uintptr_t))func_ptr)(args[0], args[1], args[2]);
+        break;
+      case 4:
+        ((void (*)(uintptr_t, uintptr_t, uintptr_t, uintptr_t))func_ptr)(args[0], args[1], args[2], args[3]);
+        break;
+    }
+    result = JS_UNDEFINED;
+  } else {
+    result = JS_ThrowTypeError(ctx, "Unsupported return type: %s", return_type_str);
+  }
+
+  // Clean up string arguments
+  for (int i = 0; i < argc; i++) {
+    if (string_args[i]) {
+      JS_FreeCString(ctx, string_args[i]);
+    }
+  }
+
+  JS_FreeCString(ctx, return_type_str);
+  return result;
 }
 
 // ffi.Library(name, functions) - Load a dynamic library
@@ -371,6 +525,7 @@ static JSValue ffi_library(JSContext *ctx, JSValueConst this_val, int argc, JSVa
     // Store function metadata as properties instead of opaque data
     JS_SetPropertyStr(ctx, js_func, "_ffi_return_type", JS_NewString(ctx, return_type_str));
     JS_SetPropertyStr(ctx, js_func, "_ffi_arg_count", JS_NewInt32(ctx, args_length));
+    JS_SetPropertyStr(ctx, js_func, "_ffi_func_ptr", JS_NewFloat64(ctx, (double)(intptr_t)func_ptr));
 
     // Don't use opaque data for now to avoid cleanup issues
     // JS_SetOpaque(js_func, func);

@@ -18,6 +18,7 @@
 #include "std/encoding.h"
 #include "std/event.h"
 #include "std/fetch.h"
+#include "std/ffi.h"
 #include "std/formdata.h"
 #include "std/module.h"
 #include "std/performance.h"
@@ -70,6 +71,7 @@ JSRT_Runtime *JSRT_RuntimeNew() {
   JSRT_RuntimeSetupStdFormData(rt);
   JSRT_RuntimeSetupStdFetch(rt);
   JSRT_RuntimeSetupStdCrypto(rt);
+  JSRT_RuntimeSetupStdFFI(rt);
   JSRT_RuntimeSetupStdProcess(rt);
   JSRT_StdModuleInit(rt);
   JSRT_StdCommonJSInit(rt);
@@ -95,6 +97,9 @@ void JSRT_RuntimeFree(JSRT_Runtime *rt) {
 
   // Cleanup module system
   JSRT_StdModuleCleanup(rt->ctx);
+
+  // Cleanup FFI module
+  JSRT_RuntimeCleanupStdFFI(rt->ctx);
 
   JSRT_RuntimeFreeValue(rt, rt->global);
   rt->global = JS_UNDEFINED;

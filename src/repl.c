@@ -32,19 +32,39 @@ static void jsrt_repl_sigint_handler(int sig) {
   g_ctrl_c_count++;
   if (g_ctrl_c_count >= 2) {
     printf("\n(To exit, press ^C again or ^D or type /exit)\n");
+#ifdef HAVE_READLINE
     rl_on_new_line();
     // Clear the line buffer manually
     rl_line_buffer[0] = '\0';
     rl_point = rl_end = 0;
     rl_redisplay();
+#elif defined(MINIMAL_READLINE)
+    rl_on_new_line();
+    // Clear the line buffer manually
+    if (rl_line_buffer) {
+      rl_line_buffer[0] = '\0';
+    }
+    rl_point = rl_end = 0;
+    rl_redisplay();
+#endif
     exit(0);
   } else {
     printf("\n(To exit, press ^C again or ^D or type /exit)\n");
+#ifdef HAVE_READLINE
     rl_on_new_line();
     // Clear the line buffer manually
     rl_line_buffer[0] = '\0';
     rl_point = rl_end = 0;
     rl_redisplay();
+#elif defined(MINIMAL_READLINE)
+    rl_on_new_line();
+    // Clear the line buffer manually
+    if (rl_line_buffer) {
+      rl_line_buffer[0] = '\0';
+    }
+    rl_point = rl_end = 0;
+    rl_redisplay();
+#endif
   }
 }
 
@@ -220,7 +240,9 @@ int JSRT_CmdRunREPL(int argc, char **argv) {
   char *history_path = jsrt_get_repl_history_path();
 
   // Load history
+#if defined(HAVE_READLINE) || defined(MINIMAL_READLINE)
   read_history(history_path);
+#endif
 
   printf("Welcome to jsrt REPL!\n");
   printf("Type JavaScript code or use shortcuts like /help, /exit\n");
@@ -246,7 +268,24 @@ int JSRT_CmdRunREPL(int argc, char **argv) {
     }
 
     // Read input with readline (handles history, arrow keys, etc.)
+#if defined(HAVE_READLINE) || defined(MINIMAL_READLINE)
     input_line = readline(prompt);
+#else
+    printf("%s", prompt);
+    fflush(stdout);
+    size_t bufsize = 1024;
+    input_line = malloc(bufsize);
+    if (getline(&input_line, &bufsize, stdin) == -1) {
+      free(input_line);
+      input_line = NULL;
+    } else {
+      // Remove trailing newline
+      size_t len = strlen(input_line);
+      if (len > 0 && input_line[len - 1] == '\n') {
+        input_line[len - 1] = '\0';
+      }
+    }
+#endif
 
     // Handle EOF (Ctrl+D)
     if (!input_line) {
@@ -336,7 +375,9 @@ int JSRT_CmdRunREPL(int argc, char **argv) {
     // Check if the accumulated code is complete
     if (jsrt_is_code_complete(rt->ctx, accumulated_input, accumulated_size - 1)) {
       // Code is complete - add to history and evaluate
+#if defined(HAVE_READLINE) || defined(MINIMAL_READLINE)
       add_history(accumulated_input);
+#endif
       is_continuation = false;
 
       // Evaluate JavaScript code
@@ -393,7 +434,9 @@ int JSRT_CmdRunREPL(int argc, char **argv) {
   }
 
   // Save history
+#if defined(HAVE_READLINE) || defined(MINIMAL_READLINE)
   write_history(history_path);
+#endif
 
   // Cleanup
   free(history_path);

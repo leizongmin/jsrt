@@ -65,44 +65,86 @@ endif()
 # build libuv
 add_subdirectory(deps/libuv)
 
-# Try to find system readline first
+# Try to find system readline with robust detection
+set(READLINE_WORKING FALSE)
+
+# First try pkg-config
 find_package(PkgConfig QUIET)
 if(PkgConfig_FOUND)
     pkg_check_modules(READLINE QUIET readline)
-endif()
-
-# Check if we can use system readline
-if(NOT READLINE_FOUND)
-    # Try to find readline manually
-    find_library(READLINE_LIBRARY NAMES readline)
-    find_path(READLINE_INCLUDE_DIR readline/readline.h)
-    if(READLINE_LIBRARY AND READLINE_INCLUDE_DIR)
-        set(READLINE_FOUND TRUE)
-        set(READLINE_LIBRARIES ${READLINE_LIBRARY})
-        set(READLINE_INCLUDE_DIRS ${READLINE_INCLUDE_DIR})
-        # Also try to find termcap/ncurses which readline usually depends on
-        find_library(TERMCAP_LIBRARY NAMES termcap ncurses)
-        if(TERMCAP_LIBRARY)
-            list(APPEND READLINE_LIBRARIES ${TERMCAP_LIBRARY})
-        endif()
+    if(READLINE_FOUND)
+        set(READLINE_TEST_LIBRARIES ${READLINE_LIBRARIES})
+        set(READLINE_TEST_INCLUDE_DIRS ${READLINE_INCLUDE_DIRS})
     endif()
 endif()
 
+# If pkg-config didn't work, try manual detection
+if(NOT READLINE_FOUND)
+    find_library(READLINE_LIBRARY NAMES readline)
+    find_path(READLINE_INCLUDE_DIR readline/readline.h)
+    if(READLINE_LIBRARY AND READLINE_INCLUDE_DIR)
+        set(READLINE_TEST_LIBRARIES ${READLINE_LIBRARY})
+        set(READLINE_TEST_INCLUDE_DIRS ${READLINE_INCLUDE_DIR})
+        
+        # Also try to find termcap/ncurses which readline usually depends on
+        find_library(TERMCAP_LIBRARY NAMES termcap ncurses)
+        if(TERMCAP_LIBRARY)
+            list(APPEND READLINE_TEST_LIBRARIES ${TERMCAP_LIBRARY})
+        endif()
+        
+        set(READLINE_FOUND TRUE)
+    endif()
+endif()
+
+# If we found readline candidates, test if they actually work
 if(READLINE_FOUND)
+    include(CheckCSourceCompiles)
+    set(CMAKE_REQUIRED_LIBRARIES ${READLINE_TEST_LIBRARIES})
+    set(CMAKE_REQUIRED_INCLUDES ${READLINE_TEST_INCLUDE_DIRS})
+    
+    check_c_source_compiles("
+        #include <stdio.h>
+        #include <readline/readline.h>
+        #include <readline/history.h>
+        int main() {
+            char *line = readline(\"test: \");
+            if (line) {
+                add_history(line);
+                rl_on_new_line();
+                rl_redisplay();
+                free(line);
+            }
+            return 0;
+        }
+    " READLINE_COMPILES_AND_LINKS)
+    
+    if(READLINE_COMPILES_AND_LINKS)
+        set(READLINE_WORKING TRUE)
+        set(READLINE_LIBRARIES ${READLINE_TEST_LIBRARIES})
+        set(READLINE_INCLUDE_DIRS ${READLINE_TEST_INCLUDE_DIRS})
+        message(STATUS "Using system readline (verified working)")
+    else()
+        message(STATUS "System readline found but doesn't work properly")
+        set(READLINE_WORKING FALSE)
+    endif()
+    
+    # Clean up test variables
+    unset(CMAKE_REQUIRED_LIBRARIES)
+    unset(CMAKE_REQUIRED_INCLUDES)
+endif()
+
+if(READLINE_WORKING)
     # Use system readline
-    message(STATUS "Using system readline")
     add_library(readline INTERFACE)
     target_link_libraries(readline INTERFACE ${READLINE_LIBRARIES})
     target_include_directories(readline INTERFACE ${READLINE_INCLUDE_DIRS})
     target_compile_definitions(readline INTERFACE HAVE_READLINE=1)
 else()
     # Provide a minimal readline replacement
-    message(STATUS "System readline not found, using minimal fallback")
+    message(STATUS "Using minimal readline fallback")
     add_library(readline STATIC src/minimal_readline.c)
     target_include_directories(readline PUBLIC src)
     target_compile_definitions(readline PUBLIC MINIMAL_READLINE=1)
-    # Also need to define this for dependent targets
-    add_compile_definitions(MINIMAL_READLINE=1)
 endif()
 
 # Platform-specific libraries
@@ -133,6 +175,7 @@ add_library(jsrtcore STATIC ${JSRT_LIB_FILES})
 target_compile_definitions(jsrtcore PRIVATE READLINE_LIBRARY)
 target_include_directories(jsrtcore PRIVATE deps/readline)
 target_compile_definitions(jsrtcore PRIVATE JSRT_VERSION="${JSRT_VERSION}")
+target_link_libraries(jsrtcore PRIVATE readline)
 add_executable(jsrt src/main.c src/build.c)
 target_compile_definitions(jsrt PRIVATE JSRT_VERSION="${JSRT_VERSION}")
 target_link_libraries(jsrt ${JSRT_LINK_LIBS})

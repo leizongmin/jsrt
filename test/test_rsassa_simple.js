@@ -3,9 +3,14 @@ const assert = require('std:assert');
 
 console.log('=== Simple RSASSA-PKCS1-v1_5 Test ===');
 
-// Test just key generation first
-console.log('Testing key generation...');
-crypto.subtle
+// Check if crypto is available (skip if OpenSSL not found)
+if (typeof crypto === 'undefined' || !crypto.subtle) {
+  console.log('❌ SKIP: WebCrypto not available (OpenSSL not found)');
+  console.log('=== Simple RSASSA-PKCS1-v1_5 Test Completed (Skipped) ===');
+} else {
+  // Test just key generation first
+  console.log('Testing key generation...');
+  crypto.subtle
   .generateKey(
     {
       name: 'RSASSA-PKCS1-v1_5',
@@ -42,3 +47,4 @@ crypto.subtle
     console.error('✗ Test failed:', error.name, error.message);
     console.log('=== Simple test FAILED ===');
   });
+}

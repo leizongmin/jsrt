@@ -8,8 +8,17 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+
+#ifdef _WIN32
+#include <windows.h>
+#include <io.h>
+#include <conio.h>
+#define STDIN_FILENO 0
+#define isatty _isatty
+#else
 #include <termios.h>
 #include <unistd.h>
+#endif
 
 // Simple history implementation
 #define MAX_HISTORY 1000
@@ -25,7 +34,12 @@ int rl_done = 0;
 const char* rl_prompt = NULL;
 
 // Terminal settings
+#ifndef _WIN32
 static struct termios orig_termios;
+#else
+static DWORD orig_console_mode;
+static HANDLE console_handle;
+#endif
 static int terminal_initialized = 0;
 
 // Initialize terminal for raw mode
@@ -33,6 +47,23 @@ static void init_terminal(void) {
   if (terminal_initialized)
     return;
 
+#ifdef _WIN32
+  console_handle = GetStdHandle(STD_INPUT_HANDLE);
+  if (console_handle == INVALID_HANDLE_VALUE) {
+    return;
+  }
+  
+  if (!GetConsoleMode(console_handle, &orig_console_mode)) {
+    return;
+  }
+  
+  DWORD new_mode = orig_console_mode;
+  new_mode &= ~(ENABLE_ECHO_INPUT | ENABLE_LINE_INPUT);
+  
+  if (!SetConsoleMode(console_handle, new_mode)) {
+    return;
+  }
+#else
   if (tcgetattr(STDIN_FILENO, &orig_termios) == -1) {
     return;
   }
@@ -45,6 +76,7 @@ static void init_terminal(void) {
   if (tcsetattr(STDIN_FILENO, TCSANOW, &raw) == -1) {
     return;
   }
+#endif
 
   terminal_initialized = 1;
 }
@@ -53,7 +85,12 @@ static void init_terminal(void) {
 static void restore_terminal(void) {
   if (!terminal_initialized)
     return;
+    
+#ifdef _WIN32
+  SetConsoleMode(console_handle, orig_console_mode);
+#else
   tcsetattr(STDIN_FILENO, TCSANOW, &orig_termios);
+#endif
   terminal_initialized = 0;
 }
 
@@ -157,9 +194,16 @@ char* readline(const char* prompt) {
 
   while (1) {
     char c;
+#ifdef _WIN32
+    DWORD chars_read;
+    if (!ReadConsole(console_handle, &c, 1, &chars_read, NULL) || chars_read != 1) {
+      break;
+    }
+#else
     if (read(STDIN_FILENO, &c, 1) != 1) {
       break;
     }
+#endif
 
     if (c == '\n' || c == '\r') {
       // Enter pressed

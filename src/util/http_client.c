@@ -1,11 +1,23 @@
 #include "http_client.h"
 
-#include <netdb.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+
+#ifdef _WIN32
+#include <winsock2.h>
+#include <ws2tcpip.h>
+#include <windows.h>
+#pragma comment(lib, "ws2_32.lib")
+#define close closesocket
+typedef int socklen_t;
+#else
+#include <netdb.h>
 #include <sys/socket.h>
 #include <unistd.h>
+#include <arpa/inet.h>
+#include <netinet/in.h>
+#endif
 
 // Internal function to parse URLs
 static int parse_url(const char* url, char** host, int* port, char** path) {
@@ -147,13 +159,24 @@ JSRT_HttpResponse JSRT_HttpGet(const char* url) {
   char* host = NULL;
   char* path = NULL;
   int port = 80;
+#ifdef _WIN32
+  SOCKET sockfd = INVALID_SOCKET;
+#else
   int sockfd = -1;
-  struct hostent* server = NULL;
+#endif
   struct sockaddr_in serv_addr;
   char* http_request = NULL;
   char* response_buffer = NULL;
   size_t response_capacity = 4096;
   size_t response_size = 0;
+
+#ifdef _WIN32
+  WSADATA wsaData;
+  if (WSAStartup(MAKEWORD(2, 2), &wsaData) != 0) {
+    response.error = JSRT_HTTP_ERROR_NETWORK;
+    return response;
+  }
+#endif
 
   // Parse URL
   if (parse_url(url, &host, &port, &path) != 0) {
@@ -170,14 +193,11 @@ JSRT_HttpResponse JSRT_HttpGet(const char* url) {
 
   // Create socket
   sockfd = socket(AF_INET, SOCK_STREAM, 0);
+#ifdef _WIN32
+  if (sockfd == INVALID_SOCKET) {
+#else
   if (sockfd < 0) {
-    response.error = JSRT_HTTP_ERROR_NETWORK;
-    goto cleanup;
-  }
-
-  // Resolve hostname
-  server = gethostbyname(host);
-  if (!server) {
+#endif
     response.error = JSRT_HTTP_ERROR_NETWORK;
     goto cleanup;
   }
@@ -185,8 +205,31 @@ JSRT_HttpResponse JSRT_HttpGet(const char* url) {
   // Setup server address
   memset(&serv_addr, 0, sizeof(serv_addr));
   serv_addr.sin_family = AF_INET;
-  memcpy(&serv_addr.sin_addr.s_addr, server->h_addr, server->h_length);
   serv_addr.sin_port = htons(port);
+
+  // Resolve hostname
+#ifdef _WIN32
+  struct addrinfo hints, *result = NULL;
+  memset(&hints, 0, sizeof(hints));
+  hints.ai_family = AF_INET;
+  hints.ai_socktype = SOCK_STREAM;
+  
+  if (getaddrinfo(host, NULL, &hints, &result) != 0 || !result) {
+    response.error = JSRT_HTTP_ERROR_NETWORK;
+    goto cleanup;
+  }
+  
+  struct sockaddr_in* addr_in = (struct sockaddr_in*)result->ai_addr;
+  serv_addr.sin_addr = addr_in->sin_addr;
+  freeaddrinfo(result);
+#else
+  struct hostent* server = gethostbyname(host);
+  if (!server) {
+    response.error = JSRT_HTTP_ERROR_NETWORK;
+    goto cleanup;
+  }
+  memcpy(&serv_addr.sin_addr.s_addr, server->h_addr, server->h_length);
+#endif
 
   // Connect to server
   if (connect(sockfd, (struct sockaddr*)&serv_addr, sizeof(serv_addr)) < 0) {
@@ -242,8 +285,14 @@ cleanup:
     free(http_request);
   if (response_buffer)
     free(response_buffer);
+#ifdef _WIN32
+  if (sockfd != INVALID_SOCKET)
+    closesocket(sockfd);
+  WSACleanup();
+#else
   if (sockfd >= 0)
     close(sockfd);
+#endif
 
   return response;
 }

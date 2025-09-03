@@ -103,7 +103,6 @@ static JSValue jsrt_create_key_pair(JSContext* ctx, void* pkey, const char* algo
 
 // Helper function to check if OpenSSL is loaded
 static int jsrt_crypto_init(void) {
-  extern void* openssl_handle;
   return openssl_handle != NULL;
 }
 
@@ -117,7 +116,6 @@ static int jsrt_ec_init(void) {
     return 0;
   }
 
-  extern void* openssl_handle;
   if (!openssl_handle)
     return 0;
 

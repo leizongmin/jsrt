@@ -2065,7 +2065,11 @@ static DWORD WINAPI async_call_thread(LPVOID lpParam) {
 #else
 static void* async_call_thread(void* arg) {
 #endif
+#ifdef _WIN32
+  ffi_async_call_t* async_call = (ffi_async_call_t*)lpParam;
+#else
   ffi_async_call_t* async_call = (ffi_async_call_t*)arg;
+#endif
   if (!async_call) {
 #ifdef _WIN32
     return 1;

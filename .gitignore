@@ -61,3 +61,6 @@ core.*
 # Temporary test files
 test_*.js
 !test/test_*.js
+
+# Claude settings
+.claude/settings.local.json

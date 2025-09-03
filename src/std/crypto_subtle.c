@@ -126,7 +126,7 @@ bool jsrt_crypto_is_algorithm_supported(jsrt_crypto_algorithm_t alg) {
     case JSRT_CRYPTO_ALG_RSASSA_PKCS1_V1_5:
       return true;  // Implemented
     case JSRT_CRYPTO_ALG_RSA_PSS:
-      return false;  // TODO: Fix OpenSSL 3.x compatibility
+      return true;  // Fixed OpenSSL 3.x compatibility
 
     // Elliptic curve algorithms
     case JSRT_CRYPTO_ALG_ECDSA:
@@ -138,7 +138,7 @@ bool jsrt_crypto_is_algorithm_supported(jsrt_crypto_algorithm_t alg) {
     case JSRT_CRYPTO_ALG_PBKDF2:
       return true;  // Implemented
     case JSRT_CRYPTO_ALG_HKDF:
-      return false;  // TODO: Implement
+      return true;  // Implemented
 
     default:
       return false;
@@ -2562,6 +2562,122 @@ JSValue jsrt_subtle_deriveKey(JSContext* ctx, JSValueConst this_val, int argc, J
   return create_rejected_promise(ctx, error);
 }
 
+// Helper function for HKDF deriveBits
+static JSValue jsrt_subtle_derive_hkdf_bits(JSContext* ctx, JSValueConst algorithm, JSValueConst base_key,
+                                            JSValueConst length_arg) {
+  // Get key material from CryptoKey object
+  JSValue key_data_val = JS_GetPropertyStr(ctx, base_key, "__keyData");
+  if (JS_IsUndefined(key_data_val)) {
+    JS_FreeValue(ctx, key_data_val);
+    JSValue error = jsrt_crypto_throw_error(ctx, "InvalidAccessError", "Invalid CryptoKey object");
+    return create_rejected_promise(ctx, error);
+  }
+
+  size_t key_data_size;
+  uint8_t* key_data = JS_GetArrayBuffer(ctx, &key_data_size, key_data_val);
+  if (!key_data) {
+    JS_FreeValue(ctx, key_data_val);
+    JSValue error = jsrt_crypto_throw_error(ctx, "InvalidAccessError", "Invalid key data");
+    return create_rejected_promise(ctx, error);
+  }
+
+  // Get length parameter (in bits)
+  uint32_t length_bits = 256;  // Default
+  if (!JS_IsUndefined(length_arg)) {
+    if (JS_ToUint32(ctx, &length_bits, length_arg) < 0) {
+      JS_FreeValue(ctx, key_data_val);
+      JSValue error = jsrt_crypto_throw_error(ctx, "TypeError", "Invalid length parameter");
+      return create_rejected_promise(ctx, error);
+    }
+  }
+
+  size_t length_bytes = (length_bits + 7) / 8;
+
+  // Parse HKDF parameters from algorithm object
+  jsrt_hkdf_params_t hkdf_params = {0};
+
+  // Get hash algorithm
+  JSValue hash_val = JS_GetPropertyStr(ctx, algorithm, "hash");
+  if (JS_IsString(hash_val)) {
+    const char* hash_name = JS_ToCString(ctx, hash_val);
+    if (hash_name) {
+      if (strcmp(hash_name, "SHA-1") == 0) {
+        hkdf_params.hash_algorithm = JSRT_CRYPTO_ALG_SHA1;
+      } else if (strcmp(hash_name, "SHA-256") == 0) {
+        hkdf_params.hash_algorithm = JSRT_CRYPTO_ALG_SHA256;
+      } else if (strcmp(hash_name, "SHA-384") == 0) {
+        hkdf_params.hash_algorithm = JSRT_CRYPTO_ALG_SHA384;
+      } else if (strcmp(hash_name, "SHA-512") == 0) {
+        hkdf_params.hash_algorithm = JSRT_CRYPTO_ALG_SHA512;
+      } else {
+        hkdf_params.hash_algorithm = JSRT_CRYPTO_ALG_SHA256;  // Default
+      }
+      JS_FreeCString(ctx, hash_name);
+    }
+  } else {
+    hkdf_params.hash_algorithm = JSRT_CRYPTO_ALG_SHA256;  // Default
+  }
+  JS_FreeValue(ctx, hash_val);
+
+  // Get salt parameter (optional)
+  JSValue salt_val = JS_GetPropertyStr(ctx, algorithm, "salt");
+  if (JS_IsObject(salt_val)) {
+    size_t salt_size;
+    uint8_t* salt_data = JS_GetArrayBuffer(ctx, &salt_size, salt_val);
+    if (salt_data && salt_size > 0) {
+      hkdf_params.salt = malloc(salt_size);
+      if (hkdf_params.salt) {
+        memcpy(hkdf_params.salt, salt_data, salt_size);
+        hkdf_params.salt_length = salt_size;
+      }
+    }
+  }
+  JS_FreeValue(ctx, salt_val);
+
+  // Get info parameter (optional)
+  JSValue info_val = JS_GetPropertyStr(ctx, algorithm, "info");
+  if (JS_IsObject(info_val)) {
+    size_t info_size;
+    uint8_t* info_data = JS_GetArrayBuffer(ctx, &info_size, info_val);
+    if (info_data && info_size > 0) {
+      hkdf_params.info = malloc(info_size);
+      if (hkdf_params.info) {
+        memcpy(hkdf_params.info, info_data, info_size);
+        hkdf_params.info_length = info_size;
+      }
+    }
+  }
+  JS_FreeValue(ctx, info_val);
+
+  // Perform HKDF
+  uint8_t* derived_key = NULL;
+  int result = jsrt_crypto_hkdf_derive_key(&hkdf_params, key_data, key_data_size, length_bytes, &derived_key);
+
+  // Cleanup
+  JS_FreeValue(ctx, key_data_val);
+  free(hkdf_params.salt);
+  free(hkdf_params.info);
+
+  if (result != 0 || !derived_key) {
+    JSValue error = jsrt_crypto_throw_error(ctx, "OperationError", "HKDF derivation failed");
+    return create_rejected_promise(ctx, error);
+  }
+
+  // Create ArrayBuffer for result
+  JSValue result_buffer = JS_NewArrayBufferCopy(ctx, derived_key, length_bytes);
+  free(derived_key);
+
+  return create_resolved_promise(ctx, result_buffer);
+}
+
+// Helper function for PBKDF2 deriveBits
+static JSValue jsrt_subtle_derive_pbkdf2_bits(JSContext* ctx, JSValueConst algorithm, JSValueConst base_key,
+                                              JSValueConst length_arg) {
+  // TODO: Implement PBKDF2 deriveBits if needed
+  JSValue error = jsrt_crypto_throw_error(ctx, "NotSupportedError", "PBKDF2 deriveBits not yet implemented");
+  return create_rejected_promise(ctx, error);
+}
+
 JSValue jsrt_subtle_deriveBits(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
   if (argc < 3) {
     JSValue error = jsrt_crypto_throw_error(ctx, "TypeError", "deriveBits requires 3 arguments");
@@ -2575,12 +2691,22 @@ JSValue jsrt_subtle_deriveBits(JSContext* ctx, JSValueConst this_val, int argc, 
     return create_rejected_promise(ctx, error);
   }
 
-  // Check if algorithm is ECDH
-  if (alg != JSRT_CRYPTO_ALG_ECDH) {
+  // Check if algorithm supports key derivation
+  if (alg != JSRT_CRYPTO_ALG_ECDH && alg != JSRT_CRYPTO_ALG_HKDF && alg != JSRT_CRYPTO_ALG_PBKDF2) {
     JSValue error = jsrt_crypto_throw_error(ctx, "InvalidAccessError", "Algorithm not suitable for key derivation");
     return create_rejected_promise(ctx, error);
   }
 
+  // Handle different key derivation algorithms
+  if (alg == JSRT_CRYPTO_ALG_HKDF) {
+    // HKDF derivation
+    return jsrt_subtle_derive_hkdf_bits(ctx, argv[0], argv[1], argv[2]);
+  } else if (alg == JSRT_CRYPTO_ALG_PBKDF2) {
+    // PBKDF2 derivation
+    return jsrt_subtle_derive_pbkdf2_bits(ctx, argv[0], argv[1], argv[2]);
+  }
+
+  // ECDH derivation (original implementation continues below)
   // Get private key data from CryptoKey object (second argument)
   JSValue priv_key_data_val = JS_GetPropertyStr(ctx, argv[1], "__keyData");
   if (JS_IsUndefined(priv_key_data_val)) {

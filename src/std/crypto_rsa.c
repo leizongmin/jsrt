@@ -92,15 +92,15 @@ static bool rsa_funcs_loaded = false;
 #define EVP_PKEY_CTRL_RSA_PADDING -4
 #define EVP_PKEY_CTRL_RSA_OAEP_MD -5
 #define EVP_PKEY_CTRL_RSA_OAEP_LABEL -6
-// Alternative control values to try
-#define EVP_PKEY_CTRL_RSA_PADDING_ALT 0x1001
+// OpenSSL 3.x actual control values (verified)
+#define EVP_PKEY_CTRL_RSA_PADDING_ALT 4097  // Actual OpenSSL 3.x value
 #define EVP_PKEY_CTRL_GET_RSA_PADDING 0x1002
 #define EVP_PKEY_CTRL_MD 1
 #define RSA_PKCS1_PADDING 1
 #define RSA_PKCS1_OAEP_PADDING 4
 #define RSA_PKCS1_PSS_PADDING 6
-// PSS specific controls
-#define EVP_PKEY_CTRL_RSA_PSS_SALTLEN (EVP_PKEY_ALG_CTRL + 2)
+// PSS specific controls - OpenSSL 3.x actual value
+#define EVP_PKEY_CTRL_RSA_PSS_SALTLEN 4098  // Actual OpenSSL 3.x value
 #define RSA_PSS_SALTLEN_DIGEST -1
 #define RSA_PSS_SALTLEN_MAX -2
 #define RSA_PSS_SALTLEN_AUTO -3
@@ -523,7 +523,7 @@ bool jsrt_crypto_is_rsa_algorithm_supported(jsrt_rsa_algorithm_t alg) {
     case JSRT_RSASSA_PKCS1_V1_5:
       return true;  // Implemented
     case JSRT_RSA_PSS:
-      return false;  // TODO: Fix OpenSSL 3.x compatibility
+      return true;  // Fixed OpenSSL 3.x compatibility
     default:
       return false;
   }
@@ -750,25 +750,53 @@ int jsrt_crypto_rsa_sign(jsrt_rsa_params_t* params, const uint8_t* data, size_t 
 
     // For RSA-PSS, set padding and salt length
     if (params->algorithm == JSRT_RSA_PSS && pkey_ctx) {
-      // Set PSS padding - try alternative control value first
-      int padding_result = openssl_rsa_funcs.EVP_PKEY_CTX_ctrl(
-          pkey_ctx, EVP_PKEY_RSA, EVP_PKEY_OP_SIGN, EVP_PKEY_CTRL_RSA_PADDING_ALT, RSA_PKCS1_PSS_PADDING, NULL);
+      // Try using string-based control first (OpenSSL 3.x preferred method)
+      int padding_result = -1;
+      if (openssl_rsa_funcs.EVP_PKEY_CTX_ctrl_str) {
+        padding_result = openssl_rsa_funcs.EVP_PKEY_CTX_ctrl_str(pkey_ctx, "rsa_padding_mode", "pss");
+        JSRT_Debug("JSRT_Crypto_RSA: String-based PSS padding result: %d", padding_result);
+      }
+
       if (padding_result <= 0) {
-        // Try with the other control value
-        padding_result = openssl_rsa_funcs.EVP_PKEY_CTX_ctrl(pkey_ctx, EVP_PKEY_RSA, EVP_PKEY_OP_SIGN,
-                                                             EVP_PKEY_CTRL_RSA_PADDING, RSA_PKCS1_PSS_PADDING, NULL);
+        // Fall back to numeric control
+        padding_result = openssl_rsa_funcs.EVP_PKEY_CTX_ctrl(
+            pkey_ctx, EVP_PKEY_RSA, EVP_PKEY_OP_SIGN, EVP_PKEY_CTRL_RSA_PADDING_ALT, RSA_PKCS1_PSS_PADDING, NULL);
+        JSRT_Debug("JSRT_Crypto_RSA: Numeric PSS padding (4097) result: %d", padding_result);
+
+        if (padding_result <= 0) {
+          // Try with the legacy control value
+          padding_result = openssl_rsa_funcs.EVP_PKEY_CTX_ctrl(pkey_ctx, EVP_PKEY_RSA, EVP_PKEY_OP_SIGN,
+                                                               EVP_PKEY_CTRL_RSA_PADDING, RSA_PKCS1_PSS_PADDING, NULL);
+          JSRT_Debug("JSRT_Crypto_RSA: Numeric PSS padding (-4) result: %d", padding_result);
+        }
       }
 
       if (padding_result <= 0) {
         openssl_rsa_funcs.EVP_MD_CTX_free(md_ctx);
-        JSRT_Debug("JSRT_Crypto_RSA: Failed to set PSS padding (tried both control values)");
+        JSRT_Debug("JSRT_Crypto_RSA: Failed to set PSS padding (tried all methods)");
         return -1;
       }
 
       // Set salt length (default to digest length)
       int salt_len = params->params.pss.salt_length > 0 ? params->params.pss.salt_length : RSA_PSS_SALTLEN_DIGEST;
-      if (openssl_rsa_funcs.EVP_PKEY_CTX_ctrl(pkey_ctx, EVP_PKEY_RSA, EVP_PKEY_OP_SIGN, EVP_PKEY_CTRL_RSA_PSS_SALTLEN,
-                                              salt_len, NULL) <= 0) {
+      int saltlen_result = -1;
+
+      // Try string-based salt length setting first
+      if (openssl_rsa_funcs.EVP_PKEY_CTX_ctrl_str) {
+        char salt_str[32];
+        snprintf(salt_str, sizeof(salt_str), "%d", salt_len);
+        saltlen_result = openssl_rsa_funcs.EVP_PKEY_CTX_ctrl_str(pkey_ctx, "rsa_pss_saltlen", salt_str);
+        JSRT_Debug("JSRT_Crypto_RSA: String-based PSS saltlen result: %d", saltlen_result);
+      }
+
+      if (saltlen_result <= 0) {
+        // Fall back to numeric control
+        saltlen_result = openssl_rsa_funcs.EVP_PKEY_CTX_ctrl(pkey_ctx, EVP_PKEY_RSA, EVP_PKEY_OP_SIGN,
+                                                             EVP_PKEY_CTRL_RSA_PSS_SALTLEN, salt_len, NULL);
+        JSRT_Debug("JSRT_Crypto_RSA: Numeric PSS saltlen result: %d", saltlen_result);
+      }
+
+      if (saltlen_result <= 0) {
         openssl_rsa_funcs.EVP_MD_CTX_free(md_ctx);
         JSRT_Debug("JSRT_Crypto_RSA: Failed to set PSS salt length");
         return -1;
@@ -896,25 +924,53 @@ bool jsrt_crypto_rsa_verify(jsrt_rsa_params_t* params, const uint8_t* data, size
 
     // For RSA-PSS, set padding and salt length
     if (params->algorithm == JSRT_RSA_PSS && pkey_ctx) {
-      // Set PSS padding - try alternative control value first
-      int padding_result = openssl_rsa_funcs.EVP_PKEY_CTX_ctrl(
-          pkey_ctx, EVP_PKEY_RSA, EVP_PKEY_OP_VERIFY, EVP_PKEY_CTRL_RSA_PADDING_ALT, RSA_PKCS1_PSS_PADDING, NULL);
+      // Try using string-based control first (OpenSSL 3.x preferred method)
+      int padding_result = -1;
+      if (openssl_rsa_funcs.EVP_PKEY_CTX_ctrl_str) {
+        padding_result = openssl_rsa_funcs.EVP_PKEY_CTX_ctrl_str(pkey_ctx, "rsa_padding_mode", "pss");
+        JSRT_Debug("JSRT_Crypto_RSA: String-based PSS padding result: %d", padding_result);
+      }
+
       if (padding_result <= 0) {
-        // Try with the other control value
-        padding_result = openssl_rsa_funcs.EVP_PKEY_CTX_ctrl(pkey_ctx, EVP_PKEY_RSA, EVP_PKEY_OP_VERIFY,
-                                                             EVP_PKEY_CTRL_RSA_PADDING, RSA_PKCS1_PSS_PADDING, NULL);
+        // Fall back to numeric control
+        padding_result = openssl_rsa_funcs.EVP_PKEY_CTX_ctrl(
+            pkey_ctx, EVP_PKEY_RSA, EVP_PKEY_OP_VERIFY, EVP_PKEY_CTRL_RSA_PADDING_ALT, RSA_PKCS1_PSS_PADDING, NULL);
+        JSRT_Debug("JSRT_Crypto_RSA: Numeric PSS padding (4097) result: %d", padding_result);
+
+        if (padding_result <= 0) {
+          // Try with the legacy control value
+          padding_result = openssl_rsa_funcs.EVP_PKEY_CTX_ctrl(pkey_ctx, EVP_PKEY_RSA, EVP_PKEY_OP_VERIFY,
+                                                               EVP_PKEY_CTRL_RSA_PADDING, RSA_PKCS1_PSS_PADDING, NULL);
+          JSRT_Debug("JSRT_Crypto_RSA: Numeric PSS padding (-4) result: %d", padding_result);
+        }
       }
 
       if (padding_result <= 0) {
         openssl_rsa_funcs.EVP_MD_CTX_free(md_ctx);
-        JSRT_Debug("JSRT_Crypto_RSA: Failed to set PSS padding for verification (tried both control values)");
+        JSRT_Debug("JSRT_Crypto_RSA: Failed to set PSS padding for verification (tried all methods)");
         return false;
       }
 
       // Set salt length (default to digest length)
       int salt_len = params->params.pss.salt_length > 0 ? params->params.pss.salt_length : RSA_PSS_SALTLEN_DIGEST;
-      if (openssl_rsa_funcs.EVP_PKEY_CTX_ctrl(pkey_ctx, EVP_PKEY_RSA, EVP_PKEY_OP_VERIFY, EVP_PKEY_CTRL_RSA_PSS_SALTLEN,
-                                              salt_len, NULL) <= 0) {
+      int saltlen_result = -1;
+
+      // Try string-based salt length setting first
+      if (openssl_rsa_funcs.EVP_PKEY_CTX_ctrl_str) {
+        char salt_str[32];
+        snprintf(salt_str, sizeof(salt_str), "%d", salt_len);
+        saltlen_result = openssl_rsa_funcs.EVP_PKEY_CTX_ctrl_str(pkey_ctx, "rsa_pss_saltlen", salt_str);
+        JSRT_Debug("JSRT_Crypto_RSA: String-based PSS saltlen result: %d", saltlen_result);
+      }
+
+      if (saltlen_result <= 0) {
+        // Fall back to numeric control
+        saltlen_result = openssl_rsa_funcs.EVP_PKEY_CTX_ctrl(pkey_ctx, EVP_PKEY_RSA, EVP_PKEY_OP_VERIFY,
+                                                             EVP_PKEY_CTRL_RSA_PSS_SALTLEN, salt_len, NULL);
+        JSRT_Debug("JSRT_Crypto_RSA: Numeric PSS saltlen result: %d", saltlen_result);
+      }
+
+      if (saltlen_result <= 0) {
         openssl_rsa_funcs.EVP_MD_CTX_free(md_ctx);
         JSRT_Debug("JSRT_Crypto_RSA: Failed to set PSS salt length for verification");
         return false;

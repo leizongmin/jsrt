@@ -27,7 +27,7 @@ if(ENABLE_COVERAGE)
     set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -fprofile-arcs -ftest-coverage")
 endif()
 
-include_directories(src deps/quickjs deps/libuv/include deps/libuv/src)
+include_directories(src deps/quickjs deps/libuv/include deps/libuv/src deps/readline)
 
 # Read jsrt version from VERSION file
 file(STRINGS VERSION JSRT_VERSION)
@@ -65,13 +65,54 @@ endif()
 # build libuv
 add_subdirectory(deps/libuv)
 
+# build readline
+set(READLINE_SOURCES
+    deps/readline/readline.c
+    deps/readline/vi_mode.c
+    deps/readline/funmap.c
+    deps/readline/keymaps.c
+    deps/readline/parens.c
+    deps/readline/search.c
+    deps/readline/rltty.c
+    deps/readline/complete.c
+    deps/readline/bind.c
+    deps/readline/isearch.c
+    deps/readline/display.c
+    deps/readline/signals.c
+    deps/readline/util.c
+    deps/readline/kill.c
+    deps/readline/undo.c
+    deps/readline/macro.c
+    deps/readline/input.c
+    deps/readline/callback.c
+    deps/readline/terminal.c
+    deps/readline/text.c
+    deps/readline/nls.c
+    deps/readline/misc.c
+    deps/readline/history.c
+    deps/readline/histexpand.c
+    deps/readline/histfile.c
+    deps/readline/histsearch.c
+    deps/readline/shell.c
+    deps/readline/mbutil.c
+    deps/readline/tilde.c
+    deps/readline/colors.c
+    deps/readline/parse-colors.c
+    deps/readline/xmalloc.c
+    deps/readline/xfree.c
+    deps/readline/compat.c
+    deps/readline/savestring.c
+)
+add_library(readline STATIC ${READLINE_SOURCES})
+target_compile_definitions(readline PRIVATE HAVE_CONFIG_H READLINE_LIBRARY)
+
 # Platform-specific libraries
 if(WIN32)
     # Windows doesn't need dl, m is built into MSVCRT, pthread is handled by libuv
     set(JSRT_PLATFORM_LIBS)
 else()
-    # Unix/Linux systems need these libraries
-    set(JSRT_PLATFORM_LIBS dl m pthread readline)
+    # Unix/Linux systems need these libraries (readline now built statically)
+    set(JSRT_PLATFORM_LIBS dl m pthread termcap)
 endif()
 
 # build jsrt
@@ -86,8 +127,10 @@ set(JSRT_LINK_LIBS
     jsrtcore
     quickjs
     uv_a
+    readline
     ${JSRT_PLATFORM_LIBS})
 add_library(jsrtcore STATIC ${JSRT_LIB_FILES})
+target_compile_definitions(jsrtcore PRIVATE READLINE_LIBRARY)
 target_compile_definitions(jsrtcore PRIVATE JSRT_VERSION="${JSRT_VERSION}")
 add_executable(jsrt src/main.c src/build.c)
 target_compile_definitions(jsrt PRIVATE JSRT_VERSION="${JSRT_VERSION}")

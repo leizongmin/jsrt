@@ -1,7 +1,5 @@
 #include "jsrt.h"
 
-#include <readline/history.h>
-#include <readline/readline.h>
 #include <signal.h>
 #include <stdbool.h>
 #include <stdint.h>
@@ -10,6 +8,9 @@
 #include <string.h>
 #include <unistd.h>
 #include <uv.h>
+
+#include <history.h>
+#include <readline.h>
 
 #include "runtime.h"
 #include "std/console.h"

@@ -66,14 +66,14 @@ typedef struct {
   jsrt_ffi_type_t *arg_types;
   void *func_ptr;
 #ifdef HAVE_LIBFFI
-  ffi_cif cif;        // libffi call interface
-  ffi_type **ffi_arg_types; // libffi argument types
-  ffi_type *ffi_return_type; // libffi return type
-  bool cif_prepared;  // whether CIF has been prepared
+  ffi_cif cif;                // libffi call interface
+  ffi_type **ffi_arg_types;   // libffi argument types
+  ffi_type *ffi_return_type;  // libffi return type
+  bool cif_prepared;          // whether CIF has been prepared
 #endif
 } jsrt_ffi_function_t;
 
-// Global storage for FFI function metadata  
+// Global storage for FFI function metadata
 static JSValue ffi_functions_map = JS_UNINITIALIZED;
 static int next_function_id = 1;
 
@@ -103,44 +103,44 @@ typedef struct {
 typedef struct ffi_struct_def ffi_struct_def_t;
 
 typedef enum {
-  JSRT_FIELD_TYPE_PRIMITIVE,    // Basic types (int, float, etc.)
-  JSRT_FIELD_TYPE_STRUCT,       // Nested struct
-  JSRT_FIELD_TYPE_ARRAY,        // Array of primitives or structs
-  JSRT_FIELD_TYPE_POINTER       // Pointer to any type
+  JSRT_FIELD_TYPE_PRIMITIVE,  // Basic types (int, float, etc.)
+  JSRT_FIELD_TYPE_STRUCT,     // Nested struct
+  JSRT_FIELD_TYPE_ARRAY,      // Array of primitives or structs
+  JSRT_FIELD_TYPE_POINTER     // Pointer to any type
 } jsrt_field_type_category_t;
 
 // Field descriptor for complex types
 typedef struct {
   char *name;
-  jsrt_ffi_type_t base_type;           // Basic FFI type
-  jsrt_field_type_category_t category; // Field category
-  size_t offset;                       // Offset in parent struct
-  
+  jsrt_ffi_type_t base_type;            // Basic FFI type
+  jsrt_field_type_category_t category;  // Field category
+  size_t offset;                        // Offset in parent struct
+
   // For nested structs
-  ffi_struct_def_t *nested_struct;     // Reference to nested struct definition
-  
+  ffi_struct_def_t *nested_struct;  // Reference to nested struct definition
+
   // For arrays
-  int array_length;                    // Array size (0 for dynamic)
-  jsrt_ffi_type_t element_type;        // Element type for arrays
-  ffi_struct_def_t *element_struct;    // Element struct for struct arrays
-  
+  int array_length;                  // Array size (0 for dynamic)
+  jsrt_ffi_type_t element_type;      // Element type for arrays
+  ffi_struct_def_t *element_struct;  // Element struct for struct arrays
+
   // For pointers
-  int pointer_levels;                  // Number of pointer levels (*, **, etc.)
-  jsrt_ffi_type_t pointed_type;        // Type being pointed to
-  ffi_struct_def_t *pointed_struct;    // Struct being pointed to
+  int pointer_levels;                // Number of pointer levels (*, **, etc.)
+  jsrt_ffi_type_t pointed_type;      // Type being pointed to
+  ffi_struct_def_t *pointed_struct;  // Struct being pointed to
 } jsrt_field_descriptor_t;
 
-// Enhanced struct definition for complex nested types  
+// Enhanced struct definition for complex nested types
 struct ffi_struct_def {
   char *name;
   int field_count;
-  jsrt_field_descriptor_t *fields;     // Enhanced field descriptors
+  jsrt_field_descriptor_t *fields;  // Enhanced field descriptors
   size_t total_size;
-  size_t alignment;                    // Struct alignment requirement
-  
+  size_t alignment;  // Struct alignment requirement
+
   // Dependency tracking for complex types
   int dependency_count;
-  ffi_struct_def_t **dependencies;     // Other structs this depends on
+  ffi_struct_def_t **dependencies;  // Other structs this depends on
 };
 
 // Store function metadata for lookup during calls
@@ -148,17 +148,17 @@ static int store_function_metadata(JSContext *ctx, jsrt_ffi_function_t *func) {
   if (JS_IsUninitialized(ffi_functions_map)) {
     ffi_functions_map = JS_NewObject(ctx);
   }
-  
+
   int function_id = next_function_id++;
   char id_str[32];
   snprintf(id_str, sizeof(id_str), "%d", function_id);
-  
+
   // Create metadata object
   JSValue metadata = JS_NewObject(ctx);
   JS_SetPropertyStr(ctx, metadata, "return_type", JS_NewInt32(ctx, func->return_type));
   JS_SetPropertyStr(ctx, metadata, "arg_count", JS_NewInt32(ctx, func->arg_count));
   JS_SetPropertyStr(ctx, metadata, "func_ptr", JS_NewInt64(ctx, (intptr_t)func->func_ptr));
-  
+
   JS_SetPropertyStr(ctx, ffi_functions_map, id_str, metadata);
   return function_id;
 }
@@ -168,38 +168,37 @@ static bool get_function_metadata_by_id(JSContext *ctx, int function_id, jsrt_ff
   if (JS_IsUninitialized(ffi_functions_map)) {
     return false;
   }
-  
+
   char id_str[32];
   snprintf(id_str, sizeof(id_str), "%d", function_id);
-  
+
   JSValue metadata = JS_GetPropertyStr(ctx, ffi_functions_map, id_str);
   if (JS_IsUndefined(metadata)) {
     return false;
   }
-  
+
   JSValue return_type_val = JS_GetPropertyStr(ctx, metadata, "return_type");
   JSValue arg_count_val = JS_GetPropertyStr(ctx, metadata, "arg_count");
   JSValue func_ptr_val = JS_GetPropertyStr(ctx, metadata, "func_ptr");
-  
+
   int32_t return_type, arg_count;
   int64_t stored_ptr;
-  
+
   bool success = (JS_ToInt32(ctx, &return_type, return_type_val) == 0) &&
-                 (JS_ToInt32(ctx, &arg_count, arg_count_val) == 0) &&
-                 (JS_ToInt64(ctx, &stored_ptr, func_ptr_val) == 0);
-  
+                 (JS_ToInt32(ctx, &arg_count, arg_count_val) == 0) && (JS_ToInt64(ctx, &stored_ptr, func_ptr_val) == 0);
+
   if (success) {
     func->return_type = (jsrt_ffi_type_t)return_type;
     func->arg_count = arg_count;
     func->arg_types = NULL;
-    func->func_ptr = (void*)(intptr_t)stored_ptr;
+    func->func_ptr = (void *)(intptr_t)stored_ptr;
   }
-  
+
   JS_FreeValue(ctx, return_type_val);
   JS_FreeValue(ctx, arg_count_val);
   JS_FreeValue(ctx, func_ptr_val);
   JS_FreeValue(ctx, metadata);
-  
+
   return success;
 }
 
@@ -224,56 +223,66 @@ static jsrt_ffi_type_t string_to_ffi_type(const char *type_str) {
 
 #ifdef HAVE_LIBFFI
 // Convert our FFI types to libffi types
-static ffi_type* jsrt_ffi_type_to_libffi(jsrt_ffi_type_t type) {
+static ffi_type *jsrt_ffi_type_to_libffi(jsrt_ffi_type_t type) {
   switch (type) {
-    case JSRT_FFI_TYPE_VOID: return &ffi_type_void;
-    case JSRT_FFI_TYPE_INT: return &ffi_type_sint;
-    case JSRT_FFI_TYPE_UINT: return &ffi_type_uint;
-    case JSRT_FFI_TYPE_INT32: return &ffi_type_sint32;
-    case JSRT_FFI_TYPE_UINT32: return &ffi_type_uint32;
-    case JSRT_FFI_TYPE_INT64: return &ffi_type_sint64;
-    case JSRT_FFI_TYPE_UINT64: return &ffi_type_uint64;
-    case JSRT_FFI_TYPE_FLOAT: return &ffi_type_float;
-    case JSRT_FFI_TYPE_DOUBLE: return &ffi_type_double;
+    case JSRT_FFI_TYPE_VOID:
+      return &ffi_type_void;
+    case JSRT_FFI_TYPE_INT:
+      return &ffi_type_sint;
+    case JSRT_FFI_TYPE_UINT:
+      return &ffi_type_uint;
+    case JSRT_FFI_TYPE_INT32:
+      return &ffi_type_sint32;
+    case JSRT_FFI_TYPE_UINT32:
+      return &ffi_type_uint32;
+    case JSRT_FFI_TYPE_INT64:
+      return &ffi_type_sint64;
+    case JSRT_FFI_TYPE_UINT64:
+      return &ffi_type_uint64;
+    case JSRT_FFI_TYPE_FLOAT:
+      return &ffi_type_float;
+    case JSRT_FFI_TYPE_DOUBLE:
+      return &ffi_type_double;
     case JSRT_FFI_TYPE_POINTER:
     case JSRT_FFI_TYPE_STRING:
     case JSRT_FFI_TYPE_ARRAY:
     case JSRT_FFI_TYPE_CALLBACK:
     case JSRT_FFI_TYPE_STRUCT:
-      return &ffi_type_pointer; // All these are essentially pointers
-    default: return &ffi_type_void;
+      return &ffi_type_pointer;  // All these are essentially pointers
+    default:
+      return &ffi_type_void;
   }
 }
 
 // Prepare libffi CIF (Call InterFace) for a function
 static bool prepare_libffi_cif(jsrt_ffi_function_t *func) {
   if (func->cif_prepared) {
-    return true; // Already prepared
+    return true;  // Already prepared
   }
-  
+
   // Allocate libffi argument types array
-  func->ffi_arg_types = malloc(func->arg_count * sizeof(ffi_type*));
+  func->ffi_arg_types = malloc(func->arg_count * sizeof(ffi_type *));
   if (!func->ffi_arg_types && func->arg_count > 0) {
     return false;
   }
-  
+
   // Convert argument types
   for (int i = 0; i < func->arg_count; i++) {
     func->ffi_arg_types[i] = jsrt_ffi_type_to_libffi(func->arg_types[i]);
   }
-  
+
   // Convert return type
   func->ffi_return_type = jsrt_ffi_type_to_libffi(func->return_type);
-  
+
   // Prepare the call interface
-  ffi_status status = ffi_prep_cif(&func->cif, FFI_DEFAULT_ABI, func->arg_count,
-                                   func->ffi_return_type, func->ffi_arg_types);
-  
+  ffi_status status =
+      ffi_prep_cif(&func->cif, FFI_DEFAULT_ABI, func->arg_count, func->ffi_return_type, func->ffi_arg_types);
+
   if (status == FFI_OK) {
     func->cif_prepared = true;
     return true;
   }
-  
+
   // Cleanup on failure
   free(func->ffi_arg_types);
   func->ffi_arg_types = NULL;
@@ -293,23 +302,24 @@ static void cleanup_libffi_cif(jsrt_ffi_function_t *func) {
 
 #ifdef HAVE_LIBFFI
 // Enhanced function calling using libffi for robust calling conventions
-static JSValue call_function_with_libffi(JSContext *ctx, jsrt_ffi_function_t *func, uint64_t *args, void **array_args, int argc) {
+static JSValue call_function_with_libffi(JSContext *ctx, jsrt_ffi_function_t *func, uint64_t *args, void **array_args,
+                                         int argc) {
   // Prepare the CIF if not already done
   if (!prepare_libffi_cif(func)) {
     return JS_ThrowTypeError(ctx, "Failed to prepare libffi call interface");
   }
-  
+
   // Prepare argument values for libffi
-  void **ffi_args = malloc(argc * sizeof(void*));
+  void **ffi_args = malloc(argc * sizeof(void *));
   if (!ffi_args && argc > 0) {
     return JS_ThrowTypeError(ctx, "Failed to allocate libffi arguments");
   }
-  
+
   // Convert arguments to libffi format
   for (int i = 0; i < argc; i++) {
-    ffi_args[i] = &args[i]; // Use address of the argument value
+    ffi_args[i] = &args[i];  // Use address of the argument value
   }
-  
+
   // Prepare result storage
   union {
     int32_t i32;
@@ -318,14 +328,14 @@ static JSValue call_function_with_libffi(JSContext *ctx, jsrt_ffi_function_t *fu
     uint64_t u64;
     float f;
     double d;
-    void* ptr;
+    void *ptr;
   } result_storage;
-  
+
   // Make the call using libffi
   ffi_call(&func->cif, func->func_ptr, &result_storage, ffi_args);
-  
+
   free(ffi_args);
-  
+
   // Convert result back to JavaScript value
   JSValue result = JS_UNDEFINED;
   switch (func->return_type) {
@@ -357,7 +367,7 @@ static JSValue call_function_with_libffi(JSContext *ctx, jsrt_ffi_function_t *fu
       break;
     case JSRT_FFI_TYPE_STRING:
       if (result_storage.ptr) {
-        result = JS_NewString(ctx, (const char*)result_storage.ptr);
+        result = JS_NewString(ctx, (const char *)result_storage.ptr);
       } else {
         result = JS_NULL;
       }
@@ -372,62 +382,60 @@ static JSValue call_function_with_libffi(JSContext *ctx, jsrt_ffi_function_t *fu
       result = JS_UNDEFINED;
       break;
   }
-  
+
   return result;
 }
 #endif
 #endif
 
-
 // Enhanced error creation with stack trace support
 static JSValue create_ffi_error_with_stack(JSContext *ctx, const char *message, const char *function_name) {
   // Create error with enhanced information
   char full_message[512];
-  snprintf(full_message, sizeof(full_message), "FFI Error in %s: %s", 
-           function_name ? function_name : "unknown", message);
-  
+  snprintf(full_message, sizeof(full_message), "FFI Error in %s: %s", function_name ? function_name : "unknown",
+           message);
+
   // Create a proper Error object instead of just throwing
   JSValue error_ctor = JS_GetGlobalObject(ctx);
   JSValue error_obj = JS_GetPropertyStr(ctx, error_ctor, "Error");
   JS_FreeValue(ctx, error_ctor);
-  
+
   if (JS_IsConstructor(ctx, error_obj)) {
     JSValue message_val = JS_NewString(ctx, full_message);
     JSValue error_instance = JS_CallConstructor(ctx, error_obj, 1, &message_val);
     JS_FreeValue(ctx, message_val);
     JS_FreeValue(ctx, error_obj);
-    
+
     if (!JS_IsException(error_instance)) {
       // Add additional properties to the error for better debugging
-      JS_SetPropertyStr(ctx, error_instance, "ffiFunction", 
-                       function_name ? JS_NewString(ctx, function_name) : JS_NULL);
+      JS_SetPropertyStr(ctx, error_instance, "ffiFunction", function_name ? JS_NewString(ctx, function_name) : JS_NULL);
       JS_SetPropertyStr(ctx, error_instance, "ffiModule", JS_NewString(ctx, "std:ffi"));
-      
+
       // Try to add stack trace by accessing the Error.stack property
       JSValue stack = JS_GetPropertyStr(ctx, error_instance, "stack");
       if (!JS_IsUndefined(stack) && !JS_IsNull(stack)) {
         // Stack trace is automatically populated by JavaScript engine
         JS_FreeValue(ctx, stack);
       }
-      
+
       return JS_Throw(ctx, error_instance);
     }
     JS_FreeValue(ctx, error_instance);
   }
   JS_FreeValue(ctx, error_obj);
-  
+
   // Fallback to the original method if Error constructor fails
   JSValue error = JS_ThrowTypeError(ctx, "%s", full_message);
-  
+
   // Try to add additional properties to the error for better debugging
   JSValue error_obj_fallback = JS_GetException(ctx);
   if (!JS_IsNull(error_obj_fallback)) {
-    JS_SetPropertyStr(ctx, error_obj_fallback, "ffiFunction", 
-                     function_name ? JS_NewString(ctx, function_name) : JS_NULL);
+    JS_SetPropertyStr(ctx, error_obj_fallback, "ffiFunction",
+                      function_name ? JS_NewString(ctx, function_name) : JS_NULL);
     JS_SetPropertyStr(ctx, error_obj_fallback, "ffiModule", JS_NewString(ctx, "std:ffi"));
     JS_Throw(ctx, error_obj_fallback);
   }
-  
+
   return error;
 }
 
@@ -437,28 +445,26 @@ static JSValue create_ffi_error(JSContext *ctx, const char *message, const char 
 }
 
 // Enhanced argument validation with detailed error messages
-static JSValue validate_ffi_arguments(JSContext *ctx, const char *function_name, 
-                                     int expected_argc, int actual_argc, 
-                                     const char *expected_types[]) {
+static JSValue validate_ffi_arguments(JSContext *ctx, const char *function_name, int expected_argc, int actual_argc,
+                                      const char *expected_types[]) {
   if (actual_argc != expected_argc) {
     char message[256];
-    snprintf(message, sizeof(message), 
-             "Expected %d argument%s, got %d", 
-             expected_argc, expected_argc == 1 ? "" : "s", actual_argc);
+    snprintf(message, sizeof(message), "Expected %d argument%s, got %d", expected_argc, expected_argc == 1 ? "" : "s",
+             actual_argc);
     return create_ffi_error(ctx, message, function_name);
   }
-  
-  return JS_UNDEFINED; // No error
+
+  return JS_UNDEFINED;  // No error
 }
 
 // Enhanced library loading error with ReferenceError type
 static JSValue create_library_load_error(JSContext *ctx, const char *lib_name) {
   char message[512];
   char full_message[600];
-  
+
 #ifdef _WIN32
   DWORD error_code = GetLastError();
-  snprintf(message, sizeof(message), 
+  snprintf(message, sizeof(message),
            "Failed to load library '%s' (Windows error code: %lu). "
            "Please check: 1) Library exists and is accessible, "
            "2) All dependencies are available, "
@@ -466,27 +472,27 @@ static JSValue create_library_load_error(JSContext *ctx, const char *lib_name) {
            lib_name, error_code);
 #else
   const char *dlerror_msg = dlerror();
-  snprintf(message, sizeof(message), 
+  snprintf(message, sizeof(message),
            "Failed to load library '%s': %s. "
            "Please check: 1) Library exists in system path or provide full path, "
            "2) Library has correct permissions, "
            "3) All dependencies are satisfied (check with ldd)",
            lib_name, dlerror_msg ? dlerror_msg : "Unknown error");
 #endif
-  
+
   // Create ReferenceError instead of generic Error for library loading failures
   snprintf(full_message, sizeof(full_message), "FFI Error in ffi.Library: %s", message);
-  
+
   JSValue error_ctor = JS_GetGlobalObject(ctx);
   JSValue ref_error_obj = JS_GetPropertyStr(ctx, error_ctor, "ReferenceError");
   JS_FreeValue(ctx, error_ctor);
-  
+
   if (JS_IsConstructor(ctx, ref_error_obj)) {
     JSValue message_val = JS_NewString(ctx, full_message);
     JSValue error_instance = JS_CallConstructor(ctx, ref_error_obj, 1, &message_val);
     JS_FreeValue(ctx, message_val);
     JS_FreeValue(ctx, ref_error_obj);
-    
+
     if (!JS_IsException(error_instance)) {
       // Add additional properties for debugging
       JS_SetPropertyStr(ctx, error_instance, "ffiFunction", JS_NewString(ctx, "ffi.Library"));
@@ -496,7 +502,7 @@ static JSValue create_library_load_error(JSContext *ctx, const char *lib_name) {
     JS_FreeValue(ctx, error_instance);
   }
   JS_FreeValue(ctx, ref_error_obj);
-  
+
   // Fallback to original method
   return create_ffi_error(ctx, message, "ffi.Library");
 }
@@ -504,7 +510,7 @@ static JSValue create_library_load_error(JSContext *ctx, const char *lib_name) {
 // Enhanced function resolution error
 static JSValue create_function_resolve_error(JSContext *ctx, const char *func_name, const char *lib_name) {
   char message[512];
-  snprintf(message, sizeof(message), 
+  snprintf(message, sizeof(message),
            "Function '%s' not found in library '%s'. "
            "Please check: 1) Function name is correct and exported, "
            "2) Function is not mangled (use extern \"C\" in C++), "
@@ -518,7 +524,8 @@ static JSClassID JSRT_FFILibraryClassID;
 static JSClassID JSRT_FFIFunctionClassID;
 
 // Forward declare function call handler
-static JSValue ffi_function_call(JSContext *ctx, JSValueConst func_obj, JSValueConst this_val, int argc, JSValueConst *argv, int flags);
+static JSValue ffi_function_call(JSContext *ctx, JSValueConst func_obj, JSValueConst this_val, int argc,
+                                 JSValueConst *argv, int flags);
 
 // FFI library finalizer
 static void ffi_library_finalizer(JSRuntime *rt, JSValue val) {
@@ -620,7 +627,7 @@ static bool js_to_native(JSContext *ctx, JSValue val, jsrt_ffi_type_t type, void
         *(void **)result = NULL;
         return true;
       }
-      
+
       // Convert JavaScript array to native array
       JSValue length_val = JS_GetPropertyStr(ctx, val, "length");
       uint32_t length;
@@ -630,12 +637,12 @@ static bool js_to_native(JSContext *ctx, JSValue val, jsrt_ffi_type_t type, void
         return true;
       }
       JS_FreeValue(ctx, length_val);
-      
+
       if (length == 0) {
         *(void **)result = NULL;
         return true;
       }
-      
+
       // For now, assume arrays are int32 arrays (most common case)
       // In a more complete implementation, we'd need type information
       int32_t *native_array = malloc(length * sizeof(int32_t));
@@ -643,17 +650,17 @@ static bool js_to_native(JSContext *ctx, JSValue val, jsrt_ffi_type_t type, void
         *(void **)result = NULL;
         return false;
       }
-      
+
       for (uint32_t i = 0; i < length; i++) {
         JSValue element = JS_GetPropertyUint32(ctx, val, i);
         int32_t element_val;
         if (JS_ToInt32(ctx, &element_val, element) < 0) {
-          element_val = 0; // Default value for conversion failures
+          element_val = 0;  // Default value for conversion failures
         }
         native_array[i] = element_val;
         JS_FreeValue(ctx, element);
       }
-      
+
       *(void **)result = native_array;
       return true;
     }
@@ -719,23 +726,24 @@ static JSValue native_to_js(JSContext *ctx, jsrt_ffi_type_t type, void *value) {
 }
 
 // FFI function call implementation
-static JSValue ffi_function_call(JSContext *ctx, JSValueConst func_obj, JSValueConst this_val, int argc, JSValueConst *argv, int flags) {
+static JSValue ffi_function_call(JSContext *ctx, JSValueConst func_obj, JSValueConst this_val, int argc,
+                                 JSValueConst *argv, int flags) {
   JSRT_Debug("FFI Call: Starting function call with argc=%d", argc);
-  
+
   // Get function ID from opaque data - use func_obj instead of this_val
   ffi_function_wrapper_t *wrapper = (ffi_function_wrapper_t *)JS_GetOpaque(func_obj, JSRT_FFIFunctionClassID);
   if (!wrapper) {
     return JS_ThrowTypeError(ctx, "Invalid FFI function - no wrapper data found");
   }
-  
+
   // Get metadata from global storage
   jsrt_ffi_function_t func_metadata;
   if (!get_function_metadata_by_id(ctx, wrapper->function_id, &func_metadata)) {
     return JS_ThrowTypeError(ctx, "FFI function metadata not found");
   }
 
-  JSRT_Debug("FFI Call: Got function metadata: return_type=%d, arg_count=%d, func_ptr=%p",
-             func_metadata.return_type, func_metadata.arg_count, func_metadata.func_ptr);
+  JSRT_Debug("FFI Call: Got function metadata: return_type=%d, arg_count=%d, func_ptr=%p", func_metadata.return_type,
+             func_metadata.arg_count, func_metadata.func_ptr);
 
   if (!func_metadata.func_ptr) {
     return JS_ThrowTypeError(ctx, "Invalid FFI function metadata - missing function pointer");
@@ -749,7 +757,7 @@ static JSValue ffi_function_call(JSContext *ctx, JSValueConst func_obj, JSValueC
   // Convert arguments to native values - now supports up to 16 arguments and arrays
   uint64_t args[16] = {0};
   const char *string_args[16] = {NULL};
-  void *array_args[16] = {NULL}; // Store array pointers for cleanup
+  void *array_args[16] = {NULL};  // Store array pointers for cleanup
 
   for (int i = 0; i < argc; i++) {
     if (JS_IsString(argv[i])) {
@@ -761,12 +769,12 @@ static JSValue ffi_function_call(JSContext *ctx, JSValueConst func_obj, JSValueC
       uint32_t length;
       if (JS_ToUint32(ctx, &length, length_val) < 0) {
         JS_FreeValue(ctx, length_val);
-        args[i] = 0; // Null pointer for invalid arrays
+        args[i] = 0;  // Null pointer for invalid arrays
       } else {
         JS_FreeValue(ctx, length_val);
-        
+
         if (length == 0) {
-          args[i] = 0; // Null pointer for empty arrays
+          args[i] = 0;  // Null pointer for empty arrays
         } else {
           // Convert to int32 array (most common case)
           int32_t *native_array = malloc(length * sizeof(int32_t));
@@ -775,15 +783,15 @@ static JSValue ffi_function_call(JSContext *ctx, JSValueConst func_obj, JSValueC
               JSValue element = JS_GetPropertyUint32(ctx, argv[i], j);
               int32_t element_val;
               if (JS_ToInt32(ctx, &element_val, element) < 0) {
-                element_val = 0; // Default value
+                element_val = 0;  // Default value
               }
               native_array[j] = element_val;
               JS_FreeValue(ctx, element);
             }
-            array_args[i] = native_array; // Store for cleanup
+            array_args[i] = native_array;  // Store for cleanup
             args[i] = (uint64_t)(uintptr_t)native_array;
           } else {
-            args[i] = 0; // Allocation failed
+            args[i] = 0;  // Allocation failed
           }
         }
       }
@@ -798,7 +806,10 @@ static JSValue ffi_function_call(JSContext *ctx, JSValueConst func_obj, JSValueC
           args[i] = (uint64_t)num_int;
         } else {
           // It's a floating point - store as double in union
-          union { double d; uint64_t u; } converter;
+          union {
+            double d;
+            uint64_t u;
+          } converter;
           converter.d = num_double;
           args[i] = converter.u;
         }
@@ -840,124 +851,368 @@ static JSValue ffi_function_call(JSContext *ctx, JSValueConst func_obj, JSValueC
   if (return_type == JSRT_FFI_TYPE_INT || return_type == JSRT_FFI_TYPE_INT32) {
     int32_t ret_val = 0;
     switch (argc) {
-      case 0: ret_val = ((int32_t(*)())func_ptr)(); break;
-      case 1: ret_val = ((int32_t(*)(uintptr_t))func_ptr)(args[0]); break;
-      case 2: ret_val = ((int32_t(*)(uintptr_t, uintptr_t))func_ptr)(args[0], args[1]); break;
-      case 3: ret_val = ((int32_t(*)(uintptr_t, uintptr_t, uintptr_t))func_ptr)(args[0], args[1], args[2]); break;
-      case 4: ret_val = ((int32_t(*)(uintptr_t, uintptr_t, uintptr_t, uintptr_t))func_ptr)(args[0], args[1], args[2], args[3]); break;
-      case 5: ret_val = ((int32_t(*)(uintptr_t, uintptr_t, uintptr_t, uintptr_t, uintptr_t))func_ptr)(args[0], args[1], args[2], args[3], args[4]); break;
-      case 6: ret_val = ((int32_t(*)(uintptr_t, uintptr_t, uintptr_t, uintptr_t, uintptr_t, uintptr_t))func_ptr)(args[0], args[1], args[2], args[3], args[4], args[5]); break;
-      case 7: ret_val = ((int32_t(*)(uintptr_t, uintptr_t, uintptr_t, uintptr_t, uintptr_t, uintptr_t, uintptr_t))func_ptr)(args[0], args[1], args[2], args[3], args[4], args[5], args[6]); break;
-      case 8: ret_val = ((int32_t(*)(uintptr_t, uintptr_t, uintptr_t, uintptr_t, uintptr_t, uintptr_t, uintptr_t, uintptr_t))func_ptr)(args[0], args[1], args[2], args[3], args[4], args[5], args[6], args[7]); break;
-      case 9: ret_val = ((int32_t(*)(uintptr_t, uintptr_t, uintptr_t, uintptr_t, uintptr_t, uintptr_t, uintptr_t, uintptr_t, uintptr_t))func_ptr)(args[0], args[1], args[2], args[3], args[4], args[5], args[6], args[7], args[8]); break;
-      case 10: ret_val = ((int32_t(*)(uintptr_t, uintptr_t, uintptr_t, uintptr_t, uintptr_t, uintptr_t, uintptr_t, uintptr_t, uintptr_t, uintptr_t))func_ptr)(args[0], args[1], args[2], args[3], args[4], args[5], args[6], args[7], args[8], args[9]); break;
-      case 11: ret_val = ((int32_t(*)(uintptr_t, uintptr_t, uintptr_t, uintptr_t, uintptr_t, uintptr_t, uintptr_t, uintptr_t, uintptr_t, uintptr_t, uintptr_t))func_ptr)(args[0], args[1], args[2], args[3], args[4], args[5], args[6], args[7], args[8], args[9], args[10]); break;
-      case 12: ret_val = ((int32_t(*)(uintptr_t, uintptr_t, uintptr_t, uintptr_t, uintptr_t, uintptr_t, uintptr_t, uintptr_t, uintptr_t, uintptr_t, uintptr_t, uintptr_t))func_ptr)(args[0], args[1], args[2], args[3], args[4], args[5], args[6], args[7], args[8], args[9], args[10], args[11]); break;
-      case 13: ret_val = ((int32_t(*)(uintptr_t, uintptr_t, uintptr_t, uintptr_t, uintptr_t, uintptr_t, uintptr_t, uintptr_t, uintptr_t, uintptr_t, uintptr_t, uintptr_t, uintptr_t))func_ptr)(args[0], args[1], args[2], args[3], args[4], args[5], args[6], args[7], args[8], args[9], args[10], args[11], args[12]); break;
-      case 14: ret_val = ((int32_t(*)(uintptr_t, uintptr_t, uintptr_t, uintptr_t, uintptr_t, uintptr_t, uintptr_t, uintptr_t, uintptr_t, uintptr_t, uintptr_t, uintptr_t, uintptr_t, uintptr_t))func_ptr)(args[0], args[1], args[2], args[3], args[4], args[5], args[6], args[7], args[8], args[9], args[10], args[11], args[12], args[13]); break;
-      case 15: ret_val = ((int32_t(*)(uintptr_t, uintptr_t, uintptr_t, uintptr_t, uintptr_t, uintptr_t, uintptr_t, uintptr_t, uintptr_t, uintptr_t, uintptr_t, uintptr_t, uintptr_t, uintptr_t, uintptr_t))func_ptr)(args[0], args[1], args[2], args[3], args[4], args[5], args[6], args[7], args[8], args[9], args[10], args[11], args[12], args[13], args[14]); break;
-      case 16: ret_val = ((int32_t(*)(uintptr_t, uintptr_t, uintptr_t, uintptr_t, uintptr_t, uintptr_t, uintptr_t, uintptr_t, uintptr_t, uintptr_t, uintptr_t, uintptr_t, uintptr_t, uintptr_t, uintptr_t, uintptr_t))func_ptr)(args[0], args[1], args[2], args[3], args[4], args[5], args[6], args[7], args[8], args[9], args[10], args[11], args[12], args[13], args[14], args[15]); break;
+      case 0:
+        ret_val = ((int32_t(*)())func_ptr)();
+        break;
+      case 1:
+        ret_val = ((int32_t(*)(uintptr_t))func_ptr)(args[0]);
+        break;
+      case 2:
+        ret_val = ((int32_t(*)(uintptr_t, uintptr_t))func_ptr)(args[0], args[1]);
+        break;
+      case 3:
+        ret_val = ((int32_t(*)(uintptr_t, uintptr_t, uintptr_t))func_ptr)(args[0], args[1], args[2]);
+        break;
+      case 4:
+        ret_val =
+            ((int32_t(*)(uintptr_t, uintptr_t, uintptr_t, uintptr_t))func_ptr)(args[0], args[1], args[2], args[3]);
+        break;
+      case 5:
+        ret_val = ((int32_t(*)(uintptr_t, uintptr_t, uintptr_t, uintptr_t, uintptr_t))func_ptr)(
+            args[0], args[1], args[2], args[3], args[4]);
+        break;
+      case 6:
+        ret_val = ((int32_t(*)(uintptr_t, uintptr_t, uintptr_t, uintptr_t, uintptr_t, uintptr_t))func_ptr)(
+            args[0], args[1], args[2], args[3], args[4], args[5]);
+        break;
+      case 7:
+        ret_val = ((int32_t(*)(uintptr_t, uintptr_t, uintptr_t, uintptr_t, uintptr_t, uintptr_t, uintptr_t))func_ptr)(
+            args[0], args[1], args[2], args[3], args[4], args[5], args[6]);
+        break;
+      case 8:
+        ret_val =
+            ((int32_t(*)(uintptr_t, uintptr_t, uintptr_t, uintptr_t, uintptr_t, uintptr_t, uintptr_t,
+                         uintptr_t))func_ptr)(args[0], args[1], args[2], args[3], args[4], args[5], args[6], args[7]);
+        break;
+      case 9:
+        ret_val = ((int32_t(*)(uintptr_t, uintptr_t, uintptr_t, uintptr_t, uintptr_t, uintptr_t, uintptr_t, uintptr_t,
+                               uintptr_t))func_ptr)(args[0], args[1], args[2], args[3], args[4], args[5], args[6],
+                                                    args[7], args[8]);
+        break;
+      case 10:
+        ret_val = ((int32_t(*)(uintptr_t, uintptr_t, uintptr_t, uintptr_t, uintptr_t, uintptr_t, uintptr_t, uintptr_t,
+                               uintptr_t, uintptr_t))func_ptr)(args[0], args[1], args[2], args[3], args[4], args[5],
+                                                               args[6], args[7], args[8], args[9]);
+        break;
+      case 11:
+        ret_val = ((int32_t(*)(uintptr_t, uintptr_t, uintptr_t, uintptr_t, uintptr_t, uintptr_t, uintptr_t, uintptr_t,
+                               uintptr_t, uintptr_t, uintptr_t))func_ptr)(
+            args[0], args[1], args[2], args[3], args[4], args[5], args[6], args[7], args[8], args[9], args[10]);
+        break;
+      case 12:
+        ret_val = ((int32_t(*)(uintptr_t, uintptr_t, uintptr_t, uintptr_t, uintptr_t, uintptr_t, uintptr_t, uintptr_t,
+                               uintptr_t, uintptr_t, uintptr_t, uintptr_t))func_ptr)(
+            args[0], args[1], args[2], args[3], args[4], args[5], args[6], args[7], args[8], args[9], args[10],
+            args[11]);
+        break;
+      case 13:
+        ret_val = ((int32_t(*)(uintptr_t, uintptr_t, uintptr_t, uintptr_t, uintptr_t, uintptr_t, uintptr_t, uintptr_t,
+                               uintptr_t, uintptr_t, uintptr_t, uintptr_t, uintptr_t))func_ptr)(
+            args[0], args[1], args[2], args[3], args[4], args[5], args[6], args[7], args[8], args[9], args[10],
+            args[11], args[12]);
+        break;
+      case 14:
+        ret_val = ((int32_t(*)(uintptr_t, uintptr_t, uintptr_t, uintptr_t, uintptr_t, uintptr_t, uintptr_t, uintptr_t,
+                               uintptr_t, uintptr_t, uintptr_t, uintptr_t, uintptr_t, uintptr_t))func_ptr)(
+            args[0], args[1], args[2], args[3], args[4], args[5], args[6], args[7], args[8], args[9], args[10],
+            args[11], args[12], args[13]);
+        break;
+      case 15:
+        ret_val = ((int32_t(*)(uintptr_t, uintptr_t, uintptr_t, uintptr_t, uintptr_t, uintptr_t, uintptr_t, uintptr_t,
+                               uintptr_t, uintptr_t, uintptr_t, uintptr_t, uintptr_t, uintptr_t, uintptr_t))func_ptr)(
+            args[0], args[1], args[2], args[3], args[4], args[5], args[6], args[7], args[8], args[9], args[10],
+            args[11], args[12], args[13], args[14]);
+        break;
+      case 16:
+        ret_val = ((int32_t(*)(uintptr_t, uintptr_t, uintptr_t, uintptr_t, uintptr_t, uintptr_t, uintptr_t, uintptr_t,
+                               uintptr_t, uintptr_t, uintptr_t, uintptr_t, uintptr_t, uintptr_t, uintptr_t,
+                               uintptr_t))func_ptr)(args[0], args[1], args[2], args[3], args[4], args[5], args[6],
+                                                    args[7], args[8], args[9], args[10], args[11], args[12], args[13],
+                                                    args[14], args[15]);
+        break;
     }
     result = JS_NewInt32(ctx, ret_val);
   } else if (return_type == JSRT_FFI_TYPE_INT64) {
     int64_t ret_val = 0;
     switch (argc) {
-      case 0: ret_val = ((int64_t(*)())func_ptr)(); break;
-      case 1: ret_val = ((int64_t(*)(uintptr_t))func_ptr)(args[0]); break;
-      case 2: ret_val = ((int64_t(*)(uintptr_t, uintptr_t))func_ptr)(args[0], args[1]); break;
-      case 3: ret_val = ((int64_t(*)(uintptr_t, uintptr_t, uintptr_t))func_ptr)(args[0], args[1], args[2]); break;
-      case 4: ret_val = ((int64_t(*)(uintptr_t, uintptr_t, uintptr_t, uintptr_t))func_ptr)(args[0], args[1], args[2], args[3]); break;
-      case 5: ret_val = ((int64_t(*)(uintptr_t, uintptr_t, uintptr_t, uintptr_t, uintptr_t))func_ptr)(args[0], args[1], args[2], args[3], args[4]); break;
-      case 6: ret_val = ((int64_t(*)(uintptr_t, uintptr_t, uintptr_t, uintptr_t, uintptr_t, uintptr_t))func_ptr)(args[0], args[1], args[2], args[3], args[4], args[5]); break;
-      case 7: ret_val = ((int64_t(*)(uintptr_t, uintptr_t, uintptr_t, uintptr_t, uintptr_t, uintptr_t, uintptr_t))func_ptr)(args[0], args[1], args[2], args[3], args[4], args[5], args[6]); break;
-      case 8: ret_val = ((int64_t(*)(uintptr_t, uintptr_t, uintptr_t, uintptr_t, uintptr_t, uintptr_t, uintptr_t, uintptr_t))func_ptr)(args[0], args[1], args[2], args[3], args[4], args[5], args[6], args[7]); break;
+      case 0:
+        ret_val = ((int64_t(*)())func_ptr)();
+        break;
+      case 1:
+        ret_val = ((int64_t(*)(uintptr_t))func_ptr)(args[0]);
+        break;
+      case 2:
+        ret_val = ((int64_t(*)(uintptr_t, uintptr_t))func_ptr)(args[0], args[1]);
+        break;
+      case 3:
+        ret_val = ((int64_t(*)(uintptr_t, uintptr_t, uintptr_t))func_ptr)(args[0], args[1], args[2]);
+        break;
+      case 4:
+        ret_val =
+            ((int64_t(*)(uintptr_t, uintptr_t, uintptr_t, uintptr_t))func_ptr)(args[0], args[1], args[2], args[3]);
+        break;
+      case 5:
+        ret_val = ((int64_t(*)(uintptr_t, uintptr_t, uintptr_t, uintptr_t, uintptr_t))func_ptr)(
+            args[0], args[1], args[2], args[3], args[4]);
+        break;
+      case 6:
+        ret_val = ((int64_t(*)(uintptr_t, uintptr_t, uintptr_t, uintptr_t, uintptr_t, uintptr_t))func_ptr)(
+            args[0], args[1], args[2], args[3], args[4], args[5]);
+        break;
+      case 7:
+        ret_val = ((int64_t(*)(uintptr_t, uintptr_t, uintptr_t, uintptr_t, uintptr_t, uintptr_t, uintptr_t))func_ptr)(
+            args[0], args[1], args[2], args[3], args[4], args[5], args[6]);
+        break;
+      case 8:
+        ret_val =
+            ((int64_t(*)(uintptr_t, uintptr_t, uintptr_t, uintptr_t, uintptr_t, uintptr_t, uintptr_t,
+                         uintptr_t))func_ptr)(args[0], args[1], args[2], args[3], args[4], args[5], args[6], args[7]);
+        break;
       // Continue with more cases for up to 16 args
-      default: ret_val = 0; // Fallback, should not reach here due to earlier check
+      default:
+        ret_val = 0;  // Fallback, should not reach here due to earlier check
     }
     result = JS_NewInt64(ctx, ret_val);
   } else if (return_type == JSRT_FFI_TYPE_DOUBLE) {
     double ret_val = 0.0;
     switch (argc) {
-      case 0: ret_val = ((double(*)())func_ptr)(); break;
-      case 1: ret_val = ((double(*)(uintptr_t))func_ptr)(args[0]); break;
-      case 2: ret_val = ((double(*)(uintptr_t, uintptr_t))func_ptr)(args[0], args[1]); break;
-      case 3: ret_val = ((double(*)(uintptr_t, uintptr_t, uintptr_t))func_ptr)(args[0], args[1], args[2]); break;
-      case 4: ret_val = ((double(*)(uintptr_t, uintptr_t, uintptr_t, uintptr_t))func_ptr)(args[0], args[1], args[2], args[3]); break;
-      case 5: ret_val = ((double(*)(uintptr_t, uintptr_t, uintptr_t, uintptr_t, uintptr_t))func_ptr)(args[0], args[1], args[2], args[3], args[4]); break;
-      case 6: ret_val = ((double(*)(uintptr_t, uintptr_t, uintptr_t, uintptr_t, uintptr_t, uintptr_t))func_ptr)(args[0], args[1], args[2], args[3], args[4], args[5]); break;
-      case 7: ret_val = ((double(*)(uintptr_t, uintptr_t, uintptr_t, uintptr_t, uintptr_t, uintptr_t, uintptr_t))func_ptr)(args[0], args[1], args[2], args[3], args[4], args[5], args[6]); break;
-      case 8: ret_val = ((double(*)(uintptr_t, uintptr_t, uintptr_t, uintptr_t, uintptr_t, uintptr_t, uintptr_t, uintptr_t))func_ptr)(args[0], args[1], args[2], args[3], args[4], args[5], args[6], args[7]); break;
+      case 0:
+        ret_val = ((double (*)())func_ptr)();
+        break;
+      case 1:
+        ret_val = ((double (*)(uintptr_t))func_ptr)(args[0]);
+        break;
+      case 2:
+        ret_val = ((double (*)(uintptr_t, uintptr_t))func_ptr)(args[0], args[1]);
+        break;
+      case 3:
+        ret_val = ((double (*)(uintptr_t, uintptr_t, uintptr_t))func_ptr)(args[0], args[1], args[2]);
+        break;
+      case 4:
+        ret_val =
+            ((double (*)(uintptr_t, uintptr_t, uintptr_t, uintptr_t))func_ptr)(args[0], args[1], args[2], args[3]);
+        break;
+      case 5:
+        ret_val = ((double (*)(uintptr_t, uintptr_t, uintptr_t, uintptr_t, uintptr_t))func_ptr)(
+            args[0], args[1], args[2], args[3], args[4]);
+        break;
+      case 6:
+        ret_val = ((double (*)(uintptr_t, uintptr_t, uintptr_t, uintptr_t, uintptr_t, uintptr_t))func_ptr)(
+            args[0], args[1], args[2], args[3], args[4], args[5]);
+        break;
+      case 7:
+        ret_val = ((double (*)(uintptr_t, uintptr_t, uintptr_t, uintptr_t, uintptr_t, uintptr_t, uintptr_t))func_ptr)(
+            args[0], args[1], args[2], args[3], args[4], args[5], args[6]);
+        break;
+      case 8:
+        ret_val =
+            ((double (*)(uintptr_t, uintptr_t, uintptr_t, uintptr_t, uintptr_t, uintptr_t, uintptr_t,
+                         uintptr_t))func_ptr)(args[0], args[1], args[2], args[3], args[4], args[5], args[6], args[7]);
+        break;
       // Continue with more cases for up to 16 args
-      default: ret_val = 0.0; // Fallback
+      default:
+        ret_val = 0.0;  // Fallback
     }
     result = JS_NewFloat64(ctx, ret_val);
   } else if (return_type == JSRT_FFI_TYPE_FLOAT) {
     float ret_val = 0.0f;
     switch (argc) {
-      case 0: ret_val = ((float(*)())func_ptr)(); break;
-      case 1: ret_val = ((float(*)(uintptr_t))func_ptr)(args[0]); break;
-      case 2: ret_val = ((float(*)(uintptr_t, uintptr_t))func_ptr)(args[0], args[1]); break;
-      case 3: ret_val = ((float(*)(uintptr_t, uintptr_t, uintptr_t))func_ptr)(args[0], args[1], args[2]); break;
-      case 4: ret_val = ((float(*)(uintptr_t, uintptr_t, uintptr_t, uintptr_t))func_ptr)(args[0], args[1], args[2], args[3]); break;
-      case 5: ret_val = ((float(*)(uintptr_t, uintptr_t, uintptr_t, uintptr_t, uintptr_t))func_ptr)(args[0], args[1], args[2], args[3], args[4]); break;
-      case 6: ret_val = ((float(*)(uintptr_t, uintptr_t, uintptr_t, uintptr_t, uintptr_t, uintptr_t))func_ptr)(args[0], args[1], args[2], args[3], args[4], args[5]); break;
-      case 7: ret_val = ((float(*)(uintptr_t, uintptr_t, uintptr_t, uintptr_t, uintptr_t, uintptr_t, uintptr_t))func_ptr)(args[0], args[1], args[2], args[3], args[4], args[5], args[6]); break;
-      case 8: ret_val = ((float(*)(uintptr_t, uintptr_t, uintptr_t, uintptr_t, uintptr_t, uintptr_t, uintptr_t, uintptr_t))func_ptr)(args[0], args[1], args[2], args[3], args[4], args[5], args[6], args[7]); break;
+      case 0:
+        ret_val = ((float (*)())func_ptr)();
+        break;
+      case 1:
+        ret_val = ((float (*)(uintptr_t))func_ptr)(args[0]);
+        break;
+      case 2:
+        ret_val = ((float (*)(uintptr_t, uintptr_t))func_ptr)(args[0], args[1]);
+        break;
+      case 3:
+        ret_val = ((float (*)(uintptr_t, uintptr_t, uintptr_t))func_ptr)(args[0], args[1], args[2]);
+        break;
+      case 4:
+        ret_val = ((float (*)(uintptr_t, uintptr_t, uintptr_t, uintptr_t))func_ptr)(args[0], args[1], args[2], args[3]);
+        break;
+      case 5:
+        ret_val = ((float (*)(uintptr_t, uintptr_t, uintptr_t, uintptr_t, uintptr_t))func_ptr)(
+            args[0], args[1], args[2], args[3], args[4]);
+        break;
+      case 6:
+        ret_val = ((float (*)(uintptr_t, uintptr_t, uintptr_t, uintptr_t, uintptr_t, uintptr_t))func_ptr)(
+            args[0], args[1], args[2], args[3], args[4], args[5]);
+        break;
+      case 7:
+        ret_val = ((float (*)(uintptr_t, uintptr_t, uintptr_t, uintptr_t, uintptr_t, uintptr_t, uintptr_t))func_ptr)(
+            args[0], args[1], args[2], args[3], args[4], args[5], args[6]);
+        break;
+      case 8:
+        ret_val =
+            ((float (*)(uintptr_t, uintptr_t, uintptr_t, uintptr_t, uintptr_t, uintptr_t, uintptr_t,
+                        uintptr_t))func_ptr)(args[0], args[1], args[2], args[3], args[4], args[5], args[6], args[7]);
+        break;
       // Continue with more cases for up to 16 args
-      default: ret_val = 0.0f; // Fallback
+      default:
+        ret_val = 0.0f;  // Fallback
     }
     result = JS_NewFloat64(ctx, (double)ret_val);
   } else if (return_type == JSRT_FFI_TYPE_STRING) {
     const char *ret_str = NULL;
     switch (argc) {
-      case 0: ret_str = ((const char *(*)())func_ptr)(); break;
-      case 1: ret_str = ((const char *(*)(uintptr_t))func_ptr)(args[0]); break;
-      case 2: ret_str = ((const char *(*)(uintptr_t, uintptr_t))func_ptr)(args[0], args[1]); break;
-      case 3: ret_str = ((const char *(*)(uintptr_t, uintptr_t, uintptr_t))func_ptr)(args[0], args[1], args[2]); break;
-      case 4: ret_str = ((const char *(*)(uintptr_t, uintptr_t, uintptr_t, uintptr_t))func_ptr)(args[0], args[1], args[2], args[3]); break;
-      case 5: ret_str = ((const char *(*)(uintptr_t, uintptr_t, uintptr_t, uintptr_t, uintptr_t))func_ptr)(args[0], args[1], args[2], args[3], args[4]); break;
-      case 6: ret_str = ((const char *(*)(uintptr_t, uintptr_t, uintptr_t, uintptr_t, uintptr_t, uintptr_t))func_ptr)(args[0], args[1], args[2], args[3], args[4], args[5]); break;
-      case 7: ret_str = ((const char *(*)(uintptr_t, uintptr_t, uintptr_t, uintptr_t, uintptr_t, uintptr_t, uintptr_t))func_ptr)(args[0], args[1], args[2], args[3], args[4], args[5], args[6]); break;
-      case 8: ret_str = ((const char *(*)(uintptr_t, uintptr_t, uintptr_t, uintptr_t, uintptr_t, uintptr_t, uintptr_t, uintptr_t))func_ptr)(args[0], args[1], args[2], args[3], args[4], args[5], args[6], args[7]); break;
+      case 0:
+        ret_str = ((const char *(*)())func_ptr)();
+        break;
+      case 1:
+        ret_str = ((const char *(*)(uintptr_t))func_ptr)(args[0]);
+        break;
+      case 2:
+        ret_str = ((const char *(*)(uintptr_t, uintptr_t))func_ptr)(args[0], args[1]);
+        break;
+      case 3:
+        ret_str = ((const char *(*)(uintptr_t, uintptr_t, uintptr_t))func_ptr)(args[0], args[1], args[2]);
+        break;
+      case 4:
+        ret_str =
+            ((const char *(*)(uintptr_t, uintptr_t, uintptr_t, uintptr_t))func_ptr)(args[0], args[1], args[2], args[3]);
+        break;
+      case 5:
+        ret_str = ((const char *(*)(uintptr_t, uintptr_t, uintptr_t, uintptr_t, uintptr_t))func_ptr)(
+            args[0], args[1], args[2], args[3], args[4]);
+        break;
+      case 6:
+        ret_str = ((const char *(*)(uintptr_t, uintptr_t, uintptr_t, uintptr_t, uintptr_t, uintptr_t))func_ptr)(
+            args[0], args[1], args[2], args[3], args[4], args[5]);
+        break;
+      case 7:
+        ret_str =
+            ((const char *(*)(uintptr_t, uintptr_t, uintptr_t, uintptr_t, uintptr_t, uintptr_t, uintptr_t))func_ptr)(
+                args[0], args[1], args[2], args[3], args[4], args[5], args[6]);
+        break;
+      case 8:
+        ret_str = ((const char *(*)(uintptr_t, uintptr_t, uintptr_t, uintptr_t, uintptr_t, uintptr_t, uintptr_t,
+                                    uintptr_t))func_ptr)(args[0], args[1], args[2], args[3], args[4], args[5], args[6],
+                                                         args[7]);
+        break;
       // Continue with more cases for up to 16 args
-      default: ret_str = NULL; // Fallback
+      default:
+        ret_str = NULL;  // Fallback
     }
     result = ret_str ? JS_NewString(ctx, ret_str) : JS_NULL;
   } else if (return_type == JSRT_FFI_TYPE_POINTER) {
     void *ret_ptr = NULL;
     switch (argc) {
-      case 0: ret_ptr = ((void *(*)())func_ptr)(); break;
-      case 1: ret_ptr = ((void *(*)(uintptr_t))func_ptr)(args[0]); break;
-      case 2: ret_ptr = ((void *(*)(uintptr_t, uintptr_t))func_ptr)(args[0], args[1]); break;
-      case 3: ret_ptr = ((void *(*)(uintptr_t, uintptr_t, uintptr_t))func_ptr)(args[0], args[1], args[2]); break;
-      case 4: ret_ptr = ((void *(*)(uintptr_t, uintptr_t, uintptr_t, uintptr_t))func_ptr)(args[0], args[1], args[2], args[3]); break;
-      case 5: ret_ptr = ((void *(*)(uintptr_t, uintptr_t, uintptr_t, uintptr_t, uintptr_t))func_ptr)(args[0], args[1], args[2], args[3], args[4]); break;
-      case 6: ret_ptr = ((void *(*)(uintptr_t, uintptr_t, uintptr_t, uintptr_t, uintptr_t, uintptr_t))func_ptr)(args[0], args[1], args[2], args[3], args[4], args[5]); break;
-      case 7: ret_ptr = ((void *(*)(uintptr_t, uintptr_t, uintptr_t, uintptr_t, uintptr_t, uintptr_t, uintptr_t))func_ptr)(args[0], args[1], args[2], args[3], args[4], args[5], args[6]); break;
-      case 8: ret_ptr = ((void *(*)(uintptr_t, uintptr_t, uintptr_t, uintptr_t, uintptr_t, uintptr_t, uintptr_t, uintptr_t))func_ptr)(args[0], args[1], args[2], args[3], args[4], args[5], args[6], args[7]); break;
+      case 0:
+        ret_ptr = ((void *(*)())func_ptr)();
+        break;
+      case 1:
+        ret_ptr = ((void *(*)(uintptr_t))func_ptr)(args[0]);
+        break;
+      case 2:
+        ret_ptr = ((void *(*)(uintptr_t, uintptr_t))func_ptr)(args[0], args[1]);
+        break;
+      case 3:
+        ret_ptr = ((void *(*)(uintptr_t, uintptr_t, uintptr_t))func_ptr)(args[0], args[1], args[2]);
+        break;
+      case 4:
+        ret_ptr = ((void *(*)(uintptr_t, uintptr_t, uintptr_t, uintptr_t))func_ptr)(args[0], args[1], args[2], args[3]);
+        break;
+      case 5:
+        ret_ptr = ((void *(*)(uintptr_t, uintptr_t, uintptr_t, uintptr_t, uintptr_t))func_ptr)(
+            args[0], args[1], args[2], args[3], args[4]);
+        break;
+      case 6:
+        ret_ptr = ((void *(*)(uintptr_t, uintptr_t, uintptr_t, uintptr_t, uintptr_t, uintptr_t))func_ptr)(
+            args[0], args[1], args[2], args[3], args[4], args[5]);
+        break;
+      case 7:
+        ret_ptr = ((void *(*)(uintptr_t, uintptr_t, uintptr_t, uintptr_t, uintptr_t, uintptr_t, uintptr_t))func_ptr)(
+            args[0], args[1], args[2], args[3], args[4], args[5], args[6]);
+        break;
+      case 8:
+        ret_ptr =
+            ((void *(*)(uintptr_t, uintptr_t, uintptr_t, uintptr_t, uintptr_t, uintptr_t, uintptr_t,
+                        uintptr_t))func_ptr)(args[0], args[1], args[2], args[3], args[4], args[5], args[6], args[7]);
+        break;
       // Continue with more cases for up to 16 args
-      default: ret_ptr = NULL; // Fallback
+      default:
+        ret_ptr = NULL;  // Fallback
     }
     result = ret_ptr ? JS_NewInt64(ctx, (intptr_t)ret_ptr) : JS_NULL;
   } else if (return_type == JSRT_FFI_TYPE_VOID) {
     switch (argc) {
-      case 0: ((void (*)())func_ptr)(); break;
-      case 1: ((void (*)(uintptr_t))func_ptr)(args[0]); break;
-      case 2: ((void (*)(uintptr_t, uintptr_t))func_ptr)(args[0], args[1]); break;
-      case 3: ((void (*)(uintptr_t, uintptr_t, uintptr_t))func_ptr)(args[0], args[1], args[2]); break;
-      case 4: ((void (*)(uintptr_t, uintptr_t, uintptr_t, uintptr_t))func_ptr)(args[0], args[1], args[2], args[3]); break;
-      case 5: ((void (*)(uintptr_t, uintptr_t, uintptr_t, uintptr_t, uintptr_t))func_ptr)(args[0], args[1], args[2], args[3], args[4]); break;
-      case 6: ((void (*)(uintptr_t, uintptr_t, uintptr_t, uintptr_t, uintptr_t, uintptr_t))func_ptr)(args[0], args[1], args[2], args[3], args[4], args[5]); break;
-      case 7: ((void (*)(uintptr_t, uintptr_t, uintptr_t, uintptr_t, uintptr_t, uintptr_t, uintptr_t))func_ptr)(args[0], args[1], args[2], args[3], args[4], args[5], args[6]); break;
-      case 8: ((void (*)(uintptr_t, uintptr_t, uintptr_t, uintptr_t, uintptr_t, uintptr_t, uintptr_t, uintptr_t))func_ptr)(args[0], args[1], args[2], args[3], args[4], args[5], args[6], args[7]); break;
-      case 9: ((void (*)(uintptr_t, uintptr_t, uintptr_t, uintptr_t, uintptr_t, uintptr_t, uintptr_t, uintptr_t, uintptr_t))func_ptr)(args[0], args[1], args[2], args[3], args[4], args[5], args[6], args[7], args[8]); break;
-      case 10: ((void (*)(uintptr_t, uintptr_t, uintptr_t, uintptr_t, uintptr_t, uintptr_t, uintptr_t, uintptr_t, uintptr_t, uintptr_t))func_ptr)(args[0], args[1], args[2], args[3], args[4], args[5], args[6], args[7], args[8], args[9]); break;
-      case 11: ((void (*)(uintptr_t, uintptr_t, uintptr_t, uintptr_t, uintptr_t, uintptr_t, uintptr_t, uintptr_t, uintptr_t, uintptr_t, uintptr_t))func_ptr)(args[0], args[1], args[2], args[3], args[4], args[5], args[6], args[7], args[8], args[9], args[10]); break;
-      case 12: ((void (*)(uintptr_t, uintptr_t, uintptr_t, uintptr_t, uintptr_t, uintptr_t, uintptr_t, uintptr_t, uintptr_t, uintptr_t, uintptr_t, uintptr_t))func_ptr)(args[0], args[1], args[2], args[3], args[4], args[5], args[6], args[7], args[8], args[9], args[10], args[11]); break;
-      case 13: ((void (*)(uintptr_t, uintptr_t, uintptr_t, uintptr_t, uintptr_t, uintptr_t, uintptr_t, uintptr_t, uintptr_t, uintptr_t, uintptr_t, uintptr_t, uintptr_t))func_ptr)(args[0], args[1], args[2], args[3], args[4], args[5], args[6], args[7], args[8], args[9], args[10], args[11], args[12]); break;
-      case 14: ((void (*)(uintptr_t, uintptr_t, uintptr_t, uintptr_t, uintptr_t, uintptr_t, uintptr_t, uintptr_t, uintptr_t, uintptr_t, uintptr_t, uintptr_t, uintptr_t, uintptr_t))func_ptr)(args[0], args[1], args[2], args[3], args[4], args[5], args[6], args[7], args[8], args[9], args[10], args[11], args[12], args[13]); break;
-      case 15: ((void (*)(uintptr_t, uintptr_t, uintptr_t, uintptr_t, uintptr_t, uintptr_t, uintptr_t, uintptr_t, uintptr_t, uintptr_t, uintptr_t, uintptr_t, uintptr_t, uintptr_t, uintptr_t))func_ptr)(args[0], args[1], args[2], args[3], args[4], args[5], args[6], args[7], args[8], args[9], args[10], args[11], args[12], args[13], args[14]); break;
-      case 16: ((void (*)(uintptr_t, uintptr_t, uintptr_t, uintptr_t, uintptr_t, uintptr_t, uintptr_t, uintptr_t, uintptr_t, uintptr_t, uintptr_t, uintptr_t, uintptr_t, uintptr_t, uintptr_t, uintptr_t))func_ptr)(args[0], args[1], args[2], args[3], args[4], args[5], args[6], args[7], args[8], args[9], args[10], args[11], args[12], args[13], args[14], args[15]); break;
+      case 0:
+        ((void (*)())func_ptr)();
+        break;
+      case 1:
+        ((void (*)(uintptr_t))func_ptr)(args[0]);
+        break;
+      case 2:
+        ((void (*)(uintptr_t, uintptr_t))func_ptr)(args[0], args[1]);
+        break;
+      case 3:
+        ((void (*)(uintptr_t, uintptr_t, uintptr_t))func_ptr)(args[0], args[1], args[2]);
+        break;
+      case 4:
+        ((void (*)(uintptr_t, uintptr_t, uintptr_t, uintptr_t))func_ptr)(args[0], args[1], args[2], args[3]);
+        break;
+      case 5:
+        ((void (*)(uintptr_t, uintptr_t, uintptr_t, uintptr_t, uintptr_t))func_ptr)(args[0], args[1], args[2], args[3],
+                                                                                    args[4]);
+        break;
+      case 6:
+        ((void (*)(uintptr_t, uintptr_t, uintptr_t, uintptr_t, uintptr_t, uintptr_t))func_ptr)(
+            args[0], args[1], args[2], args[3], args[4], args[5]);
+        break;
+      case 7:
+        ((void (*)(uintptr_t, uintptr_t, uintptr_t, uintptr_t, uintptr_t, uintptr_t, uintptr_t))func_ptr)(
+            args[0], args[1], args[2], args[3], args[4], args[5], args[6]);
+        break;
+      case 8:
+        ((void (*)(uintptr_t, uintptr_t, uintptr_t, uintptr_t, uintptr_t, uintptr_t, uintptr_t, uintptr_t))func_ptr)(
+            args[0], args[1], args[2], args[3], args[4], args[5], args[6], args[7]);
+        break;
+      case 9:
+        ((void (*)(uintptr_t, uintptr_t, uintptr_t, uintptr_t, uintptr_t, uintptr_t, uintptr_t, uintptr_t,
+                   uintptr_t))func_ptr)(args[0], args[1], args[2], args[3], args[4], args[5], args[6], args[7],
+                                        args[8]);
+        break;
+      case 10:
+        ((void (*)(uintptr_t, uintptr_t, uintptr_t, uintptr_t, uintptr_t, uintptr_t, uintptr_t, uintptr_t, uintptr_t,
+                   uintptr_t))func_ptr)(args[0], args[1], args[2], args[3], args[4], args[5], args[6], args[7], args[8],
+                                        args[9]);
+        break;
+      case 11:
+        ((void (*)(uintptr_t, uintptr_t, uintptr_t, uintptr_t, uintptr_t, uintptr_t, uintptr_t, uintptr_t, uintptr_t,
+                   uintptr_t, uintptr_t))func_ptr)(args[0], args[1], args[2], args[3], args[4], args[5], args[6],
+                                                   args[7], args[8], args[9], args[10]);
+        break;
+      case 12:
+        ((void (*)(uintptr_t, uintptr_t, uintptr_t, uintptr_t, uintptr_t, uintptr_t, uintptr_t, uintptr_t, uintptr_t,
+                   uintptr_t, uintptr_t, uintptr_t))func_ptr)(args[0], args[1], args[2], args[3], args[4], args[5],
+                                                              args[6], args[7], args[8], args[9], args[10], args[11]);
+        break;
+      case 13:
+        ((void (*)(uintptr_t, uintptr_t, uintptr_t, uintptr_t, uintptr_t, uintptr_t, uintptr_t, uintptr_t, uintptr_t,
+                   uintptr_t, uintptr_t, uintptr_t, uintptr_t))func_ptr)(args[0], args[1], args[2], args[3], args[4],
+                                                                         args[5], args[6], args[7], args[8], args[9],
+                                                                         args[10], args[11], args[12]);
+        break;
+      case 14:
+        ((void (*)(uintptr_t, uintptr_t, uintptr_t, uintptr_t, uintptr_t, uintptr_t, uintptr_t, uintptr_t, uintptr_t,
+                   uintptr_t, uintptr_t, uintptr_t, uintptr_t, uintptr_t))func_ptr)(
+            args[0], args[1], args[2], args[3], args[4], args[5], args[6], args[7], args[8], args[9], args[10],
+            args[11], args[12], args[13]);
+        break;
+      case 15:
+        ((void (*)(uintptr_t, uintptr_t, uintptr_t, uintptr_t, uintptr_t, uintptr_t, uintptr_t, uintptr_t, uintptr_t,
+                   uintptr_t, uintptr_t, uintptr_t, uintptr_t, uintptr_t, uintptr_t))func_ptr)(
+            args[0], args[1], args[2], args[3], args[4], args[5], args[6], args[7], args[8], args[9], args[10],
+            args[11], args[12], args[13], args[14]);
+        break;
+      case 16:
+        ((void (*)(uintptr_t, uintptr_t, uintptr_t, uintptr_t, uintptr_t, uintptr_t, uintptr_t, uintptr_t, uintptr_t,
+                   uintptr_t, uintptr_t, uintptr_t, uintptr_t, uintptr_t, uintptr_t, uintptr_t))func_ptr)(
+            args[0], args[1], args[2], args[3], args[4], args[5], args[6], args[7], args[8], args[9], args[10],
+            args[11], args[12], args[13], args[14], args[15]);
+        break;
     }
     result = JS_UNDEFINED;
   } else {
@@ -1069,14 +1324,13 @@ static JSValue ffi_library(JSContext *ctx, JSValueConst this_val, int argc, JSVa
     void *func_ptr = JSRT_DLSYM(handle, func_name);
     if (!func_ptr) {
       JSRT_Debug("FFI: Function '%s' not found in library '%s'", func_name, lib_name);
-      
+
       // For now, we'll log a warning but continue - in a stricter implementation,
       // we could throw an error here
       char warning_msg[256];
-      snprintf(warning_msg, sizeof(warning_msg), 
-               "Warning: Function '%s' not found in library '%s' - skipping", 
+      snprintf(warning_msg, sizeof(warning_msg), "Warning: Function '%s' not found in library '%s' - skipping",
                func_name, lib_name);
-      
+
       // Log to console if available
       JSValue global = JS_GetGlobalObject(ctx);
       JSValue console = JS_GetPropertyStr(ctx, global, "console");
@@ -1091,7 +1345,7 @@ static JSValue ffi_library(JSContext *ctx, JSValueConst this_val, int argc, JSVa
       }
       JS_FreeValue(ctx, console);
       JS_FreeValue(ctx, global);
-      
+
       JS_FreeValue(ctx, prop_val);
       JS_FreeValue(ctx, return_type_val);
       JS_FreeValue(ctx, args_val);
@@ -1112,12 +1366,12 @@ static JSValue ffi_library(JSContext *ctx, JSValueConst this_val, int argc, JSVa
     jsrt_ffi_function_t func_metadata;
     func_metadata.return_type = string_to_ffi_type(return_type_str);
     func_metadata.arg_count = args_length;
-    func_metadata.arg_types = NULL; // TODO: parse argument types if needed
+    func_metadata.arg_types = NULL;  // TODO: parse argument types if needed
     func_metadata.func_ptr = func_ptr;
 
     // Store metadata in global map and get function ID
     int function_id = store_function_metadata(ctx, &func_metadata);
-    
+
     // Create wrapper structure
     ffi_function_wrapper_t *wrapper = malloc(sizeof(ffi_function_wrapper_t));
     if (!wrapper) {
@@ -1126,7 +1380,7 @@ static JSValue ffi_library(JSContext *ctx, JSValueConst this_val, int argc, JSVa
       JS_FreeValue(ctx, args_val);
       JS_FreeCString(ctx, return_type_str);
       JS_FreeCString(ctx, func_name);
-      continue; // Skip this function
+      continue;  // Skip this function
     }
     wrapper->function_id = function_id;
 
@@ -1165,8 +1419,8 @@ static JSValue ffi_malloc(JSContext *ctx, JSValueConst this_val, int argc, JSVal
   if (size == 0) {
     return create_ffi_error(ctx, "Cannot allocate zero bytes (use a positive size)", "ffi.malloc");
   }
-  
-  if (size > 1024 * 1024 * 1024) { // Limit to 1GB for safety
+
+  if (size > 1024 * 1024 * 1024) {  // Limit to 1GB for safety
     char message[128];
     snprintf(message, sizeof(message), "Allocation size too large: %u bytes (maximum: 1GB)", size);
     return create_ffi_error(ctx, message, "ffi.malloc");
@@ -1180,7 +1434,7 @@ static JSValue ffi_malloc(JSContext *ctx, JSValueConst this_val, int argc, JSVal
   }
 
   JSRT_Debug("FFI: Allocated %u bytes at %p", size, ptr);
-  
+
   // Return pointer as integer (can be passed to native functions)
   return JS_NewInt64(ctx, (intptr_t)ptr);
 }
@@ -1216,8 +1470,7 @@ static JSValue ffi_memcpy(JSContext *ctx, JSValueConst this_val, int argc, JSVal
   int64_t dest_addr, src_addr;
   uint32_t size;
 
-  if (JS_ToInt64(ctx, &dest_addr, argv[0]) < 0 || 
-      JS_ToInt64(ctx, &src_addr, argv[1]) < 0 ||
+  if (JS_ToInt64(ctx, &dest_addr, argv[0]) < 0 || JS_ToInt64(ctx, &src_addr, argv[1]) < 0 ||
       JS_ToUint32(ctx, &size, argv[2]) < 0) {
     return JS_ThrowTypeError(ctx, "Invalid arguments for memcpy");
   }
@@ -1226,13 +1479,13 @@ static JSValue ffi_memcpy(JSContext *ctx, JSValueConst this_val, int argc, JSVal
     return JS_ThrowTypeError(ctx, "Cannot copy to/from null pointer");
   }
 
-  if (size > 1024 * 1024) { // Limit to 1MB for safety
+  if (size > 1024 * 1024) {  // Limit to 1MB for safety
     return JS_ThrowRangeError(ctx, "Copy size too large: %u", size);
   }
 
   void *dest = (void *)(intptr_t)dest_addr;
   void *src = (void *)(intptr_t)src_addr;
-  
+
   memcpy(dest, src, size);
   JSRT_Debug("FFI: Copied %u bytes from %p to %p", size, src, dest);
 
@@ -1255,9 +1508,9 @@ static JSValue ffi_read_string(JSContext *ctx, JSValueConst this_val, int argc, 
   }
 
   const char *str = (const char *)(intptr_t)ptr_addr;
-  
+
   // Optional max length parameter for safety
-  uint32_t max_len = 4096; // Default max length
+  uint32_t max_len = 4096;  // Default max length
   if (argc > 1) {
     if (JS_ToUint32(ctx, &max_len, argv[1]) < 0) {
       max_len = 4096;
@@ -1291,7 +1544,7 @@ static JSValue ffi_write_string(JSContext *ctx, JSValueConst this_val, int argc,
 
   char *dest = (char *)(intptr_t)ptr_addr;
   strcpy(dest, str);
-  
+
   JS_FreeCString(ctx, str);
   JSRT_Debug("FFI: Wrote string to %p", dest);
 
@@ -1328,7 +1581,7 @@ static JSValue ffi_array_from_pointer(JSContext *ctx, JSValueConst this_val, int
     return JS_NULL;
   }
 
-  if (length > 1024 * 1024) { // Limit to reasonable size
+  if (length > 1024 * 1024) {  // Limit to reasonable size
     JS_FreeCString(ctx, type_str);
     char message[128];
     snprintf(message, sizeof(message), "Array length too large: %u (maximum: 1M elements)", length);
@@ -1350,7 +1603,7 @@ static JSValue ffi_array_from_pointer(JSContext *ctx, JSValueConst this_val, int
   // Convert C array to JavaScript array based on type
   for (uint32_t i = 0; i < length; i++) {
     JSValue element;
-    
+
     switch (type) {
       case JSRT_FFI_TYPE_INT:
       case JSRT_FFI_TYPE_INT32: {
@@ -1379,7 +1632,7 @@ static JSValue ffi_array_from_pointer(JSContext *ctx, JSValueConst this_val, int
         element = JS_NewInt32(ctx, default_array[i]);
         break;
     }
-    
+
     JS_SetPropertyUint32(ctx, array, i, element);
   }
 
@@ -1410,15 +1663,14 @@ static int g_callback_capacity = 0;
 static int register_callback(ffi_callback_t *callback) {
   if (g_callback_count >= g_callback_capacity) {
     int new_capacity = g_callback_capacity == 0 ? 16 : g_callback_capacity * 2;
-    ffi_callback_t **new_registry = realloc(g_callback_registry, 
-                                           new_capacity * sizeof(ffi_callback_t*));
+    ffi_callback_t **new_registry = realloc(g_callback_registry, new_capacity * sizeof(ffi_callback_t *));
     if (!new_registry) {
       return -1;
     }
     g_callback_registry = new_registry;
     g_callback_capacity = new_capacity;
   }
-  
+
   g_callback_registry[g_callback_count] = callback;
   return g_callback_count++;
 }
@@ -1436,13 +1688,13 @@ static uintptr_t handle_callback(int callback_id, int argc, uintptr_t *args) {
     JSRT_Debug("FFI: Invalid callback ID: %d", callback_id);
     return 0;
   }
-  
+
   ffi_callback_t *callback = g_callback_registry[callback_id];
   if (!callback || !callback->ctx) {
     JSRT_Debug("FFI: Invalid callback or context");
     return 0;
   }
-  
+
   // Prepare JavaScript arguments
   JSValue js_args[16];
   for (int i = 0; i < argc && i < callback->arg_count; i++) {
@@ -1459,13 +1711,13 @@ static uintptr_t handle_callback(int callback_id, int argc, uintptr_t *args) {
           js_args[i] = JS_NewInt64(callback->ctx, (int64_t)args[i]);
           break;
         case JSRT_FFI_TYPE_FLOAT:
-          js_args[i] = JS_NewFloat64(callback->ctx, *(float*)&args[i]);
+          js_args[i] = JS_NewFloat64(callback->ctx, *(float *)&args[i]);
           break;
         case JSRT_FFI_TYPE_DOUBLE:
-          js_args[i] = JS_NewFloat64(callback->ctx, *(double*)&args[i]);
+          js_args[i] = JS_NewFloat64(callback->ctx, *(double *)&args[i]);
           break;
         case JSRT_FFI_TYPE_STRING:
-          js_args[i] = args[i] ? JS_NewString(callback->ctx, (const char*)args[i]) : JS_NULL;
+          js_args[i] = args[i] ? JS_NewString(callback->ctx, (const char *)args[i]) : JS_NULL;
           break;
         case JSRT_FFI_TYPE_POINTER:
           js_args[i] = JS_NewInt64(callback->ctx, (intptr_t)args[i]);
@@ -1476,15 +1728,15 @@ static uintptr_t handle_callback(int callback_id, int argc, uintptr_t *args) {
       }
     }
   }
-  
+
   // Call JavaScript function
   JSValue result = JS_Call(callback->ctx, callback->js_function, JS_UNDEFINED, argc, js_args);
-  
+
   // Clean up arguments
   for (int i = 0; i < argc && i < callback->arg_count; i++) {
     JS_FreeValue(callback->ctx, js_args[i]);
   }
-  
+
   // Convert return value
   uintptr_t ret_val = 0;
   if (!JS_IsException(result)) {
@@ -1512,13 +1764,13 @@ static uintptr_t handle_callback(int callback_id, int argc, uintptr_t *args) {
         double double_val;
         JS_ToFloat64(callback->ctx, &double_val, result);
         float float_val = (float)double_val;
-        ret_val = *(uintptr_t*)&float_val;
+        ret_val = *(uintptr_t *)&float_val;
         break;
       }
       case JSRT_FFI_TYPE_DOUBLE: {
         double double_val;
         JS_ToFloat64(callback->ctx, &double_val, result);
-        ret_val = *(uintptr_t*)&double_val;
+        ret_val = *(uintptr_t *)&double_val;
         break;
       }
       case JSRT_FFI_TYPE_POINTER: {
@@ -1539,15 +1791,13 @@ static uintptr_t handle_callback(int callback_id, int argc, uintptr_t *args) {
     JS_FreeValue(callback->ctx, exception);
     ret_val = 0;
   }
-  
+
   JS_FreeValue(callback->ctx, result);
   return ret_val;
 }
 
 // Callback trampolines for different argument counts
-static uintptr_t callback_trampoline_0() {
-  return handle_callback(0, 0, NULL);
-}
+static uintptr_t callback_trampoline_0() { return handle_callback(0, 0, NULL); }
 
 static uintptr_t callback_trampoline_1(uintptr_t arg1) {
   uintptr_t args[] = {arg1};
@@ -1574,21 +1824,21 @@ static JSValue ffi_callback(JSContext *ctx, JSValueConst this_val, int argc, JSV
   if (argc < 3) {
     return create_ffi_error(ctx, "Expected 3 arguments: function, return type, argument types", "ffi.Callback");
   }
-  
+
   if (!JS_IsFunction(ctx, argv[0])) {
     return create_ffi_error(ctx, "First argument must be a JavaScript function", "ffi.Callback");
   }
-  
+
   const char *return_type_str = JS_ToCString(ctx, argv[1]);
   if (!return_type_str) {
     return create_ffi_error(ctx, "Return type must be a string", "ffi.Callback");
   }
-  
+
   if (!JS_IsArray(ctx, argv[2])) {
     JS_FreeCString(ctx, return_type_str);
     return create_ffi_error(ctx, "Argument types must be an array", "ffi.Callback");
   }
-  
+
   // Get argument count
   JSValue length_val = JS_GetPropertyStr(ctx, argv[2], "length");
   uint32_t arg_count;
@@ -1598,25 +1848,25 @@ static JSValue ffi_callback(JSContext *ctx, JSValueConst this_val, int argc, JSV
     return create_ffi_error(ctx, "Invalid argument types array", "ffi.Callback");
   }
   JS_FreeValue(ctx, length_val);
-  
+
   if (arg_count > 4) {
     JS_FreeCString(ctx, return_type_str);
     return create_ffi_error(ctx, "Maximum 4 arguments supported for callbacks", "ffi.Callback");
   }
-  
+
   // Create callback structure
   ffi_callback_t *callback = malloc(sizeof(ffi_callback_t));
   if (!callback) {
     JS_FreeCString(ctx, return_type_str);
     return create_ffi_error(ctx, "Failed to allocate callback structure", "ffi.Callback");
   }
-  
+
   callback->ctx = ctx;
   callback->js_function = JS_DupValue(ctx, argv[0]);
   callback->return_type = string_to_ffi_type(return_type_str);
   callback->arg_count = arg_count;
   callback->arg_types = arg_count > 0 ? malloc(arg_count * sizeof(jsrt_ffi_type_t)) : NULL;
-  
+
   // Parse argument types
   for (uint32_t i = 0; i < arg_count; i++) {
     JSValue arg_type_val = JS_GetPropertyUint32(ctx, argv[2], i);
@@ -1629,14 +1879,24 @@ static JSValue ffi_callback(JSContext *ctx, JSValueConst this_val, int argc, JSV
     }
     JS_FreeValue(ctx, arg_type_val);
   }
-  
+
   // Assign trampoline function based on argument count
   switch (arg_count) {
-    case 0: callback->callback_ptr = (void*)callback_trampoline_0; break;
-    case 1: callback->callback_ptr = (void*)callback_trampoline_1; break;
-    case 2: callback->callback_ptr = (void*)callback_trampoline_2; break;
-    case 3: callback->callback_ptr = (void*)callback_trampoline_3; break;
-    case 4: callback->callback_ptr = (void*)callback_trampoline_4; break;
+    case 0:
+      callback->callback_ptr = (void *)callback_trampoline_0;
+      break;
+    case 1:
+      callback->callback_ptr = (void *)callback_trampoline_1;
+      break;
+    case 2:
+      callback->callback_ptr = (void *)callback_trampoline_2;
+      break;
+    case 3:
+      callback->callback_ptr = (void *)callback_trampoline_3;
+      break;
+    case 4:
+      callback->callback_ptr = (void *)callback_trampoline_4;
+      break;
     default:
       free(callback->arg_types);
       JS_FreeValue(ctx, callback->js_function);
@@ -1644,7 +1904,7 @@ static JSValue ffi_callback(JSContext *ctx, JSValueConst this_val, int argc, JSV
       JS_FreeCString(ctx, return_type_str);
       return create_ffi_error(ctx, "Unsupported argument count for callback", "ffi.Callback");
   }
-  
+
   // Register callback
   int callback_id = register_callback(callback);
   if (callback_id < 0) {
@@ -1654,14 +1914,14 @@ static JSValue ffi_callback(JSContext *ctx, JSValueConst this_val, int argc, JSV
     JS_FreeCString(ctx, return_type_str);
     return create_ffi_error(ctx, "Failed to register callback", "ffi.Callback");
   }
-  
+
   JS_FreeCString(ctx, return_type_str);
-  
+
   // Return pointer to the trampoline function
   return JS_NewInt64(ctx, (intptr_t)callback->callback_ptr);
 }
 
-// Enhanced async function call structure for production use  
+// Enhanced async function call structure for production use
 typedef struct {
   JSContext *ctx;
   JSValue promise_resolve;
@@ -1712,13 +1972,13 @@ static int find_available_async_slot() {
       break;
     }
   }
-  
+
 #ifdef _WIN32
   LeaveCriticalSection(&thread_pool_lock);
 #else
   pthread_mutex_unlock(&thread_pool_lock);
 #endif
-  
+
   return slot;
 }
 
@@ -1733,7 +1993,7 @@ static bool register_async_call(ffi_async_call_t *call, int slot) {
   if (slot >= 0 && slot < MAX_ASYNC_THREADS && active_async_calls[slot] == NULL) {
     active_async_calls[slot] = call;
     active_call_count++;
-    
+
 #ifdef _WIN32
     LeaveCriticalSection(&thread_pool_lock);
 #else
@@ -1741,7 +2001,7 @@ static bool register_async_call(ffi_async_call_t *call, int slot) {
 #endif
     return true;
   }
-  
+
 #ifdef _WIN32
   LeaveCriticalSection(&thread_pool_lock);
 #else
@@ -1762,7 +2022,7 @@ static void unregister_async_call(int slot) {
     active_async_calls[slot] = NULL;
     active_call_count--;
   }
-  
+
 #ifdef _WIN32
   LeaveCriticalSection(&thread_pool_lock);
 #else
@@ -1774,9 +2034,9 @@ static void unregister_async_call(int slot) {
 #ifdef _WIN32
 static DWORD WINAPI async_call_thread(LPVOID lpParam) {
 #else
-static void* async_call_thread(void* arg) {
+static void *async_call_thread(void *arg) {
 #endif
-  ffi_async_call_t *async_call = (ffi_async_call_t*)arg;
+  ffi_async_call_t *async_call = (ffi_async_call_t *)arg;
   if (!async_call) {
 #ifdef _WIN32
     return 1;
@@ -1784,20 +2044,35 @@ static void* async_call_thread(void* arg) {
     return NULL;
 #endif
   }
-  
+
   // Perform the function call in the background thread
   JSValue result = JS_UNDEFINED;
   bool call_success = true;
-  
+
   if (async_call->return_type == JSRT_FFI_TYPE_INT || async_call->return_type == JSRT_FFI_TYPE_INT32) {
     int ret_val = 0;
     switch (async_call->arg_count) {
-      case 0: ret_val = ((int (*)())async_call->func_ptr)(); break;
-      case 1: ret_val = ((int (*)(uintptr_t))async_call->func_ptr)(async_call->args[0]); break;
-      case 2: ret_val = ((int (*)(uintptr_t, uintptr_t))async_call->func_ptr)(async_call->args[0], async_call->args[1]); break;
-      case 3: ret_val = ((int (*)(uintptr_t, uintptr_t, uintptr_t))async_call->func_ptr)(async_call->args[0], async_call->args[1], async_call->args[2]); break;
-      case 4: ret_val = ((int (*)(uintptr_t, uintptr_t, uintptr_t, uintptr_t))async_call->func_ptr)(async_call->args[0], async_call->args[1], async_call->args[2], async_call->args[3]); break;
-      default: ret_val = 0; call_success = false; break;
+      case 0:
+        ret_val = ((int (*)())async_call->func_ptr)();
+        break;
+      case 1:
+        ret_val = ((int (*)(uintptr_t))async_call->func_ptr)(async_call->args[0]);
+        break;
+      case 2:
+        ret_val = ((int (*)(uintptr_t, uintptr_t))async_call->func_ptr)(async_call->args[0], async_call->args[1]);
+        break;
+      case 3:
+        ret_val = ((int (*)(uintptr_t, uintptr_t, uintptr_t))async_call->func_ptr)(
+            async_call->args[0], async_call->args[1], async_call->args[2]);
+        break;
+      case 4:
+        ret_val = ((int (*)(uintptr_t, uintptr_t, uintptr_t, uintptr_t))async_call->func_ptr)(
+            async_call->args[0], async_call->args[1], async_call->args[2], async_call->args[3]);
+        break;
+      default:
+        ret_val = 0;
+        call_success = false;
+        break;
     }
     if (call_success) {
       result = JS_NewInt32(async_call->ctx, ret_val);
@@ -1805,24 +2080,54 @@ static void* async_call_thread(void* arg) {
   } else if (async_call->return_type == JSRT_FFI_TYPE_STRING) {
     const char *ret_str = NULL;
     switch (async_call->arg_count) {
-      case 0: ret_str = ((const char *(*)())async_call->func_ptr)(); break;
-      case 1: ret_str = ((const char *(*)(uintptr_t))async_call->func_ptr)(async_call->args[0]); break;
-      case 2: ret_str = ((const char *(*)(uintptr_t, uintptr_t))async_call->func_ptr)(async_call->args[0], async_call->args[1]); break;
-      case 3: ret_str = ((const char *(*)(uintptr_t, uintptr_t, uintptr_t))async_call->func_ptr)(async_call->args[0], async_call->args[1], async_call->args[2]); break;
-      case 4: ret_str = ((const char *(*)(uintptr_t, uintptr_t, uintptr_t, uintptr_t))async_call->func_ptr)(async_call->args[0], async_call->args[1], async_call->args[2], async_call->args[3]); break;
-      default: ret_str = NULL; call_success = false; break;
+      case 0:
+        ret_str = ((const char *(*)())async_call->func_ptr)();
+        break;
+      case 1:
+        ret_str = ((const char *(*)(uintptr_t))async_call->func_ptr)(async_call->args[0]);
+        break;
+      case 2:
+        ret_str =
+            ((const char *(*)(uintptr_t, uintptr_t))async_call->func_ptr)(async_call->args[0], async_call->args[1]);
+        break;
+      case 3:
+        ret_str = ((const char *(*)(uintptr_t, uintptr_t, uintptr_t))async_call->func_ptr)(
+            async_call->args[0], async_call->args[1], async_call->args[2]);
+        break;
+      case 4:
+        ret_str = ((const char *(*)(uintptr_t, uintptr_t, uintptr_t, uintptr_t))async_call->func_ptr)(
+            async_call->args[0], async_call->args[1], async_call->args[2], async_call->args[3]);
+        break;
+      default:
+        ret_str = NULL;
+        call_success = false;
+        break;
     }
     if (call_success) {
       result = ret_str ? JS_NewString(async_call->ctx, ret_str) : JS_NULL;
     }
   } else if (async_call->return_type == JSRT_FFI_TYPE_VOID) {
     switch (async_call->arg_count) {
-      case 0: ((void (*)())async_call->func_ptr)(); break;
-      case 1: ((void (*)(uintptr_t))async_call->func_ptr)(async_call->args[0]); break;
-      case 2: ((void (*)(uintptr_t, uintptr_t))async_call->func_ptr)(async_call->args[0], async_call->args[1]); break;
-      case 3: ((void (*)(uintptr_t, uintptr_t, uintptr_t))async_call->func_ptr)(async_call->args[0], async_call->args[1], async_call->args[2]); break;
-      case 4: ((void (*)(uintptr_t, uintptr_t, uintptr_t, uintptr_t))async_call->func_ptr)(async_call->args[0], async_call->args[1], async_call->args[2], async_call->args[3]); break;
-      default: call_success = false; break;
+      case 0:
+        ((void (*)())async_call->func_ptr)();
+        break;
+      case 1:
+        ((void (*)(uintptr_t))async_call->func_ptr)(async_call->args[0]);
+        break;
+      case 2:
+        ((void (*)(uintptr_t, uintptr_t))async_call->func_ptr)(async_call->args[0], async_call->args[1]);
+        break;
+      case 3:
+        ((void (*)(uintptr_t, uintptr_t, uintptr_t))async_call->func_ptr)(async_call->args[0], async_call->args[1],
+                                                                          async_call->args[2]);
+        break;
+      case 4:
+        ((void (*)(uintptr_t, uintptr_t, uintptr_t, uintptr_t))async_call->func_ptr)(
+            async_call->args[0], async_call->args[1], async_call->args[2], async_call->args[3]);
+        break;
+      default:
+        call_success = false;
+        break;
     }
     if (call_success) {
       result = JS_UNDEFINED;
@@ -1830,7 +2135,7 @@ static void* async_call_thread(void* arg) {
   } else {
     call_success = false;
   }
-  
+
   if (call_success) {
     // Call the promise resolve function
     JSValue resolve_args[] = {result};
@@ -1842,7 +2147,7 @@ static void* async_call_thread(void* arg) {
     JS_Call(async_call->ctx, async_call->promise_reject, JS_UNDEFINED, 1, reject_args);
     JS_FreeValue(async_call->ctx, error);
   }
-  
+
   // Clean up
   if (async_call->args) free(async_call->args);
   if (async_call->string_args) {
@@ -1861,12 +2166,12 @@ static void* async_call_thread(void* arg) {
     }
     free(async_call->array_args);
   }
-  
+
   JS_FreeValue(async_call->ctx, async_call->promise_resolve);
   JS_FreeValue(async_call->ctx, async_call->promise_reject);
   JS_FreeValue(async_call->ctx, result);
   free(async_call);
-  
+
 #ifdef _WIN32
   return 0;
 #else
@@ -1877,35 +2182,36 @@ static void* async_call_thread(void* arg) {
 // Async function call - ffi.callAsync(funcPtr, returnType, argTypes, args)
 static JSValue ffi_call_async(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv) {
   if (argc < 4) {
-    return create_ffi_error(ctx, "Expected 4 arguments: function pointer, return type, argument types, arguments", "ffi.callAsync");
+    return create_ffi_error(ctx, "Expected 4 arguments: function pointer, return type, argument types, arguments",
+                            "ffi.callAsync");
   }
-  
+
   // Parse function pointer
   int64_t func_ptr_val;
   if (JS_ToInt64(ctx, &func_ptr_val, argv[0]) < 0) {
     return create_ffi_error(ctx, "Function pointer must be a number", "ffi.callAsync");
   }
-  void *func_ptr = (void*)(intptr_t)func_ptr_val;
-  
+  void *func_ptr = (void *)(intptr_t)func_ptr_val;
+
   // Parse return type
   const char *return_type_str = JS_ToCString(ctx, argv[1]);
   if (!return_type_str) {
     return create_ffi_error(ctx, "Return type must be a string", "ffi.callAsync");
   }
   jsrt_ffi_type_t return_type = string_to_ffi_type(return_type_str);
-  
+
   // Parse argument types
   if (!JS_IsArray(ctx, argv[2])) {
     JS_FreeCString(ctx, return_type_str);
     return create_ffi_error(ctx, "Argument types must be an array", "ffi.callAsync");
   }
-  
+
   // Parse arguments
   if (!JS_IsArray(ctx, argv[3])) {
     JS_FreeCString(ctx, return_type_str);
     return create_ffi_error(ctx, "Arguments must be an array", "ffi.callAsync");
   }
-  
+
   // Get argument count
   JSValue length_val = JS_GetPropertyStr(ctx, argv[3], "length");
   uint32_t arg_count;
@@ -1915,42 +2221,42 @@ static JSValue ffi_call_async(JSContext *ctx, JSValueConst this_val, int argc, J
     return create_ffi_error(ctx, "Invalid arguments array", "ffi.callAsync");
   }
   JS_FreeValue(ctx, length_val);
-  
+
   if (arg_count > 4) {
     JS_FreeCString(ctx, return_type_str);
     return create_ffi_error(ctx, "Maximum 4 arguments supported for async calls", "ffi.callAsync");
   }
-  
+
   // Create async call structure
   ffi_async_call_t *async_call = malloc(sizeof(ffi_async_call_t));
   if (!async_call) {
     JS_FreeCString(ctx, return_type_str);
     return create_ffi_error(ctx, "Failed to allocate async call structure", "ffi.callAsync");
   }
-  
+
   async_call->ctx = ctx;
   async_call->func_ptr = func_ptr;
   async_call->return_type = return_type;
   async_call->arg_count = arg_count;
   async_call->args = arg_count > 0 ? malloc(arg_count * sizeof(uintptr_t)) : NULL;
-  async_call->string_args = arg_count > 0 ? malloc(arg_count * sizeof(char*)) : NULL;
-  async_call->array_args = arg_count > 0 ? malloc(arg_count * sizeof(void*)) : NULL;
-  
+  async_call->string_args = arg_count > 0 ? malloc(arg_count * sizeof(char *)) : NULL;
+  async_call->array_args = arg_count > 0 ? malloc(arg_count * sizeof(void *)) : NULL;
+
   // Initialize arrays
   if (async_call->string_args) {
-    memset(async_call->string_args, 0, arg_count * sizeof(char*));
+    memset(async_call->string_args, 0, arg_count * sizeof(char *));
   }
   if (async_call->array_args) {
-    memset(async_call->array_args, 0, arg_count * sizeof(void*));
+    memset(async_call->array_args, 0, arg_count * sizeof(void *));
   }
-  
+
   // Convert arguments
   for (uint32_t i = 0; i < arg_count; i++) {
     JSValue arg_val = JS_GetPropertyUint32(ctx, argv[3], i);
-    
+
     if (JS_IsString(arg_val)) {
       const char *str_val = JS_ToCString(ctx, arg_val);
-      async_call->string_args[i] = (char*)str_val;  // Cast away const for storage
+      async_call->string_args[i] = (char *)str_val;  // Cast away const for storage
       async_call->args[i] = (uintptr_t)async_call->string_args[i];
     } else if (JS_IsNumber(arg_val)) {
       int64_t num_val;
@@ -1959,16 +2265,16 @@ static JSValue ffi_call_async(JSContext *ctx, JSValueConst this_val, int argc, J
     } else {
       async_call->args[i] = 0;
     }
-    
+
     JS_FreeValue(ctx, arg_val);
   }
-  
+
   // Create promise
   JSValue resolving_funcs[2];
   JSValue promise = JS_NewPromiseCapability(ctx, resolving_funcs);
   async_call->promise_resolve = resolving_funcs[0];
   async_call->promise_reject = resolving_funcs[1];
-  
+
   // Start thread for async execution
 #ifdef _WIN32
   HANDLE thread_handle = CreateThread(NULL, 0, async_call_thread, async_call, 0, NULL);
@@ -1995,7 +2301,7 @@ static JSValue ffi_call_async(JSContext *ctx, JSValueConst this_val, int argc, J
   }
   pthread_detach(thread);
 #endif
-  
+
   JS_FreeCString(ctx, return_type_str);
   return promise;
 }
@@ -2009,34 +2315,33 @@ static int g_struct_capacity = 0;
 static int register_struct(ffi_struct_def_t *struct_def) {
   if (g_struct_count >= g_struct_capacity) {
     int new_capacity = g_struct_capacity == 0 ? 16 : g_struct_capacity * 2;
-    ffi_struct_def_t **new_registry = realloc(g_struct_registry, 
-                                             new_capacity * sizeof(ffi_struct_def_t*));
+    ffi_struct_def_t **new_registry = realloc(g_struct_registry, new_capacity * sizeof(ffi_struct_def_t *));
     if (!new_registry) {
       return -1;
     }
     g_struct_registry = new_registry;
     g_struct_capacity = new_capacity;
   }
-  
+
   g_struct_registry[g_struct_count] = struct_def;
   return g_struct_count++;
 }
 
 // Forward declarations
-static ffi_struct_def_t* find_struct(const char *name);
+static ffi_struct_def_t *find_struct(const char *name);
 static size_t get_type_size(jsrt_ffi_type_t type);
 
 // Parse complex type descriptor (supports nested types)
 // Format examples:
 //   "int" - basic type
-//   "MyStruct" - nested struct  
+//   "MyStruct" - nested struct
 //   "int[10]" - fixed array
 //   "int*" - pointer to int
 //   "MyStruct**" - pointer to pointer to MyStruct
 //   "MyStruct[5]" - array of structs
 static bool parse_complex_type(const char *type_desc, jsrt_field_descriptor_t *field) {
   if (!type_desc || !field) return false;
-  
+
   field->category = JSRT_FIELD_TYPE_PRIMITIVE;
   field->base_type = JSRT_FFI_TYPE_VOID;
   field->nested_struct = NULL;
@@ -2046,18 +2351,18 @@ static bool parse_complex_type(const char *type_desc, jsrt_field_descriptor_t *f
   field->pointer_levels = 0;
   field->pointed_type = JSRT_FFI_TYPE_VOID;
   field->pointed_struct = NULL;
-  
+
   char *desc_copy = strdup(type_desc);
   char *base_desc = desc_copy;
-  
+
   // Count pointer levels (*, **, etc.)
   char *ptr_pos = base_desc;
   while ((ptr_pos = strchr(ptr_pos, '*')) != NULL) {
     field->pointer_levels++;
-    *ptr_pos = '\0'; // Remove * from string
+    *ptr_pos = '\0';  // Remove * from string
     ptr_pos++;
   }
-  
+
   // Check for array notation [N]
   char *bracket_pos = strchr(base_desc, '[');
   if (bracket_pos) {
@@ -2069,19 +2374,19 @@ static bool parse_complex_type(const char *type_desc, jsrt_field_descriptor_t *f
       field->category = JSRT_FIELD_TYPE_ARRAY;
     }
   }
-  
+
   // Trim whitespace
   while (*base_desc == ' ') base_desc++;
   int len = strlen(base_desc);
-  while (len > 0 && base_desc[len-1] == ' ') {
+  while (len > 0 && base_desc[len - 1] == ' ') {
     base_desc[--len] = '\0';
   }
-  
+
   // Handle pointers
   if (field->pointer_levels > 0) {
     field->category = JSRT_FIELD_TYPE_POINTER;
   }
-  
+
   // Check if it's a known struct
   ffi_struct_def_t *found_struct = find_struct(base_desc);
   if (found_struct) {
@@ -2107,7 +2412,7 @@ static bool parse_complex_type(const char *type_desc, jsrt_field_descriptor_t *f
       field->base_type = prim_type;
     }
   }
-  
+
   free(desc_copy);
   return true;
 }
@@ -2117,10 +2422,10 @@ static size_t calculate_complex_field_size(const jsrt_field_descriptor_t *field)
   switch (field->category) {
     case JSRT_FIELD_TYPE_PRIMITIVE:
       return get_type_size(field->base_type);
-      
+
     case JSRT_FIELD_TYPE_STRUCT:
       return field->nested_struct ? field->nested_struct->total_size : 0;
-      
+
     case JSRT_FIELD_TYPE_ARRAY: {
       size_t element_size = 0;
       if (field->element_struct) {
@@ -2130,20 +2435,19 @@ static size_t calculate_complex_field_size(const jsrt_field_descriptor_t *field)
       }
       return element_size * field->array_length;
     }
-    
+
     case JSRT_FIELD_TYPE_POINTER:
-      return sizeof(void*); // All pointers have same size
-      
+      return sizeof(void *);  // All pointers have same size
+
     default:
       return 0;
   }
 }
 
 // Find struct definition by name
-static ffi_struct_def_t* find_struct(const char *name) {
+static ffi_struct_def_t *find_struct(const char *name) {
   for (int i = 0; i < g_struct_count; i++) {
-    if (g_struct_registry[i] && g_struct_registry[i]->name && 
-        strcmp(g_struct_registry[i]->name, name) == 0) {
+    if (g_struct_registry[i] && g_struct_registry[i]->name && strcmp(g_struct_registry[i]->name, name) == 0) {
       return g_struct_registry[i];
     }
   }
@@ -2179,28 +2483,28 @@ static JSValue ffi_struct(JSContext *ctx, JSValueConst this_val, int argc, JSVal
   if (argc < 2) {
     return create_ffi_error(ctx, "Expected 2 arguments: struct name and field definitions", "ffi.Struct");
   }
-  
+
   // Check if first argument is a string
   if (!JS_IsString(argv[0])) {
     return create_ffi_error(ctx, "Struct name must be a string", "ffi.Struct");
   }
-  
+
   const char *struct_name = JS_ToCString(ctx, argv[0]);
   if (!struct_name) {
     return create_ffi_error(ctx, "Struct name must be a string", "ffi.Struct");
   }
-  
+
   if (!JS_IsObject(argv[1])) {
     JS_FreeCString(ctx, struct_name);
     return create_ffi_error(ctx, "Field definitions must be an object", "ffi.Struct");
   }
-  
+
   // Check if struct already exists
   if (find_struct(struct_name)) {
     JS_FreeCString(ctx, struct_name);
     return create_ffi_error(ctx, "Struct with this name already exists", "ffi.Struct");
   }
-  
+
   // Get field names
   JSPropertyEnum *tab;
   uint32_t tab_len;
@@ -2208,7 +2512,7 @@ static JSValue ffi_struct(JSContext *ctx, JSValueConst this_val, int argc, JSVal
     JS_FreeCString(ctx, struct_name);
     return create_ffi_error(ctx, "Failed to get field names", "ffi.Struct");
   }
-  
+
   // Create struct definition
   ffi_struct_def_t *struct_def = malloc(sizeof(ffi_struct_def_t));
   if (!struct_def) {
@@ -2216,14 +2520,14 @@ static JSValue ffi_struct(JSContext *ctx, JSValueConst this_val, int argc, JSVal
     JS_FreeCString(ctx, struct_name);
     return create_ffi_error(ctx, "Failed to allocate struct definition", "ffi.Struct");
   }
-  
+
   struct_def->name = strdup(struct_name);
   struct_def->field_count = tab_len;
   struct_def->fields = malloc(tab_len * sizeof(jsrt_field_descriptor_t));
-  struct_def->alignment = 8; // Default alignment
+  struct_def->alignment = 8;  // Default alignment
   struct_def->dependency_count = 0;
   struct_def->dependencies = NULL;
-  
+
   if (!struct_def->fields) {
     free(struct_def->name);
     free(struct_def);
@@ -2231,16 +2535,16 @@ static JSValue ffi_struct(JSContext *ctx, JSValueConst this_val, int argc, JSVal
     JS_FreeCString(ctx, struct_name);
     return create_ffi_error(ctx, "Failed to allocate struct field descriptors", "ffi.Struct");
   }
-  
+
   // Calculate field offsets and total size with enhanced type support
   size_t current_offset = 0;
   for (uint32_t i = 0; i < tab_len; i++) {
     const char *field_name = JS_AtomToCString(ctx, tab[i].atom);
     struct_def->fields[i].name = strdup(field_name);
-    
+
     JSValue field_type_val = JS_GetProperty(ctx, argv[1], tab[i].atom);
     const char *field_type_str = JS_ToCString(ctx, field_type_val);
-    
+
     if (field_type_str) {
       // Parse complex type descriptor
       if (!parse_complex_type(field_type_str, &struct_def->fields[i])) {
@@ -2248,15 +2552,15 @@ static JSValue ffi_struct(JSContext *ctx, JSValueConst this_val, int argc, JSVal
         struct_def->fields[i].base_type = JSRT_FFI_TYPE_VOID;
         struct_def->fields[i].category = JSRT_FIELD_TYPE_PRIMITIVE;
       }
-      
+
       // Calculate alignment and offset
       size_t field_size = calculate_complex_field_size(&struct_def->fields[i]);
-      size_t field_alignment = field_size > 8 ? 8 : field_size; // Max 8-byte alignment
-      
+      size_t field_alignment = field_size > 8 ? 8 : field_size;  // Max 8-byte alignment
+
       current_offset = calculate_aligned_offset(current_offset, field_alignment);
       struct_def->fields[i].offset = current_offset;
       current_offset += field_size;
-      
+
       JS_FreeCString(ctx, field_type_str);
     } else {
       // Default field setup
@@ -2264,18 +2568,18 @@ static JSValue ffi_struct(JSContext *ctx, JSValueConst this_val, int argc, JSVal
       struct_def->fields[i].category = JSRT_FIELD_TYPE_PRIMITIVE;
       struct_def->fields[i].offset = current_offset;
     }
-    
+
     JS_FreeCString(ctx, field_name);
     JS_FreeValue(ctx, field_type_val);
   }
-  
+
   // Align total size to largest field alignment (simplified)
   struct_def->total_size = calculate_aligned_offset(current_offset, 8);
-  
+
   // Register struct
   int struct_id = register_struct(struct_def);
   if (struct_id < 0) {
-    // Cleanup on failure  
+    // Cleanup on failure
     for (uint32_t i = 0; i < tab_len; i++) {
       free(struct_def->fields[i].name);
     }
@@ -2286,17 +2590,17 @@ static JSValue ffi_struct(JSContext *ctx, JSValueConst this_val, int argc, JSVal
     JS_FreeCString(ctx, struct_name);
     return create_ffi_error(ctx, "Failed to register struct", "ffi.Struct");
   }
-  
+
   js_free(ctx, tab);
   JS_FreeCString(ctx, struct_name);
-  
+
   // Return struct information object
   JSValue struct_obj = JS_NewObject(ctx);
   JS_SetPropertyStr(ctx, struct_obj, "name", JS_NewString(ctx, struct_def->name));
   JS_SetPropertyStr(ctx, struct_obj, "size", JS_NewUint32(ctx, (uint32_t)struct_def->total_size));
   JS_SetPropertyStr(ctx, struct_obj, "fieldCount", JS_NewUint32(ctx, struct_def->field_count));
   JS_SetPropertyStr(ctx, struct_obj, "id", JS_NewInt32(ctx, struct_id));
-  
+
   return struct_obj;
 }
 
@@ -2305,35 +2609,35 @@ static JSValue ffi_alloc_struct(JSContext *ctx, JSValueConst this_val, int argc,
   if (argc < 1) {
     return create_ffi_error(ctx, "Expected 1 argument: struct name", "ffi.allocStruct");
   }
-  
+
   // Check if first argument is a string
   if (!JS_IsString(argv[0])) {
     return create_ffi_error(ctx, "Struct name must be a string", "ffi.allocStruct");
   }
-  
+
   const char *struct_name = JS_ToCString(ctx, argv[0]);
   if (!struct_name) {
     return create_ffi_error(ctx, "Struct name must be a string", "ffi.allocStruct");
   }
-  
+
   ffi_struct_def_t *struct_def = find_struct(struct_name);
   if (!struct_def) {
     JS_FreeCString(ctx, struct_name);
     return create_ffi_error(ctx, "Struct not found", "ffi.allocStruct");
   }
-  
+
   // Allocate memory for struct
   void *struct_ptr = malloc(struct_def->total_size);
   if (!struct_ptr) {
     JS_FreeCString(ctx, struct_name);
     return create_ffi_error(ctx, "Failed to allocate struct memory", "ffi.allocStruct");
   }
-  
+
   // Initialize to zero
   memset(struct_ptr, 0, struct_def->total_size);
-  
+
   JS_FreeCString(ctx, struct_name);
-  
+
   // Return pointer to allocated struct
   return JS_NewInt64(ctx, (intptr_t)struct_ptr);
 }
@@ -2353,7 +2657,8 @@ JSValue JSRT_CreateFFIModule(JSContext *ctx) {
   JS_SetPropertyStr(ctx, ffi_obj, "writeString", JS_NewCFunction(ctx, ffi_write_string, "writeString", 2));
 
   // Array manipulation functions
-  JS_SetPropertyStr(ctx, ffi_obj, "arrayFromPointer", JS_NewCFunction(ctx, ffi_array_from_pointer, "arrayFromPointer", 3));
+  JS_SetPropertyStr(ctx, ffi_obj, "arrayFromPointer",
+                    JS_NewCFunction(ctx, ffi_array_from_pointer, "arrayFromPointer", 3));
   JS_SetPropertyStr(ctx, ffi_obj, "arrayLength", JS_NewCFunction(ctx, ffi_array_length, "arrayLength", 1));
 
   // Callback support
@@ -2366,9 +2671,9 @@ JSValue JSRT_CreateFFIModule(JSContext *ctx) {
   JS_SetPropertyStr(ctx, ffi_obj, "Struct", JS_NewCFunction(ctx, ffi_struct, "Struct", 2));
   JS_SetPropertyStr(ctx, ffi_obj, "allocStruct", JS_NewCFunction(ctx, ffi_alloc_struct, "allocStruct", 1));
 
-  // Add version information  
+  // Add version information
   JS_SetPropertyStr(ctx, ffi_obj, "version", JS_NewString(ctx, "3.0.0"));
-  
+
   // Add type constants for convenience
   JSValue types_obj = JS_NewObject(ctx);
   JS_SetPropertyStr(ctx, types_obj, "void", JS_NewString(ctx, "void"));
@@ -2387,7 +2692,9 @@ JSValue JSRT_CreateFFIModule(JSContext *ctx) {
   JS_SetPropertyStr(ctx, types_obj, "struct", JS_NewString(ctx, "struct"));
   JS_SetPropertyStr(ctx, ffi_obj, "types", types_obj);
 
-  JSRT_Debug("FFI: Created enhanced FFI module v3.0.0 with callback support, async functions, struct support, array support and enhanced error reporting");
+  JSRT_Debug(
+      "FFI: Created enhanced FFI module v3.0.0 with callback support, async functions, struct support, array support "
+      "and enhanced error reporting");
 
   return ffi_obj;
 }

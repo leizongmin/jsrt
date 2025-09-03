@@ -123,6 +123,7 @@ set(JSRT_LIB_FILES
     ${JSRT_STD_FILES}
     ${JSRT_UTIL_FILES}
     src/jsrt.c
+    src/repl.c
     src/runtime.c)
 set(JSRT_LINK_LIBS
     jsrtcore

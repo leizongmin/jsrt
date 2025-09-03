@@ -7,6 +7,7 @@
 
 #include "build.h"
 #include "jsrt.h"
+#include "repl.h"
 #include "runtime.h"
 #include "util/file.h"
 

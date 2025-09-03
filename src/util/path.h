@@ -5,6 +5,6 @@
 #include <stddef.h>
 #include <string.h>
 
-bool JSRT_PathHasSuffix(const char *str, const char *suffix);
+bool JSRT_PathHasSuffix(const char* str, const char* suffix);
 
 #endif

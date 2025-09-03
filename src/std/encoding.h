@@ -3,6 +3,6 @@
 
 #include "../runtime.h"
 
-void JSRT_RuntimeSetupStdEncoding(JSRT_Runtime *rt);
+void JSRT_RuntimeSetupStdEncoding(JSRT_Runtime* rt);
 
 #endif

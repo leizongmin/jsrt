@@ -16,46 +16,46 @@
 // Cross-platform dynamic loading abstractions
 #ifdef _WIN32
 extern HMODULE openssl_handle;
-#define JSRT_DLSYM(handle, name) ((void *)GetProcAddress(handle, name))
+#define JSRT_DLSYM(handle, name) ((void*)GetProcAddress(handle, name))
 #else
-extern void *openssl_handle;
+extern void* openssl_handle;
 #define JSRT_DLSYM(handle, name) dlsym(handle, name)
 #endif
 
 // OpenSSL function pointers for symmetric encryption
 typedef struct {
   // Cipher functions
-  const void *(*EVP_aes_128_cbc)(void);
-  const void *(*EVP_aes_192_cbc)(void);
-  const void *(*EVP_aes_256_cbc)(void);
-  const void *(*EVP_aes_128_gcm)(void);
-  const void *(*EVP_aes_192_gcm)(void);
-  const void *(*EVP_aes_256_gcm)(void);
-  const void *(*EVP_aes_128_ctr)(void);
-  const void *(*EVP_aes_192_ctr)(void);
-  const void *(*EVP_aes_256_ctr)(void);
+  const void* (*EVP_aes_128_cbc)(void);
+  const void* (*EVP_aes_192_cbc)(void);
+  const void* (*EVP_aes_256_cbc)(void);
+  const void* (*EVP_aes_128_gcm)(void);
+  const void* (*EVP_aes_192_gcm)(void);
+  const void* (*EVP_aes_256_gcm)(void);
+  const void* (*EVP_aes_128_ctr)(void);
+  const void* (*EVP_aes_192_ctr)(void);
+  const void* (*EVP_aes_256_ctr)(void);
 
   // Context management
-  void *(*EVP_CIPHER_CTX_new)(void);
-  void (*EVP_CIPHER_CTX_free)(void *ctx);
+  void* (*EVP_CIPHER_CTX_new)(void);
+  void (*EVP_CIPHER_CTX_free)(void* ctx);
 
   // Encryption operations
-  int (*EVP_EncryptInit_ex)(void *ctx, const void *cipher, void *impl, const unsigned char *key,
-                            const unsigned char *iv);
-  int (*EVP_EncryptUpdate)(void *ctx, unsigned char *out, int *outl, const unsigned char *in, int inl);
-  int (*EVP_EncryptFinal_ex)(void *ctx, unsigned char *out, int *outl);
+  int (*EVP_EncryptInit_ex)(void* ctx, const void* cipher, void* impl, const unsigned char* key,
+                            const unsigned char* iv);
+  int (*EVP_EncryptUpdate)(void* ctx, unsigned char* out, int* outl, const unsigned char* in, int inl);
+  int (*EVP_EncryptFinal_ex)(void* ctx, unsigned char* out, int* outl);
 
   // Decryption operations
-  int (*EVP_DecryptInit_ex)(void *ctx, const void *cipher, void *impl, const unsigned char *key,
-                            const unsigned char *iv);
-  int (*EVP_DecryptUpdate)(void *ctx, unsigned char *out, int *outl, const unsigned char *in, int inl);
-  int (*EVP_DecryptFinal_ex)(void *ctx, unsigned char *out, int *outl);
+  int (*EVP_DecryptInit_ex)(void* ctx, const void* cipher, void* impl, const unsigned char* key,
+                            const unsigned char* iv);
+  int (*EVP_DecryptUpdate)(void* ctx, unsigned char* out, int* outl, const unsigned char* in, int inl);
+  int (*EVP_DecryptFinal_ex)(void* ctx, unsigned char* out, int* outl);
 
   // GCM specific functions
-  int (*EVP_CIPHER_CTX_ctrl)(void *ctx, int type, int arg, void *ptr);
+  int (*EVP_CIPHER_CTX_ctrl)(void* ctx, int type, int arg, void* ptr);
 
   // Random number generation (for key generation)
-  int (*RAND_bytes)(unsigned char *buf, int num);
+  int (*RAND_bytes)(unsigned char* buf, int num);
 } openssl_symmetric_funcs_t;
 
 static openssl_symmetric_funcs_t openssl_symmetric_funcs = {0};
@@ -128,7 +128,7 @@ static bool load_symmetric_functions(void) {
 }
 
 // Get OpenSSL cipher for algorithm and key size
-static const void *get_openssl_cipher(jsrt_symmetric_algorithm_t alg, size_t key_length) {
+static const void* get_openssl_cipher(jsrt_symmetric_algorithm_t alg, size_t key_length) {
   if (!load_symmetric_functions()) {
     return NULL;
   }
@@ -172,7 +172,7 @@ static const void *get_openssl_cipher(jsrt_symmetric_algorithm_t alg, size_t key
 }
 
 // Generate AES key
-int jsrt_crypto_generate_aes_key(size_t key_length_bits, uint8_t **key_data, size_t *key_data_length) {
+int jsrt_crypto_generate_aes_key(size_t key_length_bits, uint8_t** key_data, size_t* key_data_length) {
   if (!load_symmetric_functions() || !openssl_symmetric_funcs.RAND_bytes) {
     JSRT_Debug("JSRT_Crypto_Symmetric: OpenSSL functions not available for key generation");
     return -1;
@@ -203,15 +203,15 @@ int jsrt_crypto_generate_aes_key(size_t key_length_bits, uint8_t **key_data, siz
 }
 
 // AES-CBC encryption
-static int jsrt_crypto_aes_cbc_encrypt(jsrt_symmetric_params_t *params, const uint8_t *plaintext,
-                                       size_t plaintext_length, uint8_t **ciphertext, size_t *ciphertext_length) {
-  const void *cipher = get_openssl_cipher(JSRT_SYMMETRIC_AES_CBC, params->key_length);
+static int jsrt_crypto_aes_cbc_encrypt(jsrt_symmetric_params_t* params, const uint8_t* plaintext,
+                                       size_t plaintext_length, uint8_t** ciphertext, size_t* ciphertext_length) {
+  const void* cipher = get_openssl_cipher(JSRT_SYMMETRIC_AES_CBC, params->key_length);
   if (!cipher) {
     JSRT_Debug("JSRT_Crypto_Symmetric: Unsupported AES-CBC key length: %zu", params->key_length);
     return -1;
   }
 
-  void *ctx = openssl_symmetric_funcs.EVP_CIPHER_CTX_new();
+  void* ctx = openssl_symmetric_funcs.EVP_CIPHER_CTX_new();
   if (!ctx) {
     JSRT_Debug("JSRT_Crypto_Symmetric: Failed to create cipher context");
     return -1;
@@ -264,15 +264,15 @@ static int jsrt_crypto_aes_cbc_encrypt(jsrt_symmetric_params_t *params, const ui
 }
 
 // AES-GCM encryption
-static int jsrt_crypto_aes_gcm_encrypt(jsrt_symmetric_params_t *params, const uint8_t *plaintext,
-                                       size_t plaintext_length, uint8_t **ciphertext, size_t *ciphertext_length) {
-  const void *cipher = get_openssl_cipher(JSRT_SYMMETRIC_AES_GCM, params->key_length);
+static int jsrt_crypto_aes_gcm_encrypt(jsrt_symmetric_params_t* params, const uint8_t* plaintext,
+                                       size_t plaintext_length, uint8_t** ciphertext, size_t* ciphertext_length) {
+  const void* cipher = get_openssl_cipher(JSRT_SYMMETRIC_AES_GCM, params->key_length);
   if (!cipher) {
     JSRT_Debug("JSRT_Crypto_Symmetric: Unsupported AES-GCM key length: %zu", params->key_length);
     return -1;
   }
 
-  void *ctx = openssl_symmetric_funcs.EVP_CIPHER_CTX_new();
+  void* ctx = openssl_symmetric_funcs.EVP_CIPHER_CTX_new();
   if (!ctx) {
     JSRT_Debug("JSRT_Crypto_Symmetric: Failed to create cipher context");
     return -1;
@@ -363,9 +363,9 @@ static int jsrt_crypto_aes_gcm_encrypt(jsrt_symmetric_params_t *params, const ui
 }
 
 // AES-GCM decryption
-static int jsrt_crypto_aes_gcm_decrypt(jsrt_symmetric_params_t *params, const uint8_t *ciphertext,
-                                       size_t ciphertext_length, uint8_t **plaintext, size_t *plaintext_length) {
-  const void *cipher = get_openssl_cipher(JSRT_SYMMETRIC_AES_GCM, params->key_length);
+static int jsrt_crypto_aes_gcm_decrypt(jsrt_symmetric_params_t* params, const uint8_t* ciphertext,
+                                       size_t ciphertext_length, uint8_t** plaintext, size_t* plaintext_length) {
+  const void* cipher = get_openssl_cipher(JSRT_SYMMETRIC_AES_GCM, params->key_length);
   if (!cipher) {
     JSRT_Debug("JSRT_Crypto_Symmetric: Unsupported AES-GCM key length: %zu", params->key_length);
     return -1;
@@ -378,9 +378,9 @@ static int jsrt_crypto_aes_gcm_decrypt(jsrt_symmetric_params_t *params, const ui
   }
 
   size_t actual_ciphertext_length = ciphertext_length - params->params.gcm.tag_length;
-  const uint8_t *tag = ciphertext + actual_ciphertext_length;
+  const uint8_t* tag = ciphertext + actual_ciphertext_length;
 
-  void *ctx = openssl_symmetric_funcs.EVP_CIPHER_CTX_new();
+  void* ctx = openssl_symmetric_funcs.EVP_CIPHER_CTX_new();
   if (!ctx) {
     JSRT_Debug("JSRT_Crypto_Symmetric: Failed to create cipher context");
     return -1;
@@ -441,7 +441,7 @@ static int jsrt_crypto_aes_gcm_decrypt(jsrt_symmetric_params_t *params, const ui
 
   // Set expected tag for authentication
   if (openssl_symmetric_funcs.EVP_CIPHER_CTX_ctrl(ctx, EVP_CTRL_GCM_SET_TAG, params->params.gcm.tag_length,
-                                                  (void *)tag) != 1) {
+                                                  (void*)tag) != 1) {
     free(*plaintext);
     *plaintext = NULL;
     openssl_symmetric_funcs.EVP_CIPHER_CTX_free(ctx);
@@ -469,15 +469,15 @@ static int jsrt_crypto_aes_gcm_decrypt(jsrt_symmetric_params_t *params, const ui
 }
 
 // AES-CBC decryption
-static int jsrt_crypto_aes_cbc_decrypt(jsrt_symmetric_params_t *params, const uint8_t *ciphertext,
-                                       size_t ciphertext_length, uint8_t **plaintext, size_t *plaintext_length) {
-  const void *cipher = get_openssl_cipher(JSRT_SYMMETRIC_AES_CBC, params->key_length);
+static int jsrt_crypto_aes_cbc_decrypt(jsrt_symmetric_params_t* params, const uint8_t* ciphertext,
+                                       size_t ciphertext_length, uint8_t** plaintext, size_t* plaintext_length) {
+  const void* cipher = get_openssl_cipher(JSRT_SYMMETRIC_AES_CBC, params->key_length);
   if (!cipher) {
     JSRT_Debug("JSRT_Crypto_Symmetric: Unsupported AES-CBC key length: %zu", params->key_length);
     return -1;
   }
 
-  void *ctx = openssl_symmetric_funcs.EVP_CIPHER_CTX_new();
+  void* ctx = openssl_symmetric_funcs.EVP_CIPHER_CTX_new();
   if (!ctx) {
     JSRT_Debug("JSRT_Crypto_Symmetric: Failed to create cipher context");
     return -1;
@@ -529,8 +529,8 @@ static int jsrt_crypto_aes_cbc_decrypt(jsrt_symmetric_params_t *params, const ui
 }
 
 // Main encryption function
-int jsrt_crypto_aes_encrypt(jsrt_symmetric_params_t *params, const uint8_t *plaintext, size_t plaintext_length,
-                            uint8_t **ciphertext, size_t *ciphertext_length) {
+int jsrt_crypto_aes_encrypt(jsrt_symmetric_params_t* params, const uint8_t* plaintext, size_t plaintext_length,
+                            uint8_t** ciphertext, size_t* ciphertext_length) {
   if (!load_symmetric_functions()) {
     JSRT_Debug("JSRT_Crypto_Symmetric: OpenSSL symmetric functions not available");
     return -1;
@@ -552,8 +552,8 @@ int jsrt_crypto_aes_encrypt(jsrt_symmetric_params_t *params, const uint8_t *plai
 }
 
 // Main decryption function
-int jsrt_crypto_aes_decrypt(jsrt_symmetric_params_t *params, const uint8_t *ciphertext, size_t ciphertext_length,
-                            uint8_t **plaintext, size_t *plaintext_length) {
+int jsrt_crypto_aes_decrypt(jsrt_symmetric_params_t* params, const uint8_t* ciphertext, size_t ciphertext_length,
+                            uint8_t** plaintext, size_t* plaintext_length) {
   if (!load_symmetric_functions()) {
     JSRT_Debug("JSRT_Crypto_Symmetric: OpenSSL symmetric functions not available");
     return -1;
@@ -575,7 +575,7 @@ int jsrt_crypto_aes_decrypt(jsrt_symmetric_params_t *params, const uint8_t *ciph
 }
 
 // Helper functions
-jsrt_symmetric_algorithm_t jsrt_crypto_parse_symmetric_algorithm(const char *algorithm_name) {
+jsrt_symmetric_algorithm_t jsrt_crypto_parse_symmetric_algorithm(const char* algorithm_name) {
   if (strcmp(algorithm_name, "AES-CBC") == 0) {
     return JSRT_SYMMETRIC_AES_CBC;
   } else if (strcmp(algorithm_name, "AES-GCM") == 0) {
@@ -586,7 +586,7 @@ jsrt_symmetric_algorithm_t jsrt_crypto_parse_symmetric_algorithm(const char *alg
   return JSRT_SYMMETRIC_AES_CBC;  // Invalid, but need to return something
 }
 
-const char *jsrt_crypto_symmetric_algorithm_to_string(jsrt_symmetric_algorithm_t alg) {
+const char* jsrt_crypto_symmetric_algorithm_to_string(jsrt_symmetric_algorithm_t alg) {
   switch (alg) {
     case JSRT_SYMMETRIC_AES_CBC:
       return "AES-CBC";
@@ -625,7 +625,7 @@ size_t jsrt_crypto_get_aes_key_size(jsrt_crypto_algorithm_t alg, int key_length_
   }
 }
 
-void jsrt_crypto_symmetric_params_free(jsrt_symmetric_params_t *params) {
+void jsrt_crypto_symmetric_params_free(jsrt_symmetric_params_t* params) {
   if (params) {
     free(params->key_data);
 

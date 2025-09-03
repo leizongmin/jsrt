@@ -31,14 +31,14 @@
 #include "util/jsutils.h"
 #include "util/path.h"
 
-static void JSRT_RuntimeCloseWalkCallback(uv_handle_t *handle, void *arg) {
+static void JSRT_RuntimeCloseWalkCallback(uv_handle_t* handle, void* arg) {
   if (!uv_is_closing(handle)) {
     uv_close(handle, NULL);
   }
 }
 
-JSRT_Runtime *JSRT_RuntimeNew() {
-  JSRT_Runtime *rt = malloc(sizeof(JSRT_Runtime));
+JSRT_Runtime* JSRT_RuntimeNew() {
+  JSRT_Runtime* rt = malloc(sizeof(JSRT_Runtime));
   rt->rt = JS_NewRuntime();
   JS_SetRuntimeOpaque(rt->rt, rt);
   rt->ctx = JS_NewContext(rt->rt);
@@ -79,7 +79,7 @@ JSRT_Runtime *JSRT_RuntimeNew() {
   return rt;
 }
 
-void JSRT_RuntimeFree(JSRT_Runtime *rt) {
+void JSRT_RuntimeFree(JSRT_Runtime* rt) {
   // Close all handles before closing the loop
   uv_walk(rt->uv_loop, JSRT_RuntimeCloseWalkCallback, NULL);
 
@@ -123,7 +123,7 @@ JSRT_EvalResult JSRT_EvalResultDefault() {
   return res;
 }
 
-void JSRT_EvalResultFree(JSRT_EvalResult *res) {
+void JSRT_EvalResultFree(JSRT_EvalResult* res) {
   if (res->error != NULL) {
     free(res->error);
     res->error = NULL;
@@ -137,13 +137,13 @@ void JSRT_EvalResultFree(JSRT_EvalResult *res) {
   }
 }
 
-char *JSRT_RuntimeGetExceptionString(JSRT_Runtime *rt, JSValue e) {
-  const char *error = JS_ToCString(rt->ctx, e);
+char* JSRT_RuntimeGetExceptionString(JSRT_Runtime* rt, JSValue e) {
+  const char* error = JS_ToCString(rt->ctx, e);
   char str[2048];
 
   JSValue stack_val = JS_GetPropertyStr(rt->ctx, e, "stack");
   if (JS_IsString(stack_val)) {
-    const char *stack = JS_ToCString(rt->ctx, stack_val);
+    const char* stack = JS_ToCString(rt->ctx, stack_val);
     snprintf(str, sizeof(str), "%s\n%s", error, stack);
     JS_FreeCString(rt->ctx, stack);
   } else {
@@ -157,14 +157,14 @@ char *JSRT_RuntimeGetExceptionString(JSRT_Runtime *rt, JSValue e) {
   return strdup(str);
 }
 
-JSRT_EvalResult JSRT_RuntimeEval(JSRT_Runtime *rt, const char *filename, const char *code, size_t length) {
+JSRT_EvalResult JSRT_RuntimeEval(JSRT_Runtime* rt, const char* filename, const char* code, size_t length) {
   JSRT_EvalResult result;
   result.rt = rt;
   result.is_error = false;
   result.error = NULL;
   result.error_length = 0;
 
-  bool is_module = JSRT_PathHasSuffix(filename, ".mjs") || JS_DetectModule((const char *)code, length);
+  bool is_module = JSRT_PathHasSuffix(filename, ".mjs") || JS_DetectModule((const char*)code, length);
   int eval_flags = is_module ? JS_EVAL_TYPE_MODULE : JS_EVAL_TYPE_GLOBAL;
 
   // JSRT_Debug("eval: filename=%s module=%d code=\n%s", filename, is_module, code);
@@ -189,7 +189,7 @@ JSRT_EvalResult JSRT_RuntimeEval(JSRT_Runtime *rt, const char *filename, const c
   return result;
 }
 
-JSRT_EvalResult JSRT_RuntimeAwaitEvalResult(JSRT_Runtime *rt, JSRT_EvalResult *res) {
+JSRT_EvalResult JSRT_RuntimeAwaitEvalResult(JSRT_Runtime* rt, JSRT_EvalResult* res) {
   JSRT_EvalResult new_result = JSRT_EvalResultDefault();
   new_result.rt = rt;
 
@@ -226,7 +226,7 @@ JSRT_EvalResult JSRT_RuntimeAwaitEvalResult(JSRT_Runtime *rt, JSRT_EvalResult *r
   return new_result;
 }
 
-bool JSRT_RuntimeRun(JSRT_Runtime *rt) {
+bool JSRT_RuntimeRun(JSRT_Runtime* rt) {
   uint64_t counter = 0;
   for (;; counter++) {
     // JSRT_Debug("runtime run loop: counter=%d", counter);
@@ -258,13 +258,13 @@ bool JSRT_RuntimeRun(JSRT_Runtime *rt) {
   return true;
 }
 
-bool JSRT_RuntimeRunTicket(JSRT_Runtime *rt) {
-  JSContext *ctx1;
+bool JSRT_RuntimeRunTicket(JSRT_Runtime* rt) {
+  JSContext* ctx1;
   int status = JS_ExecutePendingJob(JS_GetRuntime(rt->ctx), &ctx1);
   // JSRT_Debug("runtime execute pending job: status=%d", status);
   if (status < 0) {
     JSValue e = JS_GetException(rt->ctx);
-    char *s = JSRT_RuntimeGetExceptionString(rt, e);
+    char* s = JSRT_RuntimeGetExceptionString(rt, e);
     fprintf(stderr, "%s\n", s);
     free(s);
     JSRT_RuntimeFreeValue(rt, e);
@@ -274,7 +274,7 @@ bool JSRT_RuntimeRunTicket(JSRT_Runtime *rt) {
   return true;
 }
 
-void JSRT_RuntimeAddDisposeValue(JSRT_Runtime *rt, JSValue value) {
+void JSRT_RuntimeAddDisposeValue(JSRT_Runtime* rt, JSValue value) {
   if (rt->dispose_values_length == rt->dispose_values_capacity) {
     rt->dispose_values_capacity *= 2;
     rt->dispose_values = realloc(rt->dispose_values, rt->dispose_values_capacity * sizeof(JSValue));
@@ -284,7 +284,7 @@ void JSRT_RuntimeAddDisposeValue(JSRT_Runtime *rt, JSValue value) {
   JSRT_Debug("add dispose value: value=%p", &value);
 }
 
-void JSRT_RuntimeFreeDisposeValues(JSRT_Runtime *rt) {
+void JSRT_RuntimeFreeDisposeValues(JSRT_Runtime* rt) {
   for (size_t i = 0; i < rt->dispose_values_length; i++) {
     JSRT_Debug("free dispose value: value=%p", &rt->dispose_values[i]);
     JSRT_RuntimeFreeValue(rt, rt->dispose_values[i]);
@@ -295,7 +295,7 @@ void JSRT_RuntimeFreeDisposeValues(JSRT_Runtime *rt) {
   rt->dispose_values_length = 0;
 }
 
-void JSRT_RuntimeAddExceptionValue(JSRT_Runtime *rt, JSValue e) {
+void JSRT_RuntimeAddExceptionValue(JSRT_Runtime* rt, JSValue e) {
   if (rt->exception_values_length == rt->exception_values_capacity) {
     rt->exception_values_capacity *= 2;
     rt->exception_values = realloc(rt->exception_values, rt->exception_values_capacity * sizeof(JSValue));
@@ -304,9 +304,9 @@ void JSRT_RuntimeAddExceptionValue(JSRT_Runtime *rt, JSValue e) {
   rt->exception_values_length++;
 }
 
-void JSRT_RuntimeFreeExceptionValues(JSRT_Runtime *rt) {
+void JSRT_RuntimeFreeExceptionValues(JSRT_Runtime* rt) {
   for (size_t i = 0; i < rt->exception_values_length; i++) {
-    char *s = JSRT_RuntimeGetExceptionString(rt, rt->exception_values[i]);
+    char* s = JSRT_RuntimeGetExceptionString(rt, rt->exception_values[i]);
     JSRT_Debug("free unhandled exception value: value=%p %s", &rt->exception_values[i], s);
     free(s);
     JSRT_RuntimeFreeValue(rt, rt->exception_values[i]);
@@ -317,9 +317,9 @@ void JSRT_RuntimeFreeExceptionValues(JSRT_Runtime *rt) {
   rt->exception_values_length = 0;
 }
 
-bool JSRT_RuntimeProcessUnhandledExceptionValues(JSRT_Runtime *rt) {
+bool JSRT_RuntimeProcessUnhandledExceptionValues(JSRT_Runtime* rt) {
   for (size_t i = 0; i < rt->exception_values_length; i++) {
-    char *s = JSRT_RuntimeGetExceptionString(rt, rt->exception_values[i]);
+    char* s = JSRT_RuntimeGetExceptionString(rt, rt->exception_values[i]);
     // TODO: emit "error" event
     fprintf(stderr, "%s\n", s);
     free(s);
@@ -329,12 +329,12 @@ bool JSRT_RuntimeProcessUnhandledExceptionValues(JSRT_Runtime *rt) {
   return true;
 }
 
-JSRT_CompileResult JSRT_RuntimeCompileToBytecode(JSRT_Runtime *rt, const char *filename, const char *code,
+JSRT_CompileResult JSRT_RuntimeCompileToBytecode(JSRT_Runtime* rt, const char* filename, const char* code,
                                                  size_t length) {
   JSRT_CompileResult result = {0};
 
   // Detect if this is a module or script
-  bool is_module = JSRT_PathHasSuffix(filename, ".mjs") || JS_DetectModule((const char *)code, length);
+  bool is_module = JSRT_PathHasSuffix(filename, ".mjs") || JS_DetectModule((const char*)code, length);
 
   // Compile the JavaScript code with appropriate type
   int eval_flags = JS_EVAL_FLAG_COMPILE_ONLY | (is_module ? JS_EVAL_TYPE_MODULE : JS_EVAL_TYPE_GLOBAL);
@@ -350,7 +350,7 @@ JSRT_CompileResult JSRT_RuntimeCompileToBytecode(JSRT_Runtime *rt, const char *f
 
   // Write the compiled function to bytecode
   size_t out_buf_len;
-  uint8_t *out_buf = JS_WriteObject(rt->ctx, &out_buf_len, val, JS_WRITE_OBJ_BYTECODE);
+  uint8_t* out_buf = JS_WriteObject(rt->ctx, &out_buf_len, val, JS_WRITE_OBJ_BYTECODE);
   JS_FreeValue(rt->ctx, val);
 
   if (!out_buf) {
@@ -363,7 +363,7 @@ JSRT_CompileResult JSRT_RuntimeCompileToBytecode(JSRT_Runtime *rt, const char *f
   return result;
 }
 
-void JSRT_CompileResultFree(JSRT_CompileResult *result) {
+void JSRT_CompileResultFree(JSRT_CompileResult* result) {
   if (result->data) {
     // QuickJS allocated memory needs to be freed with js_free_rt or regular free
     // Since JS_WriteObject allocates with js_malloc which uses malloc internally

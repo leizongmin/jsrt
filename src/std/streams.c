@@ -19,8 +19,8 @@ typedef struct {
   bool locked;
 } JSRT_ReadableStream;
 
-static void JSRT_ReadableStreamFinalize(JSRuntime *rt, JSValue val) {
-  JSRT_ReadableStream *stream = JS_GetOpaque(val, JSRT_ReadableStreamClassID);
+static void JSRT_ReadableStreamFinalize(JSRuntime* rt, JSValue val) {
+  JSRT_ReadableStream* stream = JS_GetOpaque(val, JSRT_ReadableStreamClassID);
   if (stream) {
     if (!JS_IsUndefined(stream->controller)) {
       JS_FreeValueRT(rt, stream->controller);
@@ -34,8 +34,8 @@ static JSClassDef JSRT_ReadableStreamClass = {
     .finalizer = JSRT_ReadableStreamFinalize,
 };
 
-static JSValue JSRT_ReadableStreamConstructor(JSContext *ctx, JSValueConst new_target, int argc, JSValueConst *argv) {
-  JSRT_ReadableStream *stream = malloc(sizeof(JSRT_ReadableStream));
+static JSValue JSRT_ReadableStreamConstructor(JSContext* ctx, JSValueConst new_target, int argc, JSValueConst* argv) {
+  JSRT_ReadableStream* stream = malloc(sizeof(JSRT_ReadableStream));
   stream->controller = JS_UNDEFINED;
   stream->locked = false;
 
@@ -44,16 +44,16 @@ static JSValue JSRT_ReadableStreamConstructor(JSContext *ctx, JSValueConst new_t
   return obj;
 }
 
-static JSValue JSRT_ReadableStreamGetLocked(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv) {
-  JSRT_ReadableStream *stream = JS_GetOpaque(this_val, JSRT_ReadableStreamClassID);
+static JSValue JSRT_ReadableStreamGetLocked(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
+  JSRT_ReadableStream* stream = JS_GetOpaque(this_val, JSRT_ReadableStreamClassID);
   if (!stream) {
     return JS_EXCEPTION;
   }
   return JS_NewBool(ctx, stream->locked);
 }
 
-static JSValue JSRT_ReadableStreamGetReader(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv) {
-  JSRT_ReadableStream *stream = JS_GetOpaque(this_val, JSRT_ReadableStreamClassID);
+static JSValue JSRT_ReadableStreamGetReader(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
+  JSRT_ReadableStream* stream = JS_GetOpaque(this_val, JSRT_ReadableStreamClassID);
   if (!stream) {
     return JS_EXCEPTION;
   }
@@ -79,8 +79,8 @@ typedef struct {
   bool locked;
 } JSRT_WritableStream;
 
-static void JSRT_WritableStreamFinalize(JSRuntime *rt, JSValue val) {
-  JSRT_WritableStream *stream = JS_GetOpaque(val, JSRT_WritableStreamClassID);
+static void JSRT_WritableStreamFinalize(JSRuntime* rt, JSValue val) {
+  JSRT_WritableStream* stream = JS_GetOpaque(val, JSRT_WritableStreamClassID);
   if (stream) {
     if (!JS_IsUndefined(stream->controller)) {
       JS_FreeValueRT(rt, stream->controller);
@@ -94,8 +94,8 @@ static JSClassDef JSRT_WritableStreamClass = {
     .finalizer = JSRT_WritableStreamFinalize,
 };
 
-static JSValue JSRT_WritableStreamConstructor(JSContext *ctx, JSValueConst new_target, int argc, JSValueConst *argv) {
-  JSRT_WritableStream *stream = malloc(sizeof(JSRT_WritableStream));
+static JSValue JSRT_WritableStreamConstructor(JSContext* ctx, JSValueConst new_target, int argc, JSValueConst* argv) {
+  JSRT_WritableStream* stream = malloc(sizeof(JSRT_WritableStream));
   stream->controller = JS_UNDEFINED;
   stream->locked = false;
 
@@ -104,8 +104,8 @@ static JSValue JSRT_WritableStreamConstructor(JSContext *ctx, JSValueConst new_t
   return obj;
 }
 
-static JSValue JSRT_WritableStreamGetLocked(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv) {
-  JSRT_WritableStream *stream = JS_GetOpaque(this_val, JSRT_WritableStreamClassID);
+static JSValue JSRT_WritableStreamGetLocked(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
+  JSRT_WritableStream* stream = JS_GetOpaque(this_val, JSRT_WritableStreamClassID);
   if (!stream) {
     return JS_EXCEPTION;
   }
@@ -118,8 +118,8 @@ typedef struct {
   JSValue writable;
 } JSRT_TransformStream;
 
-static void JSRT_TransformStreamFinalize(JSRuntime *rt, JSValue val) {
-  JSRT_TransformStream *stream = JS_GetOpaque(val, JSRT_TransformStreamClassID);
+static void JSRT_TransformStreamFinalize(JSRuntime* rt, JSValue val) {
+  JSRT_TransformStream* stream = JS_GetOpaque(val, JSRT_TransformStreamClassID);
   if (stream) {
     if (!JS_IsUndefined(stream->readable)) {
       JS_FreeValueRT(rt, stream->readable);
@@ -136,8 +136,8 @@ static JSClassDef JSRT_TransformStreamClass = {
     .finalizer = JSRT_TransformStreamFinalize,
 };
 
-static JSValue JSRT_TransformStreamConstructor(JSContext *ctx, JSValueConst new_target, int argc, JSValueConst *argv) {
-  JSRT_TransformStream *stream = malloc(sizeof(JSRT_TransformStream));
+static JSValue JSRT_TransformStreamConstructor(JSContext* ctx, JSValueConst new_target, int argc, JSValueConst* argv) {
+  JSRT_TransformStream* stream = malloc(sizeof(JSRT_TransformStream));
 
   // Create readable and writable streams
   JSValue readable_ctor = JS_GetPropertyStr(ctx, JS_GetGlobalObject(ctx), "ReadableStream");
@@ -154,26 +154,26 @@ static JSValue JSRT_TransformStreamConstructor(JSContext *ctx, JSValueConst new_
   return obj;
 }
 
-static JSValue JSRT_TransformStreamGetReadable(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv) {
-  JSRT_TransformStream *stream = JS_GetOpaque(this_val, JSRT_TransformStreamClassID);
+static JSValue JSRT_TransformStreamGetReadable(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
+  JSRT_TransformStream* stream = JS_GetOpaque(this_val, JSRT_TransformStreamClassID);
   if (!stream) {
     return JS_EXCEPTION;
   }
   return JS_DupValue(ctx, stream->readable);
 }
 
-static JSValue JSRT_TransformStreamGetWritable(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv) {
-  JSRT_TransformStream *stream = JS_GetOpaque(this_val, JSRT_TransformStreamClassID);
+static JSValue JSRT_TransformStreamGetWritable(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
+  JSRT_TransformStream* stream = JS_GetOpaque(this_val, JSRT_TransformStreamClassID);
   if (!stream) {
     return JS_EXCEPTION;
   }
   return JS_DupValue(ctx, stream->writable);
 }
 
-void JSRT_RuntimeSetupStdStreams(JSRT_Runtime *rt) {
+void JSRT_RuntimeSetupStdStreams(JSRT_Runtime* rt) {
   JSRT_Debug("JSRT_RuntimeSetupStdStreams: initializing Streams API");
 
-  JSContext *ctx = rt->ctx;
+  JSContext* ctx = rt->ctx;
 
   // Register ReadableStream class
   JS_NewClassID(&JSRT_ReadableStreamClassID);

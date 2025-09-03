@@ -14,7 +14,7 @@
 #include "process.h"
 
 // Module init function for std:assert ES module
-static int js_std_assert_init(JSContext *ctx, JSModuleDef *m) {
+static int js_std_assert_init(JSContext* ctx, JSModuleDef* m) {
   JSValue assert_module = JSRT_CreateAssertModule(ctx);
   if (JS_IsException(assert_module)) {
     return -1;
@@ -24,7 +24,7 @@ static int js_std_assert_init(JSContext *ctx, JSModuleDef *m) {
 }
 
 // Module init function for std:process ES module
-static int js_std_process_init(JSContext *ctx, JSModuleDef *m) {
+static int js_std_process_init(JSContext* ctx, JSModuleDef* m) {
   JSValue process_module = JSRT_CreateProcessModule(ctx);
   if (JS_IsException(process_module)) {
     return -1;
@@ -34,7 +34,7 @@ static int js_std_process_init(JSContext *ctx, JSModuleDef *m) {
 }
 
 // Module init function for std:ffi ES module
-static int js_std_ffi_init(JSContext *ctx, JSModuleDef *m) {
+static int js_std_ffi_init(JSContext* ctx, JSModuleDef* m) {
   JSValue ffi_module = JSRT_CreateFFIModule(ctx);
   if (JS_IsException(ffi_module)) {
     return -1;
@@ -43,7 +43,7 @@ static int js_std_ffi_init(JSContext *ctx, JSModuleDef *m) {
   return 0;
 }
 
-static char *resolve_module_path(const char *module_name, const char *base_path) {
+static char* resolve_module_path(const char* module_name, const char* base_path) {
   JSRT_Debug("resolve_module_path: module_name='%s', base_path='%s'", module_name, base_path ? base_path : "null");
 
   // Handle absolute paths
@@ -58,8 +58,8 @@ static char *resolve_module_path(const char *module_name, const char *base_path)
     }
 
     // Find the directory of base_path
-    char *base_dir = strdup(base_path);
-    char *last_slash = strrchr(base_dir, '/');
+    char* base_dir = strdup(base_path);
+    char* last_slash = strrchr(base_dir, '/');
     if (last_slash) {
       *last_slash = '\0';
     } else {
@@ -68,7 +68,7 @@ static char *resolve_module_path(const char *module_name, const char *base_path)
 
     // Build the resolved path
     size_t path_len = strlen(base_dir) + strlen(module_name) + 2;
-    char *resolved_path = malloc(path_len);
+    char* resolved_path = malloc(path_len);
     snprintf(resolved_path, path_len, "%s/%s", base_dir, module_name);
 
     free(base_dir);
@@ -79,14 +79,14 @@ static char *resolve_module_path(const char *module_name, const char *base_path)
   return strdup(module_name);
 }
 
-static char *try_extensions(const char *base_path) {
-  const char *extensions[] = {".js", ".mjs", ""};
+static char* try_extensions(const char* base_path) {
+  const char* extensions[] = {".js", ".mjs", ""};
   size_t base_len = strlen(base_path);
 
   for (int i = 0; extensions[i][0] != '\0' || i == 2; i++) {
-    const char *ext = extensions[i];
+    const char* ext = extensions[i];
     size_t ext_len = strlen(ext);
-    char *full_path = malloc(base_len + ext_len + 1);
+    char* full_path = malloc(base_len + ext_len + 1);
     strcpy(full_path, base_path);
     strcat(full_path, ext);
 
@@ -103,7 +103,7 @@ static char *try_extensions(const char *base_path) {
   return NULL;
 }
 
-char *JSRT_ModuleNormalize(JSContext *ctx, const char *module_base_name, const char *module_name, void *opaque) {
+char* JSRT_ModuleNormalize(JSContext* ctx, const char* module_base_name, const char* module_name, void* opaque) {
   JSRT_Debug("JSRT_ModuleNormalize: module_name='%s', module_base_name='%s'", module_name,
              module_base_name ? module_base_name : "null");
 
@@ -113,8 +113,8 @@ char *JSRT_ModuleNormalize(JSContext *ctx, const char *module_base_name, const c
   }
 
   // module_name is what we want to import, module_base_name is the importing module
-  char *resolved_path = resolve_module_path(module_name, module_base_name);
-  char *final_path = try_extensions(resolved_path);
+  char* resolved_path = resolve_module_path(module_name, module_base_name);
+  char* final_path = try_extensions(resolved_path);
 
   if (!final_path) {
     final_path = resolved_path;
@@ -126,16 +126,16 @@ char *JSRT_ModuleNormalize(JSContext *ctx, const char *module_base_name, const c
   return final_path;
 }
 
-JSModuleDef *JSRT_ModuleLoader(JSContext *ctx, const char *module_name, void *opaque) {
+JSModuleDef* JSRT_ModuleLoader(JSContext* ctx, const char* module_name, void* opaque) {
   JSRT_Debug("JSRT_ModuleLoader: loading ES module '%s'", module_name);
 
   // Handle std: modules
   if (strncmp(module_name, "std:", 4) == 0) {
-    const char *std_module = module_name + 4;  // Skip "std:" prefix
+    const char* std_module = module_name + 4;  // Skip "std:" prefix
 
     if (strcmp(std_module, "assert") == 0) {
       // Create std:assert module with init function
-      JSModuleDef *m = JS_NewCModule(ctx, module_name, js_std_assert_init);
+      JSModuleDef* m = JS_NewCModule(ctx, module_name, js_std_assert_init);
       if (m) {
         JS_AddModuleExport(ctx, m, "default");
       }
@@ -144,7 +144,7 @@ JSModuleDef *JSRT_ModuleLoader(JSContext *ctx, const char *module_name, void *op
 
     if (strcmp(std_module, "process") == 0) {
       // Create std:process module with init function
-      JSModuleDef *m = JS_NewCModule(ctx, module_name, js_std_process_init);
+      JSModuleDef* m = JS_NewCModule(ctx, module_name, js_std_process_init);
       if (m) {
         JS_AddModuleExport(ctx, m, "default");
       }
@@ -153,7 +153,7 @@ JSModuleDef *JSRT_ModuleLoader(JSContext *ctx, const char *module_name, void *op
 
     if (strcmp(std_module, "ffi") == 0) {
       // Create std:ffi module with init function
-      JSModuleDef *m = JS_NewCModule(ctx, module_name, js_std_ffi_init);
+      JSModuleDef* m = JS_NewCModule(ctx, module_name, js_std_ffi_init);
       if (m) {
         JS_AddModuleExport(ctx, m, "default");
       }
@@ -185,14 +185,14 @@ JSModuleDef *JSRT_ModuleLoader(JSContext *ctx, const char *module_name, void *op
   }
 
   // Get the module definition from the compiled function
-  JSModuleDef *m = JS_VALUE_GET_PTR(func_val);
+  JSModuleDef* m = JS_VALUE_GET_PTR(func_val);
   JS_FreeValue(ctx, func_val);
 
   // Set up import.meta for the module
   JSValue meta_obj = JS_GetImportMeta(ctx, m);
   if (!JS_IsUndefined(meta_obj)) {
     // Set import.meta.url
-    char *url = malloc(strlen(module_name) + 8);  // "file://" + module_name + null
+    char* url = malloc(strlen(module_name) + 8);  // "file://" + module_name + null
     if (module_name[0] == '/') {
       // Absolute path
       snprintf(url, strlen(module_name) + 8, "file://%s", module_name);
@@ -222,15 +222,15 @@ JSModuleDef *JSRT_ModuleLoader(JSContext *ctx, const char *module_name, void *op
 
 // Simple module cache for require()
 typedef struct {
-  char *name;
+  char* name;
   JSValue exports;
 } RequireModuleCache;
 
-static RequireModuleCache *module_cache = NULL;
+static RequireModuleCache* module_cache = NULL;
 static size_t module_cache_size = 0;
 static size_t module_cache_capacity = 0;
 
-static JSValue get_cached_module(JSContext *ctx, const char *name) {
+static JSValue get_cached_module(JSContext* ctx, const char* name) {
   for (size_t i = 0; i < module_cache_size; i++) {
     if (strcmp(module_cache[i].name, name) == 0) {
       return JS_DupValue(ctx, module_cache[i].exports);
@@ -239,7 +239,7 @@ static JSValue get_cached_module(JSContext *ctx, const char *name) {
   return JS_UNDEFINED;
 }
 
-static void cache_module(JSContext *ctx, const char *name, JSValue exports) {
+static void cache_module(JSContext* ctx, const char* name, JSValue exports) {
   if (module_cache_size >= module_cache_capacity) {
     module_cache_capacity = module_cache_capacity == 0 ? 16 : module_cache_capacity * 2;
     module_cache = realloc(module_cache, module_cache_capacity * sizeof(RequireModuleCache));
@@ -250,12 +250,12 @@ static void cache_module(JSContext *ctx, const char *name, JSValue exports) {
   module_cache_size++;
 }
 
-static JSValue js_require(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv) {
+static JSValue js_require(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
   if (argc < 1) {
     return JS_ThrowTypeError(ctx, "require expects at least 1 argument");
   }
 
-  const char *module_name = JS_ToCString(ctx, argv[0]);
+  const char* module_name = JS_ToCString(ctx, argv[0]);
   if (!module_name) {
     return JS_EXCEPTION;
   }
@@ -264,7 +264,7 @@ static JSValue js_require(JSContext *ctx, JSValueConst this_val, int argc, JSVal
 
   // Handle std: modules
   if (strncmp(module_name, "std:", 4) == 0) {
-    const char *std_module = module_name + 4;  // Skip "std:" prefix
+    const char* std_module = module_name + 4;  // Skip "std:" prefix
 
     if (strcmp(std_module, "assert") == 0) {
       JSValue result = JSRT_CreateAssertModule(ctx);
@@ -289,9 +289,9 @@ static JSValue js_require(JSContext *ctx, JSValueConst this_val, int argc, JSVal
   }
 
   // Resolve the module path
-  char *resolved_path = resolve_module_path(module_name, NULL);
+  char* resolved_path = resolve_module_path(module_name, NULL);
   JSRT_Debug("js_require: resolved_path='%s'", resolved_path);
-  char *final_path = try_extensions(resolved_path);
+  char* final_path = try_extensions(resolved_path);
   JSRT_Debug("js_require: after try_extensions, final_path='%s'", final_path ? final_path : "NULL");
 
   if (!final_path) {
@@ -326,7 +326,7 @@ static JSValue js_require(JSContext *ctx, JSValueConst this_val, int argc, JSVal
 
   // Create a wrapper function to provide CommonJS environment
   size_t wrapper_size = file_result.size + 512;
-  char *wrapper_code = malloc(wrapper_size);
+  char* wrapper_code = malloc(wrapper_size);
   snprintf(wrapper_code, wrapper_size, "(function(exports, require, module, __filename, __dirname) {\n%s\n})",
            file_result.data);
 
@@ -385,12 +385,12 @@ static JSValue js_require(JSContext *ctx, JSValueConst this_val, int argc, JSVal
   return module_exports;
 }
 
-void JSRT_StdModuleInit(JSRT_Runtime *rt) {
+void JSRT_StdModuleInit(JSRT_Runtime* rt) {
   JSRT_Debug("JSRT_StdModuleInit: initializing ES module loader");
   JS_SetModuleLoaderFunc(rt->rt, JSRT_ModuleNormalize, JSRT_ModuleLoader, rt);
 }
 
-void JSRT_StdCommonJSInit(JSRT_Runtime *rt) {
+void JSRT_StdCommonJSInit(JSRT_Runtime* rt) {
   JSRT_Debug("JSRT_StdCommonJSInit: initializing CommonJS support");
 
   JSValue global = JS_GetGlobalObject(rt->ctx);
@@ -399,7 +399,7 @@ void JSRT_StdCommonJSInit(JSRT_Runtime *rt) {
 }
 
 // Module cache cleanup function
-void JSRT_StdModuleCleanup(JSContext *ctx) {
+void JSRT_StdModuleCleanup(JSContext* ctx) {
   if (module_cache) {
     for (size_t i = 0; i < module_cache_size; i++) {
       free(module_cache[i].name);

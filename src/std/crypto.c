@@ -22,13 +22,13 @@
 #ifdef _WIN32
 HMODULE openssl_handle = NULL;
 #else
-void *openssl_handle = NULL;
+void* openssl_handle = NULL;
 #endif
-static char *openssl_version = NULL;
+static char* openssl_version = NULL;
 
 // Function pointer types for OpenSSL functions we need
-typedef int (*RAND_bytes_func)(unsigned char *buf, int num);
-typedef const char *(*OpenSSL_version_func)(int type);
+typedef int (*RAND_bytes_func)(unsigned char* buf, int num);
+typedef const char* (*OpenSSL_version_func)(int type);
 
 // Function pointers
 static RAND_bytes_func openssl_RAND_bytes = NULL;
@@ -44,7 +44,7 @@ static bool load_openssl() {
   }
 
   // Try different OpenSSL library names based on platform
-  const char *openssl_names[] = {
+  const char* openssl_names[] = {
 #ifdef _WIN32
       "libssl-3-x64.dll",    // Windows OpenSSL 3.x 64-bit
       "libssl-1_1-x64.dll",  // Windows OpenSSL 1.1.x 64-bit
@@ -108,7 +108,7 @@ static bool load_openssl() {
   }
 
   if (openssl_OpenSSL_version != NULL) {
-    const char *version_str = openssl_OpenSSL_version(OPENSSL_VERSION);
+    const char* version_str = openssl_OpenSSL_version(OPENSSL_VERSION);
     if (version_str) {
       openssl_version = strdup(version_str);
       JSRT_Debug("JSRT_Crypto: OpenSSL version: %s", openssl_version);
@@ -119,7 +119,7 @@ static bool load_openssl() {
 }
 
 // Fallback random bytes using system random (not cryptographically secure)
-static bool fallback_random_bytes(unsigned char *buf, int num) {
+static bool fallback_random_bytes(unsigned char* buf, int num) {
   static bool seeded = false;
   if (!seeded) {
     srand((unsigned int)time(NULL));
@@ -133,7 +133,7 @@ static bool fallback_random_bytes(unsigned char *buf, int num) {
 }
 
 // crypto.getRandomValues(typedArray)
-static JSValue jsrt_crypto_getRandomValues(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv) {
+static JSValue jsrt_crypto_getRandomValues(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
   if (argc < 1) {
     return JS_ThrowTypeError(ctx, "crypto.getRandomValues requires 1 argument");
   }
@@ -167,7 +167,7 @@ static JSValue jsrt_crypto_getRandomValues(JSContext *ctx, JSValueConst this_val
   }
 
   // Generate random bytes
-  unsigned char *random_data = malloc(byte_length);
+  unsigned char* random_data = malloc(byte_length);
   if (!random_data) {
     return JS_ThrowInternalError(ctx, "Failed to allocate memory for random data");
   }
@@ -194,7 +194,7 @@ static JSValue jsrt_crypto_getRandomValues(JSContext *ctx, JSValueConst this_val
 }
 
 // crypto.randomUUID()
-static JSValue jsrt_crypto_randomUUID(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv) {
+static JSValue jsrt_crypto_randomUUID(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
   unsigned char random_bytes[16];
   bool success = false;
 
@@ -226,7 +226,7 @@ static JSValue jsrt_crypto_randomUUID(JSContext *ctx, JSValueConst this_val, int
 }
 
 // Get OpenSSL version for process.versions.openssl
-const char *JSRT_GetOpenSSLVersion() {
+const char* JSRT_GetOpenSSLVersion() {
   if (openssl_version != NULL) {
     return openssl_version;
   }
@@ -234,7 +234,7 @@ const char *JSRT_GetOpenSSLVersion() {
 }
 
 // Setup crypto module in runtime
-void JSRT_RuntimeSetupStdCrypto(JSRT_Runtime *rt) {
+void JSRT_RuntimeSetupStdCrypto(JSRT_Runtime* rt) {
   bool openssl_loaded = load_openssl();
 
   if (!openssl_loaded) {

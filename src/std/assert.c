@@ -8,24 +8,24 @@
 #include "../util/colorize.h"
 
 // Forward declarations
-static JSValue jsrt_assert(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv);
-static JSValue jsrt_assert_ok(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv);
-static JSValue jsrt_assert_equal(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv);
-static JSValue jsrt_assert_notEqual(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv);
-static JSValue jsrt_assert_strictEqual(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv);
-static JSValue jsrt_assert_notStrictEqual(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv);
-static JSValue jsrt_assert_deepEqual(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv);
-static JSValue jsrt_assert_notDeepEqual(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv);
-static JSValue jsrt_assert_throws(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv);
-static JSValue jsrt_assert_doesNotThrow(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv);
+static JSValue jsrt_assert(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv);
+static JSValue jsrt_assert_ok(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv);
+static JSValue jsrt_assert_equal(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv);
+static JSValue jsrt_assert_notEqual(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv);
+static JSValue jsrt_assert_strictEqual(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv);
+static JSValue jsrt_assert_notStrictEqual(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv);
+static JSValue jsrt_assert_deepEqual(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv);
+static JSValue jsrt_assert_notDeepEqual(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv);
+static JSValue jsrt_assert_throws(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv);
+static JSValue jsrt_assert_doesNotThrow(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv);
 
 // Helper function to format assertion error message
-static void print_assertion_error(JSContext *ctx, const char *message, JSValueConst actual, JSValueConst expected) {
+static void print_assertion_error(JSContext* ctx, const char* message, JSValueConst actual, JSValueConst expected) {
   printf("%sAssertionError: %s", jsrt_colorize(JSRT_ColorizeRed, -1, JSRT_ColorizeBold), JSRT_ColorizeClear);
   printf("%s\n", message);
 
   if (!JS_IsUndefined(actual)) {
-    const char *actual_str = JS_ToCString(ctx, actual);
+    const char* actual_str = JS_ToCString(ctx, actual);
     if (actual_str) {
       printf("  actual: %s\n", actual_str);
       JS_FreeCString(ctx, actual_str);
@@ -33,7 +33,7 @@ static void print_assertion_error(JSContext *ctx, const char *message, JSValueCo
   }
 
   if (!JS_IsUndefined(expected)) {
-    const char *expected_str = JS_ToCString(ctx, expected);
+    const char* expected_str = JS_ToCString(ctx, expected);
     if (expected_str) {
       printf("  expected: %s\n", expected_str);
       JS_FreeCString(ctx, expected_str);
@@ -42,7 +42,7 @@ static void print_assertion_error(JSContext *ctx, const char *message, JSValueCo
 }
 
 // Helper function to throw AssertionError
-static JSValue throw_assertion_error(JSContext *ctx, const char *message) {
+static JSValue throw_assertion_error(JSContext* ctx, const char* message) {
   JSValue error = JS_NewError(ctx);
   JS_SetPropertyStr(ctx, error, "name", JS_NewString(ctx, "AssertionError"));
   JS_SetPropertyStr(ctx, error, "message", JS_NewString(ctx, message));
@@ -50,14 +50,14 @@ static JSValue throw_assertion_error(JSContext *ctx, const char *message) {
 }
 
 // assert(value[, message])
-static JSValue jsrt_assert(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv) {
+static JSValue jsrt_assert(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
   if (argc < 1) {
     return throw_assertion_error(ctx, "No assertion provided");
   }
 
   int32_t value = JS_ToBool(ctx, argv[0]);
   if (value <= 0) {
-    const char *message = "Assertion failed";
+    const char* message = "Assertion failed";
     if (argc > 1 && JS_IsString(argv[1])) {
       message = JS_ToCString(ctx, argv[1]);
     }
@@ -76,12 +76,12 @@ static JSValue jsrt_assert(JSContext *ctx, JSValueConst this_val, int argc, JSVa
 }
 
 // assert.ok(value[, message]) - alias for assert()
-static JSValue jsrt_assert_ok(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv) {
+static JSValue jsrt_assert_ok(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
   return jsrt_assert(ctx, this_val, argc, argv);
 }
 
 // assert.equal(actual, expected[, message])
-static JSValue jsrt_assert_equal(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv) {
+static JSValue jsrt_assert_equal(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
   if (argc < 2) {
     return throw_assertion_error(ctx, "assert.equal requires at least 2 arguments");
   }
@@ -100,7 +100,7 @@ static JSValue jsrt_assert_equal(JSContext *ctx, JSValueConst this_val, int argc
   JS_FreeValue(ctx, result);
   equal = (equal == 1);
   if (!equal) {
-    const char *message = "Expected values to be equal (==)";
+    const char* message = "Expected values to be equal (==)";
     if (argc > 2 && JS_IsString(argv[2])) {
       message = JS_ToCString(ctx, argv[2]);
     }
@@ -119,7 +119,7 @@ static JSValue jsrt_assert_equal(JSContext *ctx, JSValueConst this_val, int argc
 }
 
 // assert.notEqual(actual, expected[, message])
-static JSValue jsrt_assert_notEqual(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv) {
+static JSValue jsrt_assert_notEqual(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
   if (argc < 2) {
     return throw_assertion_error(ctx, "assert.notEqual requires at least 2 arguments");
   }
@@ -129,19 +129,21 @@ static JSValue jsrt_assert_notEqual(JSContext *ctx, JSValueConst this_val, int a
   int equal = JS_StrictEq(ctx, val1, val2);
   // For loose equality, convert to string and compare
   if (equal != 1) {
-    const char *str1 = JS_ToCString(ctx, val1);
-    const char *str2 = JS_ToCString(ctx, val2);
+    const char* str1 = JS_ToCString(ctx, val1);
+    const char* str2 = JS_ToCString(ctx, val2);
     if (str1 && str2) {
       equal = (strcmp(str1, str2) == 0) ? 1 : 0;
     }
-    if (str1) JS_FreeCString(ctx, str1);
-    if (str2) JS_FreeCString(ctx, str2);
+    if (str1)
+      JS_FreeCString(ctx, str1);
+    if (str2)
+      JS_FreeCString(ctx, str2);
   }
   JS_FreeValue(ctx, val1);
   JS_FreeValue(ctx, val2);
   equal = (equal == 1);
   if (equal) {
-    const char *message = "Expected values to be not equal (!=)";
+    const char* message = "Expected values to be not equal (!=)";
     if (argc > 2 && JS_IsString(argv[2])) {
       message = JS_ToCString(ctx, argv[2]);
     }
@@ -160,14 +162,14 @@ static JSValue jsrt_assert_notEqual(JSContext *ctx, JSValueConst this_val, int a
 }
 
 // assert.strictEqual(actual, expected[, message])
-static JSValue jsrt_assert_strictEqual(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv) {
+static JSValue jsrt_assert_strictEqual(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
   if (argc < 2) {
     return throw_assertion_error(ctx, "assert.strictEqual requires at least 2 arguments");
   }
 
   int equal = JS_StrictEq(ctx, argv[0], argv[1]);
   if (equal != 1) {
-    const char *message = "Expected values to be strictly equal (===)";
+    const char* message = "Expected values to be strictly equal (===)";
     if (argc > 2 && JS_IsString(argv[2])) {
       message = JS_ToCString(ctx, argv[2]);
     }
@@ -186,14 +188,14 @@ static JSValue jsrt_assert_strictEqual(JSContext *ctx, JSValueConst this_val, in
 }
 
 // assert.notStrictEqual(actual, expected[, message])
-static JSValue jsrt_assert_notStrictEqual(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv) {
+static JSValue jsrt_assert_notStrictEqual(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
   if (argc < 2) {
     return throw_assertion_error(ctx, "assert.notStrictEqual requires at least 2 arguments");
   }
 
   int equal = JS_StrictEq(ctx, argv[0], argv[1]);
   if (equal == 1) {
-    const char *message = "Expected values to be not strictly equal (!==)";
+    const char* message = "Expected values to be not strictly equal (!==)";
     if (argc > 2 && JS_IsString(argv[2])) {
       message = JS_ToCString(ctx, argv[2]);
     }
@@ -212,14 +214,17 @@ static JSValue jsrt_assert_notStrictEqual(JSContext *ctx, JSValueConst this_val,
 }
 
 // Simple deep equal implementation - only handles basic types
-static int deep_equal(JSContext *ctx, JSValueConst a, JSValueConst b) {
+static int deep_equal(JSContext* ctx, JSValueConst a, JSValueConst b) {
   // First try strict equality
   int strict = JS_StrictEq(ctx, a, b);
-  if (strict == 1) return 1;
-  if (strict == -1) return 0;  // error
+  if (strict == 1)
+    return 1;
+  if (strict == -1)
+    return 0;  // error
 
   // Check types
-  if (JS_VALUE_GET_TAG(a) != JS_VALUE_GET_TAG(b)) return 0;
+  if (JS_VALUE_GET_TAG(a) != JS_VALUE_GET_TAG(b))
+    return 0;
 
   // For objects and arrays, do a simple JSON comparison
   if (JS_IsObject(a) && JS_IsObject(b)) {
@@ -242,13 +247,13 @@ static int deep_equal(JSContext *ctx, JSValueConst a, JSValueConst b) {
 }
 
 // assert.deepEqual(actual, expected[, message])
-static JSValue jsrt_assert_deepEqual(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv) {
+static JSValue jsrt_assert_deepEqual(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
   if (argc < 2) {
     return throw_assertion_error(ctx, "assert.deepEqual requires at least 2 arguments");
   }
 
   if (!deep_equal(ctx, argv[0], argv[1])) {
-    const char *message = "Expected values to be deeply equal";
+    const char* message = "Expected values to be deeply equal";
     if (argc > 2 && JS_IsString(argv[2])) {
       message = JS_ToCString(ctx, argv[2]);
     }
@@ -267,13 +272,13 @@ static JSValue jsrt_assert_deepEqual(JSContext *ctx, JSValueConst this_val, int 
 }
 
 // assert.notDeepEqual(actual, expected[, message])
-static JSValue jsrt_assert_notDeepEqual(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv) {
+static JSValue jsrt_assert_notDeepEqual(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
   if (argc < 2) {
     return throw_assertion_error(ctx, "assert.notDeepEqual requires at least 2 arguments");
   }
 
   if (deep_equal(ctx, argv[0], argv[1])) {
-    const char *message = "Expected values to be not deeply equal";
+    const char* message = "Expected values to be not deeply equal";
     if (argc > 2 && JS_IsString(argv[2])) {
       message = JS_ToCString(ctx, argv[2]);
     }
@@ -292,7 +297,7 @@ static JSValue jsrt_assert_notDeepEqual(JSContext *ctx, JSValueConst this_val, i
 }
 
 // assert.throws(block[, error][, message])
-static JSValue jsrt_assert_throws(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv) {
+static JSValue jsrt_assert_throws(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
   if (argc < 1) {
     return throw_assertion_error(ctx, "assert.throws requires at least 1 argument");
   }
@@ -305,7 +310,7 @@ static JSValue jsrt_assert_throws(JSContext *ctx, JSValueConst this_val, int arg
 
   if (!JS_IsException(result)) {
     JS_FreeValue(ctx, result);
-    const char *message = "Expected function to throw";
+    const char* message = "Expected function to throw";
     if (argc > 1 && JS_IsString(argv[argc - 1])) {
       message = JS_ToCString(ctx, argv[argc - 1]);
     }
@@ -325,7 +330,7 @@ static JSValue jsrt_assert_throws(JSContext *ctx, JSValueConst this_val, int arg
 }
 
 // assert.doesNotThrow(block[, error][, message])
-static JSValue jsrt_assert_doesNotThrow(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv) {
+static JSValue jsrt_assert_doesNotThrow(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
   if (argc < 1) {
     return throw_assertion_error(ctx, "assert.doesNotThrow requires at least 1 argument");
   }
@@ -337,7 +342,7 @@ static JSValue jsrt_assert_doesNotThrow(JSContext *ctx, JSValueConst this_val, i
   JSValue result = JS_Call(ctx, argv[0], JS_UNDEFINED, 0, NULL);
 
   if (JS_IsException(result)) {
-    const char *message = "Expected function not to throw";
+    const char* message = "Expected function not to throw";
     if (argc > 1 && JS_IsString(argv[argc - 1])) {
       message = JS_ToCString(ctx, argv[argc - 1]);
     }
@@ -356,7 +361,7 @@ static JSValue jsrt_assert_doesNotThrow(JSContext *ctx, JSValueConst this_val, i
 }
 
 // Create assert module for std:assert
-JSValue JSRT_CreateAssertModule(JSContext *ctx) {
+JSValue JSRT_CreateAssertModule(JSContext* ctx) {
   // Create assert function that is also callable
   JSValue assert_func = JS_NewCFunction(ctx, jsrt_assert, "assert", 2);
 

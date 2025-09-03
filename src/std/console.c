@@ -21,7 +21,7 @@
 // Platform-specific function implementations
 #ifdef _WIN32
 // Windows equivalent of gettimeofday()
-static int jsrt_console_gettimeofday(struct timeval *tv, void *tz) {
+static int jsrt_console_gettimeofday(struct timeval* tv, void* tz) {
   FILETIME ft;
   unsigned __int64 tmpres = 0;
 
@@ -47,23 +47,23 @@ static int jsrt_console_gettimeofday(struct timeval *tv, void *tz) {
 #endif
 
 // Forward declarations
-static JSValue jsrt_console_log(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv);
-static JSValue jsrt_console_error(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv);
-static JSValue jsrt_console_warn(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv);
-static JSValue jsrt_console_info(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv);
-static JSValue jsrt_console_debug(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv);
-static JSValue jsrt_console_trace(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv);
-static JSValue jsrt_console_assert(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv);
-static JSValue jsrt_console_time(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv);
-static JSValue jsrt_console_timeEnd(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv);
-static JSValue jsrt_console_count(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv);
-static JSValue jsrt_console_countReset(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv);
-static JSValue jsrt_console_group(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv);
-static JSValue jsrt_console_groupEnd(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv);
-static JSValue jsrt_console_groupCollapsed(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv);
-static JSValue jsrt_console_clear(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv);
-static JSValue jsrt_console_dir(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv);
-static JSValue jsrt_console_table(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv);
+static JSValue jsrt_console_log(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv);
+static JSValue jsrt_console_error(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv);
+static JSValue jsrt_console_warn(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv);
+static JSValue jsrt_console_info(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv);
+static JSValue jsrt_console_debug(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv);
+static JSValue jsrt_console_trace(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv);
+static JSValue jsrt_console_assert(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv);
+static JSValue jsrt_console_time(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv);
+static JSValue jsrt_console_timeEnd(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv);
+static JSValue jsrt_console_count(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv);
+static JSValue jsrt_console_countReset(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv);
+static JSValue jsrt_console_group(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv);
+static JSValue jsrt_console_groupEnd(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv);
+static JSValue jsrt_console_groupCollapsed(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv);
+static JSValue jsrt_console_clear(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv);
+static JSValue jsrt_console_dir(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv);
+static JSValue jsrt_console_table(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv);
 
 // Global state for console functionality
 typedef struct {
@@ -74,19 +74,19 @@ typedef struct {
   int count;
 } ConsoleCounter;
 
-static ConsoleTimer *timers = NULL;
-static char **timer_labels = NULL;
+static ConsoleTimer* timers = NULL;
+static char** timer_labels = NULL;
 static int timer_count = 0;
 static int timer_capacity = 0;
 
-static ConsoleCounter *counters = NULL;
-static char **counter_labels = NULL;
+static ConsoleCounter* counters = NULL;
+static char** counter_labels = NULL;
 static int counter_count = 0;
 static int counter_capacity = 0;
 
 static int group_level = 0;
 
-void JSRT_RuntimeSetupStdConsole(JSRT_Runtime *rt) {
+void JSRT_RuntimeSetupStdConsole(JSRT_Runtime* rt) {
   JSValueConst console = JS_NewObject(rt->ctx);
 
   JS_SetPropertyStr(rt->ctx, console, "log", JS_NewCFunction(rt->ctx, jsrt_console_log, "log", 1));
@@ -110,8 +110,8 @@ void JSRT_RuntimeSetupStdConsole(JSRT_Runtime *rt) {
   JS_SetPropertyStr(rt->ctx, rt->global, "console", console);
 }
 
-static void jsrt_init_dbuf(JSContext *ctx, DynBuf *s) {
-  dbuf_init2(s, JS_GetRuntime(ctx), (DynBufReallocFunc *)js_realloc_rt);
+static void jsrt_init_dbuf(JSContext* ctx, DynBuf* s) {
+  dbuf_init2(s, JS_GetRuntime(ctx), (DynBufReallocFunc*)js_realloc_rt);
 }
 
 // Get current time in milliseconds
@@ -122,8 +122,8 @@ static double jsrt_get_time_ms() {
 }
 
 // Common function for console output with different streams and colors
-static void jsrt_console_output(JSContext *ctx, int argc, JSValueConst *argv, FILE *stream, const char *color_start,
-                                const char *color_end, const char *prefix) {
+static void jsrt_console_output(JSContext* ctx, int argc, JSValueConst* argv, FILE* stream, const char* color_start,
+                                const char* color_end, const char* prefix) {
   int i;
   DynBuf dbuf;
   jsrt_init_dbuf(ctx, &dbuf);
@@ -136,10 +136,13 @@ static void jsrt_console_output(JSContext *ctx, int argc, JSValueConst *argv, FI
 
   // Add prefix if provided
   if (prefix) {
-    if (colors && color_start) dbuf_putstr(&dbuf, color_start);
+    if (colors && color_start)
+      dbuf_putstr(&dbuf, color_start);
     dbuf_putstr(&dbuf, prefix);
-    if (colors && color_end) dbuf_putstr(&dbuf, color_end);
-    if (argc > 0) dbuf_putstr(&dbuf, " ");
+    if (colors && color_end)
+      dbuf_putstr(&dbuf, color_end);
+    if (argc > 0)
+      dbuf_putstr(&dbuf, " ");
   }
 
   for (i = 0; i < argc; i++) {
@@ -154,32 +157,32 @@ static void jsrt_console_output(JSContext *ctx, int argc, JSValueConst *argv, FI
   putc('\n', stream);
 }
 
-static JSValue jsrt_console_log(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv) {
+static JSValue jsrt_console_log(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
   jsrt_console_output(ctx, argc, argv, stdout, NULL, NULL, NULL);
   return JS_UNDEFINED;
 }
 
-static JSValue jsrt_console_error(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv) {
+static JSValue jsrt_console_error(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
   jsrt_console_output(ctx, argc, argv, stderr, JSRT_ColorizeFontRed, JSRT_ColorizeClear, NULL);
   return JS_UNDEFINED;
 }
 
-static JSValue jsrt_console_warn(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv) {
+static JSValue jsrt_console_warn(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
   jsrt_console_output(ctx, argc, argv, stderr, JSRT_ColorizeFontYellow, JSRT_ColorizeClear, NULL);
   return JS_UNDEFINED;
 }
 
-static JSValue jsrt_console_info(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv) {
+static JSValue jsrt_console_info(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
   jsrt_console_output(ctx, argc, argv, stdout, JSRT_ColorizeFontBlue, JSRT_ColorizeClear, NULL);
   return JS_UNDEFINED;
 }
 
-static JSValue jsrt_console_debug(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv) {
+static JSValue jsrt_console_debug(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
   jsrt_console_output(ctx, argc, argv, stdout, JSRT_ColorizeFontBlack, JSRT_ColorizeClear, NULL);
   return JS_UNDEFINED;
 }
 
-static JSValue jsrt_console_trace(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv) {
+static JSValue jsrt_console_trace(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
   // Output the trace message first
   jsrt_console_output(ctx, argc, argv, stderr, JSRT_ColorizeFontCyan, JSRT_ColorizeClear, "Trace:");
 
@@ -192,7 +195,7 @@ static JSValue jsrt_console_trace(JSContext *ctx, JSValueConst this_val, int arg
   return JS_UNDEFINED;
 }
 
-static JSValue jsrt_console_assert(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv) {
+static JSValue jsrt_console_assert(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
   if (argc == 0) {
     // No assertion, always fails
     jsrt_console_output(ctx, 0, NULL, stderr, JSRT_ColorizeFontRed, JSRT_ColorizeClear, "Assertion failed:");
@@ -214,7 +217,7 @@ static JSValue jsrt_console_assert(JSContext *ctx, JSValueConst this_val, int ar
 }
 
 // Timer management functions
-static int jsrt_find_timer(const char *label) {
+static int jsrt_find_timer(const char* label) {
   for (int i = 0; i < timer_count; i++) {
     if (timer_labels[i] && strcmp(timer_labels[i], label) == 0) {
       return i;
@@ -223,11 +226,11 @@ static int jsrt_find_timer(const char *label) {
   return -1;
 }
 
-static int jsrt_add_timer(const char *label, double start_time) {
+static int jsrt_add_timer(const char* label, double start_time) {
   if (timer_count >= timer_capacity) {
     timer_capacity = timer_capacity == 0 ? 4 : timer_capacity * 2;
     timers = realloc(timers, timer_capacity * sizeof(ConsoleTimer));
-    timer_labels = realloc(timer_labels, timer_capacity * sizeof(char *));
+    timer_labels = realloc(timer_labels, timer_capacity * sizeof(char*));
   }
 
   int index = timer_count++;
@@ -248,11 +251,12 @@ static void jsrt_remove_timer(int index) {
   }
 }
 
-static JSValue jsrt_console_time(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv) {
-  const char *label = "default";
+static JSValue jsrt_console_time(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
+  const char* label = "default";
   if (argc > 0) {
     label = JS_ToCString(ctx, argv[0]);
-    if (!label) label = "default";
+    if (!label)
+      label = "default";
   }
 
   // Check if timer already exists
@@ -270,11 +274,12 @@ static JSValue jsrt_console_time(JSContext *ctx, JSValueConst this_val, int argc
   return JS_UNDEFINED;
 }
 
-static JSValue jsrt_console_timeEnd(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv) {
-  const char *label = "default";
+static JSValue jsrt_console_timeEnd(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
+  const char* label = "default";
   if (argc > 0) {
     label = JS_ToCString(ctx, argv[0]);
-    if (!label) label = "default";
+    if (!label)
+      label = "default";
   }
 
   int timer_index = jsrt_find_timer(label);
@@ -309,7 +314,7 @@ static JSValue jsrt_console_timeEnd(JSContext *ctx, JSValueConst this_val, int a
 }
 
 // Counter management functions
-static int jsrt_find_counter(const char *label) {
+static int jsrt_find_counter(const char* label) {
   for (int i = 0; i < counter_count; i++) {
     if (counter_labels[i] && strcmp(counter_labels[i], label) == 0) {
       return i;
@@ -318,11 +323,11 @@ static int jsrt_find_counter(const char *label) {
   return -1;
 }
 
-static int jsrt_add_counter(const char *label) {
+static int jsrt_add_counter(const char* label) {
   if (counter_count >= counter_capacity) {
     counter_capacity = counter_capacity == 0 ? 4 : counter_capacity * 2;
     counters = realloc(counters, counter_capacity * sizeof(ConsoleCounter));
-    counter_labels = realloc(counter_labels, counter_capacity * sizeof(char *));
+    counter_labels = realloc(counter_labels, counter_capacity * sizeof(char*));
   }
 
   int index = counter_count++;
@@ -331,11 +336,12 @@ static int jsrt_add_counter(const char *label) {
   return index;
 }
 
-static JSValue jsrt_console_count(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv) {
-  const char *label = "default";
+static JSValue jsrt_console_count(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
+  const char* label = "default";
   if (argc > 0) {
     label = JS_ToCString(ctx, argv[0]);
-    if (!label) label = "default";
+    if (!label)
+      label = "default";
   }
 
   int counter_index = jsrt_find_counter(label);
@@ -365,11 +371,12 @@ static JSValue jsrt_console_count(JSContext *ctx, JSValueConst this_val, int arg
   return JS_UNDEFINED;
 }
 
-static JSValue jsrt_console_countReset(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv) {
-  const char *label = "default";
+static JSValue jsrt_console_countReset(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
+  const char* label = "default";
   if (argc > 0) {
     label = JS_ToCString(ctx, argv[0]);
-    if (!label) label = "default";
+    if (!label)
+      label = "default";
   }
 
   int counter_index = jsrt_find_counter(label);
@@ -387,38 +394,38 @@ static JSValue jsrt_console_countReset(JSContext *ctx, JSValueConst this_val, in
   return JS_UNDEFINED;
 }
 
-static JSValue jsrt_console_group(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv) {
+static JSValue jsrt_console_group(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
   jsrt_console_output(ctx, argc, argv, stdout, NULL, NULL, NULL);
   group_level++;
   return JS_UNDEFINED;
 }
 
-static JSValue jsrt_console_groupEnd(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv) {
+static JSValue jsrt_console_groupEnd(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
   if (group_level > 0) {
     group_level--;
   }
   return JS_UNDEFINED;
 }
 
-static JSValue jsrt_console_groupCollapsed(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv) {
+static JSValue jsrt_console_groupCollapsed(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
   // Same as group for now - could be enhanced to show collapsed state
   return jsrt_console_group(ctx, this_val, argc, argv);
 }
 
-static JSValue jsrt_console_clear(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv) {
+static JSValue jsrt_console_clear(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
   // Clear terminal using ANSI escape sequences
   printf("\033[2J\033[H");
   fflush(stdout);
   return JS_UNDEFINED;
 }
 
-static JSValue jsrt_console_dir(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv) {
+static JSValue jsrt_console_dir(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
   // Same as log for now - could be enhanced with more detailed object inspection
   jsrt_console_output(ctx, argc, argv, stdout, NULL, NULL, NULL);
   return JS_UNDEFINED;
 }
 
-static JSValue jsrt_console_table(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv) {
+static JSValue jsrt_console_table(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
   if (argc == 0) {
     return JS_UNDEFINED;
   }
@@ -452,11 +459,11 @@ static JSValue jsrt_console_table(JSContext *ctx, JSValueConst this_val, int arg
       dbuf_putstr(&dbuf, "├─────────┼─────────┤\n");
 
       // Get array properties
-      JSPropertyEnum *tab;
+      JSPropertyEnum* tab;
       uint32_t keys_len;
       if (JS_GetOwnPropertyNames(ctx, &tab, &keys_len, data, JS_GPN_STRING_MASK | JS_GPN_ENUM_ONLY) >= 0) {
         for (uint32_t i = 0; i < keys_len; i++) {
-          const char *key = JS_AtomToCString(ctx, tab[i].atom);
+          const char* key = JS_AtomToCString(ctx, tab[i].atom);
           JSValue value = JS_GetProperty(ctx, data, tab[i].atom);
 
           for (int g = 0; g < group_level; g++) {
@@ -467,7 +474,7 @@ static JSValue jsrt_console_table(JSContext *ctx, JSValueConst this_val, int arg
           dbuf_putstr(&dbuf, "    │   ");
 
           // Format the value simply
-          const char *value_str = JS_ToCString(ctx, value);
+          const char* value_str = JS_ToCString(ctx, value);
           dbuf_putstr(&dbuf, value_str ? value_str : "undefined");
           JS_FreeCString(ctx, value_str);
 
@@ -499,22 +506,22 @@ static JSValue jsrt_console_table(JSContext *ctx, JSValueConst this_val, int arg
   return JS_UNDEFINED;
 }
 
-JSValue JSRT_StringFormat(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv, bool colors) {
-  JSRT_Runtime *rt = JS_GetContextOpaque(ctx);
+JSValue JSRT_StringFormat(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv, bool colors) {
+  JSRT_Runtime* rt = JS_GetContextOpaque(ctx);
 
   return JS_UNDEFINED;
 }
 
-void JSRT_GetJSValuePrettyString(DynBuf *s, JSContext *ctx, JSValueConst value, const char *name, bool colors) {
+void JSRT_GetJSValuePrettyString(DynBuf* s, JSContext* ctx, JSValueConst value, const char* name, bool colors) {
   uint32_t tag = JS_VALUE_GET_NORM_TAG(value);
   size_t len;
-  const char *str;
+  const char* str;
   switch (tag) {
     case JS_TAG_UNDEFINED: {
       str = JS_ToCStringLen(ctx, &len, value);
-      colors &&dbuf_putstr(s, JSRT_ColorizeFontBlack);
+      colors&& dbuf_putstr(s, JSRT_ColorizeFontBlack);
       dbuf_putstr(s, str);
-      colors &&dbuf_putstr(s, JSRT_ColorizeClear);
+      colors&& dbuf_putstr(s, JSRT_ColorizeClear);
       JS_FreeCString(ctx, str);
       break;
     }
@@ -525,31 +532,31 @@ void JSRT_GetJSValuePrettyString(DynBuf *s, JSContext *ctx, JSValueConst value, 
     case JS_TAG_BOOL:
     case JS_TAG_SYMBOL: {
       str = JS_ToCStringLen(ctx, &len, value);
-      colors &&dbuf_putstr(s, JSRT_ColorizeFontYellow);
+      colors&& dbuf_putstr(s, JSRT_ColorizeFontYellow);
       dbuf_putstr(s, str);
-      colors &&dbuf_putstr(s, JSRT_ColorizeClear);
+      colors&& dbuf_putstr(s, JSRT_ColorizeClear);
       JS_FreeCString(ctx, str);
       break;
     }
     case JS_TAG_NULL: {
       str = JS_ToCStringLen(ctx, &len, value);
-      colors &&dbuf_putstr(s, JSRT_ColorizeFontWhiteBold);
+      colors&& dbuf_putstr(s, JSRT_ColorizeFontWhiteBold);
       dbuf_putstr(s, str);
-      colors &&dbuf_putstr(s, JSRT_ColorizeClear);
+      colors&& dbuf_putstr(s, JSRT_ColorizeClear);
       JS_FreeCString(ctx, str);
       break;
     }
     case JS_TAG_STRING: {
       str = JS_ToCStringLen(ctx, &len, value);
-      colors &&dbuf_putstr(s, JSRT_ColorizeFontGreen);
+      colors&& dbuf_putstr(s, JSRT_ColorizeFontGreen);
       dbuf_putstr(s, str);
-      colors &&dbuf_putstr(s, JSRT_ColorizeClear);
+      colors&& dbuf_putstr(s, JSRT_ColorizeClear);
       JS_FreeCString(ctx, str);
       break;
     }
     case JS_TAG_OBJECT: {
       if (JS_IsFunction(ctx, value)) {
-        colors &&dbuf_putstr(s, JSRT_ColorizeFontCyan);
+        colors&& dbuf_putstr(s, JSRT_ColorizeFontCyan);
         dbuf_putstr(s, "[Function: ");
         JSValue n = JS_GetPropertyStr(ctx, value, "name");
         str = JS_ToCStringLen(ctx, &len, n);
@@ -557,16 +564,16 @@ void JSRT_GetJSValuePrettyString(DynBuf *s, JSContext *ctx, JSValueConst value, 
         JS_FreeCString(ctx, str);
         JS_FreeValue(ctx, n);
         dbuf_putstr(s, "]");
-        colors &&dbuf_putstr(s, JSRT_ColorizeClear);
+        colors&& dbuf_putstr(s, JSRT_ColorizeClear);
       } else {
         // is an array?
         JSValue n = JS_GetPropertyStr(ctx, value, "length");
         bool is_array = JS_VALUE_GET_NORM_TAG(n) == JS_TAG_INT;
         JS_FreeValue(ctx, n);
 
-        JSPropertyEnum *tab;
+        JSPropertyEnum* tab;
         uint32_t keys_len;
-        const char *k;
+        const char* k;
         JSValue v;
 
         if (is_array) {

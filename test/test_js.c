@@ -6,7 +6,7 @@
 
 void PrintHelp(bool is_error);
 
-int main(int argc, char **argv) {
+int main(int argc, char** argv) {
   for (int i = 0; i < argc; i++) {
     JSRT_Debug("argv[%d] = %s", i, argv[i]);
   }
@@ -18,7 +18,7 @@ int main(int argc, char **argv) {
 
   int failed_count = 0;
   for (int i = 1; i < argc; i++) {
-    const char *filename = argv[i];
+    const char* filename = argv[i];
     printf("\033[32mRun file: %s\033[0m\n", filename);
     int ret = JSRT_CmdRunFile(filename, argc, argv);
     if (ret != 0) {

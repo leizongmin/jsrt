@@ -3,6 +3,6 @@
 
 #include "../runtime.h"
 
-void JSRT_RuntimeSetupStdStreams(JSRT_Runtime *rt);
+void JSRT_RuntimeSetupStdStreams(JSRT_Runtime* rt);
 
 #endif

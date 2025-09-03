@@ -12,16 +12,16 @@ typedef enum {
 
 typedef struct {
   JSRT_ReadFileError error;
-  char *data;
+  char* data;
   size_t size;
 } JSRT_ReadFileResult;
 
 JSRT_ReadFileResult JSRT_ReadFileResultDefault();
 
-JSRT_ReadFileResult JSRT_ReadFile(const char *path);
+JSRT_ReadFileResult JSRT_ReadFile(const char* path);
 
-void JSRT_ReadFileResultFree(JSRT_ReadFileResult *result);
+void JSRT_ReadFileResultFree(JSRT_ReadFileResult* result);
 
-const char *JSRT_ReadFileErrorToString(JSRT_ReadFileError error);
+const char* JSRT_ReadFileErrorToString(JSRT_ReadFileError error);
 
 #endif

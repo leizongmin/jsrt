@@ -3,6 +3,6 @@
 
 #include "../runtime.h"
 
-void JSRT_RuntimeSetupStdAbort(JSRT_Runtime *rt);
+void JSRT_RuntimeSetupStdAbort(JSRT_Runtime* rt);
 
 #endif

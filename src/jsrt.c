@@ -14,21 +14,21 @@
 #include "util/http_client.h"
 
 // Forward declarations
-static bool is_url(const char *str);
-static JSRT_ReadFileResult download_url(const char *url);
+static bool is_url(const char* str);
+static JSRT_ReadFileResult download_url(const char* url);
 
 // Helper function to check if a string is a URL
-static bool is_url(const char *str) {
+static bool is_url(const char* str) {
   return (strncmp(str, "http://", 7) == 0 || strncmp(str, "https://", 8) == 0 || strncmp(str, "file://", 7) == 0);
 }
 
 // Helper function to download URL content using native HTTP client
-static JSRT_ReadFileResult download_url(const char *url) {
+static JSRT_ReadFileResult download_url(const char* url) {
   JSRT_ReadFileResult result = JSRT_ReadFileResultDefault();
 
   // Handle file:// URLs
   if (strncmp(url, "file://", 7) == 0) {
-    const char *filepath = url + 7;
+    const char* filepath = url + 7;
     return JSRT_ReadFile(filepath);
   }
 
@@ -87,12 +87,12 @@ static JSRT_ReadFileResult download_url(const char *url) {
   return result;
 }
 
-int JSRT_CmdRunFile(const char *filename, int argc, char **argv) {
+int JSRT_CmdRunFile(const char* filename, int argc, char** argv) {
   // Store command line arguments for process module
   g_jsrt_argc = argc;
   g_jsrt_argv = argv;
   int ret = 0;
-  JSRT_Runtime *rt = JSRT_RuntimeNew();
+  JSRT_Runtime* rt = JSRT_RuntimeNew();
 
   JSRT_ReadFileResult file = JSRT_ReadFileResultDefault();
   JSRT_EvalResult res = JSRT_EvalResultDefault();
@@ -135,18 +135,18 @@ end:
   return ret;
 }
 
-int JSRT_CmdRunStdin(int argc, char **argv) {
+int JSRT_CmdRunStdin(int argc, char** argv) {
   // Store command line arguments for process module
   g_jsrt_argc = argc;
   g_jsrt_argv = argv;
   int ret = 0;
-  JSRT_Runtime *rt = JSRT_RuntimeNew();
+  JSRT_Runtime* rt = JSRT_RuntimeNew();
 
   JSRT_EvalResult res = JSRT_EvalResultDefault();
   JSRT_EvalResult res2 = JSRT_EvalResultDefault();
 
   // Read from stdin
-  char *code = NULL;
+  char* code = NULL;
   size_t code_size = 0;
   size_t code_capacity = 1024;
 
@@ -161,7 +161,7 @@ int JSRT_CmdRunStdin(int argc, char **argv) {
   while ((c = getchar()) != EOF) {
     if (code_size >= code_capacity - 1) {
       code_capacity *= 2;
-      char *new_code = realloc(code, code_capacity);
+      char* new_code = realloc(code, code_capacity);
       if (!new_code) {
         fprintf(stderr, "Error: Failed to reallocate memory for stdin input\n");
         ret = 1;
@@ -196,19 +196,20 @@ int JSRT_CmdRunStdin(int argc, char **argv) {
   JSRT_RuntimeRun(rt);
 
 end:
-  if (code) free(code);
+  if (code)
+    free(code);
   JSRT_EvalResultFree(&res2);
   JSRT_EvalResultFree(&res);
   JSRT_RuntimeFree(rt);
   return ret;
 }
 
-int JSRT_CmdRunEval(const char *code, int argc, char **argv) {
+int JSRT_CmdRunEval(const char* code, int argc, char** argv) {
   // Store command line arguments for process module
   g_jsrt_argc = argc;
   g_jsrt_argv = argv;
   int ret = 0;
-  JSRT_Runtime *rt = JSRT_RuntimeNew();
+  JSRT_Runtime* rt = JSRT_RuntimeNew();
 
   JSRT_EvalResult res = JSRT_EvalResultDefault();
   JSRT_EvalResult res2 = JSRT_EvalResultDefault();
@@ -236,9 +237,9 @@ end:
   return ret;
 }
 
-int JSRT_CmdRunEmbeddedBytecode(const char *executable_path, int argc, char **argv) {
+int JSRT_CmdRunEmbeddedBytecode(const char* executable_path, int argc, char** argv) {
   // Read the executable file to check for embedded bytecode
-  FILE *exe_file = fopen(executable_path, "rb");
+  FILE* exe_file = fopen(executable_path, "rb");
   if (!exe_file) {
     // Silently return non-zero to indicate no embedded bytecode
     return 1;
@@ -249,7 +250,7 @@ int JSRT_CmdRunEmbeddedBytecode(const char *executable_path, int argc, char **ar
   long exe_size = ftell(exe_file);
 
   // Check minimum size for boundary + 8-byte size
-  const char *boundary = "JSRT_BYTECODE_BOUNDARY";
+  const char* boundary = "JSRT_BYTECODE_BOUNDARY";
   size_t boundary_len = strlen(boundary);
   size_t min_size = boundary_len + 8;  // boundary + 8-byte size
 
@@ -292,7 +293,7 @@ int JSRT_CmdRunEmbeddedBytecode(const char *executable_path, int argc, char **ar
   long bytecode_start = exe_size - 8 - boundary_len - bytecode_size;
 
   // Allocate buffer for bytecode
-  char *bytecode = malloc(bytecode_size);
+  char* bytecode = malloc(bytecode_size);
   if (!bytecode) {
     fprintf(stderr, "Error: Memory allocation failed for bytecode\n");
     fclose(exe_file);
@@ -314,7 +315,7 @@ int JSRT_CmdRunEmbeddedBytecode(const char *executable_path, int argc, char **ar
   g_jsrt_argc = argc;
   g_jsrt_argv = argv;
   int ret = 0;
-  JSRT_Runtime *rt = JSRT_RuntimeNew();
+  JSRT_Runtime* rt = JSRT_RuntimeNew();
   if (!rt) {
     fprintf(stderr, "Error: Failed to create runtime\n");
     free(bytecode);
@@ -324,7 +325,7 @@ int JSRT_CmdRunEmbeddedBytecode(const char *executable_path, int argc, char **ar
   JSRT_EvalResult res2 = JSRT_EvalResultDefault();
 
   // Load and execute bytecode using QuickJS
-  JSValue obj = JS_ReadObject(rt->ctx, (const uint8_t *)bytecode, bytecode_size, JS_READ_OBJ_BYTECODE);
+  JSValue obj = JS_ReadObject(rt->ctx, (const uint8_t*)bytecode, bytecode_size, JS_READ_OBJ_BYTECODE);
   free(bytecode);
 
   if (JS_IsException(obj)) {

@@ -69,25 +69,25 @@ static void jsrt_repl_sigint_handler(int sig) {
 }
 
 // Get REPL history file path
-static char *jsrt_get_repl_history_path() {
-  char *history_path = getenv("JSRT_REPL_HISTORY");
+static char* jsrt_get_repl_history_path() {
+  char* history_path = getenv("JSRT_REPL_HISTORY");
   if (history_path && strlen(history_path) > 0) {
     return strdup(history_path);
   }
 
-  char *home = getenv("HOME");
+  char* home = getenv("HOME");
   if (!home) {
     return strdup(".jsrt_repl");
   }
 
   size_t len = strlen(home) + strlen("/.jsrt_repl") + 1;
-  char *path = malloc(len);
+  char* path = malloc(len);
   snprintf(path, len, "%s/.jsrt_repl", home);
   return path;
 }
 
 // Check if JavaScript code is syntactically complete
-static bool jsrt_is_code_complete(JSContext *ctx, const char *code, size_t code_len) {
+static bool jsrt_is_code_complete(JSContext* ctx, const char* code, size_t code_len) {
   // First, try to compile the code without executing it
   JSValue result = JS_Eval(ctx, code, code_len, "<repl-check>", JS_EVAL_FLAG_COMPILE_ONLY);
 
@@ -168,7 +168,7 @@ static bool jsrt_is_code_complete(JSContext *ctx, const char *code, size_t code_
 
     // If brackets are balanced but compilation failed, try some specific error patterns
     JSValue exception = JS_GetException(ctx);
-    const char *exception_str = JS_ToCString(ctx, exception);
+    const char* exception_str = JS_ToCString(ctx, exception);
     bool is_incomplete = false;
 
     if (exception_str) {
@@ -192,7 +192,7 @@ static bool jsrt_is_code_complete(JSContext *ctx, const char *code, size_t code_
 }
 
 // Process REPL shortcuts
-static bool jsrt_process_repl_shortcut(const char *input) {
+static bool jsrt_process_repl_shortcut(const char* input) {
   if (strcmp(input, "/exit") == 0 || strcmp(input, "/quit") == 0) {
     printf("Goodbye!\n");
     return true;  // Exit REPL
@@ -223,21 +223,21 @@ static bool jsrt_process_repl_shortcut(const char *input) {
   return false;
 }
 
-int JSRT_CmdRunREPL(int argc, char **argv) {
+int JSRT_CmdRunREPL(int argc, char** argv) {
   // Store command line arguments for process module
   extern int g_jsrt_argc;
-  extern char **g_jsrt_argv;
+  extern char** g_jsrt_argv;
   g_jsrt_argc = argc;
   g_jsrt_argv = argv;
 
   // Initialize runtime
-  JSRT_Runtime *rt = JSRT_RuntimeNew();
+  JSRT_Runtime* rt = JSRT_RuntimeNew();
 
   // Setup signal handler for CTRL-C
   signal(SIGINT, jsrt_repl_sigint_handler);
 
   // Get history file path
-  char *history_path = jsrt_get_repl_history_path();
+  char* history_path = jsrt_get_repl_history_path();
 
   // Load history
 #if defined(HAVE_READLINE) || defined(MINIMAL_READLINE)
@@ -249,8 +249,8 @@ int JSRT_CmdRunREPL(int argc, char **argv) {
   printf("Press Ctrl+C twice or Ctrl+D to exit\n");
   printf("\n");
 
-  char *input_line;
-  char *accumulated_input = NULL;
+  char* input_line;
+  char* accumulated_input = NULL;
   size_t accumulated_size = 0;
   int line_number = 1;
   bool is_continuation = false;
@@ -311,7 +311,7 @@ int JSRT_CmdRunREPL(int argc, char **argv) {
               JSRT_GetJSValuePrettyString(&dbuf, rt->ctx, result_val, NULL, true);
               if (dbuf.buf && dbuf.size > 0) {
                 // Remove trailing newline if present
-                char *output = (char *)dbuf.buf;
+                char* output = (char*)dbuf.buf;
                 if (output[dbuf.size - 1] == '\n') {
                   output[dbuf.size - 1] = '\0';
                 }
@@ -401,7 +401,7 @@ int JSRT_CmdRunREPL(int argc, char **argv) {
             JSRT_GetJSValuePrettyString(&dbuf, rt->ctx, result_val, NULL, true);
             if (dbuf.buf && dbuf.size > 0) {
               // Remove trailing newline if present
-              char *output = (char *)dbuf.buf;
+              char* output = (char*)dbuf.buf;
               if (output[dbuf.size - 1] == '\n') {
                 output[dbuf.size - 1] = '\0';
               }

@@ -32,26 +32,26 @@ typedef struct {
   jsrt_symmetric_algorithm_t algorithm;
 
   // Key parameters
-  uint8_t *key_data;
+  uint8_t* key_data;
   size_t key_length;
 
   // Algorithm-specific parameters
   union {
     struct {
-      uint8_t *iv;
+      uint8_t* iv;
       size_t iv_length;
     } cbc;
 
     struct {
-      uint8_t *iv;
+      uint8_t* iv;
       size_t iv_length;
-      uint8_t *additional_data;
+      uint8_t* additional_data;
       size_t additional_data_length;
       size_t tag_length;  // Usually 16 bytes
     } gcm;
 
     struct {
-      uint8_t *counter;
+      uint8_t* counter;
       size_t counter_length;
       uint32_t length;  // Counter length in bits (usually 64)
     } ctr;
@@ -61,22 +61,22 @@ typedef struct {
 // Function declarations
 
 // AES key generation
-int jsrt_crypto_generate_aes_key(size_t key_length_bits, uint8_t **key_data, size_t *key_data_length);
+int jsrt_crypto_generate_aes_key(size_t key_length_bits, uint8_t** key_data, size_t* key_data_length);
 
 // AES encryption/decryption functions
-int jsrt_crypto_aes_encrypt(jsrt_symmetric_params_t *params, const uint8_t *plaintext, size_t plaintext_length,
-                            uint8_t **ciphertext, size_t *ciphertext_length);
+int jsrt_crypto_aes_encrypt(jsrt_symmetric_params_t* params, const uint8_t* plaintext, size_t plaintext_length,
+                            uint8_t** ciphertext, size_t* ciphertext_length);
 
-int jsrt_crypto_aes_decrypt(jsrt_symmetric_params_t *params, const uint8_t *ciphertext, size_t ciphertext_length,
-                            uint8_t **plaintext, size_t *plaintext_length);
+int jsrt_crypto_aes_decrypt(jsrt_symmetric_params_t* params, const uint8_t* ciphertext, size_t ciphertext_length,
+                            uint8_t** plaintext, size_t* plaintext_length);
 
 // Helper functions
-jsrt_symmetric_algorithm_t jsrt_crypto_parse_symmetric_algorithm(const char *algorithm_name);
-const char *jsrt_crypto_symmetric_algorithm_to_string(jsrt_symmetric_algorithm_t alg);
+jsrt_symmetric_algorithm_t jsrt_crypto_parse_symmetric_algorithm(const char* algorithm_name);
+const char* jsrt_crypto_symmetric_algorithm_to_string(jsrt_symmetric_algorithm_t alg);
 bool jsrt_crypto_is_symmetric_algorithm_supported(jsrt_symmetric_algorithm_t alg);
 size_t jsrt_crypto_get_aes_key_size(jsrt_crypto_algorithm_t alg, int key_length_bits);
 
 // Parameter management
-void jsrt_crypto_symmetric_params_free(jsrt_symmetric_params_t *params);
+void jsrt_crypto_symmetric_params_free(jsrt_symmetric_params_t* params);
 
 #endif  // JSRT_CRYPTO_SYMMETRIC_H

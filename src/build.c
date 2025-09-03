@@ -141,8 +141,10 @@ int BuildExecutable(const char* executable_path, const char* filename, const cha
 
   if (!output_file || !bytecode_file) {
     fprintf(stderr, "Error: Failed to open files for bytecode embedding\n");
-    if (output_file) fclose(output_file);
-    if (bytecode_file) fclose(bytecode_file);
+    if (output_file)
+      fclose(output_file);
+    if (bytecode_file)
+      fclose(bytecode_file);
     unlink(temp_bytecode_file);
     unlink(output_name);
     return 1;

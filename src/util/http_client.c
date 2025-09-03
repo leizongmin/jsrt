@@ -8,16 +8,16 @@
 #include <unistd.h>
 
 // Internal function to parse URLs
-static int parse_url(const char *url, char **host, int *port, char **path) {
+static int parse_url(const char* url, char** host, int* port, char** path) {
   // Simple URL parser for http://host:port/path format
   if (strncmp(url, "http://", 7) != 0) {
     return -1;  // Only support HTTP for now (HTTPS would require SSL/TLS)
   }
 
-  const char *start = url + 7;  // Skip "http://"
+  const char* start = url + 7;  // Skip "http://"
 
   // Find the end of hostname (either : or / or end of string)
-  const char *host_end = start;
+  const char* host_end = start;
   while (*host_end && *host_end != ':' && *host_end != '/') {
     host_end++;
   }
@@ -25,7 +25,8 @@ static int parse_url(const char *url, char **host, int *port, char **path) {
   // Extract hostname
   size_t host_len = host_end - start;
   *host = malloc(host_len + 1);
-  if (!*host) return -1;
+  if (!*host)
+    return -1;
   strncpy(*host, start, host_len);
   (*host)[host_len] = '\0';
 
@@ -57,10 +58,11 @@ static int parse_url(const char *url, char **host, int *port, char **path) {
 }
 
 // Internal function to build HTTP request
-static char *build_http_request(const char *method, const char *path, const char *host, int port) {
+static char* build_http_request(const char* method, const char* path, const char* host, int port) {
   size_t request_size = strlen(method) + strlen(path) + strlen(host) + 200;
-  char *request = malloc(request_size);
-  if (!request) return NULL;
+  char* request = malloc(request_size);
+  if (!request)
+    return NULL;
 
   int len;
   if (port == 80) {
@@ -90,7 +92,7 @@ static char *build_http_request(const char *method, const char *path, const char
 }
 
 // Internal function to parse HTTP response
-static JSRT_HttpResponse parse_http_response(const char *response_data, size_t response_size) {
+static JSRT_HttpResponse parse_http_response(const char* response_data, size_t response_size) {
   JSRT_HttpResponse response = {0};
 
   if (!response_data || response_size == 0) {
@@ -99,7 +101,7 @@ static JSRT_HttpResponse parse_http_response(const char *response_data, size_t r
   }
 
   // Find end of headers
-  const char *headers_end = strstr(response_data, "\r\n\r\n");
+  const char* headers_end = strstr(response_data, "\r\n\r\n");
   if (!headers_end) {
     headers_end = strstr(response_data, "\n\n");
     if (!headers_end) {
@@ -140,16 +142,16 @@ static JSRT_HttpResponse parse_http_response(const char *response_data, size_t r
   return response;
 }
 
-JSRT_HttpResponse JSRT_HttpGet(const char *url) {
+JSRT_HttpResponse JSRT_HttpGet(const char* url) {
   JSRT_HttpResponse response = {0};
-  char *host = NULL;
-  char *path = NULL;
+  char* host = NULL;
+  char* path = NULL;
   int port = 80;
   int sockfd = -1;
-  struct hostent *server = NULL;
+  struct hostent* server = NULL;
   struct sockaddr_in serv_addr;
-  char *http_request = NULL;
-  char *response_buffer = NULL;
+  char* http_request = NULL;
+  char* response_buffer = NULL;
   size_t response_capacity = 4096;
   size_t response_size = 0;
 
@@ -187,7 +189,7 @@ JSRT_HttpResponse JSRT_HttpGet(const char *url) {
   serv_addr.sin_port = htons(port);
 
   // Connect to server
-  if (connect(sockfd, (struct sockaddr *)&serv_addr, sizeof(serv_addr)) < 0) {
+  if (connect(sockfd, (struct sockaddr*)&serv_addr, sizeof(serv_addr)) < 0) {
     response.error = JSRT_HTTP_ERROR_NETWORK;
     goto cleanup;
   }
@@ -209,14 +211,15 @@ JSRT_HttpResponse JSRT_HttpGet(const char *url) {
 
   while (1) {
     ssize_t received = recv(sockfd, response_buffer + response_size, response_capacity - response_size - 1, 0);
-    if (received <= 0) break;
+    if (received <= 0)
+      break;
 
     response_size += received;
 
     // Expand buffer if needed
     if (response_size >= response_capacity - 1) {
       response_capacity *= 2;
-      char *new_buffer = realloc(response_buffer, response_capacity);
+      char* new_buffer = realloc(response_buffer, response_capacity);
       if (!new_buffer) {
         response.error = JSRT_HTTP_ERROR_OUT_OF_MEMORY;
         goto cleanup;
@@ -231,17 +234,23 @@ JSRT_HttpResponse JSRT_HttpGet(const char *url) {
   response = parse_http_response(response_buffer, response_size);
 
 cleanup:
-  if (host) free(host);
-  if (path) free(path);
-  if (http_request) free(http_request);
-  if (response_buffer) free(response_buffer);
-  if (sockfd >= 0) close(sockfd);
+  if (host)
+    free(host);
+  if (path)
+    free(path);
+  if (http_request)
+    free(http_request);
+  if (response_buffer)
+    free(response_buffer);
+  if (sockfd >= 0)
+    close(sockfd);
 
   return response;
 }
 
-void JSRT_HttpResponseFree(JSRT_HttpResponse *response) {
-  if (!response) return;
+void JSRT_HttpResponseFree(JSRT_HttpResponse* response) {
+  if (!response)
+    return;
 
   if (response->status_text) {
     free(response->status_text);

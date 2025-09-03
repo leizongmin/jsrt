@@ -8,32 +8,32 @@
 #include "../util/macro.h"
 
 typedef struct {
-  JSRT_Runtime *rt;
+  JSRT_Runtime* rt;
   uv_timer_t uv_timer;
   uint64_t timeout;
   bool is_interval;
   uint64_t timer_id;  // Add our own timer ID field
   JSValue this_val;
   int argc;
-  JSValue *argv;
+  JSValue* argv;
   JSValue callback;
 } JSRT_Timer;
 
 // Static counter for generating unique timer IDs
 static uint64_t next_timer_id = 1;
 
-static void jsrt_timer_free(JSRT_Timer *timer);
-static void jsrt_timer_close_callback(uv_handle_t *handle);
+static void jsrt_timer_free(JSRT_Timer* timer);
+static void jsrt_timer_close_callback(uv_handle_t* handle);
 
-static JSValue jsrt_set_timeout(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv);
-static JSValue jsrt_set_interval(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv);
-static JSValue jsrt_start_timer(bool is_interval, JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv);
-static JSValue jsrt_stop_timer(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv);
-static void jsrt_on_timer_callback(uv_timer_t *timer);
+static JSValue jsrt_set_timeout(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv);
+static JSValue jsrt_set_interval(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv);
+static JSValue jsrt_start_timer(bool is_interval, JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv);
+static JSValue jsrt_stop_timer(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv);
+static void jsrt_on_timer_callback(uv_timer_t* timer);
 
 static JSClassID timer_class_id;
-static void jsrt_timer_finalizer(JSRuntime *rt, JSValue val) {
-  JSRT_Timer *timer = JS_GetOpaque(val, timer_class_id);
+static void jsrt_timer_finalizer(JSRuntime* rt, JSValue val) {
+  JSRT_Timer* timer = JS_GetOpaque(val, timer_class_id);
   if (timer) {
     // Use our own timer_id instead of potentially problematic uv_timer.start_id
     // JSRT_Debug("TimerFinalizer: timer=%p id=%llu", timer, timer->timer_id);
@@ -45,7 +45,7 @@ static JSClassDef timer_class = {
 };
 static const JSCFunctionListEntry timer_proto_funcs[] = {};
 
-void JSRT_RuntimeSetupStdTimer(JSRT_Runtime *rt) {
+void JSRT_RuntimeSetupStdTimer(JSRT_Runtime* rt) {
   JSValue timer_proto;
   JS_NewClassID(&timer_class_id);
   JS_NewClass(rt->rt, timer_class_id, &timer_class);
@@ -60,16 +60,16 @@ void JSRT_RuntimeSetupStdTimer(JSRT_Runtime *rt) {
                     JS_NewCFunction(rt->ctx, jsrt_stop_timer, "clearInterval", 1));
 }
 
-static JSValue jsrt_set_timeout(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv) {
+static JSValue jsrt_set_timeout(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
   return jsrt_start_timer(false, ctx, this_val, argc, argv);
 }
 
-static JSValue jsrt_set_interval(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv) {
+static JSValue jsrt_set_interval(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
   return jsrt_start_timer(true, ctx, this_val, argc, argv);
 }
 
-static JSValue jsrt_start_timer(bool is_interval, JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv) {
-  JSRT_Runtime *rt = JS_GetContextOpaque(ctx);
+static JSValue jsrt_start_timer(bool is_interval, JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
+  JSRT_Runtime* rt = JS_GetContextOpaque(ctx);
 
   int64_t timeout = 0;
   JSValue callback;
@@ -89,7 +89,7 @@ static JSValue jsrt_start_timer(bool is_interval, JSContext *ctx, JSValueConst t
                              JSRT_GetTypeofJSValue(ctx, callback));
   }
 
-  JSRT_Timer *timer = malloc(sizeof(JSRT_Timer));
+  JSRT_Timer* timer = malloc(sizeof(JSRT_Timer));
   timer->rt = rt;
   timer->uv_timer.data = timer;
   timer->timeout = (uint64_t)timeout;
@@ -125,11 +125,11 @@ static JSValue jsrt_start_timer(bool is_interval, JSContext *ctx, JSValueConst t
   return result;
 }
 
-static JSValue jsrt_stop_timer(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv) {
-  JSRT_Runtime *rt = JS_GetContextOpaque(ctx);
+static JSValue jsrt_stop_timer(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
+  JSRT_Runtime* rt = JS_GetContextOpaque(ctx);
 
   if (argc > 0) {
-    JSRT_Timer *timer = JS_GetOpaque(argv[0], timer_class_id);
+    JSRT_Timer* timer = JS_GetOpaque(argv[0], timer_class_id);
     if (timer != NULL) {
       jsrt_timer_free(timer);
     }
@@ -138,8 +138,8 @@ static JSValue jsrt_stop_timer(JSContext *ctx, JSValueConst this_val, int argc, 
   return JS_UNDEFINED;
 }
 
-void jsrt_on_timer_callback(uv_timer_t *uv_timer) {
-  JSRT_Timer *timer = uv_timer->data;
+void jsrt_on_timer_callback(uv_timer_t* uv_timer) {
+  JSRT_Timer* timer = uv_timer->data;
   if (!timer) {
     JSRT_Debug("Timer callback called with NULL timer data");
     return;
@@ -147,7 +147,7 @@ void jsrt_on_timer_callback(uv_timer_t *uv_timer) {
 
   JSValue this_val = timer->this_val;
   int argc = timer->argc;
-  JSValue *argv = timer->argv;
+  JSValue* argv = timer->argv;
   JSValue callback = timer->callback;
 
   JSValue ret = JS_Call(timer->rt->ctx, callback, this_val, argc, argv);
@@ -163,13 +163,13 @@ void jsrt_on_timer_callback(uv_timer_t *uv_timer) {
 }
 
 // Close callback that safely frees the timer after handle is closed
-static void jsrt_timer_close_callback(uv_handle_t *handle) {
+static void jsrt_timer_close_callback(uv_handle_t* handle) {
   if (!handle || !handle->data) {
     JSRT_Debug("Timer close callback called with NULL handle or data");
     return;
   }
 
-  JSRT_Timer *timer = (JSRT_Timer *)handle->data;
+  JSRT_Timer* timer = (JSRT_Timer*)handle->data;
   JSRT_Debug("TimerCloseCallback: timer=%p id=%" PRIu64, timer, timer->timer_id);
 
   JSRT_RuntimeFreeValue(timer->rt, timer->callback);
@@ -189,7 +189,7 @@ static void jsrt_timer_close_callback(uv_handle_t *handle) {
   free(timer);
 }
 
-static void jsrt_timer_free(JSRT_Timer *timer) {
+static void jsrt_timer_free(JSRT_Timer* timer) {
   if (!timer) {
     JSRT_Debug("Timer free called with NULL timer");
     return;
@@ -200,5 +200,5 @@ static void jsrt_timer_free(JSRT_Timer *timer) {
   JSRT_Debug("uv_timer_stop: id=%" PRIu64 " status=%d", timer->timer_id, status);
 
   // Close the handle with proper callback to ensure safe cleanup
-  uv_close((uv_handle_t *)&timer->uv_timer, jsrt_timer_close_callback);
+  uv_close((uv_handle_t*)&timer->uv_timer, jsrt_timer_close_callback);
 }

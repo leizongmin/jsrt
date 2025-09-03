@@ -25,7 +25,7 @@
 // Platform-specific function implementations
 #ifdef _WIN32
 // Windows equivalent of gettimeofday()
-static int jsrt_gettimeofday(struct timeval *tv, void *tz) {
+static int jsrt_gettimeofday(struct timeval* tv, void* tz) {
   FILETIME ft;
   unsigned __int64 tmpres = 0;
 
@@ -88,7 +88,7 @@ static int jsrt_getppid(void) {
 
 // Global variables for command line arguments
 int g_jsrt_argc = 0;
-char **g_jsrt_argv = NULL;
+char** g_jsrt_argv = NULL;
 
 // Start time for process.uptime()
 static struct timeval g_process_start_time;
@@ -103,7 +103,7 @@ static void init_process_start_time() {
 }
 
 // process.argv getter
-static JSValue jsrt_process_get_argv(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv) {
+static JSValue jsrt_process_get_argv(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
   JSValue argv_array = JS_NewArray(ctx);
 
   for (int i = 0; i < g_jsrt_argc; i++) {
@@ -114,7 +114,7 @@ static JSValue jsrt_process_get_argv(JSContext *ctx, JSValueConst this_val, int 
 }
 
 // process.uptime()
-static JSValue jsrt_process_uptime(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv) {
+static JSValue jsrt_process_uptime(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
   init_process_start_time();
 
   struct timeval current_time;
@@ -127,8 +127,8 @@ static JSValue jsrt_process_uptime(JSContext *ctx, JSValueConst this_val, int ar
 }
 
 // Helper function to get jsrt version from compile-time macro
-static char *get_jsrt_version() {
-  static char *cached_version = NULL;
+static char* get_jsrt_version() {
+  static char* cached_version = NULL;
   static bool version_loaded = false;
 
   if (version_loaded) {
@@ -147,17 +147,17 @@ static char *get_jsrt_version() {
 }
 
 // process.pid getter
-static JSValue jsrt_process_get_pid(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv) {
+static JSValue jsrt_process_get_pid(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
   return JS_NewInt32(ctx, (int32_t)JSRT_GETPID());
 }
 
 // process.ppid getter
-static JSValue jsrt_process_get_ppid(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv) {
+static JSValue jsrt_process_get_ppid(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
   return JS_NewInt32(ctx, (int32_t)JSRT_GETPPID());
 }
 
 // process.argv0 getter
-static JSValue jsrt_process_get_argv0(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv) {
+static JSValue jsrt_process_get_argv0(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
   if (g_jsrt_argc > 0 && g_jsrt_argv && g_jsrt_argv[0]) {
     return JS_NewString(ctx, g_jsrt_argv[0]);
   }
@@ -165,8 +165,8 @@ static JSValue jsrt_process_get_argv0(JSContext *ctx, JSValueConst this_val, int
 }
 
 // process.version getter
-static JSValue jsrt_process_get_version(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv) {
-  char *version = get_jsrt_version();
+static JSValue jsrt_process_get_version(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
+  char* version = get_jsrt_version();
   if (version != NULL) {
     // Add 'v' prefix to version
     char version_with_prefix[256];
@@ -177,7 +177,7 @@ static JSValue jsrt_process_get_version(JSContext *ctx, JSValueConst this_val, i
 }
 
 // process.platform getter
-static JSValue jsrt_process_get_platform(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv) {
+static JSValue jsrt_process_get_platform(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
 #ifdef __APPLE__
   return JS_NewString(ctx, "darwin");
 #elif __linux__
@@ -196,7 +196,7 @@ static JSValue jsrt_process_get_platform(JSContext *ctx, JSValueConst this_val, 
 }
 
 // process.arch getter
-static JSValue jsrt_process_get_arch(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv) {
+static JSValue jsrt_process_get_arch(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
 #if defined(__x86_64__) || defined(_M_X64)
   return JS_NewString(ctx, "x64");
 #elif defined(__i386__) || defined(_M_IX86)
@@ -211,11 +211,11 @@ static JSValue jsrt_process_get_arch(JSContext *ctx, JSValueConst this_val, int 
 }
 
 // process.versions getter
-static JSValue jsrt_process_get_versions(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv) {
+static JSValue jsrt_process_get_versions(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
   JSValue versions_obj = JS_NewObject(ctx);
 
   // Add jsrt version from VERSION file
-  char *version = get_jsrt_version();
+  char* version = get_jsrt_version();
   if (version != NULL) {
     JS_SetPropertyStr(ctx, versions_obj, "jsrt", JS_NewString(ctx, version));
   } else {
@@ -223,13 +223,13 @@ static JSValue jsrt_process_get_versions(JSContext *ctx, JSValueConst this_val, 
   }
 
   // Add libuv version
-  const char *uv_version = uv_version_string();
+  const char* uv_version = uv_version_string();
   if (uv_version != NULL) {
     JS_SetPropertyStr(ctx, versions_obj, "uv", JS_NewString(ctx, uv_version));
   }
 
   // Add OpenSSL version if available
-  const char *openssl_version = JSRT_GetOpenSSLVersion();
+  const char* openssl_version = JSRT_GetOpenSSLVersion();
   if (openssl_version != NULL) {
     JS_SetPropertyStr(ctx, versions_obj, "openssl", JS_NewString(ctx, openssl_version));
   }
@@ -238,7 +238,7 @@ static JSValue jsrt_process_get_versions(JSContext *ctx, JSValueConst this_val, 
 }
 
 // Create process module for std:process
-JSValue JSRT_CreateProcessModule(JSContext *ctx) {
+JSValue JSRT_CreateProcessModule(JSContext* ctx) {
   JSValue process_obj = JS_NewObject(ctx);
 
   // process.argv - define as a getter property
@@ -283,7 +283,7 @@ JSValue JSRT_CreateProcessModule(JSContext *ctx) {
 }
 
 // Setup process module in runtime
-void JSRT_RuntimeSetupStdProcess(JSRT_Runtime *rt) {
+void JSRT_RuntimeSetupStdProcess(JSRT_Runtime* rt) {
   init_process_start_time();
 
   // Create process object and set it as global

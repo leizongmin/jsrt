@@ -105,6 +105,7 @@ set(READLINE_SOURCES
 )
 add_library(readline STATIC ${READLINE_SOURCES})
 target_compile_definitions(readline PRIVATE HAVE_CONFIG_H READLINE_LIBRARY)
+target_include_directories(readline PUBLIC deps/readline)
 
 # Platform-specific libraries
 if(WIN32)
@@ -131,6 +132,7 @@ set(JSRT_LINK_LIBS
     ${JSRT_PLATFORM_LIBS})
 add_library(jsrtcore STATIC ${JSRT_LIB_FILES})
 target_compile_definitions(jsrtcore PRIVATE READLINE_LIBRARY)
+target_include_directories(jsrtcore PRIVATE deps/readline)
 target_compile_definitions(jsrtcore PRIVATE JSRT_VERSION="${JSRT_VERSION}")
 add_executable(jsrt src/main.c src/build.c)
 target_compile_definitions(jsrt PRIVATE JSRT_VERSION="${JSRT_VERSION}")

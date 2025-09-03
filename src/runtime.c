@@ -323,3 +323,51 @@ bool JSRT_RuntimeProcessUnhandledExceptionValues(JSRT_Runtime *rt) {
   rt->exception_values_length = 0;
   return true;
 }
+
+JSRT_CompileResult JSRT_RuntimeCompileToBytecode(JSRT_Runtime *rt, const char *filename, const char *code,
+                                                 size_t length) {
+  JSRT_CompileResult result = {0};
+
+  // Detect if this is a module or script
+  bool is_module = JSRT_PathHasSuffix(filename, ".mjs") || JS_DetectModule((const char *)code, length);
+
+  // Compile the JavaScript code with appropriate type
+  int eval_flags = JS_EVAL_FLAG_COMPILE_ONLY | (is_module ? JS_EVAL_TYPE_MODULE : JS_EVAL_TYPE_GLOBAL);
+  JSValue val = JS_Eval(rt->ctx, code, length, filename, eval_flags);
+
+  if (JS_IsException(val)) {
+    // Get exception string
+    JSValue exception = JS_GetException(rt->ctx);
+    result.error = JSRT_RuntimeGetExceptionString(rt, exception);
+    JS_FreeValue(rt->ctx, exception);
+    return result;
+  }
+
+  // Write the compiled function to bytecode
+  size_t out_buf_len;
+  uint8_t *out_buf = JS_WriteObject(rt->ctx, &out_buf_len, val, JS_WRITE_OBJ_BYTECODE);
+  JS_FreeValue(rt->ctx, val);
+
+  if (!out_buf) {
+    result.error = strdup("Failed to write bytecode");
+    return result;
+  }
+
+  result.data = out_buf;
+  result.size = out_buf_len;
+  return result;
+}
+
+void JSRT_CompileResultFree(JSRT_CompileResult *result) {
+  if (result->data) {
+    // QuickJS allocated memory needs to be freed with js_free_rt or regular free
+    // Since JS_WriteObject allocates with js_malloc which uses malloc internally
+    free(result->data);
+    result->data = NULL;
+  }
+  if (result->error) {
+    free(result->error);
+    result->error = NULL;
+  }
+  result->size = 0;
+}

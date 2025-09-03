@@ -237,20 +237,11 @@ end:
 }
 
 int JSRT_CmdRunEmbeddedBytecode(const char *executable_path, int argc, char **argv) {
-  // Store command line arguments for process module
-  g_jsrt_argc = argc;
-  g_jsrt_argv = argv;
-  int ret = 0;
-  JSRT_Runtime *rt = JSRT_RuntimeNew();
-  JSRT_EvalResult res = JSRT_EvalResultDefault();
-  JSRT_EvalResult res2 = JSRT_EvalResultDefault();
-
-  // Read the executable file to extract embedded bytecode
+  // Read the executable file to check for embedded bytecode
   FILE *exe_file = fopen(executable_path, "rb");
   if (!exe_file) {
-    fprintf(stderr, "Error: Cannot open executable file '%s'\n", executable_path);
-    ret = 1;
-    goto end;
+    // Silently return non-zero to indicate no embedded bytecode
+    return 1;
   }
 
   // Seek to end to check for footer signature
@@ -263,10 +254,9 @@ int JSRT_CmdRunEmbeddedBytecode(const char *executable_path, int argc, char **ar
   size_t min_size = boundary_len + 8;  // boundary + 8-byte size
 
   if (exe_size < min_size) {
-    fprintf(stderr, "Error: No embedded bytecode found\n");
+    // No embedded bytecode, silently return
     fclose(exe_file);
-    ret = 1;
-    goto end;
+    return 1;
   }
 
   // Read the 8-byte size from the end
@@ -281,10 +271,9 @@ int JSRT_CmdRunEmbeddedBytecode(const char *executable_path, int argc, char **ar
   }
 
   if (bytecode_size <= 0 || bytecode_size > exe_size) {
-    fprintf(stderr, "Error: Invalid bytecode size in executable\n");
+    // Invalid bytecode size, silently return
     fclose(exe_file);
-    ret = 1;
-    goto end;
+    return 1;
   }
 
   // Check for boundary signature
@@ -294,10 +283,9 @@ int JSRT_CmdRunEmbeddedBytecode(const char *executable_path, int argc, char **ar
   boundary_check[boundary_len] = '\0';
 
   if (strcmp(boundary_check, boundary) != 0) {
-    fprintf(stderr, "Error: No JSRT boundary found in executable\n");
+    // No JSRT boundary found, silently return
     fclose(exe_file);
-    ret = 1;
-    goto end;
+    return 1;
   }
 
   // Calculate bytecode start position
@@ -308,8 +296,7 @@ int JSRT_CmdRunEmbeddedBytecode(const char *executable_path, int argc, char **ar
   if (!bytecode) {
     fprintf(stderr, "Error: Memory allocation failed for bytecode\n");
     fclose(exe_file);
-    ret = 1;
-    goto end;
+    return 1;
   }
 
   // Read bytecode
@@ -320,9 +307,21 @@ int JSRT_CmdRunEmbeddedBytecode(const char *executable_path, int argc, char **ar
   if (bytecode_read != bytecode_size) {
     fprintf(stderr, "Error: Failed to read complete bytecode\n");
     free(bytecode);
-    ret = 1;
-    goto end;
+    return 1;
   }
+
+  // Now that we have the bytecode, initialize the runtime
+  g_jsrt_argc = argc;
+  g_jsrt_argv = argv;
+  int ret = 0;
+  JSRT_Runtime *rt = JSRT_RuntimeNew();
+  if (!rt) {
+    fprintf(stderr, "Error: Failed to create runtime\n");
+    free(bytecode);
+    return 1;
+  }
+  JSRT_EvalResult res = JSRT_EvalResultDefault();
+  JSRT_EvalResult res2 = JSRT_EvalResultDefault();
 
   // Load and execute bytecode using QuickJS
   JSValue obj = JS_ReadObject(rt->ctx, (const uint8_t *)bytecode, bytecode_size, JS_READ_OBJ_BYTECODE);
@@ -353,6 +352,7 @@ int JSRT_CmdRunEmbeddedBytecode(const char *executable_path, int argc, char **ar
   }
 
   JS_FreeValue(rt->ctx, result);
+
   JSRT_RuntimeRun(rt);
 
 end:

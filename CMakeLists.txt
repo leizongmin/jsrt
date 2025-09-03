@@ -89,7 +89,7 @@ set(JSRT_LINK_LIBS
     ${JSRT_PLATFORM_LIBS})
 add_library(jsrtcore STATIC ${JSRT_LIB_FILES})
 target_compile_definitions(jsrtcore PRIVATE JSRT_VERSION="${JSRT_VERSION}")
-add_executable(jsrt src/main.c)
+add_executable(jsrt src/main.c src/build.c)
 target_compile_definitions(jsrt PRIVATE JSRT_VERSION="${JSRT_VERSION}")
 target_link_libraries(jsrt ${JSRT_LINK_LIBS})
 

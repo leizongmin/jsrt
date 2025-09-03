@@ -27,7 +27,24 @@ if(ENABLE_COVERAGE)
     set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -fprofile-arcs -ftest-coverage")
 endif()
 
-include_directories(src deps/quickjs deps/libuv/include deps/libuv/src)
+# Find libffi for enhanced FFI support
+find_package(PkgConfig QUIET)
+if(PkgConfig_FOUND)
+    pkg_check_modules(LIBFFI QUIET libffi)
+endif()
+
+# Optional: Enable libffi integration
+option(ENABLE_LIBFFI "Enable libffi integration for robust FFI calling conventions" ${LIBFFI_FOUND})
+
+if(ENABLE_LIBFFI AND LIBFFI_FOUND)
+    message(STATUS "libffi support enabled")
+    add_definitions(-DHAVE_LIBFFI=1)
+    include_directories(${LIBFFI_INCLUDE_DIRS})
+    set(FFI_LIBRARIES ${LIBFFI_LIBRARIES})
+else()
+    message(STATUS "libffi support disabled - using basic calling conventions")
+    set(FFI_LIBRARIES "")
+endif()
 
 # build libquickjs
 set(QUICKJS_LIB_FILES
@@ -67,8 +84,7 @@ if(WIN32)
     # Windows doesn't need dl, m is built into MSVCRT, pthread is handled by libuv
     set(JSRT_PLATFORM_LIBS)
 else()
-    # Unix/Linux systems need these libraries
-    set(JSRT_PLATFORM_LIBS dl m pthread)
+    include_directories(src deps/quickjs deps/libuv/include deps/libuv/src)
 endif()
 
 # build jsrt

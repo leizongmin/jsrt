@@ -5,6 +5,7 @@
 #include <windows.h>
 #else
 #include <dlfcn.h>
+#include <pthread.h>
 #endif
 
 #include <quickjs.h>
@@ -45,7 +46,9 @@ typedef enum {
   FFI_TYPE_DOUBLE,
   FFI_TYPE_POINTER,
   FFI_TYPE_STRING,
-  FFI_TYPE_ARRAY
+  FFI_TYPE_ARRAY,
+  FFI_TYPE_CALLBACK,
+  FFI_TYPE_STRUCT
 } ffi_type_t;
 
 // Function signature structure
@@ -63,6 +66,26 @@ typedef struct {
   JSValue functions;  // JS object containing functions
 } ffi_library_t;
 
+// Callback structure for JavaScript functions called from C
+typedef struct {
+  JSContext *ctx;
+  JSValue js_function;
+  ffi_type_t return_type;
+  int arg_count;
+  ffi_type_t *arg_types;
+  void *callback_ptr;  // Generated trampoline function pointer
+} ffi_callback_t;
+
+// Struct definition for FFI structs
+typedef struct {
+  char *name;
+  int field_count;
+  char **field_names;
+  ffi_type_t *field_types;
+  size_t *field_offsets;
+  size_t total_size;
+} ffi_struct_def_t;
+
 // Convert string to FFI type
 static ffi_type_t string_to_ffi_type(const char *type_str) {
   if (strcmp(type_str, "void") == 0) return FFI_TYPE_VOID;
@@ -77,28 +100,66 @@ static ffi_type_t string_to_ffi_type(const char *type_str) {
   if (strcmp(type_str, "pointer") == 0) return FFI_TYPE_POINTER;
   if (strcmp(type_str, "string") == 0) return FFI_TYPE_STRING;
   if (strcmp(type_str, "array") == 0) return FFI_TYPE_ARRAY;
+  if (strcmp(type_str, "callback") == 0) return FFI_TYPE_CALLBACK;
+  if (strcmp(type_str, "struct") == 0) return FFI_TYPE_STRUCT;
   return FFI_TYPE_VOID;  // Default to void for unknown types
 }
 
 // Enhanced error creation with stack trace support
-static JSValue create_ffi_error(JSContext *ctx, const char *message, const char *function_name) {
+static JSValue create_ffi_error_with_stack(JSContext *ctx, const char *message, const char *function_name) {
   // Create error with enhanced information
   char full_message[512];
   snprintf(full_message, sizeof(full_message), "FFI Error in %s: %s", 
            function_name ? function_name : "unknown", message);
   
+  // Create a proper Error object instead of just throwing
+  JSValue error_ctor = JS_GetGlobalObject(ctx);
+  JSValue error_obj = JS_GetPropertyStr(ctx, error_ctor, "Error");
+  JS_FreeValue(ctx, error_ctor);
+  
+  if (JS_IsConstructor(ctx, error_obj)) {
+    JSValue message_val = JS_NewString(ctx, full_message);
+    JSValue error_instance = JS_CallConstructor(ctx, error_obj, 1, &message_val);
+    JS_FreeValue(ctx, message_val);
+    JS_FreeValue(ctx, error_obj);
+    
+    if (!JS_IsException(error_instance)) {
+      // Add additional properties to the error for better debugging
+      JS_SetPropertyStr(ctx, error_instance, "ffiFunction", 
+                       function_name ? JS_NewString(ctx, function_name) : JS_NULL);
+      JS_SetPropertyStr(ctx, error_instance, "ffiModule", JS_NewString(ctx, "std:ffi"));
+      
+      // Try to add stack trace by accessing the Error.stack property
+      JSValue stack = JS_GetPropertyStr(ctx, error_instance, "stack");
+      if (!JS_IsUndefined(stack) && !JS_IsNull(stack)) {
+        // Stack trace is automatically populated by JavaScript engine
+        JS_FreeValue(ctx, stack);
+      }
+      
+      return JS_Throw(ctx, error_instance);
+    }
+    JS_FreeValue(ctx, error_instance);
+  }
+  JS_FreeValue(ctx, error_obj);
+  
+  // Fallback to the original method if Error constructor fails
   JSValue error = JS_ThrowTypeError(ctx, "%s", full_message);
   
   // Try to add additional properties to the error for better debugging
-  JSValue error_obj = JS_GetException(ctx);
-  if (!JS_IsNull(error_obj)) {
-    JS_SetPropertyStr(ctx, error_obj, "ffiFunction", 
+  JSValue error_obj_fallback = JS_GetException(ctx);
+  if (!JS_IsNull(error_obj_fallback)) {
+    JS_SetPropertyStr(ctx, error_obj_fallback, "ffiFunction", 
                      function_name ? JS_NewString(ctx, function_name) : JS_NULL);
-    JS_SetPropertyStr(ctx, error_obj, "ffiModule", JS_NewString(ctx, "std:ffi"));
-    JS_Throw(ctx, error_obj);
+    JS_SetPropertyStr(ctx, error_obj_fallback, "ffiModule", JS_NewString(ctx, "std:ffi"));
+    JS_Throw(ctx, error_obj_fallback);
   }
   
   return error;
+}
+
+// Enhanced error creation with stack trace support
+static JSValue create_ffi_error(JSContext *ctx, const char *message, const char *function_name) {
+  return create_ffi_error_with_stack(ctx, message, function_name);
 }
 
 // Enhanced argument validation with detailed error messages
@@ -915,12 +976,12 @@ static JSValue ffi_memcpy(JSContext *ctx, JSValueConst this_val, int argc, JSVal
 // Read string from pointer - ffi.readString(ptr, [maxLength])
 static JSValue ffi_read_string(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv) {
   if (argc < 1) {
-    return JS_ThrowTypeError(ctx, "ffi.readString expects at least 1 argument: pointer");
+    return create_ffi_error(ctx, "Expected at least 1 argument: pointer", "ffi.readString");
   }
 
   int64_t ptr_addr;
   if (JS_ToInt64(ctx, &ptr_addr, argv[0]) < 0) {
-    return JS_ThrowTypeError(ctx, "Pointer must be a number");
+    return create_ffi_error(ctx, "Pointer must be a number", "ffi.readString");
   }
 
   if (ptr_addr == 0) {
@@ -945,21 +1006,21 @@ static JSValue ffi_read_string(JSContext *ctx, JSValueConst this_val, int argc, 
 // Write string to pointer - ffi.writeString(ptr, str)
 static JSValue ffi_write_string(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv) {
   if (argc < 2) {
-    return JS_ThrowTypeError(ctx, "ffi.writeString expects 2 arguments: pointer, string");
+    return create_ffi_error(ctx, "Expected 2 arguments: pointer and string", "ffi.writeString");
   }
 
   int64_t ptr_addr;
   if (JS_ToInt64(ctx, &ptr_addr, argv[0]) < 0) {
-    return JS_ThrowTypeError(ctx, "Pointer must be a number");
+    return create_ffi_error(ctx, "Pointer must be a number", "ffi.writeString");
   }
 
   if (ptr_addr == 0) {
-    return JS_ThrowTypeError(ctx, "Cannot write to null pointer");
+    return create_ffi_error(ctx, "Cannot write to null pointer", "ffi.writeString");
   }
 
   const char *str = JS_ToCString(ctx, argv[1]);
   if (!str) {
-    return JS_ThrowTypeError(ctx, "String argument required");
+    return create_ffi_error(ctx, "String argument required", "ffi.writeString");
   }
 
   char *dest = (char *)(intptr_t)ptr_addr;
@@ -1074,6 +1135,727 @@ static JSValue ffi_array_length(JSContext *ctx, JSValueConst this_val, int argc,
   return length_val;
 }
 
+// Global callback registry to track active callbacks
+static ffi_callback_t **g_callback_registry = NULL;
+static int g_callback_count = 0;
+static int g_callback_capacity = 0;
+
+// Register a callback in the global registry
+static int register_callback(ffi_callback_t *callback) {
+  if (g_callback_count >= g_callback_capacity) {
+    int new_capacity = g_callback_capacity == 0 ? 16 : g_callback_capacity * 2;
+    ffi_callback_t **new_registry = realloc(g_callback_registry, 
+                                           new_capacity * sizeof(ffi_callback_t*));
+    if (!new_registry) {
+      return -1;
+    }
+    g_callback_registry = new_registry;
+    g_callback_capacity = new_capacity;
+  }
+  
+  g_callback_registry[g_callback_count] = callback;
+  return g_callback_count++;
+}
+
+// Forward declarations for callback trampolines
+static uintptr_t callback_trampoline_0();
+static uintptr_t callback_trampoline_1(uintptr_t arg1);
+static uintptr_t callback_trampoline_2(uintptr_t arg1, uintptr_t arg2);
+static uintptr_t callback_trampoline_3(uintptr_t arg1, uintptr_t arg2, uintptr_t arg3);
+static uintptr_t callback_trampoline_4(uintptr_t arg1, uintptr_t arg2, uintptr_t arg3, uintptr_t arg4);
+
+// Generic callback handler that calls JavaScript from C
+static uintptr_t handle_callback(int callback_id, int argc, uintptr_t *args) {
+  if (callback_id < 0 || callback_id >= g_callback_count) {
+    JSRT_Debug("FFI: Invalid callback ID: %d", callback_id);
+    return 0;
+  }
+  
+  ffi_callback_t *callback = g_callback_registry[callback_id];
+  if (!callback || !callback->ctx) {
+    JSRT_Debug("FFI: Invalid callback or context");
+    return 0;
+  }
+  
+  // Prepare JavaScript arguments
+  JSValue js_args[16];
+  for (int i = 0; i < argc && i < callback->arg_count; i++) {
+    if (i < callback->arg_count) {
+      switch (callback->arg_types[i]) {
+        case FFI_TYPE_INT:
+        case FFI_TYPE_INT32:
+          js_args[i] = JS_NewInt32(callback->ctx, (int32_t)args[i]);
+          break;
+        case FFI_TYPE_UINT32:
+          js_args[i] = JS_NewUint32(callback->ctx, (uint32_t)args[i]);
+          break;
+        case FFI_TYPE_INT64:
+          js_args[i] = JS_NewInt64(callback->ctx, (int64_t)args[i]);
+          break;
+        case FFI_TYPE_FLOAT:
+          js_args[i] = JS_NewFloat64(callback->ctx, *(float*)&args[i]);
+          break;
+        case FFI_TYPE_DOUBLE:
+          js_args[i] = JS_NewFloat64(callback->ctx, *(double*)&args[i]);
+          break;
+        case FFI_TYPE_STRING:
+          js_args[i] = args[i] ? JS_NewString(callback->ctx, (const char*)args[i]) : JS_NULL;
+          break;
+        case FFI_TYPE_POINTER:
+          js_args[i] = JS_NewInt64(callback->ctx, (intptr_t)args[i]);
+          break;
+        default:
+          js_args[i] = JS_NewInt64(callback->ctx, (int64_t)args[i]);
+          break;
+      }
+    }
+  }
+  
+  // Call JavaScript function
+  JSValue result = JS_Call(callback->ctx, callback->js_function, JS_UNDEFINED, argc, js_args);
+  
+  // Clean up arguments
+  for (int i = 0; i < argc && i < callback->arg_count; i++) {
+    JS_FreeValue(callback->ctx, js_args[i]);
+  }
+  
+  // Convert return value
+  uintptr_t ret_val = 0;
+  if (!JS_IsException(result)) {
+    switch (callback->return_type) {
+      case FFI_TYPE_INT:
+      case FFI_TYPE_INT32: {
+        int32_t int_val;
+        JS_ToInt32(callback->ctx, &int_val, result);
+        ret_val = (uintptr_t)int_val;
+        break;
+      }
+      case FFI_TYPE_UINT32: {
+        uint32_t uint_val;
+        JS_ToUint32(callback->ctx, &uint_val, result);
+        ret_val = (uintptr_t)uint_val;
+        break;
+      }
+      case FFI_TYPE_INT64: {
+        int64_t int64_val;
+        JS_ToInt64(callback->ctx, &int64_val, result);
+        ret_val = (uintptr_t)int64_val;
+        break;
+      }
+      case FFI_TYPE_FLOAT: {
+        double double_val;
+        JS_ToFloat64(callback->ctx, &double_val, result);
+        float float_val = (float)double_val;
+        ret_val = *(uintptr_t*)&float_val;
+        break;
+      }
+      case FFI_TYPE_DOUBLE: {
+        double double_val;
+        JS_ToFloat64(callback->ctx, &double_val, result);
+        ret_val = *(uintptr_t*)&double_val;
+        break;
+      }
+      case FFI_TYPE_POINTER: {
+        int64_t ptr_val;
+        JS_ToInt64(callback->ctx, &ptr_val, result);
+        ret_val = (uintptr_t)ptr_val;
+        break;
+      }
+      case FFI_TYPE_VOID:
+      default:
+        ret_val = 0;
+        break;
+    }
+  } else {
+    // Handle JavaScript exception
+    JSValue exception = JS_GetException(callback->ctx);
+    JSRT_Debug("FFI: JavaScript callback threw exception");
+    JS_FreeValue(callback->ctx, exception);
+    ret_val = 0;
+  }
+  
+  JS_FreeValue(callback->ctx, result);
+  return ret_val;
+}
+
+// Callback trampolines for different argument counts
+static uintptr_t callback_trampoline_0() {
+  return handle_callback(0, 0, NULL);
+}
+
+static uintptr_t callback_trampoline_1(uintptr_t arg1) {
+  uintptr_t args[] = {arg1};
+  return handle_callback(1, 1, args);
+}
+
+static uintptr_t callback_trampoline_2(uintptr_t arg1, uintptr_t arg2) {
+  uintptr_t args[] = {arg1, arg2};
+  return handle_callback(2, 2, args);
+}
+
+static uintptr_t callback_trampoline_3(uintptr_t arg1, uintptr_t arg2, uintptr_t arg3) {
+  uintptr_t args[] = {arg1, arg2, arg3};
+  return handle_callback(3, 3, args);
+}
+
+static uintptr_t callback_trampoline_4(uintptr_t arg1, uintptr_t arg2, uintptr_t arg3, uintptr_t arg4) {
+  uintptr_t args[] = {arg1, arg2, arg3, arg4};
+  return handle_callback(4, 4, args);
+}
+
+// Create callback function - ffi.Callback(jsFunction, returnType, argTypes)
+static JSValue ffi_callback(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv) {
+  if (argc < 3) {
+    return create_ffi_error(ctx, "Expected 3 arguments: function, return type, argument types", "ffi.Callback");
+  }
+  
+  if (!JS_IsFunction(ctx, argv[0])) {
+    return create_ffi_error(ctx, "First argument must be a JavaScript function", "ffi.Callback");
+  }
+  
+  const char *return_type_str = JS_ToCString(ctx, argv[1]);
+  if (!return_type_str) {
+    return create_ffi_error(ctx, "Return type must be a string", "ffi.Callback");
+  }
+  
+  if (!JS_IsArray(ctx, argv[2])) {
+    JS_FreeCString(ctx, return_type_str);
+    return create_ffi_error(ctx, "Argument types must be an array", "ffi.Callback");
+  }
+  
+  // Get argument count
+  JSValue length_val = JS_GetPropertyStr(ctx, argv[2], "length");
+  uint32_t arg_count;
+  if (JS_ToUint32(ctx, &arg_count, length_val) < 0) {
+    JS_FreeValue(ctx, length_val);
+    JS_FreeCString(ctx, return_type_str);
+    return create_ffi_error(ctx, "Invalid argument types array", "ffi.Callback");
+  }
+  JS_FreeValue(ctx, length_val);
+  
+  if (arg_count > 4) {
+    JS_FreeCString(ctx, return_type_str);
+    return create_ffi_error(ctx, "Maximum 4 arguments supported for callbacks", "ffi.Callback");
+  }
+  
+  // Create callback structure
+  ffi_callback_t *callback = malloc(sizeof(ffi_callback_t));
+  if (!callback) {
+    JS_FreeCString(ctx, return_type_str);
+    return create_ffi_error(ctx, "Failed to allocate callback structure", "ffi.Callback");
+  }
+  
+  callback->ctx = ctx;
+  callback->js_function = JS_DupValue(ctx, argv[0]);
+  callback->return_type = string_to_ffi_type(return_type_str);
+  callback->arg_count = arg_count;
+  callback->arg_types = arg_count > 0 ? malloc(arg_count * sizeof(ffi_type_t)) : NULL;
+  
+  // Parse argument types
+  for (uint32_t i = 0; i < arg_count; i++) {
+    JSValue arg_type_val = JS_GetPropertyUint32(ctx, argv[2], i);
+    const char *arg_type_str = JS_ToCString(ctx, arg_type_val);
+    if (arg_type_str) {
+      callback->arg_types[i] = string_to_ffi_type(arg_type_str);
+      JS_FreeCString(ctx, arg_type_str);
+    } else {
+      callback->arg_types[i] = FFI_TYPE_VOID;
+    }
+    JS_FreeValue(ctx, arg_type_val);
+  }
+  
+  // Assign trampoline function based on argument count
+  switch (arg_count) {
+    case 0: callback->callback_ptr = (void*)callback_trampoline_0; break;
+    case 1: callback->callback_ptr = (void*)callback_trampoline_1; break;
+    case 2: callback->callback_ptr = (void*)callback_trampoline_2; break;
+    case 3: callback->callback_ptr = (void*)callback_trampoline_3; break;
+    case 4: callback->callback_ptr = (void*)callback_trampoline_4; break;
+    default:
+      free(callback->arg_types);
+      JS_FreeValue(ctx, callback->js_function);
+      free(callback);
+      JS_FreeCString(ctx, return_type_str);
+      return create_ffi_error(ctx, "Unsupported argument count for callback", "ffi.Callback");
+  }
+  
+  // Register callback
+  int callback_id = register_callback(callback);
+  if (callback_id < 0) {
+    free(callback->arg_types);
+    JS_FreeValue(ctx, callback->js_function);
+    free(callback);
+    JS_FreeCString(ctx, return_type_str);
+    return create_ffi_error(ctx, "Failed to register callback", "ffi.Callback");
+  }
+  
+  JS_FreeCString(ctx, return_type_str);
+  
+  // Return pointer to the trampoline function
+  return JS_NewInt64(ctx, (intptr_t)callback->callback_ptr);
+}
+
+// Async function call structure
+typedef struct {
+  JSContext *ctx;
+  JSValue promise_resolve;
+  JSValue promise_reject;
+  void *func_ptr;
+  ffi_type_t return_type;
+  int arg_count;
+  uintptr_t *args;
+  char **string_args;
+  void **array_args;
+} ffi_async_call_t;
+
+// Thread function for async FFI calls
+#ifdef _WIN32
+static DWORD WINAPI async_call_thread(LPVOID lpParam) {
+#else
+static void* async_call_thread(void* arg) {
+#endif
+  ffi_async_call_t *async_call = (ffi_async_call_t*)arg;
+  if (!async_call) {
+#ifdef _WIN32
+    return 1;
+#else
+    return NULL;
+#endif
+  }
+  
+  // Perform the function call in the background thread
+  JSValue result = JS_UNDEFINED;
+  bool call_success = true;
+  
+  if (async_call->return_type == FFI_TYPE_INT || async_call->return_type == FFI_TYPE_INT32) {
+    int ret_val = 0;
+    switch (async_call->arg_count) {
+      case 0: ret_val = ((int (*)())async_call->func_ptr)(); break;
+      case 1: ret_val = ((int (*)(uintptr_t))async_call->func_ptr)(async_call->args[0]); break;
+      case 2: ret_val = ((int (*)(uintptr_t, uintptr_t))async_call->func_ptr)(async_call->args[0], async_call->args[1]); break;
+      case 3: ret_val = ((int (*)(uintptr_t, uintptr_t, uintptr_t))async_call->func_ptr)(async_call->args[0], async_call->args[1], async_call->args[2]); break;
+      case 4: ret_val = ((int (*)(uintptr_t, uintptr_t, uintptr_t, uintptr_t))async_call->func_ptr)(async_call->args[0], async_call->args[1], async_call->args[2], async_call->args[3]); break;
+      default: ret_val = 0; call_success = false; break;
+    }
+    if (call_success) {
+      result = JS_NewInt32(async_call->ctx, ret_val);
+    }
+  } else if (async_call->return_type == FFI_TYPE_STRING) {
+    const char *ret_str = NULL;
+    switch (async_call->arg_count) {
+      case 0: ret_str = ((const char *(*)())async_call->func_ptr)(); break;
+      case 1: ret_str = ((const char *(*)(uintptr_t))async_call->func_ptr)(async_call->args[0]); break;
+      case 2: ret_str = ((const char *(*)(uintptr_t, uintptr_t))async_call->func_ptr)(async_call->args[0], async_call->args[1]); break;
+      case 3: ret_str = ((const char *(*)(uintptr_t, uintptr_t, uintptr_t))async_call->func_ptr)(async_call->args[0], async_call->args[1], async_call->args[2]); break;
+      case 4: ret_str = ((const char *(*)(uintptr_t, uintptr_t, uintptr_t, uintptr_t))async_call->func_ptr)(async_call->args[0], async_call->args[1], async_call->args[2], async_call->args[3]); break;
+      default: ret_str = NULL; call_success = false; break;
+    }
+    if (call_success) {
+      result = ret_str ? JS_NewString(async_call->ctx, ret_str) : JS_NULL;
+    }
+  } else if (async_call->return_type == FFI_TYPE_VOID) {
+    switch (async_call->arg_count) {
+      case 0: ((void (*)())async_call->func_ptr)(); break;
+      case 1: ((void (*)(uintptr_t))async_call->func_ptr)(async_call->args[0]); break;
+      case 2: ((void (*)(uintptr_t, uintptr_t))async_call->func_ptr)(async_call->args[0], async_call->args[1]); break;
+      case 3: ((void (*)(uintptr_t, uintptr_t, uintptr_t))async_call->func_ptr)(async_call->args[0], async_call->args[1], async_call->args[2]); break;
+      case 4: ((void (*)(uintptr_t, uintptr_t, uintptr_t, uintptr_t))async_call->func_ptr)(async_call->args[0], async_call->args[1], async_call->args[2], async_call->args[3]); break;
+      default: call_success = false; break;
+    }
+    if (call_success) {
+      result = JS_UNDEFINED;
+    }
+  } else {
+    call_success = false;
+  }
+  
+  if (call_success) {
+    // Call the promise resolve function
+    JSValue resolve_args[] = {result};
+    JS_Call(async_call->ctx, async_call->promise_resolve, JS_UNDEFINED, 1, resolve_args);
+  } else {
+    // Call the promise reject function
+    JSValue error = JS_NewString(async_call->ctx, "Native function call failed");
+    JSValue reject_args[] = {error};
+    JS_Call(async_call->ctx, async_call->promise_reject, JS_UNDEFINED, 1, reject_args);
+    JS_FreeValue(async_call->ctx, error);
+  }
+  
+  // Clean up
+  if (async_call->args) free(async_call->args);
+  if (async_call->string_args) {
+    for (int i = 0; i < async_call->arg_count; i++) {
+      if (async_call->string_args[i]) {
+        JS_FreeCString(async_call->ctx, async_call->string_args[i]);
+      }
+    }
+    free(async_call->string_args);
+  }
+  if (async_call->array_args) {
+    for (int i = 0; i < async_call->arg_count; i++) {
+      if (async_call->array_args[i]) {
+        free(async_call->array_args[i]);
+      }
+    }
+    free(async_call->array_args);
+  }
+  
+  JS_FreeValue(async_call->ctx, async_call->promise_resolve);
+  JS_FreeValue(async_call->ctx, async_call->promise_reject);
+  JS_FreeValue(async_call->ctx, result);
+  free(async_call);
+  
+#ifdef _WIN32
+  return 0;
+#else
+  return NULL;
+#endif
+}
+
+// Async function call - ffi.callAsync(funcPtr, returnType, argTypes, args)
+static JSValue ffi_call_async(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv) {
+  if (argc < 4) {
+    return create_ffi_error(ctx, "Expected 4 arguments: function pointer, return type, argument types, arguments", "ffi.callAsync");
+  }
+  
+  // Parse function pointer
+  int64_t func_ptr_val;
+  if (JS_ToInt64(ctx, &func_ptr_val, argv[0]) < 0) {
+    return create_ffi_error(ctx, "Function pointer must be a number", "ffi.callAsync");
+  }
+  void *func_ptr = (void*)(intptr_t)func_ptr_val;
+  
+  // Parse return type
+  const char *return_type_str = JS_ToCString(ctx, argv[1]);
+  if (!return_type_str) {
+    return create_ffi_error(ctx, "Return type must be a string", "ffi.callAsync");
+  }
+  ffi_type_t return_type = string_to_ffi_type(return_type_str);
+  
+  // Parse argument types
+  if (!JS_IsArray(ctx, argv[2])) {
+    JS_FreeCString(ctx, return_type_str);
+    return create_ffi_error(ctx, "Argument types must be an array", "ffi.callAsync");
+  }
+  
+  // Parse arguments
+  if (!JS_IsArray(ctx, argv[3])) {
+    JS_FreeCString(ctx, return_type_str);
+    return create_ffi_error(ctx, "Arguments must be an array", "ffi.callAsync");
+  }
+  
+  // Get argument count
+  JSValue length_val = JS_GetPropertyStr(ctx, argv[3], "length");
+  uint32_t arg_count;
+  if (JS_ToUint32(ctx, &arg_count, length_val) < 0) {
+    JS_FreeValue(ctx, length_val);
+    JS_FreeCString(ctx, return_type_str);
+    return create_ffi_error(ctx, "Invalid arguments array", "ffi.callAsync");
+  }
+  JS_FreeValue(ctx, length_val);
+  
+  if (arg_count > 4) {
+    JS_FreeCString(ctx, return_type_str);
+    return create_ffi_error(ctx, "Maximum 4 arguments supported for async calls", "ffi.callAsync");
+  }
+  
+  // Create async call structure
+  ffi_async_call_t *async_call = malloc(sizeof(ffi_async_call_t));
+  if (!async_call) {
+    JS_FreeCString(ctx, return_type_str);
+    return create_ffi_error(ctx, "Failed to allocate async call structure", "ffi.callAsync");
+  }
+  
+  async_call->ctx = ctx;
+  async_call->func_ptr = func_ptr;
+  async_call->return_type = return_type;
+  async_call->arg_count = arg_count;
+  async_call->args = arg_count > 0 ? malloc(arg_count * sizeof(uintptr_t)) : NULL;
+  async_call->string_args = arg_count > 0 ? malloc(arg_count * sizeof(char*)) : NULL;
+  async_call->array_args = arg_count > 0 ? malloc(arg_count * sizeof(void*)) : NULL;
+  
+  // Initialize arrays
+  if (async_call->string_args) {
+    memset(async_call->string_args, 0, arg_count * sizeof(char*));
+  }
+  if (async_call->array_args) {
+    memset(async_call->array_args, 0, arg_count * sizeof(void*));
+  }
+  
+  // Convert arguments
+  for (uint32_t i = 0; i < arg_count; i++) {
+    JSValue arg_val = JS_GetPropertyUint32(ctx, argv[3], i);
+    
+    if (JS_IsString(arg_val)) {
+      const char *str_val = JS_ToCString(ctx, arg_val);
+      async_call->string_args[i] = (char*)str_val;  // Cast away const for storage
+      async_call->args[i] = (uintptr_t)async_call->string_args[i];
+    } else if (JS_IsNumber(arg_val)) {
+      int64_t num_val;
+      JS_ToInt64(ctx, &num_val, arg_val);
+      async_call->args[i] = (uintptr_t)num_val;
+    } else {
+      async_call->args[i] = 0;
+    }
+    
+    JS_FreeValue(ctx, arg_val);
+  }
+  
+  // Create promise
+  JSValue resolving_funcs[2];
+  JSValue promise = JS_NewPromiseCapability(ctx, resolving_funcs);
+  async_call->promise_resolve = resolving_funcs[0];
+  async_call->promise_reject = resolving_funcs[1];
+  
+  // Start thread for async execution
+#ifdef _WIN32
+  HANDLE thread_handle = CreateThread(NULL, 0, async_call_thread, async_call, 0, NULL);
+  if (!thread_handle) {
+    // Cleanup on failure
+    free(async_call->args);
+    free(async_call->string_args);
+    free(async_call->array_args);
+    free(async_call);
+    JS_FreeCString(ctx, return_type_str);
+    return create_ffi_error(ctx, "Failed to create thread for async call", "ffi.callAsync");
+  }
+  CloseHandle(thread_handle);
+#else
+  pthread_t thread;
+  if (pthread_create(&thread, NULL, async_call_thread, async_call) != 0) {
+    // Cleanup on failure
+    free(async_call->args);
+    free(async_call->string_args);
+    free(async_call->array_args);
+    free(async_call);
+    JS_FreeCString(ctx, return_type_str);
+    return create_ffi_error(ctx, "Failed to create thread for async call", "ffi.callAsync");
+  }
+  pthread_detach(thread);
+#endif
+  
+  JS_FreeCString(ctx, return_type_str);
+  return promise;
+}
+
+// Global struct registry
+static ffi_struct_def_t **g_struct_registry = NULL;
+static int g_struct_count = 0;
+static int g_struct_capacity = 0;
+
+// Register a struct definition
+static int register_struct(ffi_struct_def_t *struct_def) {
+  if (g_struct_count >= g_struct_capacity) {
+    int new_capacity = g_struct_capacity == 0 ? 16 : g_struct_capacity * 2;
+    ffi_struct_def_t **new_registry = realloc(g_struct_registry, 
+                                             new_capacity * sizeof(ffi_struct_def_t*));
+    if (!new_registry) {
+      return -1;
+    }
+    g_struct_registry = new_registry;
+    g_struct_capacity = new_capacity;
+  }
+  
+  g_struct_registry[g_struct_count] = struct_def;
+  return g_struct_count++;
+}
+
+// Find struct definition by name
+static ffi_struct_def_t* find_struct(const char *name) {
+  for (int i = 0; i < g_struct_count; i++) {
+    if (g_struct_registry[i] && g_struct_registry[i]->name && 
+        strcmp(g_struct_registry[i]->name, name) == 0) {
+      return g_struct_registry[i];
+    }
+  }
+  return NULL;
+}
+
+// Calculate size and alignment for basic types
+static size_t get_type_size(ffi_type_t type) {
+  switch (type) {
+    case FFI_TYPE_INT:
+    case FFI_TYPE_INT32:
+    case FFI_TYPE_UINT32:
+    case FFI_TYPE_FLOAT:
+      return 4;
+    case FFI_TYPE_INT64:
+    case FFI_TYPE_UINT64:
+    case FFI_TYPE_DOUBLE:
+    case FFI_TYPE_POINTER:
+    case FFI_TYPE_STRING:
+      return 8;
+    default:
+      return 1;
+  }
+}
+
+// Calculate struct alignment
+static size_t calculate_aligned_offset(size_t current_offset, size_t alignment) {
+  return (current_offset + alignment - 1) & ~(alignment - 1);
+}
+
+// Define struct - ffi.Struct(name, fields)
+static JSValue ffi_struct(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv) {
+  if (argc < 2) {
+    return create_ffi_error(ctx, "Expected 2 arguments: struct name and field definitions", "ffi.Struct");
+  }
+  
+  // Check if first argument is a string
+  if (!JS_IsString(argv[0])) {
+    return create_ffi_error(ctx, "Struct name must be a string", "ffi.Struct");
+  }
+  
+  const char *struct_name = JS_ToCString(ctx, argv[0]);
+  if (!struct_name) {
+    return create_ffi_error(ctx, "Struct name must be a string", "ffi.Struct");
+  }
+  
+  if (!JS_IsObject(argv[1])) {
+    JS_FreeCString(ctx, struct_name);
+    return create_ffi_error(ctx, "Field definitions must be an object", "ffi.Struct");
+  }
+  
+  // Check if struct already exists
+  if (find_struct(struct_name)) {
+    JS_FreeCString(ctx, struct_name);
+    return create_ffi_error(ctx, "Struct with this name already exists", "ffi.Struct");
+  }
+  
+  // Get field names
+  JSPropertyEnum *tab;
+  uint32_t tab_len;
+  if (JS_GetOwnPropertyNames(ctx, &tab, &tab_len, argv[1], JS_GPN_STRING_MASK) < 0) {
+    JS_FreeCString(ctx, struct_name);
+    return create_ffi_error(ctx, "Failed to get field names", "ffi.Struct");
+  }
+  
+  // Create struct definition
+  ffi_struct_def_t *struct_def = malloc(sizeof(ffi_struct_def_t));
+  if (!struct_def) {
+    js_free(ctx, tab);
+    JS_FreeCString(ctx, struct_name);
+    return create_ffi_error(ctx, "Failed to allocate struct definition", "ffi.Struct");
+  }
+  
+  struct_def->name = strdup(struct_name);
+  struct_def->field_count = tab_len;
+  struct_def->field_names = malloc(tab_len * sizeof(char*));
+  struct_def->field_types = malloc(tab_len * sizeof(ffi_type_t));
+  struct_def->field_offsets = malloc(tab_len * sizeof(size_t));
+  
+  if (!struct_def->field_names || !struct_def->field_types || !struct_def->field_offsets) {
+    free(struct_def->field_names);
+    free(struct_def->field_types);
+    free(struct_def->field_offsets);
+    free(struct_def->name);
+    free(struct_def);
+    js_free(ctx, tab);
+    JS_FreeCString(ctx, struct_name);
+    return create_ffi_error(ctx, "Failed to allocate struct field arrays", "ffi.Struct");
+  }
+  
+  // Calculate field offsets and total size
+  size_t current_offset = 0;
+  for (uint32_t i = 0; i < tab_len; i++) {
+    const char *field_name = JS_AtomToCString(ctx, tab[i].atom);
+    struct_def->field_names[i] = strdup(field_name);
+    
+    JSValue field_type_val = JS_GetProperty(ctx, argv[1], tab[i].atom);
+    const char *field_type_str = JS_ToCString(ctx, field_type_val);
+    
+    if (field_type_str) {
+      struct_def->field_types[i] = string_to_ffi_type(field_type_str);
+      
+      // Calculate alignment and offset
+      size_t field_size = get_type_size(struct_def->field_types[i]);
+      size_t field_alignment = field_size; // Simple alignment rule
+      
+      current_offset = calculate_aligned_offset(current_offset, field_alignment);
+      struct_def->field_offsets[i] = current_offset;
+      current_offset += field_size;
+      
+      JS_FreeCString(ctx, field_type_str);
+    } else {
+      struct_def->field_types[i] = FFI_TYPE_VOID;
+      struct_def->field_offsets[i] = current_offset;
+    }
+    
+    JS_FreeCString(ctx, field_name);
+    JS_FreeValue(ctx, field_type_val);
+  }
+  
+  // Align total size to largest field alignment (simplified)
+  struct_def->total_size = calculate_aligned_offset(current_offset, 8);
+  
+  // Register struct
+  int struct_id = register_struct(struct_def);
+  if (struct_id < 0) {
+    // Cleanup on failure
+    for (uint32_t i = 0; i < tab_len; i++) {
+      free(struct_def->field_names[i]);
+    }
+    free(struct_def->field_names);
+    free(struct_def->field_types);
+    free(struct_def->field_offsets);
+    free(struct_def->name);
+    free(struct_def);
+    js_free(ctx, tab);
+    JS_FreeCString(ctx, struct_name);
+    return create_ffi_error(ctx, "Failed to register struct", "ffi.Struct");
+  }
+  
+  js_free(ctx, tab);
+  JS_FreeCString(ctx, struct_name);
+  
+  // Return struct information object
+  JSValue struct_obj = JS_NewObject(ctx);
+  JS_SetPropertyStr(ctx, struct_obj, "name", JS_NewString(ctx, struct_def->name));
+  JS_SetPropertyStr(ctx, struct_obj, "size", JS_NewUint32(ctx, (uint32_t)struct_def->total_size));
+  JS_SetPropertyStr(ctx, struct_obj, "fieldCount", JS_NewUint32(ctx, struct_def->field_count));
+  JS_SetPropertyStr(ctx, struct_obj, "id", JS_NewInt32(ctx, struct_id));
+  
+  return struct_obj;
+}
+
+// Allocate struct - ffi.allocStruct(structName)
+static JSValue ffi_alloc_struct(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv) {
+  if (argc < 1) {
+    return create_ffi_error(ctx, "Expected 1 argument: struct name", "ffi.allocStruct");
+  }
+  
+  // Check if first argument is a string
+  if (!JS_IsString(argv[0])) {
+    return create_ffi_error(ctx, "Struct name must be a string", "ffi.allocStruct");
+  }
+  
+  const char *struct_name = JS_ToCString(ctx, argv[0]);
+  if (!struct_name) {
+    return create_ffi_error(ctx, "Struct name must be a string", "ffi.allocStruct");
+  }
+  
+  ffi_struct_def_t *struct_def = find_struct(struct_name);
+  if (!struct_def) {
+    JS_FreeCString(ctx, struct_name);
+    return create_ffi_error(ctx, "Struct not found", "ffi.allocStruct");
+  }
+  
+  // Allocate memory for struct
+  void *struct_ptr = malloc(struct_def->total_size);
+  if (!struct_ptr) {
+    JS_FreeCString(ctx, struct_name);
+    return create_ffi_error(ctx, "Failed to allocate struct memory", "ffi.allocStruct");
+  }
+  
+  // Initialize to zero
+  memset(struct_ptr, 0, struct_def->total_size);
+  
+  JS_FreeCString(ctx, struct_name);
+  
+  // Return pointer to allocated struct
+  return JS_NewInt64(ctx, (intptr_t)struct_ptr);
+}
+
 // Create FFI module for require("std:ffi")
 JSValue JSRT_CreateFFIModule(JSContext *ctx) {
   JSValue ffi_obj = JS_NewObject(ctx);
@@ -1092,8 +1874,18 @@ JSValue JSRT_CreateFFIModule(JSContext *ctx) {
   JS_SetPropertyStr(ctx, ffi_obj, "arrayFromPointer", JS_NewCFunction(ctx, ffi_array_from_pointer, "arrayFromPointer", 3));
   JS_SetPropertyStr(ctx, ffi_obj, "arrayLength", JS_NewCFunction(ctx, ffi_array_length, "arrayLength", 1));
 
+  // Callback support
+  JS_SetPropertyStr(ctx, ffi_obj, "Callback", JS_NewCFunction(ctx, ffi_callback, "Callback", 3));
+
+  // Async function support
+  JS_SetPropertyStr(ctx, ffi_obj, "callAsync", JS_NewCFunction(ctx, ffi_call_async, "callAsync", 4));
+
+  // Struct support
+  JS_SetPropertyStr(ctx, ffi_obj, "Struct", JS_NewCFunction(ctx, ffi_struct, "Struct", 2));
+  JS_SetPropertyStr(ctx, ffi_obj, "allocStruct", JS_NewCFunction(ctx, ffi_alloc_struct, "allocStruct", 1));
+
   // Add version information  
-  JS_SetPropertyStr(ctx, ffi_obj, "version", JS_NewString(ctx, "2.2.0"));
+  JS_SetPropertyStr(ctx, ffi_obj, "version", JS_NewString(ctx, "3.0.0"));
   
   // Add type constants for convenience
   JSValue types_obj = JS_NewObject(ctx);
@@ -1109,9 +1901,11 @@ JSValue JSRT_CreateFFIModule(JSContext *ctx) {
   JS_SetPropertyStr(ctx, types_obj, "string", JS_NewString(ctx, "string"));
   JS_SetPropertyStr(ctx, types_obj, "pointer", JS_NewString(ctx, "pointer"));
   JS_SetPropertyStr(ctx, types_obj, "array", JS_NewString(ctx, "array"));
+  JS_SetPropertyStr(ctx, types_obj, "callback", JS_NewString(ctx, "callback"));
+  JS_SetPropertyStr(ctx, types_obj, "struct", JS_NewString(ctx, "struct"));
   JS_SetPropertyStr(ctx, ffi_obj, "types", types_obj);
 
-  JSRT_Debug("FFI: Created enhanced FFI module v2.2.0 with array support and enhanced error reporting");
+  JSRT_Debug("FFI: Created enhanced FFI module v3.0.0 with callback support, async functions, struct support, array support and enhanced error reporting");
 
   return ffi_obj;
 }

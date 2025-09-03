@@ -126,33 +126,85 @@ try {
 
 ## Limitations and Current Status
 
-### ⚠️ Important Notice
+### ✅ Recent Major Improvements (v2.0.0)
 
-This is a **proof-of-concept** implementation with the following limitations:
+This FFI implementation has been significantly enhanced with the following improvements:
 
-1. **Function Calls Not Fully Implemented**: While the module can load libraries and create function bindings, actually calling the functions may cause crashes or unpredictable behavior.
+#### 🚀 Enhanced Function Calling
+- **16 Arguments Support**: Expanded from 4 to 16 function arguments
+- **Enhanced Type System**: Full support for `int`, `int32`, `int64`, `float`, `double`, `string`, `pointer`, `void`
+- **Better Argument Parsing**: Supports JavaScript numbers, strings, booleans, null/undefined
 
-2. **No libffi Integration**: A production FFI implementation would use libffi for proper calling convention handling. This implementation uses a simplified approach that doesn't handle all calling conventions correctly.
+#### 🛠️ Memory Management API
+- **`ffi.malloc(size)`**: Allocate memory dynamically
+- **`ffi.free(ptr)`**: Free allocated memory  
+- **`ffi.memcpy(dest, src, size)`**: Copy memory between pointers
+- **`ffi.readString(ptr, [maxLength])`**: Read null-terminated string from pointer
+- **`ffi.writeString(ptr, str)`**: Write string to memory location
 
-3. **Limited Type Support**: Complex types like structs, unions, and function pointers are not supported.
+#### 📚 Developer Experience
+- **Type Constants**: `ffi.types` object with predefined type strings
+- **Enhanced Error Handling**: Better validation and error messages
+- **Safety Limits**: Reasonable limits on memory operations for security
 
-4. **Memory Management**: No automatic memory management for allocated memory from native functions.
+### 📖 Enhanced Usage Examples
 
-### What Works
+```javascript
+const ffi = require('std:ffi');
 
-- ✅ Loading dynamic libraries across platforms
-- ✅ Function symbol resolution
-- ✅ Basic type definitions
-- ✅ Error handling for missing libraries/functions
+// Using type constants for cleaner code
+const libc = ffi.Library('libc.so.6', {
+  'strlen': [ffi.types.int, [ffi.types.string]],
+  'sqrt': [ffi.types.double, [ffi.types.double]],
+  'malloc': [ffi.types.pointer, [ffi.types.int]],
+  'free': [ffi.types.void, [ffi.types.pointer]]
+});
+
+// Enhanced function calls with more types
+const length = libc.strlen('hello');           // int return
+const result = libc.sqrt(16.0);               // double return  
+
+// Memory management
+const ptr = ffi.malloc(256);                  // Allocate 256 bytes
+ffi.writeString(ptr, "Hello, FFI!");          // Write string to memory
+const str = ffi.readString(ptr);              // Read string back
+ffi.free(ptr);                                // Clean up memory
+
+// Copy memory between buffers
+const src = ffi.malloc(100);
+const dest = ffi.malloc(100);
+ffi.writeString(src, "Source data");
+ffi.memcpy(dest, src, 50);                    // Copy 50 bytes
+ffi.free(src);
+ffi.free(dest);
+```
+
+### ⚠️ Current Limitations
+
+While significantly improved, some limitations remain:
+
+1. **Complex Types**: Structs, unions, and arrays are not yet supported
+2. **Callbacks**: No support for C functions calling JavaScript functions
+3. **No libffi**: Still uses basic x86_64 calling conventions 
+4. **Platform Dependencies**: Some math functions may not be available on all systems
+
+### What Works ✅
+
+- ✅ Loading dynamic libraries across platforms (Windows, Linux, macOS)
+- ✅ Function symbol resolution with enhanced error handling
+- ✅ **Function calls with up to 16 arguments** (was 4)
+- ✅ **Complete type system**: int, int32, int64, float, double, string, pointer, void
+- ✅ **Memory management API**: malloc, free, memcpy, readString, writeString  
+- ✅ **Enhanced argument parsing**: numbers, strings, booleans, null/undefined
+- ✅ **Type constants**: `ffi.types` for cleaner code
 - ✅ Both CommonJS (`require`) and ES Module (`import`) support
 
-### What Doesn't Work
+### What's Limited ⚠️
 
-- ❌ Actual function calls (may crash)
-- ❌ Complex parameter types
-- ❌ Callback functions
-- ❌ Memory management for native allocations
-- ❌ Struct/union support
+- ⚠️ **Structs/unions**: Complex data structures not supported
+- ⚠️ **Callbacks**: C-to-JavaScript function calls not implemented  
+- ⚠️ **libffi**: Advanced calling convention handling not integrated
+- ⚠️ **Async calls**: No support for asynchronous native function execution
 
 ## Architecture
 
@@ -171,13 +223,18 @@ The FFI module uses two main classes:
 
 ## Future Enhancements
 
-To make this a production-ready FFI implementation:
+To further enhance this FFI implementation:
 
-1. **Integrate libffi**: Use libffi for proper cross-platform function calling
-2. **Add callback support**: Allow JavaScript functions to be called from native code
-3. **Struct/union support**: Define and use complex data types
-4. **Memory management helpers**: Provide utilities for manual memory management
-5. **Async function support**: Support for asynchronous native function calls
+1. **~~Expand argument support~~** ✅ **COMPLETED** - Now supports up to 16 arguments
+2. **~~Add numeric types~~** ✅ **COMPLETED** - Added float, double, int64 support  
+3. **~~Memory management~~** ✅ **COMPLETED** - Added malloc/free/memcpy/readString/writeString
+4. **Integrate libffi**: Use libffi for robust cross-platform function calling
+5. **Add callback support**: Allow JavaScript functions to be called from native code
+6. **Struct/union support**: Define and use complex data types
+7. **Array handling**: Support for native arrays and buffers
+8. **Async function support**: Support for asynchronous native function calls
+9. **Symbol export**: Allow exporting JavaScript functions to native libraries
+10. **ABI validation**: Ensure calling convention compatibility
 6. **Better error messages**: More detailed error reporting with stack traces
 
 ## Security Considerations

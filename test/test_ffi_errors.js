@@ -6,7 +6,7 @@ console.log('=== FFI Enhanced Error Messages Tests ===');
 console.log('Test 1: Loading FFI module with enhanced error messages');
 const ffi = require('std:ffi');
 assert.strictEqual(typeof ffi, 'object', 'FFI module should be an object');
-assert.strictEqual(ffi.version, '2.2.0', 'FFI version should be 2.2.0');
+assert.strictEqual(ffi.version, '3.0.0', 'FFI version should be 3.0.0');
 console.log('✓ FFI module with enhanced error messages loaded successfully');
 
 // Test 2: Enhanced error messages for invalid arguments

@@ -12,7 +12,7 @@ assert.strictEqual(typeof ffi.free, 'function', 'ffi.free should be a function')
 assert.strictEqual(typeof ffi.memcpy, 'function', 'ffi.memcpy should be a function');
 assert.strictEqual(typeof ffi.readString, 'function', 'ffi.readString should be a function');
 assert.strictEqual(typeof ffi.writeString, 'function', 'ffi.writeString should be a function');
-assert.strictEqual(ffi.version, '2.2.0', 'FFI version should be 2.2.0');
+assert.strictEqual(ffi.version, '3.0.0', 'FFI version should be 3.0.0');
 console.log('✓ Enhanced FFI module loaded successfully');
 console.log('FFI version:', ffi.version);
 

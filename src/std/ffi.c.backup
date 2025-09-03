@@ -59,15 +59,6 @@ typedef struct {
   void *func_ptr;
 } ffi_function_t;
 
-// Global storage for FFI function metadata  
-static JSValue ffi_functions_map = JS_UNINITIALIZED;
-static int next_function_id = 1;
-
-// Function wrapper data structure
-typedef struct {
-  int function_id;
-} ffi_function_wrapper_t;
-
 // Library handle structure
 typedef struct {
   jsrt_dl_handle_t handle;
@@ -94,66 +85,6 @@ typedef struct {
   size_t *field_offsets;
   size_t total_size;
 } ffi_struct_def_t;
-
-// Store function metadata for lookup during calls
-static int store_function_metadata(JSContext *ctx, ffi_function_t *func) {
-  if (JS_IsUninitialized(ffi_functions_map)) {
-    ffi_functions_map = JS_NewObject(ctx);
-  }
-  
-  int function_id = next_function_id++;
-  char id_str[32];
-  snprintf(id_str, sizeof(id_str), "%d", function_id);
-  
-  // Create metadata object
-  JSValue metadata = JS_NewObject(ctx);
-  JS_SetPropertyStr(ctx, metadata, "return_type", JS_NewInt32(ctx, func->return_type));
-  JS_SetPropertyStr(ctx, metadata, "arg_count", JS_NewInt32(ctx, func->arg_count));
-  JS_SetPropertyStr(ctx, metadata, "func_ptr", JS_NewInt64(ctx, (intptr_t)func->func_ptr));
-  
-  JS_SetPropertyStr(ctx, ffi_functions_map, id_str, metadata);
-  return function_id;
-}
-
-// Retrieve function metadata during calls
-static bool get_function_metadata_by_id(JSContext *ctx, int function_id, ffi_function_t *func) {
-  if (JS_IsUninitialized(ffi_functions_map)) {
-    return false;
-  }
-  
-  char id_str[32];
-  snprintf(id_str, sizeof(id_str), "%d", function_id);
-  
-  JSValue metadata = JS_GetPropertyStr(ctx, ffi_functions_map, id_str);
-  if (JS_IsUndefined(metadata)) {
-    return false;
-  }
-  
-  JSValue return_type_val = JS_GetPropertyStr(ctx, metadata, "return_type");
-  JSValue arg_count_val = JS_GetPropertyStr(ctx, metadata, "arg_count");
-  JSValue func_ptr_val = JS_GetPropertyStr(ctx, metadata, "func_ptr");
-  
-  int32_t return_type, arg_count;
-  int64_t stored_ptr;
-  
-  bool success = (JS_ToInt32(ctx, &return_type, return_type_val) == 0) &&
-                 (JS_ToInt32(ctx, &arg_count, arg_count_val) == 0) &&
-                 (JS_ToInt64(ctx, &stored_ptr, func_ptr_val) == 0);
-  
-  if (success) {
-    func->return_type = (ffi_type_t)return_type;
-    func->arg_count = arg_count;
-    func->arg_types = NULL;
-    func->func_ptr = (void*)(intptr_t)stored_ptr;
-  }
-  
-  JS_FreeValue(ctx, return_type_val);
-  JS_FreeValue(ctx, arg_count_val);
-  JS_FreeValue(ctx, func_ptr_val);
-  JS_FreeValue(ctx, metadata);
-  
-  return success;
-}
 
 // Convert string to FFI type
 static ffi_type_t string_to_ffi_type(const char *type_str) {
@@ -287,9 +218,6 @@ static JSValue create_function_resolve_error(JSContext *ctx, const char *func_na
 static JSClassID JSRT_FFILibraryClassID;
 static JSClassID JSRT_FFIFunctionClassID;
 
-// Forward declare function call handler
-static JSValue ffi_function_call(JSContext *ctx, JSValueConst func_obj, JSValueConst this_val, int argc, JSValueConst *argv, int flags);
-
 // FFI library finalizer
 static void ffi_library_finalizer(JSRuntime *rt, JSValue val) {
   ffi_library_t *lib = (ffi_library_t *)JS_GetOpaque(val, JSRT_FFILibraryClassID);
@@ -308,10 +236,13 @@ static void ffi_library_finalizer(JSRuntime *rt, JSValue val) {
 
 // FFI function finalizer
 static void ffi_function_finalizer(JSRuntime *rt, JSValue val) {
-  ffi_function_wrapper_t *wrapper = (ffi_function_wrapper_t *)JS_GetOpaque(val, JSRT_FFIFunctionClassID);
-  if (wrapper) {
-    JSRT_Debug("FFI: Finalizing function wrapper with ID %d", wrapper->function_id);
-    free(wrapper);
+  ffi_function_t *func = (ffi_function_t *)JS_GetOpaque(val, JSRT_FFIFunctionClassID);
+  if (func) {
+    JSRT_Debug("FFI: Finalizing function");
+    if (func->arg_types) {
+      free(func->arg_types);
+    }
+    free(func);
   }
 }
 
@@ -324,7 +255,6 @@ static JSClassDef JSRT_FFILibraryClass = {
 static JSClassDef JSRT_FFIFunctionClass = {
     .class_name = "FFIFunction",
     .finalizer = ffi_function_finalizer,
-    .call = ffi_function_call,
 };
 
 // Convert JS value to native value based on FFI type
@@ -489,32 +419,78 @@ static JSValue native_to_js(JSContext *ctx, ffi_type_t type, void *value) {
 }
 
 // FFI function call implementation
-static JSValue ffi_function_call(JSContext *ctx, JSValueConst func_obj, JSValueConst this_val, int argc, JSValueConst *argv, int flags) {
+static JSValue ffi_function_call(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv) {
   JSRT_Debug("FFI Call: Starting function call with argc=%d", argc);
   
-  // Get function ID from opaque data - use func_obj instead of this_val
-  ffi_function_wrapper_t *wrapper = (ffi_function_wrapper_t *)JS_GetOpaque(func_obj, JSRT_FFIFunctionClassID);
-  if (!wrapper) {
-    return JS_ThrowTypeError(ctx, "Invalid FFI function - no wrapper data found");
-  }
-  
-  // Get metadata from global storage
-  ffi_function_t func_metadata;
-  if (!get_function_metadata_by_id(ctx, wrapper->function_id, &func_metadata)) {
-    return JS_ThrowTypeError(ctx, "FFI function metadata not found");
+  // Get function metadata from properties
+  JSValue return_type_val = JS_GetPropertyStr(ctx, this_val, "_ffi_return_type");
+  JSValue arg_count_val = JS_GetPropertyStr(ctx, this_val, "_ffi_arg_count");
+  JSValue func_ptr_val = JS_GetPropertyStr(ctx, this_val, "_ffi_func_ptr");
+
+  JSRT_Debug("FFI Call: Got property values");
+
+  const char *return_type_str = JS_ToCString(ctx, return_type_val);
+  int32_t expected_argc;
+  int64_t func_ptr_addr;
+
+  JSRT_Debug("FFI Call: Converting values");
+
+  if (JS_ToInt32(ctx, &expected_argc, arg_count_val) < 0) {
+    expected_argc = 0;
   }
 
-  JSRT_Debug("FFI Call: Got function metadata: return_type=%d, arg_count=%d, func_ptr=%p",
-             func_metadata.return_type, func_metadata.arg_count, func_metadata.func_ptr);
+  // Try to get the function pointer address as a float first, then convert to int64
+  double func_ptr_float;
+  if (JS_ToFloat64(ctx, &func_ptr_float, func_ptr_val) < 0) {
+    func_ptr_addr = 0;
+  } else {
+    func_ptr_addr = (int64_t)func_ptr_float;
+  }
 
-  if (!func_metadata.func_ptr) {
+  JSRT_Debug("FFI Call: return_type_str=%s, expected_argc=%d, actual_argc=%d, func_ptr_addr=%lld",
+             return_type_str ? return_type_str : "NULL", expected_argc, argc, (long long)func_ptr_addr);
+
+  if (!return_type_str) {
+    JS_FreeValue(ctx, return_type_val);
+    JS_FreeValue(ctx, arg_count_val);
+    JS_FreeValue(ctx, func_ptr_val);
+    return JS_ThrowTypeError(ctx, "Invalid FFI function metadata - missing return type");
+  }
+
+  if (func_ptr_addr == 0) {
+    // Add a console.log to debug what func_ptr_addr is
+    JSValue global = JS_GetGlobalObject(ctx);
+    JSValue console = JS_GetPropertyStr(ctx, global, "console");
+    JSValue log_func = JS_GetPropertyStr(ctx, console, "log");
+    char debug_buf[256];
+    snprintf(debug_buf, sizeof(debug_buf), "DEBUG: func_ptr_addr = %lld", (long long)func_ptr_addr);
+    JSValue debug_msg = JS_NewString(ctx, debug_buf);
+    JS_Call(ctx, log_func, console, 1, &debug_msg);
+    JS_FreeValue(ctx, debug_msg);
+    JS_FreeValue(ctx, log_func);
+    JS_FreeValue(ctx, console);
+    JS_FreeValue(ctx, global);
+
+    JS_FreeCString(ctx, return_type_str);
+    JS_FreeValue(ctx, return_type_val);
+    JS_FreeValue(ctx, arg_count_val);
+    JS_FreeValue(ctx, func_ptr_val);
     return JS_ThrowTypeError(ctx, "Invalid FFI function metadata - missing function pointer");
   }
 
+  JS_FreeValue(ctx, return_type_val);
+  JS_FreeValue(ctx, arg_count_val);
+  JS_FreeValue(ctx, func_ptr_val);
+
+  // No need to check argc != expected_argc since QuickJS handles this for us
+
   // Enhanced implementation for function calls with up to 16 arguments
-  if (func_metadata.arg_count > 16) {
+  if (expected_argc > 16) {
+    JS_FreeCString(ctx, return_type_str);
     return JS_ThrowTypeError(ctx, "FFI functions with more than 16 arguments not supported");
   }
+
+  void *func_ptr = (void *)(intptr_t)func_ptr_addr;
 
   // Convert arguments to native values - now supports up to 16 arguments and arrays
   uint64_t args[16] = {0};
@@ -581,6 +557,7 @@ static JSValue ffi_function_call(JSContext *ctx, JSValueConst func_obj, JSValueC
             if (string_args[j]) JS_FreeCString(ctx, string_args[j]);
             if (array_args[j]) free(array_args[j]);
           }
+          JS_FreeCString(ctx, return_type_str);
           return JS_ThrowTypeError(ctx, "Failed to convert argument %d to number", i);
         }
         args[i] = (uint64_t)(int64_t)num;
@@ -597,14 +574,14 @@ static JSValue ffi_function_call(JSContext *ctx, JSValueConst func_obj, JSValueC
         if (string_args[j]) JS_FreeCString(ctx, string_args[j]);
         if (array_args[j]) free(array_args[j]);
       }
+      JS_FreeCString(ctx, return_type_str);
       return JS_ThrowTypeError(ctx, "Unsupported argument type at position %d", i);
     }
   }
 
   // Perform the function call based on signature with enhanced type support
   JSValue result = JS_UNDEFINED;
-  ffi_type_t return_type = func_metadata.return_type;
-  void *func_ptr = func_metadata.func_ptr;
+  ffi_type_t return_type = string_to_ffi_type(return_type_str);
 
   // Handle different return types with expanded argument support
   if (return_type == FFI_TYPE_INT || return_type == FFI_TYPE_INT32) {
@@ -731,9 +708,7 @@ static JSValue ffi_function_call(JSContext *ctx, JSValueConst func_obj, JSValueC
     }
     result = JS_UNDEFINED;
   } else {
-    char type_name[32];
-    snprintf(type_name, sizeof(type_name), "type_%d", (int)return_type);
-    result = JS_ThrowTypeError(ctx, "Unsupported return type: %s", type_name);
+    result = JS_ThrowTypeError(ctx, "Unsupported return type: %s", return_type_str);
   }
 
   // Clean up allocated resources
@@ -746,6 +721,7 @@ static JSValue ffi_function_call(JSContext *ctx, JSValueConst func_obj, JSValueC
     }
   }
 
+  JS_FreeCString(ctx, return_type_str);
   return result;
 }
 
@@ -878,31 +854,19 @@ static JSValue ffi_library(JSContext *ctx, JSValueConst this_val, int argc, JSVa
     }
     JS_FreeValue(ctx, args_length_val);
 
-    // Create function metadata structure and store it globally
-    ffi_function_t func_metadata;
-    func_metadata.return_type = string_to_ffi_type(return_type_str);
-    func_metadata.arg_count = args_length;
-    func_metadata.arg_types = NULL; // TODO: parse argument types if needed
-    func_metadata.func_ptr = func_ptr;
+    // Skip detailed function parsing for now - just store basic metadata
+    // This is a proof-of-concept implementation
 
-    // Store metadata in global map and get function ID
-    int function_id = store_function_metadata(ctx, &func_metadata);
-    
-    // Create wrapper structure
-    ffi_function_wrapper_t *wrapper = malloc(sizeof(ffi_function_wrapper_t));
-    if (!wrapper) {
-      JS_FreeValue(ctx, prop_val);
-      JS_FreeValue(ctx, return_type_val);
-      JS_FreeValue(ctx, args_val);
-      JS_FreeCString(ctx, return_type_str);
-      JS_FreeCString(ctx, func_name);
-      continue; // Skip this function
-    }
-    wrapper->function_id = function_id;
+    // Create JS function with correct argument count
+    JSValue js_func = JS_NewCFunction(ctx, ffi_function_call, func_name, args_length);
 
-    // Create callable function object
-    JSValue js_func = JS_NewObjectClass(ctx, JSRT_FFIFunctionClassID);
-    JS_SetOpaque(js_func, wrapper);
+    // Store function metadata as properties instead of opaque data
+    JS_SetPropertyStr(ctx, js_func, "_ffi_return_type", JS_NewString(ctx, return_type_str));
+    JS_SetPropertyStr(ctx, js_func, "_ffi_arg_count", JS_NewInt32(ctx, args_length));
+    JS_SetPropertyStr(ctx, js_func, "_ffi_func_ptr", JS_NewFloat64(ctx, (double)(intptr_t)func_ptr));
+
+    // Don't use opaque data for now to avoid cleanup issues
+    // JS_SetOpaque(js_func, func);
 
     JS_SetPropertyStr(ctx, lib_obj, func_name, js_func);
 

@@ -1,5 +1,5 @@
 // Cross-platform compatible runtime tests
-const assert = require('std:assert');
+const assert = require('jsrt:assert');
 const testValue = 123;
 
 console.log('Runtime test - basic functionality check');

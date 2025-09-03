@@ -6,10 +6,10 @@ The FFI module provides the ability to call functions from native dynamic librar
 
 ```javascript
 // CommonJS
-const ffi = require('std:ffi');
+const ffi = require('jsrt:ffi');
 
 // ES Modules
-import ffi from 'std:ffi';
+import ffi from 'jsrt:ffi';
 ```
 
 ## API Reference
@@ -33,7 +33,7 @@ Loads a dynamic library and creates JavaScript bindings for specified functions.
 
 **Example:**
 ```javascript
-const ffi = require('std:ffi');
+const ffi = require('jsrt:ffi');
 
 // Load libc with basic functions
 const libc = ffi.Library('libc.so.6', {
@@ -82,7 +82,7 @@ The FFI module automatically handles platform-specific differences:
 ### Basic Usage
 
 ```javascript
-const ffi = require('std:ffi');
+const ffi = require('jsrt:ffi');
 
 // Load system math library
 const libm = ffi.Library('libm.so.6', {
@@ -98,7 +98,7 @@ console.log('Math functions loaded:', Object.keys(libm));
 ### Windows Example
 
 ```javascript
-const ffi = require('std:ffi');
+const ffi = require('jsrt:ffi');
 
 // Load Windows kernel32.dll
 const kernel32 = ffi.Library('kernel32.dll', {
@@ -112,7 +112,7 @@ console.log('Windows functions loaded:', Object.keys(kernel32));
 ### Error Handling
 
 ```javascript
-const ffi = require('std:ffi');
+const ffi = require('jsrt:ffi');
 
 try {
   const lib = ffi.Library('nonexistent.so', {
@@ -164,7 +164,7 @@ This FFI implementation has been significantly enhanced with the following impro
 ### 📖 Enhanced Usage Examples
 
 ```javascript
-const ffi = require('std:ffi');
+const ffi = require('jsrt:ffi');
 
 // Using type constants for cleaner code
 const libc = ffi.Library('libc.so.6', {

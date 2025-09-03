@@ -1,5 +1,5 @@
 // Demo showcasing the process module
-import process from 'std:process';
+import process from 'jsrt:process';
 
 console.log('='.repeat(50));
 console.log('Process Module Demo');
@@ -22,7 +22,7 @@ console.log(`  Architecture: ${process.arch}`);
 console.log(`\nUptime at start: ${process.uptime()}`);
 
 // Test CommonJS require as well
-const processRequire = require('std:process');
+const processRequire = require('jsrt:process');
 console.log('\nUsing require():');
 console.log(`  PID via require: ${processRequire.pid}`);
 console.log(`  Platform via require: ${processRequire.platform}`);

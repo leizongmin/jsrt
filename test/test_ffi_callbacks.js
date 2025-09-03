@@ -1,10 +1,10 @@
-const assert = require('std:assert');
+const assert = require('jsrt:assert');
 
 console.log('=== FFI Callback Tests ===');
 
 // Test callback support
 try {
-  const ffi = require('std:ffi');
+  const ffi = require('jsrt:ffi');
 
   console.log('Test 1: Creating a simple callback');
 

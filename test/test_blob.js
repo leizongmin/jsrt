@@ -1,5 +1,5 @@
 // Test Blob API
-const assert = require('std:assert');
+const assert = require('jsrt:assert');
 console.log('Testing Blob API...');
 
 // Test basic Blob constructor

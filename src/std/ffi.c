@@ -423,7 +423,7 @@ static JSValue create_ffi_error_with_stack(JSContext* ctx, const char* message, 
     if (!JS_IsException(error_instance)) {
       // Add additional properties to the error for better debugging
       JS_SetPropertyStr(ctx, error_instance, "ffiFunction", function_name ? JS_NewString(ctx, function_name) : JS_NULL);
-      JS_SetPropertyStr(ctx, error_instance, "ffiModule", JS_NewString(ctx, "std:ffi"));
+      JS_SetPropertyStr(ctx, error_instance, "ffiModule", JS_NewString(ctx, "jsrt:ffi"));
 
       // Try to add stack trace by accessing the Error.stack property
       JSValue stack = JS_GetPropertyStr(ctx, error_instance, "stack");
@@ -446,7 +446,7 @@ static JSValue create_ffi_error_with_stack(JSContext* ctx, const char* message, 
   if (!JS_IsNull(error_obj_fallback)) {
     JS_SetPropertyStr(ctx, error_obj_fallback, "ffiFunction",
                       function_name ? JS_NewString(ctx, function_name) : JS_NULL);
-    JS_SetPropertyStr(ctx, error_obj_fallback, "ffiModule", JS_NewString(ctx, "std:ffi"));
+    JS_SetPropertyStr(ctx, error_obj_fallback, "ffiModule", JS_NewString(ctx, "jsrt:ffi"));
     JS_Throw(ctx, error_obj_fallback);
   }
 
@@ -510,7 +510,7 @@ static JSValue create_library_load_error(JSContext* ctx, const char* lib_name) {
     if (!JS_IsException(error_instance)) {
       // Add additional properties for debugging
       JS_SetPropertyStr(ctx, error_instance, "ffiFunction", JS_NewString(ctx, "ffi.Library"));
-      JS_SetPropertyStr(ctx, error_instance, "ffiModule", JS_NewString(ctx, "std:ffi"));
+      JS_SetPropertyStr(ctx, error_instance, "ffiModule", JS_NewString(ctx, "jsrt:ffi"));
       return JS_Throw(ctx, error_instance);
     }
     JS_FreeValue(ctx, error_instance);
@@ -2678,7 +2678,7 @@ static JSValue ffi_alloc_struct(JSContext* ctx, JSValueConst this_val, int argc,
   return JS_NewInt64(ctx, (intptr_t)struct_ptr);
 }
 
-// Create FFI module for require("std:ffi")
+// Create FFI module for require("jsrt:ffi")
 JSValue JSRT_CreateFFIModule(JSContext* ctx) {
   JSValue ffi_obj = JS_NewObject(ctx);
 

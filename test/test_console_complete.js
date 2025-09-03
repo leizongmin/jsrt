@@ -1,5 +1,5 @@
 // Comprehensive Console API tests for WinterCG compliance
-const assert = require('std:assert');
+const assert = require('jsrt:assert');
 console.log('=== Starting Complete Console API Tests ===');
 
 // Test basic logging methods

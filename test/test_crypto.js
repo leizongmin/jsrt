@@ -1,5 +1,5 @@
 // WebCrypto API tests for WinterCG compliance
-const assert = require('std:assert');
+const assert = require('jsrt:assert');
 console.log('=== Starting WebCrypto API Tests ===');
 
 // Test 1: crypto object existence

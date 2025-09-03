@@ -1,6 +1,6 @@
-const assert = require('std:assert');
+const assert = require('jsrt:assert');
 
-console.log('=== Testing std:assert module (CommonJS) ===');
+console.log('=== Testing jsrt:assert module (CommonJS) ===');
 console.log('Assert module type:', typeof assert);
 
 // Test 1: Basic assert function
@@ -196,4 +196,4 @@ try {
   console.log('✅ Custom error message:', e.message);
 }
 
-console.log('\n=== All std:assert (CommonJS) tests completed ===');
+console.log('\n=== All jsrt:assert (CommonJS) tests completed ===');

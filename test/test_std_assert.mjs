@@ -1,6 +1,6 @@
-import assert from 'std:assert';
+import assert from 'jsrt:assert';
 
-console.log('=== Testing std:assert module (ES Modules) ===');
+console.log('=== Testing jsrt:assert module (ES Modules) ===');
 console.log('Assert module type:', typeof assert);
 
 // Test 1: Basic assert function
@@ -220,4 +220,4 @@ try {
   console.log('❌ null/undefined deepEqual failed:', e.message);
 }
 
-console.log('\n=== All std:assert (ES Modules) tests completed ===');
+console.log('\n=== All jsrt:assert (ES Modules) tests completed ===');

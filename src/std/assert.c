@@ -360,7 +360,7 @@ static JSValue jsrt_assert_doesNotThrow(JSContext* ctx, JSValueConst this_val, i
   return JS_UNDEFINED;
 }
 
-// Create assert module for std:assert
+// Create assert module for jsrt:assert
 JSValue JSRT_CreateAssertModule(JSContext* ctx) {
   // Create assert function that is also callable
   JSValue assert_func = JS_NewCFunction(ctx, jsrt_assert, "assert", 2);

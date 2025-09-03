@@ -1,10 +1,10 @@
-const assert = require('std:assert');
+const assert = require('jsrt:assert');
 
 console.log('=== FFI Enhanced Error Messages Tests ===');
 
 // Test 1: Basic FFI module loading with enhanced error messages
 console.log('Test 1: Loading FFI module with enhanced error messages');
-const ffi = require('std:ffi');
+const ffi = require('jsrt:ffi');
 assert.strictEqual(typeof ffi, 'object', 'FFI module should be an object');
 assert.strictEqual(ffi.version, '3.0.0', 'FFI version should be 3.0.0');
 console.log('✓ FFI module with enhanced error messages loaded successfully');

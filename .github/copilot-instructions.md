@@ -108,8 +108,8 @@ make clean && make
 ### Writing Tests (MANDATORY Requirements)
 
 ```javascript
-// ✅ CORRECT: Use std:assert module
-const assert = require("std:assert");
+// ✅ CORRECT: Use jsrt:assert module
+const assert = require("jsrt:assert");
 
 // Test basic functionality
 assert.strictEqual(1 + 1, 2, "Addition should work");

@@ -1,5 +1,5 @@
 // Test Streams API
-const assert = require('std:assert');
+const assert = require('jsrt:assert');
 console.log('Testing Streams API...');
 
 // Test ReadableStream

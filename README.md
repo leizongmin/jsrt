@@ -75,7 +75,7 @@ fetch('https://httpbin.org/json')
 
 ### Process Information
 ```javascript
-import process from 'std:process';
+import process from 'jsrt:process';
 
 console.log(`PID: ${process.pid}`);
 console.log(`Platform: ${process.platform}`);
@@ -97,7 +97,7 @@ console.log('UUID:', uuid);
 ### Native Library Access (FFI)
 ```javascript
 // Load and call native C library functions
-const ffi = require('std:ffi');
+const ffi = require('jsrt:ffi');
 
 // Load standard C library
 const libc = ffi.Library('libc.so.6', {
@@ -116,9 +116,9 @@ console.log('Available functions:', Object.keys(libc));
 | Module | Description | Usage |
 |--------|-------------|-------|
 | `console` | Enhanced console logging | Global `console` object |
-| `std:process` | Process information and control | `import process from 'std:process'` |
-| `std:assert` | Testing assertions | `const assert = require('std:assert')` |
-| `std:ffi` | Foreign Function Interface for native libraries | `const ffi = require('std:ffi')` |
+| `jsrt:process` | Process information and control | `import process from 'jsrt:process'` |
+| `jsrt:assert` | Testing assertions | `const assert = require('jsrt:assert')` |
+| `jsrt:ffi` | Foreign Function Interface for native libraries | `const ffi = require('jsrt:ffi')` |
 | `crypto` | Cryptographic functions | Global `crypto` object |
 | `fetch` | HTTP client (Fetch API) | Global `fetch` function |
 | `encoding` | Text encoding/decoding | Global `TextEncoder`, `TextDecoder`, `btoa`, `atob` |

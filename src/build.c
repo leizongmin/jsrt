@@ -48,7 +48,7 @@ int BuildExecutable(const char* executable_path, const char* filename, const cha
   if (JS_DetectModule(input_file.data, input_file.size)) {
     fprintf(stderr, "Error: ES6 modules (import/export) are not supported in self-contained executables.\n");
     fprintf(stderr, "       Please use CommonJS require() instead of ES6 import.\n");
-    fprintf(stderr, "       Example: const process = require('std:process');\n");
+    fprintf(stderr, "       Example: const process = require('jsrt:process');\n");
     JSRT_ReadFileResultFree(&input_file);
     return 1;
   }

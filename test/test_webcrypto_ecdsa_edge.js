@@ -1,5 +1,5 @@
 // WebCrypto ECDSA edge cases and comprehensive tests
-const assert = require('std:assert');
+const assert = require('jsrt:assert');
 
 // Check if crypto is available (skip if OpenSSL not found)
 if (typeof crypto === 'undefined' || !crypto.subtle) {

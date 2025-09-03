@@ -1,5 +1,5 @@
 // Simple RSASSA-PKCS1-v1_5 test
-const assert = require('std:assert');
+const assert = require('jsrt:assert');
 
 console.log('=== Simple RSASSA-PKCS1-v1_5 Test ===');
 

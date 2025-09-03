@@ -1,5 +1,5 @@
 // Test CommonJS require
-const assert = require('std:assert');
+const assert = require('jsrt:assert');
 console.log('=== CommonJS Module Tests ===');
 
 // Test 1: Basic require

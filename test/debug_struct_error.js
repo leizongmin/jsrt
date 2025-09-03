@@ -1,4 +1,4 @@
-const ffi = require('std:ffi');
+const ffi = require('jsrt:ffi');
 
 try {
   ffi.Struct(123, { x: 'int32' });

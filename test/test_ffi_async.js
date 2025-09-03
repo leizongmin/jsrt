@@ -1,9 +1,9 @@
-const assert = require('std:assert');
+const assert = require('jsrt:assert');
 
 console.log('=== Minimal FFI Async Function Tests ===');
 
 try {
-  const ffi = require('std:ffi');
+  const ffi = require('jsrt:ffi');
 
   console.log('Test 1: Check async function availability');
   assert.strictEqual(

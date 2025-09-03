@@ -3,7 +3,7 @@ console.log('🚀 FFI Module Demo');
 console.log('==================');
 
 // Load the FFI module
-const ffi = require('std:ffi');
+const ffi = require('jsrt:ffi');
 
 console.log('✅ FFI module loaded successfully');
 console.log('📋 FFI version:', ffi.version);
@@ -49,7 +49,7 @@ try {
 }
 
 console.log('\n📖 Usage Examples:');
-console.log('const ffi = require("std:ffi");');
+console.log('const ffi = require("jsrt:ffi");');
 console.log('const lib = ffi.Library("mylibrary.so", {');
 console.log('  "my_function": ["int", ["string", "int"]]');
 console.log('});');

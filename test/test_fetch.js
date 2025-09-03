@@ -1,5 +1,5 @@
 // Test Fetch API implementation - Web Standards Compliant
-const assert = require('std:assert');
+const assert = require('jsrt:assert');
 console.log('=== Fetch API Tests ===');
 
 // Test 1: Headers class - Complete API

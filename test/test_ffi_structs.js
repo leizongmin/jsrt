@@ -1,10 +1,10 @@
-const assert = require('std:assert');
+const assert = require('jsrt:assert');
 
 console.log('=== FFI Struct Support Tests ===');
 
 // Test struct support
 try {
-  const ffi = require('std:ffi');
+  const ffi = require('jsrt:ffi');
 
   console.log('Test 1: Check struct support availability');
   assert.strictEqual(

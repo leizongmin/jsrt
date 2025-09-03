@@ -1,5 +1,5 @@
 // Comprehensive Fetch API Unit Tests
-const assert = require('std:assert');
+const assert = require('jsrt:assert');
 console.log('=== Comprehensive Fetch API Unit Tests ===');
 
 let testCount = 0;
@@ -15,7 +15,7 @@ function testAssert(condition, message) {
     console.log(`❌ FAIL: ${message}`);
     failCount++;
   }
-  // Use std:assert for actual assertion
+  // Use jsrt:assert for actual assertion
   assert.ok(condition, message);
 }
 

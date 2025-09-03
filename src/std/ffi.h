@@ -11,7 +11,7 @@ void JSRT_RuntimeSetupStdFFI(JSRT_Runtime* rt);
 // Cleanup FFI module
 void JSRT_RuntimeCleanupStdFFI(JSContext* ctx);
 
-// Create FFI module for require("std:ffi")
+// Create FFI module for require("jsrt:ffi")
 JSValue JSRT_CreateFFIModule(JSContext* ctx);
 
 #endif

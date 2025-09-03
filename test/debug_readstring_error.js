@@ -1,4 +1,4 @@
-const ffi = require('std:ffi');
+const ffi = require('jsrt:ffi');
 
 try {
   ffi.readString(0);

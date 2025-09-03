@@ -1,5 +1,5 @@
 // Test AbortController and AbortSignal implementation
-const assert = require('std:assert');
+const assert = require('jsrt:assert');
 console.log('=== AbortController/AbortSignal API Tests ===');
 
 // Test 1: Basic AbortController construction

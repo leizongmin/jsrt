@@ -1,5 +1,5 @@
 // FFI ES Module Test
-import ffi from 'std:ffi';
+import ffi from 'jsrt:ffi';
 
 console.log('=== FFI ES Module Test ===');
 

@@ -1,10 +1,10 @@
-const assert = require('std:assert');
+const assert = require('jsrt:assert');
 
 console.log('=== FFI Array Support Tests ===');
 
 // Test 1: Basic FFI module loading with array support
 console.log('Test 1: Loading FFI module with array support');
-const ffi = require('std:ffi');
+const ffi = require('jsrt:ffi');
 assert.strictEqual(typeof ffi, 'object', 'FFI module should be an object');
 assert.strictEqual(
   typeof ffi.Library,

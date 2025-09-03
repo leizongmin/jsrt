@@ -13,7 +13,7 @@
 #include "ffi.h"
 #include "process.h"
 
-// Module init function for std:assert ES module
+// Module init function for jsrt:assert ES module
 static int js_std_assert_init(JSContext* ctx, JSModuleDef* m) {
   JSValue assert_module = JSRT_CreateAssertModule(ctx);
   if (JS_IsException(assert_module)) {
@@ -23,7 +23,7 @@ static int js_std_assert_init(JSContext* ctx, JSModuleDef* m) {
   return 0;
 }
 
-// Module init function for std:process ES module
+// Module init function for jsrt:process ES module
 static int js_std_process_init(JSContext* ctx, JSModuleDef* m) {
   JSValue process_module = JSRT_CreateProcessModule(ctx);
   if (JS_IsException(process_module)) {
@@ -33,7 +33,7 @@ static int js_std_process_init(JSContext* ctx, JSModuleDef* m) {
   return 0;
 }
 
-// Module init function for std:ffi ES module
+// Module init function for jsrt:ffi ES module
 static int js_std_ffi_init(JSContext* ctx, JSModuleDef* m) {
   JSValue ffi_module = JSRT_CreateFFIModule(ctx);
   if (JS_IsException(ffi_module)) {
@@ -107,8 +107,8 @@ char* JSRT_ModuleNormalize(JSContext* ctx, const char* module_base_name, const c
   JSRT_Debug("JSRT_ModuleNormalize: module_name='%s', module_base_name='%s'", module_name,
              module_base_name ? module_base_name : "null");
 
-  // Handle std: modules specially - don't try to resolve them as files
-  if (strncmp(module_name, "std:", 4) == 0) {
+  // Handle jsrt: modules specially - don't try to resolve them as files
+  if (strncmp(module_name, "jsrt:", 5) == 0) {
     return strdup(module_name);
   }
 
@@ -129,12 +129,12 @@ char* JSRT_ModuleNormalize(JSContext* ctx, const char* module_base_name, const c
 JSModuleDef* JSRT_ModuleLoader(JSContext* ctx, const char* module_name, void* opaque) {
   JSRT_Debug("JSRT_ModuleLoader: loading ES module '%s'", module_name);
 
-  // Handle std: modules
-  if (strncmp(module_name, "std:", 4) == 0) {
-    const char* std_module = module_name + 4;  // Skip "std:" prefix
+  // Handle jsrt: modules
+  if (strncmp(module_name, "jsrt:", 5) == 0) {
+    const char* std_module = module_name + 5;  // Skip "jsrt:" prefix
 
     if (strcmp(std_module, "assert") == 0) {
-      // Create std:assert module with init function
+      // Create jsrt:assert module with init function
       JSModuleDef* m = JS_NewCModule(ctx, module_name, js_std_assert_init);
       if (m) {
         JS_AddModuleExport(ctx, m, "default");
@@ -143,7 +143,7 @@ JSModuleDef* JSRT_ModuleLoader(JSContext* ctx, const char* module_name, void* op
     }
 
     if (strcmp(std_module, "process") == 0) {
-      // Create std:process module with init function
+      // Create jsrt:process module with init function
       JSModuleDef* m = JS_NewCModule(ctx, module_name, js_std_process_init);
       if (m) {
         JS_AddModuleExport(ctx, m, "default");
@@ -152,7 +152,7 @@ JSModuleDef* JSRT_ModuleLoader(JSContext* ctx, const char* module_name, void* op
     }
 
     if (strcmp(std_module, "ffi") == 0) {
-      // Create std:ffi module with init function
+      // Create jsrt:ffi module with init function
       JSModuleDef* m = JS_NewCModule(ctx, module_name, js_std_ffi_init);
       if (m) {
         JS_AddModuleExport(ctx, m, "default");
@@ -262,9 +262,9 @@ static JSValue js_require(JSContext* ctx, JSValueConst this_val, int argc, JSVal
 
   JSRT_Debug("js_require: loading CommonJS module '%s'", module_name);
 
-  // Handle std: modules
-  if (strncmp(module_name, "std:", 4) == 0) {
-    const char* std_module = module_name + 4;  // Skip "std:" prefix
+  // Handle jsrt: modules
+  if (strncmp(module_name, "jsrt:", 5) == 0) {
+    const char* std_module = module_name + 5;  // Skip "jsrt:" prefix
 
     if (strcmp(std_module, "assert") == 0) {
       JSValue result = JSRT_CreateAssertModule(ctx);
@@ -285,7 +285,7 @@ static JSValue js_require(JSContext* ctx, JSValueConst this_val, int argc, JSVal
     }
 
     JS_FreeCString(ctx, module_name);
-    return JS_ThrowReferenceError(ctx, "Unknown std module '%s'", std_module);
+    return JS_ThrowReferenceError(ctx, "Unknown jsrt module '%s'", std_module);
   }
 
   // Resolve the module path

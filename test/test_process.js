@@ -1,7 +1,7 @@
 // Test ES module import
-import process from 'std:process';
+import process from 'jsrt:process';
 
-console.log('Testing std:process module with ES import:');
+console.log('Testing jsrt:process module with ES import:');
 console.log('process.argv:', process.argv);
 console.log('process.argv0:', process.argv0);
 console.log('process.pid:', process.pid);
@@ -12,9 +12,9 @@ console.log('process.arch:', process.arch);
 console.log('process.uptime():', process.uptime());
 
 // Test CommonJS require
-const assert = require('std:assert');
-const process2 = require('std:process');
-console.log('\nTesting std:process module with CommonJS require:');
+const assert = require('jsrt:assert');
+const process2 = require('jsrt:process');
+console.log('\nTesting jsrt:process module with CommonJS require:');
 
 // Basic assertions for process object properties
 assert.ok(Array.isArray(process2.argv), 'process.argv should be an array');

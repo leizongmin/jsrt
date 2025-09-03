@@ -1,10 +1,10 @@
-const assert = require('std:assert');
+const assert = require('jsrt:assert');
 
 console.log('=== FFI Enhanced Error Reporting Tests ===');
 
 // Test enhanced error reporting with stack traces
 try {
-  const ffi = require('std:ffi');
+  const ffi = require('jsrt:ffi');
 
   console.log('Test 1: Basic error structure validation');
 
@@ -40,7 +40,7 @@ try {
     if (error.ffiModule) {
       assert.strictEqual(
         error.ffiModule,
-        'std:ffi',
+        'jsrt:ffi',
         'Error should have FFI module property'
       );
     }

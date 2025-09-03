@@ -1,4 +1,4 @@
-const ffi = require('std:ffi');
+const ffi = require('jsrt:ffi');
 
 console.log('Loading FFI module...');
 console.log('FFI version:', ffi.version);

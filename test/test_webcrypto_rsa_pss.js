@@ -1,5 +1,5 @@
 // WebCrypto RSA-PSS signature/verification test
-const assert = require('std:assert');
+const assert = require('jsrt:assert');
 
 // Main test function
 (async function () {

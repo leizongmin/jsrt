@@ -237,7 +237,7 @@ static JSValue jsrt_process_get_versions(JSContext* ctx, JSValueConst this_val, 
   return versions_obj;
 }
 
-// Create process module for std:process
+// Create process module for jsrt:process
 JSValue JSRT_CreateProcessModule(JSContext* ctx) {
   JSValue process_obj = JS_NewObject(ctx);
 

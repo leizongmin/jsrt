@@ -98,6 +98,9 @@ void JSRT_RuntimeFree(JSRT_Runtime *rt) {
   // Cleanup module system
   JSRT_StdModuleCleanup(rt->ctx);
 
+  // Cleanup FFI module
+  JSRT_RuntimeCleanupStdFFI(rt->ctx);
+
   JSRT_RuntimeFreeValue(rt, rt->global);
   rt->global = JS_UNDEFINED;
 

@@ -2699,6 +2699,21 @@ JSValue JSRT_CreateFFIModule(JSContext *ctx) {
   return ffi_obj;
 }
 
+// Cleanup FFI module
+void JSRT_RuntimeCleanupStdFFI(JSContext *ctx) {
+  // Clean up global ffi_functions_map if it was initialized
+  if (!JS_IsUninitialized(ffi_functions_map)) {
+    JSRT_Debug("FFI: Cleaning up global ffi_functions_map");
+    JS_FreeValue(ctx, ffi_functions_map);
+    ffi_functions_map = JS_UNINITIALIZED;
+  }
+
+  // Reset function ID counter
+  next_function_id = 1;
+
+  JSRT_Debug("FFI: FFI module cleanup completed");
+}
+
 // Initialize FFI module
 void JSRT_RuntimeSetupStdFFI(JSRT_Runtime *rt) {
   // Create class IDs

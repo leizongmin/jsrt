@@ -99,15 +99,49 @@ typedef struct {
   void *callback_ptr;  // Generated trampoline function pointer
 } ffi_callback_t;
 
-// Struct definition for FFI structs
+// Enhanced struct definition for complex nested types
+typedef struct ffi_struct_def ffi_struct_def_t;
+
+typedef enum {
+  JSRT_FIELD_TYPE_PRIMITIVE,    // Basic types (int, float, etc.)
+  JSRT_FIELD_TYPE_STRUCT,       // Nested struct
+  JSRT_FIELD_TYPE_ARRAY,        // Array of primitives or structs
+  JSRT_FIELD_TYPE_POINTER       // Pointer to any type
+} jsrt_field_type_category_t;
+
+// Field descriptor for complex types
 typedef struct {
   char *name;
+  jsrt_ffi_type_t base_type;           // Basic FFI type
+  jsrt_field_type_category_t category; // Field category
+  size_t offset;                       // Offset in parent struct
+  
+  // For nested structs
+  ffi_struct_def_t *nested_struct;     // Reference to nested struct definition
+  
+  // For arrays
+  int array_length;                    // Array size (0 for dynamic)
+  jsrt_ffi_type_t element_type;        // Element type for arrays
+  ffi_struct_def_t *element_struct;    // Element struct for struct arrays
+  
+  // For pointers
+  int pointer_levels;                  // Number of pointer levels (*, **, etc.)
+  jsrt_ffi_type_t pointed_type;        // Type being pointed to
+  ffi_struct_def_t *pointed_struct;    // Struct being pointed to
+} jsrt_field_descriptor_t;
+
+// Enhanced struct definition for complex nested types  
+struct ffi_struct_def {
+  char *name;
   int field_count;
-  char **field_names;
-  jsrt_ffi_type_t *field_types;
-  size_t *field_offsets;
+  jsrt_field_descriptor_t *fields;     // Enhanced field descriptors
   size_t total_size;
-} ffi_struct_def_t;
+  size_t alignment;                    // Struct alignment requirement
+  
+  // Dependency tracking for complex types
+  int dependency_count;
+  ffi_struct_def_t **dependencies;     // Other structs this depends on
+};
 
 // Store function metadata for lookup during calls
 static int store_function_metadata(JSContext *ctx, jsrt_ffi_function_t *func) {
@@ -1627,7 +1661,7 @@ static JSValue ffi_callback(JSContext *ctx, JSValueConst this_val, int argc, JSV
   return JS_NewInt64(ctx, (intptr_t)callback->callback_ptr);
 }
 
-// Async function call structure
+// Enhanced async function call structure for production use
 typedef struct {
   JSContext *ctx;
   JSValue promise_resolve;
@@ -1635,10 +1669,127 @@ typedef struct {
   void *func_ptr;
   jsrt_ffi_type_t return_type;
   int arg_count;
+  jsrt_ffi_type_t *arg_types;  // Argument types for libffi
   uintptr_t *args;
   char **string_args;
   void **array_args;
-} ffi_async_call_t;
+  
+  // Production hardening features
+  uint32_t timeout_ms;     // Timeout in milliseconds (0 = no timeout)
+  bool completed;          // Thread completion flag
+  bool timed_out;          // Timeout flag
+  int error_code;          // Error code if call failed
+  char *error_message;     // Error message
+  
+#ifdef HAVE_LIBFFI
+  jsrt_ffi_function_t ffi_func;  // libffi function metadata
+#endif
+
+#ifdef _WIN32
+  HANDLE thread_handle;    // Thread handle for cleanup
+  CRITICAL_SECTION lock;   // Thread synchronization
+#else
+  pthread_t thread_id;     // Thread ID for cleanup
+  pthread_mutex_t lock;    // Thread synchronization
+  bool thread_started;     // Track if thread was created
+#endif
+} enhanced_ffi_async_call_t;
+
+// Thread pool management for production async calls
+#define MAX_ASYNC_THREADS 8
+static enhanced_ffi_async_call_t *active_async_calls[MAX_ASYNC_THREADS];
+static int active_call_count = 0;
+
+#ifdef _WIN32
+static CRITICAL_SECTION thread_pool_lock;
+static bool thread_pool_initialized = false;
+#else
+static pthread_mutex_t thread_pool_lock = PTHREAD_MUTEX_INITIALIZER;
+#endif
+
+// Initialize thread pool management
+static void init_thread_pool() {
+#ifdef _WIN32
+  if (!thread_pool_initialized) {
+    InitializeCriticalSection(&thread_pool_lock);
+    thread_pool_initialized = true;
+  }
+#endif
+  // pthread mutex is statically initialized
+}
+
+// Find available slot for async call
+static int find_available_async_slot() {
+#ifdef _WIN32
+  EnterCriticalSection(&thread_pool_lock);
+#else
+  pthread_mutex_lock(&thread_pool_lock);
+#endif
+
+  int slot = -1;
+  for (int i = 0; i < MAX_ASYNC_THREADS; i++) {
+    if (active_async_calls[i] == NULL) {
+      slot = i;
+      break;
+    }
+  }
+  
+#ifdef _WIN32
+  LeaveCriticalSection(&thread_pool_lock);
+#else
+  pthread_mutex_unlock(&thread_pool_lock);
+#endif
+  
+  return slot;
+}
+
+// Register async call in thread pool
+static bool register_async_call(enhanced_ffi_async_call_t *call, int slot) {
+#ifdef _WIN32
+  EnterCriticalSection(&thread_pool_lock);
+#else
+  pthread_mutex_lock(&thread_pool_lock);
+#endif
+
+  if (slot >= 0 && slot < MAX_ASYNC_THREADS && active_async_calls[slot] == NULL) {
+    active_async_calls[slot] = call;
+    active_call_count++;
+    
+#ifdef _WIN32
+    LeaveCriticalSection(&thread_pool_lock);
+#else
+    pthread_mutex_unlock(&thread_pool_lock);
+#endif
+    return true;
+  }
+  
+#ifdef _WIN32
+  LeaveCriticalSection(&thread_pool_lock);
+#else
+  pthread_mutex_unlock(&thread_pool_lock);
+#endif
+  return false;
+}
+
+// Unregister async call from thread pool
+static void unregister_async_call(int slot) {
+#ifdef _WIN32
+  EnterCriticalSection(&thread_pool_lock);
+#else
+  pthread_mutex_lock(&thread_pool_lock);
+#endif
+
+  if (slot >= 0 && slot < MAX_ASYNC_THREADS && active_async_calls[slot] != NULL) {
+    active_async_calls[slot] = NULL;
+    active_call_count--;
+  }
+  
+#ifdef _WIN32
+  LeaveCriticalSection(&thread_pool_lock);
+#else
+  pthread_mutex_unlock(&thread_pool_lock);
+#endif
+}
 
 // Thread function for async FFI calls
 #ifdef _WIN32
@@ -1890,6 +2041,119 @@ static int register_struct(ffi_struct_def_t *struct_def) {
   
   g_struct_registry[g_struct_count] = struct_def;
   return g_struct_count++;
+}
+
+// Parse complex type descriptor (supports nested types)
+// Format examples:
+//   "int" - basic type
+//   "MyStruct" - nested struct  
+//   "int[10]" - fixed array
+//   "int*" - pointer to int
+//   "MyStruct**" - pointer to pointer to MyStruct
+//   "MyStruct[5]" - array of structs
+static bool parse_complex_type(const char *type_desc, jsrt_field_descriptor_t *field) {
+  if (!type_desc || !field) return false;
+  
+  field->category = JSRT_FIELD_TYPE_PRIMITIVE;
+  field->base_type = JSRT_FFI_TYPE_VOID;
+  field->nested_struct = NULL;
+  field->array_length = 0;
+  field->element_type = JSRT_FFI_TYPE_VOID;
+  field->element_struct = NULL;
+  field->pointer_levels = 0;
+  field->pointed_type = JSRT_FFI_TYPE_VOID;
+  field->pointed_struct = NULL;
+  
+  char *desc_copy = strdup(type_desc);
+  char *base_desc = desc_copy;
+  
+  // Count pointer levels (*, **, etc.)
+  char *ptr_pos = base_desc;
+  while ((ptr_pos = strchr(ptr_pos, '*')) != NULL) {
+    field->pointer_levels++;
+    *ptr_pos = '\0'; // Remove * from string
+    ptr_pos++;
+  }
+  
+  // Check for array notation [N]
+  char *bracket_pos = strchr(base_desc, '[');
+  if (bracket_pos) {
+    *bracket_pos = '\0';
+    char *end_bracket = strchr(bracket_pos + 1, ']');
+    if (end_bracket) {
+      *end_bracket = '\0';
+      field->array_length = atoi(bracket_pos + 1);
+      field->category = JSRT_FIELD_TYPE_ARRAY;
+    }
+  }
+  
+  // Trim whitespace
+  while (*base_desc == ' ') base_desc++;
+  int len = strlen(base_desc);
+  while (len > 0 && base_desc[len-1] == ' ') {
+    base_desc[--len] = '\0';
+  }
+  
+  // Handle pointers
+  if (field->pointer_levels > 0) {
+    field->category = JSRT_FIELD_TYPE_POINTER;
+  }
+  
+  // Check if it's a known struct
+  ffi_struct_def_t *found_struct = find_struct(base_desc);
+  if (found_struct) {
+    if (field->category == JSRT_FIELD_TYPE_ARRAY) {
+      field->element_struct = found_struct;
+      field->element_type = JSRT_FFI_TYPE_STRUCT;
+    } else if (field->category == JSRT_FIELD_TYPE_POINTER) {
+      field->pointed_struct = found_struct;
+      field->pointed_type = JSRT_FFI_TYPE_STRUCT;
+    } else {
+      field->category = JSRT_FIELD_TYPE_STRUCT;
+      field->nested_struct = found_struct;
+      field->base_type = JSRT_FFI_TYPE_STRUCT;
+    }
+  } else {
+    // Parse as primitive type
+    jsrt_ffi_type_t prim_type = string_to_ffi_type(base_desc);
+    if (field->category == JSRT_FIELD_TYPE_ARRAY) {
+      field->element_type = prim_type;
+    } else if (field->category == JSRT_FIELD_TYPE_POINTER) {
+      field->pointed_type = prim_type;
+    } else {
+      field->base_type = prim_type;
+    }
+  }
+  
+  free(desc_copy);
+  return true;
+}
+
+// Calculate size with complex type support
+static size_t calculate_complex_field_size(const jsrt_field_descriptor_t *field) {
+  switch (field->category) {
+    case JSRT_FIELD_TYPE_PRIMITIVE:
+      return get_type_size(field->base_type);
+      
+    case JSRT_FIELD_TYPE_STRUCT:
+      return field->nested_struct ? field->nested_struct->total_size : 0;
+      
+    case JSRT_FIELD_TYPE_ARRAY: {
+      size_t element_size = 0;
+      if (field->element_struct) {
+        element_size = field->element_struct->total_size;
+      } else {
+        element_size = get_type_size(field->element_type);
+      }
+      return element_size * field->array_length;
+    }
+    
+    case JSRT_FIELD_TYPE_POINTER:
+      return sizeof(void*); // All pointers have same size
+      
+    default:
+      return 0;
+  }
 }
 
 // Find struct definition by name

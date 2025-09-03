@@ -1,6 +1,7 @@
 #include "jsrt.h"
 
 #include <stdbool.h>
+#include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -8,9 +9,9 @@
 #include <uv.h>
 
 #include "runtime.h"
-#include "std/fetch.h"
 #include "std/process.h"
 #include "util/file.h"
+#include "util/http_client.h"
 
 // Forward declarations
 static bool is_url(const char *str);
@@ -21,7 +22,7 @@ static bool is_url(const char *str) {
   return (strncmp(str, "http://", 7) == 0 || strncmp(str, "https://", 8) == 0 || strncmp(str, "file://", 7) == 0);
 }
 
-// Helper function to download URL content using native fetch implementation
+// Helper function to download URL content using native HTTP client
 static JSRT_ReadFileResult download_url(const char *url) {
   JSRT_ReadFileResult result = JSRT_ReadFileResultDefault();
 
@@ -31,111 +32,53 @@ static JSRT_ReadFileResult download_url(const char *url) {
     return JSRT_ReadFile(filepath);
   }
 
-  // Handle http:// and https:// URLs using fetch API
-  if (strncmp(url, "http://", 7) == 0 || strncmp(url, "https://", 8) == 0) {
-    // Create a minimal runtime with just fetch support
-    JSRT_Runtime *temp_rt = malloc(sizeof(JSRT_Runtime));
-    if (!temp_rt) {
-      result.error = JSRT_READ_FILE_ERROR_OUT_OF_MEMORY;
-      return result;
-    }
+  // Handle http:// URLs using direct HTTP client
+  if (strncmp(url, "http://", 7) == 0) {
+    JSRT_HttpResponse http_response = JSRT_HttpGet(url);
 
-    // Initialize the runtime components
-    temp_rt->rt = JS_NewRuntime();
-    JS_SetRuntimeOpaque(temp_rt->rt, temp_rt);
-    temp_rt->ctx = JS_NewContext(temp_rt->rt);
-    JS_SetContextOpaque(temp_rt->ctx, temp_rt);
-    temp_rt->global = JS_GetGlobalObject(temp_rt->ctx);
-
-    // Initialize value arrays (minimal setup)
-    temp_rt->dispose_values_capacity = 16;
-    temp_rt->dispose_values_length = 0;
-    temp_rt->dispose_values = malloc(temp_rt->dispose_values_capacity * sizeof(JSValue));
-    temp_rt->exception_values_capacity = 16;
-    temp_rt->exception_values_length = 0;
-    temp_rt->exception_values = malloc(temp_rt->exception_values_capacity * sizeof(JSValue));
-
-    // Initialize the UV loop
-    temp_rt->uv_loop = malloc(sizeof(uv_loop_t));
-    uv_loop_init(temp_rt->uv_loop);
-
-    // Set up only the necessary components for fetch
-    JSRT_RuntimeSetupStdFetch(temp_rt);
-
-    // Build JavaScript code to fetch the URL
-    size_t js_code_len = strlen(url) + 300;
-    char *js_code = malloc(js_code_len);
-    if (!js_code) {
-      result.error = JSRT_READ_FILE_ERROR_OUT_OF_MEMORY;
-      JSRT_RuntimeFree(temp_rt);
-      return result;
-    }
-
-    snprintf(js_code, js_code_len,
-             "(async () => {\n"
-             "  try {\n"
-             "    const response = await fetch('%s');\n"
-             "    if (!response.ok) {\n"
-             "      throw new Error(`HTTP ${response.status}: ${response.statusText}`);\n"
-             "    }\n"
-             "    return await response.text();\n"
-             "  } catch (error) {\n"
-             "    throw error;\n"
-             "  }\n"
-             "})();",
-             url);
-
-    // Execute the fetch
-    JSRT_EvalResult eval_result = JSRT_RuntimeEval(temp_rt, "<fetch>", js_code, strlen(js_code));
-    free(js_code);
-
-    if (eval_result.is_error) {
+    if (http_response.error != JSRT_HTTP_OK) {
       result.error = JSRT_READ_FILE_ERROR_FILE_NOT_FOUND;
-      JSRT_EvalResultFree(&eval_result);
-      JSRT_RuntimeFree(temp_rt);
+      JSRT_HttpResponseFree(&http_response);
       return result;
     }
 
-    // Wait for the promise to resolve
-    JSRT_EvalResult await_result = JSRT_RuntimeAwaitEvalResult(temp_rt, &eval_result);
-    JSRT_EvalResultFree(&eval_result);
-
-    // Run the event loop to complete any pending async operations
-    while (uv_run(temp_rt->uv_loop, UV_RUN_NOWAIT) != 0) {
-      // Keep running until all async operations complete
-    }
-
-    if (await_result.is_error) {
+    // Check HTTP status
+    if (http_response.status < 200 || http_response.status >= 300) {
       result.error = JSRT_READ_FILE_ERROR_FILE_NOT_FOUND;
-      JSRT_EvalResultFree(&await_result);
-      JSRT_RuntimeFree(temp_rt);
+      JSRT_HttpResponseFree(&http_response);
       return result;
     }
 
-    // Extract the response text
-    if (JS_IsString(await_result.value)) {
-      size_t response_len;
-      const char *response_text = JS_ToCStringLen(temp_rt->ctx, &response_len, await_result.value);
-      if (response_text) {
-        result.data = malloc(response_len + 1);
-        if (result.data) {
-          memcpy(result.data, response_text, response_len);
-          result.data[response_len] = '\0';
-          result.size = response_len;
-          result.error = JSRT_READ_FILE_OK;
-        } else {
-          result.error = JSRT_READ_FILE_ERROR_OUT_OF_MEMORY;
-        }
-        JS_FreeCString(temp_rt->ctx, response_text);
+    // Copy the response body
+    if (http_response.body && http_response.body_size > 0) {
+      result.data = malloc(http_response.body_size + 1);
+      if (result.data) {
+        memcpy(result.data, http_response.body, http_response.body_size);
+        result.data[http_response.body_size] = '\0';
+        result.size = http_response.body_size;
+        result.error = JSRT_READ_FILE_OK;
       } else {
-        result.error = JSRT_READ_FILE_ERROR_READ_ERROR;
+        result.error = JSRT_READ_FILE_ERROR_OUT_OF_MEMORY;
       }
     } else {
-      result.error = JSRT_READ_FILE_ERROR_READ_ERROR;
+      // Empty response is still valid
+      result.data = malloc(1);
+      if (result.data) {
+        result.data[0] = '\0';
+        result.size = 0;
+        result.error = JSRT_READ_FILE_OK;
+      } else {
+        result.error = JSRT_READ_FILE_ERROR_OUT_OF_MEMORY;
+      }
     }
 
-    JSRT_EvalResultFree(&await_result);
-    JSRT_RuntimeFree(temp_rt);
+    JSRT_HttpResponseFree(&http_response);
+    return result;
+  }
+
+  // HTTPS not supported by simple HTTP client - could be extended later
+  if (strncmp(url, "https://", 8) == 0) {
+    result.error = JSRT_READ_FILE_ERROR_FILE_NOT_FOUND;
     return result;
   }
 
@@ -253,9 +196,40 @@ int JSRT_CmdRunStdin(int argc, char **argv) {
   JSRT_RuntimeRun(rt);
 
 end:
-  if (code) {
-    free(code);
+  if (code) free(code);
+  JSRT_EvalResultFree(&res2);
+  JSRT_EvalResultFree(&res);
+  JSRT_RuntimeFree(rt);
+  return ret;
+}
+
+int JSRT_CmdRunEval(const char *code, int argc, char **argv) {
+  // Store command line arguments for process module
+  g_jsrt_argc = argc;
+  g_jsrt_argv = argv;
+  int ret = 0;
+  JSRT_Runtime *rt = JSRT_RuntimeNew();
+
+  JSRT_EvalResult res = JSRT_EvalResultDefault();
+  JSRT_EvalResult res2 = JSRT_EvalResultDefault();
+
+  res = JSRT_RuntimeEval(rt, "<eval>", code, strlen(code));
+  if (res.is_error) {
+    fprintf(stderr, "%s\n", res.error);
+    ret = 1;
+    goto end;
   }
+
+  res2 = JSRT_RuntimeAwaitEvalResult(rt, &res);
+  if (res2.is_error) {
+    fprintf(stderr, "%s\n", res2.error);
+    ret = 1;
+    goto end;
+  }
+
+  JSRT_RuntimeRun(rt);
+
+end:
   JSRT_EvalResultFree(&res2);
   JSRT_EvalResultFree(&res);
   JSRT_RuntimeFree(rt);

@@ -183,7 +183,7 @@ if (typeof crypto === 'undefined' || !crypto.subtle) {
       })
       .catch(function (error) {
         console.error('\n=== RSA-OAEP tests FAILED ===');
-        process.exit(1);
+        throw error;
       });
   }
 

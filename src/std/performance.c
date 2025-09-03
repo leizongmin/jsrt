@@ -11,7 +11,7 @@
 static uint64_t performance_time_origin = 0;
 
 // performance.now() implementation - returns high resolution time relative to timeOrigin
-static JSValue JSRT_PerformanceNow(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv) {
+static JSValue JSRT_PerformanceNow(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
   // uv_hrtime() returns time in nanoseconds, performance.now() should return milliseconds
   uint64_t current_time = uv_hrtime();
 
@@ -27,7 +27,7 @@ static JSValue JSRT_PerformanceNow(JSContext *ctx, JSValueConst this_val, int ar
 }
 
 // Property getter for performance.timeOrigin
-static JSValue JSRT_PerformanceTimeOrigin(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv) {
+static JSValue JSRT_PerformanceTimeOrigin(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
   if (performance_time_origin == 0) {
     return JS_NewFloat64(ctx, 0.0);
   }
@@ -40,7 +40,7 @@ static JSValue JSRT_PerformanceTimeOrigin(JSContext *ctx, JSValueConst this_val,
 }
 
 // Setup Performance API
-void JSRT_RuntimeSetupStdPerformance(JSRT_Runtime *rt) {
+void JSRT_RuntimeSetupStdPerformance(JSRT_Runtime* rt) {
   // Set the time origin when the runtime is initialized
   if (performance_time_origin == 0) {
     performance_time_origin = uv_hrtime();

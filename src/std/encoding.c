@@ -15,11 +15,11 @@ static JSClassID JSRT_TextDecoderClassID;
 
 // TextEncoder implementation
 typedef struct {
-  const char *encoding;
+  const char* encoding;
 } JSRT_TextEncoder;
 
-static void JSRT_TextEncoderFinalize(JSRuntime *rt, JSValue val) {
-  JSRT_TextEncoder *encoder = JS_GetOpaque(val, JSRT_TextEncoderClassID);
+static void JSRT_TextEncoderFinalize(JSRuntime* rt, JSValue val) {
+  JSRT_TextEncoder* encoder = JS_GetOpaque(val, JSRT_TextEncoderClassID);
   if (encoder) {
     free(encoder);
   }
@@ -30,9 +30,9 @@ static JSClassDef JSRT_TextEncoderClass = {
     .finalizer = JSRT_TextEncoderFinalize,
 };
 
-static JSValue JSRT_TextEncoderConstructor(JSContext *ctx, JSValueConst new_target, int argc, JSValueConst *argv) {
+static JSValue JSRT_TextEncoderConstructor(JSContext* ctx, JSValueConst new_target, int argc, JSValueConst* argv) {
   JSValue obj;
-  JSRT_TextEncoder *encoder;
+  JSRT_TextEncoder* encoder;
 
   encoder = malloc(sizeof(JSRT_TextEncoder));
   if (!encoder) {
@@ -55,13 +55,13 @@ static JSValue JSRT_TextEncoderConstructor(JSContext *ctx, JSValueConst new_targ
   return obj;
 }
 
-static JSValue JSRT_TextEncoderEncode(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv) {
-  JSRT_TextEncoder *encoder = JS_GetOpaque2(ctx, this_val, JSRT_TextEncoderClassID);
+static JSValue JSRT_TextEncoderEncode(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
+  JSRT_TextEncoder* encoder = JS_GetOpaque2(ctx, this_val, JSRT_TextEncoderClassID);
   if (!encoder) {
     return JS_EXCEPTION;
   }
 
-  const char *input = "";
+  const char* input = "";
   size_t input_len = 0;
 
   if (argc > 0 && !JS_IsUndefined(argv[0])) {
@@ -72,7 +72,7 @@ static JSValue JSRT_TextEncoderEncode(JSContext *ctx, JSValueConst this_val, int
   }
 
   // Create Uint8Array with the UTF-8 bytes
-  JSValue array_buffer = JS_NewArrayBufferCopy(ctx, (const uint8_t *)input, input_len);
+  JSValue array_buffer = JS_NewArrayBufferCopy(ctx, (const uint8_t*)input, input_len);
   if (JS_IsException(array_buffer)) {
     JS_FreeCString(ctx, input);
     return JS_EXCEPTION;
@@ -89,8 +89,8 @@ static JSValue JSRT_TextEncoderEncode(JSContext *ctx, JSValueConst this_val, int
   return uint8_array;
 }
 
-static JSValue JSRT_TextEncoderEncodeInto(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv) {
-  JSRT_TextEncoder *encoder = JS_GetOpaque2(ctx, this_val, JSRT_TextEncoderClassID);
+static JSValue JSRT_TextEncoderEncodeInto(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
+  JSRT_TextEncoder* encoder = JS_GetOpaque2(ctx, this_val, JSRT_TextEncoderClassID);
   if (!encoder) {
     return JS_EXCEPTION;
   }
@@ -99,7 +99,7 @@ static JSValue JSRT_TextEncoderEncodeInto(JSContext *ctx, JSValueConst this_val,
     return JS_ThrowTypeError(ctx, "encodeInto requires 2 arguments");
   }
 
-  const char *input = "";
+  const char* input = "";
   size_t input_len = 0;
 
   if (!JS_IsUndefined(argv[0])) {
@@ -118,7 +118,7 @@ static JSValue JSRT_TextEncoderEncodeInto(JSContext *ctx, JSValueConst this_val,
     return JS_ThrowTypeError(ctx, "destination must be a Uint8Array");
   }
 
-  uint8_t *buffer = JS_GetArrayBuffer(ctx, &byte_length, array_buffer);
+  uint8_t* buffer = JS_GetArrayBuffer(ctx, &byte_length, array_buffer);
   if (!buffer) {
     JS_FreeCString(ctx, input);
     JS_FreeValue(ctx, array_buffer);
@@ -142,13 +142,13 @@ static JSValue JSRT_TextEncoderEncodeInto(JSContext *ctx, JSValueConst this_val,
 
 // TextDecoder implementation
 typedef struct {
-  const char *encoding;
+  const char* encoding;
   bool fatal;
   bool ignore_bom;
 } JSRT_TextDecoder;
 
-static void JSRT_TextDecoderFinalize(JSRuntime *rt, JSValue val) {
-  JSRT_TextDecoder *decoder = JS_GetOpaque(val, JSRT_TextDecoderClassID);
+static void JSRT_TextDecoderFinalize(JSRuntime* rt, JSValue val) {
+  JSRT_TextDecoder* decoder = JS_GetOpaque(val, JSRT_TextDecoderClassID);
   if (decoder) {
     free(decoder);
   }
@@ -159,9 +159,9 @@ static JSClassDef JSRT_TextDecoderClass = {
     .finalizer = JSRT_TextDecoderFinalize,
 };
 
-static JSValue JSRT_TextDecoderConstructor(JSContext *ctx, JSValueConst new_target, int argc, JSValueConst *argv) {
+static JSValue JSRT_TextDecoderConstructor(JSContext* ctx, JSValueConst new_target, int argc, JSValueConst* argv) {
   JSValue obj;
-  JSRT_TextDecoder *decoder;
+  JSRT_TextDecoder* decoder;
 
   decoder = malloc(sizeof(JSRT_TextDecoder));
   if (!decoder) {
@@ -203,8 +203,8 @@ static JSValue JSRT_TextDecoderConstructor(JSContext *ctx, JSValueConst new_targ
   return obj;
 }
 
-static JSValue JSRT_TextDecoderDecode(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv) {
-  JSRT_TextDecoder *decoder = JS_GetOpaque2(ctx, this_val, JSRT_TextDecoderClassID);
+static JSValue JSRT_TextDecoderDecode(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
+  JSRT_TextDecoder* decoder = JS_GetOpaque2(ctx, this_val, JSRT_TextDecoderClassID);
   if (!decoder) {
     return JS_EXCEPTION;
   }
@@ -213,7 +213,7 @@ static JSValue JSRT_TextDecoderDecode(JSContext *ctx, JSValueConst this_val, int
     return JS_NewString(ctx, "");
   }
 
-  uint8_t *input_data = NULL;
+  uint8_t* input_data = NULL;
   size_t input_len = 0;
 
   // Try to get as ArrayBuffer first
@@ -236,10 +236,10 @@ static JSValue JSRT_TextDecoderDecode(JSContext *ctx, JSValueConst this_val, int
     // QuickJS expects valid UTF-8, so we'll validate if fatal is true
     if (decoder->fatal) {
       // Validate UTF-8 sequence
-      const uint8_t *p = input_data + start_pos;
-      const uint8_t *end = input_data + input_len;
+      const uint8_t* p = input_data + start_pos;
+      const uint8_t* end = input_data + input_len;
       while (p < end) {
-        const uint8_t *p_next;
+        const uint8_t* p_next;
         int c = unicode_from_utf8(p, end - p, &p_next);
         if (c < 0) {
           return JS_ThrowTypeError(ctx, "Invalid UTF-8 sequence");
@@ -248,7 +248,7 @@ static JSValue JSRT_TextDecoderDecode(JSContext *ctx, JSValueConst this_val, int
       }
     }
 
-    return JS_NewStringLen(ctx, (const char *)(input_data + start_pos), input_len - start_pos);
+    return JS_NewStringLen(ctx, (const char*)(input_data + start_pos), input_len - start_pos);
   }
 
   // Try to get as typed array - testing just the call
@@ -264,7 +264,7 @@ static JSValue JSRT_TextDecoderDecode(JSContext *ctx, JSValueConst this_val, int
   }
 
   size_t buffer_size;
-  uint8_t *buffer = JS_GetArrayBuffer(ctx, &buffer_size, array_buffer);
+  uint8_t* buffer = JS_GetArrayBuffer(ctx, &buffer_size, array_buffer);
   if (!buffer) {
     JS_FreeValue(ctx, array_buffer);
     return JS_ThrowTypeError(ctx, "Failed to get buffer from typed array");
@@ -283,10 +283,10 @@ static JSValue JSRT_TextDecoderDecode(JSContext *ctx, JSValueConst this_val, int
   // QuickJS expects valid UTF-8, so we'll validate if fatal is true
   if (decoder->fatal) {
     // Validate UTF-8 sequence
-    const uint8_t *p = input_data + start_pos;
-    const uint8_t *end = input_data + input_len;
+    const uint8_t* p = input_data + start_pos;
+    const uint8_t* end = input_data + input_len;
     while (p < end) {
-      const uint8_t *p_next;
+      const uint8_t* p_next;
       int c = unicode_from_utf8(p, end - p, &p_next);
       if (c < 0) {
         JS_FreeValue(ctx, array_buffer);
@@ -297,14 +297,14 @@ static JSValue JSRT_TextDecoderDecode(JSContext *ctx, JSValueConst this_val, int
   }
 
   // Create string from the buffer
-  JSValue result = JS_NewStringLen(ctx, (const char *)(input_data + start_pos), input_len - start_pos);
+  JSValue result = JS_NewStringLen(ctx, (const char*)(input_data + start_pos), input_len - start_pos);
   JS_FreeValue(ctx, array_buffer);
   return result;
 }
 
 // Setup functions
-void JSRT_RuntimeSetupStdEncoding(JSRT_Runtime *rt) {
-  JSContext *ctx = rt->ctx;
+void JSRT_RuntimeSetupStdEncoding(JSRT_Runtime* rt) {
+  JSContext* ctx = rt->ctx;
 
   // Register TextEncoder class
   JS_NewClassID(&JSRT_TextEncoderClassID);

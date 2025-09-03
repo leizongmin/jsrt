@@ -6,8 +6,8 @@
 // HTTP response structure
 typedef struct {
   int status;
-  char *status_text;
-  char *body;
+  char* status_text;
+  char* body;
   size_t body_size;
   int error;  // 0 = success, non-zero = error code
 } JSRT_HttpResponse;
@@ -22,9 +22,9 @@ typedef struct {
 
 // Perform a synchronous GET request to the given URL
 // Returns a JSRT_HttpResponse structure that must be freed with JSRT_HttpResponseFree
-JSRT_HttpResponse JSRT_HttpGet(const char *url);
+JSRT_HttpResponse JSRT_HttpGet(const char* url);
 
 // Free memory allocated for an HTTP response
-void JSRT_HttpResponseFree(JSRT_HttpResponse *response);
+void JSRT_HttpResponseFree(JSRT_HttpResponse* response);
 
 #endif

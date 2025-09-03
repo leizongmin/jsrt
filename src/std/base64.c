@@ -33,12 +33,12 @@ static const uint8_t base64_decode_table[256] = {255, 255, 255, 255, 255, 255, 2
                                                  255, 255, 255, 255, 255, 255, 255, 255, 255, 255};
 
 // btoa implementation - encodes a string to Base64
-static JSValue JSRT_btoa(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv) {
+static JSValue JSRT_btoa(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
   if (argc < 1) {
     return JS_ThrowTypeError(ctx, "btoa requires 1 argument");
   }
 
-  const char *input_str = JS_ToCString(ctx, argv[0]);
+  const char* input_str = JS_ToCString(ctx, argv[0]);
   if (!input_str) {
     return JS_EXCEPTION;
   }
@@ -56,7 +56,7 @@ static JSValue JSRT_btoa(JSContext *ctx, JSValueConst this_val, int argc, JSValu
 
   // Calculate output length
   size_t output_len = 4 * ((input_len + 2) / 3);
-  char *output = malloc(output_len + 1);
+  char* output = malloc(output_len + 1);
   if (!output) {
     JS_FreeCString(ctx, input_str);
     return JS_ThrowOutOfMemory(ctx);
@@ -85,12 +85,12 @@ static JSValue JSRT_btoa(JSContext *ctx, JSValueConst this_val, int argc, JSValu
 }
 
 // atob implementation - decodes a Base64 string
-static JSValue JSRT_atob(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv) {
+static JSValue JSRT_atob(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
   if (argc < 1) {
     return JS_ThrowTypeError(ctx, "atob requires 1 argument");
   }
 
-  const char *input_str = JS_ToCString(ctx, argv[0]);
+  const char* input_str = JS_ToCString(ctx, argv[0]);
   if (!input_str) {
     return JS_EXCEPTION;
   }
@@ -105,10 +105,12 @@ static JSValue JSRT_atob(JSContext *ctx, JSValueConst this_val, int argc, JSValu
 
   // Calculate output length
   size_t output_len = input_len / 4 * 3;
-  if (input_len >= 1 && input_str[input_len - 1] == '=') output_len--;
-  if (input_len >= 2 && input_str[input_len - 2] == '=') output_len--;
+  if (input_len >= 1 && input_str[input_len - 1] == '=')
+    output_len--;
+  if (input_len >= 2 && input_str[input_len - 2] == '=')
+    output_len--;
 
-  unsigned char *output = malloc(output_len + 1);
+  unsigned char* output = malloc(output_len + 1);
   if (!output) {
     JS_FreeCString(ctx, input_str);
     return JS_ThrowOutOfMemory(ctx);
@@ -130,26 +132,31 @@ static JSValue JSRT_atob(JSContext *ctx, JSValueConst this_val, int argc, JSValu
     }
 
     // Handle padding
-    if (input_str[i + 2] == '=') sextet_c = 0;
-    if (input_str[i + 3] == '=') sextet_d = 0;
+    if (input_str[i + 2] == '=')
+      sextet_c = 0;
+    if (input_str[i + 3] == '=')
+      sextet_d = 0;
 
     uint32_t triple = (sextet_a << 18) + (sextet_b << 12) + (sextet_c << 6) + sextet_d;
 
-    if (j < output_len) output[j++] = (triple >> 16) & 255;
-    if (j < output_len) output[j++] = (triple >> 8) & 255;
-    if (j < output_len) output[j++] = triple & 255;
+    if (j < output_len)
+      output[j++] = (triple >> 16) & 255;
+    if (j < output_len)
+      output[j++] = (triple >> 8) & 255;
+    if (j < output_len)
+      output[j++] = triple & 255;
   }
 
   output[output_len] = '\0';
   JS_FreeCString(ctx, input_str);
 
-  JSValue result = JS_NewStringLen(ctx, (const char *)output, output_len);
+  JSValue result = JS_NewStringLen(ctx, (const char*)output, output_len);
   free(output);
   return result;
 }
 
 // Setup Base64 global functions
-void JSRT_RuntimeSetupStdBase64(JSRT_Runtime *rt) {
+void JSRT_RuntimeSetupStdBase64(JSRT_Runtime* rt) {
   JS_SetPropertyStr(rt->ctx, rt->global, "btoa", JS_NewCFunction(rt->ctx, JSRT_btoa, "btoa", 1));
   JS_SetPropertyStr(rt->ctx, rt->global, "atob", JS_NewCFunction(rt->ctx, JSRT_atob, "atob", 1));
 }

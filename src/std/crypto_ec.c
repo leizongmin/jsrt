@@ -110,14 +110,16 @@ static int jsrt_crypto_init(void) {
 // Initialize EC crypto functions
 static int jsrt_ec_init(void) {
   static int initialized = 0;
-  if (initialized) return 1;
+  if (initialized)
+    return 1;
 
   if (!jsrt_crypto_init()) {
     return 0;
   }
 
   extern void* openssl_handle;
-  if (!openssl_handle) return 0;
+  if (!openssl_handle)
+    return 0;
 
   // Load EC-specific functions
   evp_pkey_ctx_new_id = (EVP_PKEY_CTX_new_id_fn)JSRT_DLSYM(openssl_handle, "EVP_PKEY_CTX_new_id");
@@ -159,7 +161,8 @@ static int jsrt_ec_init(void) {
 
 // Convert curve name to enum
 int jsrt_ec_curve_from_string(const char* curve_name, jsrt_ec_curve_t* curve) {
-  if (!curve_name || !curve) return 0;
+  if (!curve_name || !curve)
+    return 0;
 
   if (strcmp(curve_name, "P-256") == 0) {
     *curve = JSRT_EC_P256;
@@ -513,7 +516,8 @@ static JSValue jsrt_create_key_pair(JSContext* ctx, void* pkey, const char* algo
   if (i2d_privatekey) {
     priv_len = i2d_privatekey(pkey, &priv_der);
     if (priv_len <= 0) {
-      if (pub_der) free(pub_der);
+      if (pub_der)
+        free(pub_der);
       jsrt_evp_pkey_free(pkey);
       return JS_ThrowInternalError(ctx, "Failed to serialize private key");
     }
@@ -560,8 +564,10 @@ static JSValue jsrt_create_key_pair(JSContext* ctx, void* pkey, const char* algo
   JS_SetPropertyStr(ctx, keypair_obj, "privateKey", private_key_obj);
 
   // Cleanup
-  if (pub_der) free(pub_der);
-  if (priv_der) free(priv_der);
+  if (pub_der)
+    free(pub_der);
+  if (priv_der)
+    free(priv_der);
   jsrt_evp_pkey_free(pkey);
 
   return keypair_obj;

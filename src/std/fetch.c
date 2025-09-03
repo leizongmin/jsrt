@@ -19,50 +19,50 @@ static JSClassID JSRT_ResponseClassID;
 
 // Headers structure
 typedef struct JSRT_HeaderItem {
-  char *name;
-  char *value;
-  struct JSRT_HeaderItem *next;
+  char* name;
+  char* value;
+  struct JSRT_HeaderItem* next;
 } JSRT_HeaderItem;
 
 typedef struct {
-  JSRT_HeaderItem *first;
+  JSRT_HeaderItem* first;
 } JSRT_Headers;
 
 // Request structure
 typedef struct {
-  char *method;
-  char *url;
-  JSRT_Headers *headers;
+  char* method;
+  char* url;
+  JSRT_Headers* headers;
   JSValue body;
 } JSRT_Request;
 
 // Response structure
 typedef struct {
   int status;
-  char *status_text;
-  JSRT_Headers *headers;
+  char* status_text;
+  JSRT_Headers* headers;
   JSValue body;
   bool ok;
 } JSRT_Response;
 
 // HTTP request context for async operations
 typedef struct {
-  JSRT_Runtime *rt;
+  JSRT_Runtime* rt;
   uv_tcp_t tcp_handle;
   uv_connect_t connect_req;
   uv_write_t write_req;
-  char *host;
+  char* host;
   int port;
-  char *path;
-  char *method;
-  JSRT_Headers *request_headers;
+  char* path;
+  char* method;
+  JSRT_Headers* request_headers;
 
   // Request body data
-  char *request_body;
+  char* request_body;
   size_t request_body_size;
 
   // Response data
-  char *response_buffer;
+  char* response_buffer;
   size_t response_size;
   size_t response_capacity;
 
@@ -72,16 +72,16 @@ typedef struct {
 } JSRT_FetchContext;
 
 // Helper functions
-static JSRT_Headers *JSRT_HeadersNew();
-static void JSRT_HeadersFree(JSRT_Headers *headers);
-static void JSRT_HeadersSet(JSRT_Headers *headers, const char *name, const char *value);
-static const char *JSRT_HeadersGet(JSRT_Headers *headers, const char *name);
-static bool JSRT_HeadersHas(JSRT_Headers *headers, const char *name);
-static void JSRT_HeadersDelete(JSRT_Headers *headers, const char *name);
+static JSRT_Headers* JSRT_HeadersNew();
+static void JSRT_HeadersFree(JSRT_Headers* headers);
+static void JSRT_HeadersSet(JSRT_Headers* headers, const char* name, const char* value);
+static const char* JSRT_HeadersGet(JSRT_Headers* headers, const char* name);
+static bool JSRT_HeadersHas(JSRT_Headers* headers, const char* name);
+static void JSRT_HeadersDelete(JSRT_Headers* headers, const char* name);
 
 // Headers class implementation
-static void JSRT_HeadersFinalize(JSRuntime *rt, JSValue val) {
-  JSRT_Headers *headers = JS_GetOpaque(val, JSRT_HeadersClassID);
+static void JSRT_HeadersFinalize(JSRuntime* rt, JSValue val) {
+  JSRT_Headers* headers = JS_GetOpaque(val, JSRT_HeadersClassID);
   if (headers) {
     JSRT_HeadersFree(headers);
   }
@@ -92,16 +92,16 @@ static JSClassDef JSRT_HeadersClass = {
     .finalizer = JSRT_HeadersFinalize,
 };
 
-static JSValue JSRT_HeadersConstructor(JSContext *ctx, JSValueConst new_target, int argc, JSValueConst *argv) {
-  JSRT_Headers *headers = JSRT_HeadersNew();
+static JSValue JSRT_HeadersConstructor(JSContext* ctx, JSValueConst new_target, int argc, JSValueConst* argv) {
+  JSRT_Headers* headers = JSRT_HeadersNew();
 
   JSValue obj = JS_NewObjectClass(ctx, JSRT_HeadersClassID);
   JS_SetOpaque(obj, headers);
   return obj;
 }
 
-static JSValue JSRT_HeadersGetMethod(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv) {
-  JSRT_Headers *headers = JS_GetOpaque2(ctx, this_val, JSRT_HeadersClassID);
+static JSValue JSRT_HeadersGetMethod(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
+  JSRT_Headers* headers = JS_GetOpaque2(ctx, this_val, JSRT_HeadersClassID);
   if (!headers) {
     return JS_EXCEPTION;
   }
@@ -110,12 +110,12 @@ static JSValue JSRT_HeadersGetMethod(JSContext *ctx, JSValueConst this_val, int 
     return JS_ThrowTypeError(ctx, "Missing name parameter");
   }
 
-  const char *name = JS_ToCString(ctx, argv[0]);
+  const char* name = JS_ToCString(ctx, argv[0]);
   if (!name) {
     return JS_EXCEPTION;
   }
 
-  const char *value = JSRT_HeadersGet(headers, name);
+  const char* value = JSRT_HeadersGet(headers, name);
   JS_FreeCString(ctx, name);
 
   if (value) {
@@ -125,8 +125,8 @@ static JSValue JSRT_HeadersGetMethod(JSContext *ctx, JSValueConst this_val, int 
   }
 }
 
-static JSValue JSRT_HeadersSetMethod(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv) {
-  JSRT_Headers *headers = JS_GetOpaque2(ctx, this_val, JSRT_HeadersClassID);
+static JSValue JSRT_HeadersSetMethod(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
+  JSRT_Headers* headers = JS_GetOpaque2(ctx, this_val, JSRT_HeadersClassID);
   if (!headers) {
     return JS_EXCEPTION;
   }
@@ -135,11 +135,13 @@ static JSValue JSRT_HeadersSetMethod(JSContext *ctx, JSValueConst this_val, int 
     return JS_ThrowTypeError(ctx, "Missing name or value parameter");
   }
 
-  const char *name = JS_ToCString(ctx, argv[0]);
-  const char *value = JS_ToCString(ctx, argv[1]);
+  const char* name = JS_ToCString(ctx, argv[0]);
+  const char* value = JS_ToCString(ctx, argv[1]);
   if (!name || !value) {
-    if (name) JS_FreeCString(ctx, name);
-    if (value) JS_FreeCString(ctx, value);
+    if (name)
+      JS_FreeCString(ctx, name);
+    if (value)
+      JS_FreeCString(ctx, value);
     return JS_EXCEPTION;
   }
 
@@ -150,8 +152,8 @@ static JSValue JSRT_HeadersSetMethod(JSContext *ctx, JSValueConst this_val, int 
   return JS_UNDEFINED;
 }
 
-static JSValue JSRT_HeadersHasMethod(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv) {
-  JSRT_Headers *headers = JS_GetOpaque2(ctx, this_val, JSRT_HeadersClassID);
+static JSValue JSRT_HeadersHasMethod(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
+  JSRT_Headers* headers = JS_GetOpaque2(ctx, this_val, JSRT_HeadersClassID);
   if (!headers) {
     return JS_EXCEPTION;
   }
@@ -160,7 +162,7 @@ static JSValue JSRT_HeadersHasMethod(JSContext *ctx, JSValueConst this_val, int 
     return JS_ThrowTypeError(ctx, "Missing name parameter");
   }
 
-  const char *name = JS_ToCString(ctx, argv[0]);
+  const char* name = JS_ToCString(ctx, argv[0]);
   if (!name) {
     return JS_EXCEPTION;
   }
@@ -171,8 +173,8 @@ static JSValue JSRT_HeadersHasMethod(JSContext *ctx, JSValueConst this_val, int 
   return JS_NewBool(ctx, has);
 }
 
-static JSValue JSRT_HeadersDeleteMethod(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv) {
-  JSRT_Headers *headers = JS_GetOpaque2(ctx, this_val, JSRT_HeadersClassID);
+static JSValue JSRT_HeadersDeleteMethod(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
+  JSRT_Headers* headers = JS_GetOpaque2(ctx, this_val, JSRT_HeadersClassID);
   if (!headers) {
     return JS_EXCEPTION;
   }
@@ -181,7 +183,7 @@ static JSValue JSRT_HeadersDeleteMethod(JSContext *ctx, JSValueConst this_val, i
     return JS_ThrowTypeError(ctx, "Missing name parameter");
   }
 
-  const char *name = JS_ToCString(ctx, argv[0]);
+  const char* name = JS_ToCString(ctx, argv[0]);
   if (!name) {
     return JS_EXCEPTION;
   }
@@ -193,8 +195,8 @@ static JSValue JSRT_HeadersDeleteMethod(JSContext *ctx, JSValueConst this_val, i
 }
 
 // Request class implementation
-static void JSRT_RequestFinalize(JSRuntime *rt, JSValue val) {
-  JSRT_Request *request = JS_GetOpaque(val, JSRT_RequestClassID);
+static void JSRT_RequestFinalize(JSRuntime* rt, JSValue val) {
+  JSRT_Request* request = JS_GetOpaque(val, JSRT_RequestClassID);
   if (request) {
     free(request->method);
     free(request->url);
@@ -209,17 +211,17 @@ static JSClassDef JSRT_RequestClass = {
     .finalizer = JSRT_RequestFinalize,
 };
 
-static JSValue JSRT_RequestConstructor(JSContext *ctx, JSValueConst new_target, int argc, JSValueConst *argv) {
+static JSValue JSRT_RequestConstructor(JSContext* ctx, JSValueConst new_target, int argc, JSValueConst* argv) {
   if (argc < 1) {
     return JS_ThrowTypeError(ctx, "Missing input parameter");
   }
 
-  const char *input = JS_ToCString(ctx, argv[0]);
+  const char* input = JS_ToCString(ctx, argv[0]);
   if (!input) {
     return JS_EXCEPTION;
   }
 
-  JSRT_Request *request = malloc(sizeof(JSRT_Request));
+  JSRT_Request* request = malloc(sizeof(JSRT_Request));
   request->method = strdup("GET");
   request->url = strdup(input);
   request->headers = JSRT_HeadersNew();
@@ -231,7 +233,7 @@ static JSValue JSRT_RequestConstructor(JSContext *ctx, JSValueConst new_target, 
   if (argc > 1 && JS_IsObject(argv[1])) {
     JSValue method_val = JS_GetPropertyStr(ctx, argv[1], "method");
     if (JS_IsString(method_val)) {
-      const char *method = JS_ToCString(ctx, method_val);
+      const char* method = JS_ToCString(ctx, method_val);
       if (method) {
         free(request->method);
         request->method = strdup(method);
@@ -246,16 +248,16 @@ static JSValue JSRT_RequestConstructor(JSContext *ctx, JSValueConst new_target, 
   return obj;
 }
 
-static JSValue JSRT_RequestGetMethod(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv) {
-  JSRT_Request *request = JS_GetOpaque2(ctx, this_val, JSRT_RequestClassID);
+static JSValue JSRT_RequestGetMethod(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
+  JSRT_Request* request = JS_GetOpaque2(ctx, this_val, JSRT_RequestClassID);
   if (!request) {
     return JS_EXCEPTION;
   }
   return JS_NewString(ctx, request->method);
 }
 
-static JSValue JSRT_RequestGetUrl(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv) {
-  JSRT_Request *request = JS_GetOpaque2(ctx, this_val, JSRT_RequestClassID);
+static JSValue JSRT_RequestGetUrl(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
+  JSRT_Request* request = JS_GetOpaque2(ctx, this_val, JSRT_RequestClassID);
   if (!request) {
     return JS_EXCEPTION;
   }
@@ -263,8 +265,8 @@ static JSValue JSRT_RequestGetUrl(JSContext *ctx, JSValueConst this_val, int arg
 }
 
 // Response class implementation
-static void JSRT_ResponseFinalize(JSRuntime *rt, JSValue val) {
-  JSRT_Response *response = JS_GetOpaque(val, JSRT_ResponseClassID);
+static void JSRT_ResponseFinalize(JSRuntime* rt, JSValue val) {
+  JSRT_Response* response = JS_GetOpaque(val, JSRT_ResponseClassID);
   if (response) {
     free(response->status_text);
     JSRT_HeadersFree(response->headers);
@@ -278,8 +280,8 @@ static JSClassDef JSRT_ResponseClass = {
     .finalizer = JSRT_ResponseFinalize,
 };
 
-static JSValue JSRT_ResponseConstructor(JSContext *ctx, JSValueConst new_target, int argc, JSValueConst *argv) {
-  JSRT_Response *response = malloc(sizeof(JSRT_Response));
+static JSValue JSRT_ResponseConstructor(JSContext* ctx, JSValueConst new_target, int argc, JSValueConst* argv) {
+  JSRT_Response* response = malloc(sizeof(JSRT_Response));
   response->status = 200;
   response->status_text = strdup("OK");
   response->headers = JSRT_HeadersNew();
@@ -291,24 +293,24 @@ static JSValue JSRT_ResponseConstructor(JSContext *ctx, JSValueConst new_target,
   return obj;
 }
 
-static JSValue JSRT_ResponseGetStatus(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv) {
-  JSRT_Response *response = JS_GetOpaque2(ctx, this_val, JSRT_ResponseClassID);
+static JSValue JSRT_ResponseGetStatus(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
+  JSRT_Response* response = JS_GetOpaque2(ctx, this_val, JSRT_ResponseClassID);
   if (!response) {
     return JS_EXCEPTION;
   }
   return JS_NewInt32(ctx, response->status);
 }
 
-static JSValue JSRT_ResponseGetOk(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv) {
-  JSRT_Response *response = JS_GetOpaque2(ctx, this_val, JSRT_ResponseClassID);
+static JSValue JSRT_ResponseGetOk(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
+  JSRT_Response* response = JS_GetOpaque2(ctx, this_val, JSRT_ResponseClassID);
   if (!response) {
     return JS_EXCEPTION;
   }
   return JS_NewBool(ctx, response->ok);
 }
 
-static JSValue JSRT_ResponseText(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv) {
-  JSRT_Response *response = JS_GetOpaque2(ctx, this_val, JSRT_ResponseClassID);
+static JSValue JSRT_ResponseText(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
+  JSRT_Response* response = JS_GetOpaque2(ctx, this_val, JSRT_ResponseClassID);
   if (!response) {
     return JS_EXCEPTION;
   }
@@ -331,8 +333,8 @@ static JSValue JSRT_ResponseText(JSContext *ctx, JSValueConst this_val, int argc
   return promise;
 }
 
-static JSValue JSRT_ResponseJson(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv) {
-  JSRT_Response *response = JS_GetOpaque2(ctx, this_val, JSRT_ResponseClassID);
+static JSValue JSRT_ResponseJson(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
+  JSRT_Response* response = JS_GetOpaque2(ctx, this_val, JSRT_ResponseClassID);
   if (!response) {
     return JS_EXCEPTION;
   }
@@ -346,7 +348,7 @@ static JSValue JSRT_ResponseJson(JSContext *ctx, JSValueConst this_val, int argc
 
   // Parse JSON and resolve/reject the promise
   if (JS_IsString(response->body)) {
-    const char *json_str = JS_ToCString(ctx, response->body);
+    const char* json_str = JS_ToCString(ctx, response->body);
     if (!json_str) {
       JSValue error = JS_NewError(ctx);
       JS_SetPropertyStr(ctx, error, "message", JS_NewString(ctx, "Failed to get response text"));
@@ -382,8 +384,8 @@ static JSValue JSRT_ResponseJson(JSContext *ctx, JSValueConst this_val, int argc
   return promise;
 }
 
-static JSValue JSRT_ResponseArrayBuffer(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv) {
-  JSRT_Response *response = JS_GetOpaque2(ctx, this_val, JSRT_ResponseClassID);
+static JSValue JSRT_ResponseArrayBuffer(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
+  JSRT_Response* response = JS_GetOpaque2(ctx, this_val, JSRT_ResponseClassID);
   if (!response) {
     return JS_EXCEPTION;
   }
@@ -398,14 +400,14 @@ static JSValue JSRT_ResponseArrayBuffer(JSContext *ctx, JSValueConst this_val, i
   // Convert response body to ArrayBuffer
   if (JS_IsString(response->body)) {
     size_t body_len;
-    const char *body_str = JS_ToCStringLen(ctx, &body_len, response->body);
+    const char* body_str = JS_ToCStringLen(ctx, &body_len, response->body);
     if (!body_str) {
       JSValue error = JS_NewError(ctx);
       JS_SetPropertyStr(ctx, error, "message", JS_NewString(ctx, "Failed to get response text"));
       JS_Call(ctx, resolving_funcs[1], JS_UNDEFINED, 1, &error);
       JS_FreeValue(ctx, error);
     } else {
-      JSValue arraybuffer = JS_NewArrayBufferCopy(ctx, (const uint8_t *)body_str, body_len);
+      JSValue arraybuffer = JS_NewArrayBufferCopy(ctx, (const uint8_t*)body_str, body_len);
       JS_Call(ctx, resolving_funcs[0], JS_UNDEFINED, 1, &arraybuffer);
       JS_FreeValue(ctx, arraybuffer);
       JS_FreeCString(ctx, body_str);
@@ -423,8 +425,8 @@ static JSValue JSRT_ResponseArrayBuffer(JSContext *ctx, JSValueConst this_val, i
   return promise;
 }
 
-static JSValue JSRT_ResponseBlob(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv) {
-  JSRT_Response *response = JS_GetOpaque2(ctx, this_val, JSRT_ResponseClassID);
+static JSValue JSRT_ResponseBlob(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
+  JSRT_Response* response = JS_GetOpaque2(ctx, this_val, JSRT_ResponseClassID);
   if (!response) {
     return JS_EXCEPTION;
   }
@@ -440,7 +442,7 @@ static JSValue JSRT_ResponseBlob(JSContext *ctx, JSValueConst this_val, int argc
   // In a full implementation, we'd create a proper Blob object
   if (JS_IsString(response->body)) {
     size_t body_len;
-    const char *body_str = JS_ToCStringLen(ctx, &body_len, response->body);
+    const char* body_str = JS_ToCStringLen(ctx, &body_len, response->body);
     if (!body_str) {
       JSValue error = JS_NewError(ctx);
       JS_SetPropertyStr(ctx, error, "message", JS_NewString(ctx, "Failed to get response text"));
@@ -473,25 +475,25 @@ static JSValue JSRT_ResponseBlob(JSContext *ctx, JSValueConst this_val, int argc
 }
 
 // Forward declarations for HTTP implementation
-static void JSRT_FetchContextFree(JSRT_FetchContext *ctx);
-static void JSRT_FetchOnConnect(uv_connect_t *req, int status);
-static void JSRT_FetchOnWrite(uv_write_t *req, int status);
-static void JSRT_FetchOnRead(uv_stream_t *stream, ssize_t nread, const uv_buf_t *buf);
-static void JSRT_FetchAllocBuffer(uv_handle_t *handle, size_t suggested_size, uv_buf_t *buf);
-static void JSRT_FetchOnGetAddrInfo(uv_getaddrinfo_t *req, int status, struct addrinfo *res);
-static void JSRT_FetchOnClose(uv_handle_t *handle);
-static int JSRT_FetchParseURL(const char *url, char **host, int *port, char **path);
-static char *JSRT_FetchBuildHttpRequest(const char *method, const char *path, const char *host, int port,
-                                        JSRT_Headers *headers, const char *body, size_t body_size);
-static JSRT_Response *JSRT_FetchParseHttpResponse(const char *response_data, size_t response_size);
+static void JSRT_FetchContextFree(JSRT_FetchContext* ctx);
+static void JSRT_FetchOnConnect(uv_connect_t* req, int status);
+static void JSRT_FetchOnWrite(uv_write_t* req, int status);
+static void JSRT_FetchOnRead(uv_stream_t* stream, ssize_t nread, const uv_buf_t* buf);
+static void JSRT_FetchAllocBuffer(uv_handle_t* handle, size_t suggested_size, uv_buf_t* buf);
+static void JSRT_FetchOnGetAddrInfo(uv_getaddrinfo_t* req, int status, struct addrinfo* res);
+static void JSRT_FetchOnClose(uv_handle_t* handle);
+static int JSRT_FetchParseURL(const char* url, char** host, int* port, char** path);
+static char* JSRT_FetchBuildHttpRequest(const char* method, const char* path, const char* host, int port,
+                                        JSRT_Headers* headers, const char* body, size_t body_size);
+static JSRT_Response* JSRT_FetchParseHttpResponse(const char* response_data, size_t response_size);
 
 // Real fetch function implementation using libuv
-static JSValue JSRT_Fetch(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv) {
+static JSValue JSRT_Fetch(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
   if (argc < 1) {
     return JS_ThrowTypeError(ctx, "Missing input parameter");
   }
 
-  const char *input = JS_ToCString(ctx, argv[0]);
+  const char* input = JS_ToCString(ctx, argv[0]);
   if (!input) {
     return JS_EXCEPTION;
   }
@@ -505,7 +507,7 @@ static JSValue JSRT_Fetch(JSContext *ctx, JSValueConst this_val, int argc, JSVal
   }
 
   // Create fetch context
-  JSRT_FetchContext *fetch_ctx = malloc(sizeof(JSRT_FetchContext));
+  JSRT_FetchContext* fetch_ctx = malloc(sizeof(JSRT_FetchContext));
   if (!fetch_ctx) {
     JS_FreeCString(ctx, input);
     JS_FreeValue(ctx, resolving_funcs[0]);
@@ -539,7 +541,7 @@ static JSValue JSRT_Fetch(JSContext *ctx, JSValueConst this_val, int argc, JSVal
     // Extract method
     JSValue method_val = JS_GetPropertyStr(ctx, options, "method");
     if (JS_IsString(method_val)) {
-      const char *method_str = JS_ToCString(ctx, method_val);
+      const char* method_str = JS_ToCString(ctx, method_val);
       if (method_str) {
         free(fetch_ctx->method);
         fetch_ctx->method = strdup(method_str);
@@ -552,30 +554,32 @@ static JSValue JSRT_Fetch(JSContext *ctx, JSValueConst this_val, int argc, JSVal
     JSValue headers_val = JS_GetPropertyStr(ctx, options, "headers");
     if (JS_IsObject(headers_val)) {
       // Try to get as Headers object first
-      JSRT_Headers *custom_headers = JS_GetOpaque2(ctx, headers_val, JSRT_HeadersClassID);
+      JSRT_Headers* custom_headers = JS_GetOpaque2(ctx, headers_val, JSRT_HeadersClassID);
       if (custom_headers) {
         // Copy headers from Headers object
-        JSRT_HeaderItem *item = custom_headers->first;
+        JSRT_HeaderItem* item = custom_headers->first;
         while (item) {
           JSRT_HeadersSet(fetch_ctx->request_headers, item->name, item->value);
           item = item->next;
         }
       } else {
         // Try to iterate as plain object
-        JSPropertyEnum *props;
+        JSPropertyEnum* props;
         uint32_t prop_count;
         if (JS_GetOwnPropertyNames(ctx, &props, &prop_count, headers_val, JS_GPN_STRING_MASK) == 0) {
           for (uint32_t i = 0; i < prop_count; i++) {
             JSValue key = JS_AtomToString(ctx, props[i].atom);
             JSValue value = JS_GetProperty(ctx, headers_val, props[i].atom);
             if (JS_IsString(key) && JS_IsString(value)) {
-              const char *key_str = JS_ToCString(ctx, key);
-              const char *value_str = JS_ToCString(ctx, value);
+              const char* key_str = JS_ToCString(ctx, key);
+              const char* value_str = JS_ToCString(ctx, value);
               if (key_str && value_str) {
                 JSRT_HeadersSet(fetch_ctx->request_headers, key_str, value_str);
               }
-              if (key_str) JS_FreeCString(ctx, key_str);
-              if (value_str) JS_FreeCString(ctx, value_str);
+              if (key_str)
+                JS_FreeCString(ctx, key_str);
+              if (value_str)
+                JS_FreeCString(ctx, value_str);
             }
             JS_FreeValue(ctx, key);
             JS_FreeValue(ctx, value);
@@ -595,7 +599,7 @@ static JSValue JSRT_Fetch(JSContext *ctx, JSValueConst this_val, int argc, JSVal
       if (JS_IsString(body_val)) {
         // String body
         size_t body_len;
-        const char *body_str = JS_ToCStringLen(ctx, &body_len, body_val);
+        const char* body_str = JS_ToCStringLen(ctx, &body_len, body_val);
         if (body_str) {
           fetch_ctx->request_body = malloc(body_len + 1);
           if (fetch_ctx->request_body) {
@@ -627,7 +631,7 @@ static JSValue JSRT_Fetch(JSContext *ctx, JSValueConst this_val, int argc, JSVal
   }
 
   // Start DNS resolution
-  uv_getaddrinfo_t *getaddrinfo_req = malloc(sizeof(uv_getaddrinfo_t));
+  uv_getaddrinfo_t* getaddrinfo_req = malloc(sizeof(uv_getaddrinfo_t));
   if (!getaddrinfo_req) {
     JSValue error = JS_NewError(ctx);
     JS_SetPropertyStr(ctx, error, "message", JS_NewString(ctx, "Memory allocation failed"));
@@ -669,15 +673,22 @@ cleanup:
 }
 
 // HTTP implementation helper functions
-static void JSRT_FetchContextFree(JSRT_FetchContext *ctx) {
-  if (!ctx) return;
+static void JSRT_FetchContextFree(JSRT_FetchContext* ctx) {
+  if (!ctx)
+    return;
 
-  if (ctx->host) free(ctx->host);
-  if (ctx->path) free(ctx->path);
-  if (ctx->method) free(ctx->method);
-  if (ctx->request_body) free(ctx->request_body);
-  if (ctx->response_buffer) free(ctx->response_buffer);
-  if (ctx->request_headers) JSRT_HeadersFree(ctx->request_headers);
+  if (ctx->host)
+    free(ctx->host);
+  if (ctx->path)
+    free(ctx->path);
+  if (ctx->method)
+    free(ctx->method);
+  if (ctx->request_body)
+    free(ctx->request_body);
+  if (ctx->response_buffer)
+    free(ctx->response_buffer);
+  if (ctx->request_headers)
+    JSRT_HeadersFree(ctx->request_headers);
 
   // Free JavaScript values safely - only if runtime context is still valid
   if (ctx->rt && ctx->rt->ctx) {
@@ -694,18 +705,18 @@ static void JSRT_FetchContextFree(JSRT_FetchContext *ctx) {
   free(ctx);
 }
 
-static int JSRT_FetchParseURL(const char *url, char **host, int *port, char **path) {
+static int JSRT_FetchParseURL(const char* url, char** host, int* port, char** path) {
   // Simple URL parser for http://host:port/path format
   if (strncmp(url, "http://", 7) != 0 && strncmp(url, "https://", 8) != 0) {
     return -1;  // Only support HTTP/HTTPS
   }
 
-  const char *start = url;
+  const char* start = url;
   bool is_https = strncmp(url, "https://", 8) == 0;
   start += is_https ? 8 : 7;
 
   // Find the end of hostname (either : or / or end of string)
-  const char *host_end = start;
+  const char* host_end = start;
   while (*host_end && *host_end != ':' && *host_end != '/') {
     host_end++;
   }
@@ -713,7 +724,8 @@ static int JSRT_FetchParseURL(const char *url, char **host, int *port, char **pa
   // Extract hostname
   size_t host_len = host_end - start;
   *host = malloc(host_len + 1);
-  if (!*host) return -1;
+  if (!*host)
+    return -1;
   strncpy(*host, start, host_len);
   (*host)[host_len] = '\0';
 
@@ -744,15 +756,15 @@ static int JSRT_FetchParseURL(const char *url, char **host, int *port, char **pa
   return 0;
 }
 
-static char *JSRT_FetchBuildHttpRequest(const char *method, const char *path, const char *host, int port,
-                                        JSRT_Headers *headers, const char *body, size_t body_size) {
+static char* JSRT_FetchBuildHttpRequest(const char* method, const char* path, const char* host, int port,
+                                        JSRT_Headers* headers, const char* body, size_t body_size) {
   // Calculate required buffer size more accurately
   size_t base_size = strlen(method) + strlen(path) + strlen(host) + 100;  // Base request line + host header
 
   // Calculate headers size
   size_t headers_size = 0;
   if (headers) {
-    JSRT_HeaderItem *item = headers->first;
+    JSRT_HeaderItem* item = headers->first;
     while (item) {
       headers_size += strlen(item->name) + strlen(item->value) + 4;  // ": \r\n"
       item = item->next;
@@ -760,10 +772,12 @@ static char *JSRT_FetchBuildHttpRequest(const char *method, const char *path, co
   }
 
   size_t request_size = base_size + headers_size + body_size + 10;  // Extra buffer for safety
-  if (request_size < 1024) request_size = 1024;                     // Minimum size
+  if (request_size < 1024)
+    request_size = 1024;  // Minimum size
 
-  char *request = malloc(request_size);
-  if (!request) return NULL;
+  char* request = malloc(request_size);
+  if (!request)
+    return NULL;
 
   // Build request line
   int len = snprintf(request, request_size, "%s %s HTTP/1.1\r\n", method, path);
@@ -786,13 +800,13 @@ static char *JSRT_FetchBuildHttpRequest(const char *method, const char *path, co
 
   // Add custom headers
   if (headers) {
-    JSRT_HeaderItem *item = headers->first;
+    JSRT_HeaderItem* item = headers->first;
     while (item && len < (int)request_size - 10) {
       int header_len = snprintf(request + len, request_size - len, "%s: %s\r\n", item->name, item->value);
       if (len + header_len >= (int)request_size) {
         // Need more space - reallocate
         request_size *= 2;
-        char *new_request = realloc(request, request_size);
+        char* new_request = realloc(request, request_size);
         if (!new_request) {
           free(request);
           return NULL;
@@ -821,7 +835,7 @@ static char *JSRT_FetchBuildHttpRequest(const char *method, const char *path, co
     } else {
       // Need more space
       request_size = len + body_size + 10;
-      char *new_request = realloc(request, request_size);
+      char* new_request = realloc(request, request_size);
       if (!new_request) {
         free(request);
         return NULL;
@@ -835,17 +849,19 @@ static char *JSRT_FetchBuildHttpRequest(const char *method, const char *path, co
   return request;
 }
 
-static JSRT_Response *JSRT_FetchParseHttpResponse(const char *response_data, size_t response_size) {
-  if (!response_data || response_size == 0) return NULL;
+static JSRT_Response* JSRT_FetchParseHttpResponse(const char* response_data, size_t response_size) {
+  if (!response_data || response_size == 0)
+    return NULL;
 
-  JSRT_Response *response = malloc(sizeof(JSRT_Response));
-  if (!response) return NULL;
+  JSRT_Response* response = malloc(sizeof(JSRT_Response));
+  if (!response)
+    return NULL;
 
   memset(response, 0, sizeof(JSRT_Response));
   response->headers = JSRT_HeadersNew();
 
   // Find end of headers - try both \r\n\r\n and \n\n for compatibility
-  const char *headers_end = strstr(response_data, "\r\n\r\n");
+  const char* headers_end = strstr(response_data, "\r\n\r\n");
   if (!headers_end) {
     headers_end = strstr(response_data, "\n\n");
     if (!headers_end) {
@@ -883,35 +899,36 @@ static JSRT_Response *JSRT_FetchParseHttpResponse(const char *response_data, siz
   response->ok = (response->status >= 200 && response->status < 300);
 
   // Parse headers - improved robustness
-  const char *header_start = strchr(response_data, '\n');
+  const char* header_start = strchr(response_data, '\n');
   if (header_start) {
     header_start++;  // Skip status line
     while (header_start < headers_end) {
-      const char *line_end = strchr(header_start, '\n');
-      if (!line_end) break;
+      const char* line_end = strchr(header_start, '\n');
+      if (!line_end)
+        break;
 
       // Handle \r\n line endings
-      const char *actual_line_end = line_end;
+      const char* actual_line_end = line_end;
       if (line_end > header_start && *(line_end - 1) == '\r') {
         actual_line_end = line_end - 1;
       }
 
-      const char *colon = strchr(header_start, ':');
+      const char* colon = strchr(header_start, ':');
       if (colon && colon < actual_line_end) {
         // Calculate lengths
         size_t name_len = colon - header_start;
         size_t value_len = actual_line_end - colon - 1;
 
         // Skip whitespace after colon
-        const char *value_start = colon + 1;
+        const char* value_start = colon + 1;
         while (value_start < actual_line_end && (*value_start == ' ' || *value_start == '\t')) {
           value_start++;
           value_len--;
         }
 
         if (name_len > 0 && value_len > 0) {
-          char *name = malloc(name_len + 1);
-          char *value = malloc(value_len + 1);
+          char* name = malloc(name_len + 1);
+          char* value = malloc(value_len + 1);
           if (name && value) {
             strncpy(name, header_start, name_len);
             name[name_len] = '\0';
@@ -919,8 +936,10 @@ static JSRT_Response *JSRT_FetchParseHttpResponse(const char *response_data, siz
             value[value_len] = '\0';
             JSRT_HeadersSet(response->headers, name, value);
           }
-          if (name) free(name);
-          if (value) free(value);
+          if (name)
+            free(name);
+          if (value)
+            free(value);
         }
       }
 
@@ -934,12 +953,13 @@ static JSRT_Response *JSRT_FetchParseHttpResponse(const char *response_data, siz
   return response;
 }
 
-static void JSRT_FetchOnGetAddrInfo(uv_getaddrinfo_t *req, int status, struct addrinfo *res) {
-  JSRT_FetchContext *ctx = (JSRT_FetchContext *)req->data;
+static void JSRT_FetchOnGetAddrInfo(uv_getaddrinfo_t* req, int status, struct addrinfo* res) {
+  JSRT_FetchContext* ctx = (JSRT_FetchContext*)req->data;
 
   // Safety check - ensure runtime context is still valid
   if (!ctx || !ctx->rt || !ctx->rt->ctx) {
-    if (ctx) JSRT_FetchContextFree(ctx);
+    if (ctx)
+      JSRT_FetchContextFree(ctx);
     goto cleanup;
   }
 
@@ -971,7 +991,7 @@ static void JSRT_FetchOnGetAddrInfo(uv_getaddrinfo_t *req, int status, struct ad
   ctx->connect_req.data = ctx;
 
   // Connect to the resolved address
-  ret = uv_tcp_connect(&ctx->connect_req, &ctx->tcp_handle, (const struct sockaddr *)res->ai_addr, JSRT_FetchOnConnect);
+  ret = uv_tcp_connect(&ctx->connect_req, &ctx->tcp_handle, (const struct sockaddr*)res->ai_addr, JSRT_FetchOnConnect);
   if (ret != 0) {
     JSValue error = JS_NewError(ctx->rt->ctx);
     char error_msg[256];
@@ -983,17 +1003,19 @@ static void JSRT_FetchOnGetAddrInfo(uv_getaddrinfo_t *req, int status, struct ad
   }
 
 cleanup:
-  if (res) uv_freeaddrinfo(res);
+  if (res)
+    uv_freeaddrinfo(res);
   // Free the getaddrinfo request
   free(req);
 }
 
-static void JSRT_FetchOnConnect(uv_connect_t *req, int status) {
-  JSRT_FetchContext *ctx = (JSRT_FetchContext *)req->data;
+static void JSRT_FetchOnConnect(uv_connect_t* req, int status) {
+  JSRT_FetchContext* ctx = (JSRT_FetchContext*)req->data;
 
   // Safety check - ensure runtime context is still valid
   if (!ctx || !ctx->rt || !ctx->rt->ctx) {
-    if (ctx) JSRT_FetchContextFree(ctx);
+    if (ctx)
+      JSRT_FetchContextFree(ctx);
     return;
   }
 
@@ -1009,7 +1031,7 @@ static void JSRT_FetchOnConnect(uv_connect_t *req, int status) {
   }
 
   // Start reading responses
-  int ret = uv_read_start((uv_stream_t *)&ctx->tcp_handle, JSRT_FetchAllocBuffer, JSRT_FetchOnRead);
+  int ret = uv_read_start((uv_stream_t*)&ctx->tcp_handle, JSRT_FetchAllocBuffer, JSRT_FetchOnRead);
   if (ret != 0) {
     JSValue error = JS_NewError(ctx->rt->ctx);
     char error_msg[256];
@@ -1022,7 +1044,7 @@ static void JSRT_FetchOnConnect(uv_connect_t *req, int status) {
   }
 
   // Build and send HTTP request
-  char *http_request = JSRT_FetchBuildHttpRequest(ctx->method, ctx->path, ctx->host, ctx->port, ctx->request_headers,
+  char* http_request = JSRT_FetchBuildHttpRequest(ctx->method, ctx->path, ctx->host, ctx->port, ctx->request_headers,
                                                   ctx->request_body, ctx->request_body_size);
   if (!http_request) {
     JSValue error = JS_NewError(ctx->rt->ctx);
@@ -1036,7 +1058,7 @@ static void JSRT_FetchOnConnect(uv_connect_t *req, int status) {
   uv_buf_t write_buf = uv_buf_init(http_request, strlen(http_request));
   ctx->write_req.data = http_request;  // Store pointer to free later
 
-  ret = uv_write(&ctx->write_req, (uv_stream_t *)&ctx->tcp_handle, &write_buf, 1, JSRT_FetchOnWrite);
+  ret = uv_write(&ctx->write_req, (uv_stream_t*)&ctx->tcp_handle, &write_buf, 1, JSRT_FetchOnWrite);
   if (ret != 0) {
     JSValue error = JS_NewError(ctx->rt->ctx);
     char error_msg[256];
@@ -1049,16 +1071,17 @@ static void JSRT_FetchOnConnect(uv_connect_t *req, int status) {
   }
 }
 
-static void JSRT_FetchOnWrite(uv_write_t *req, int status) {
-  char *http_request = (char *)req->data;
+static void JSRT_FetchOnWrite(uv_write_t* req, int status) {
+  char* http_request = (char*)req->data;
   free(http_request);  // Free the request buffer
 
   if (status != 0) {
-    JSRT_FetchContext *ctx = (JSRT_FetchContext *)req->handle->data;
+    JSRT_FetchContext* ctx = (JSRT_FetchContext*)req->handle->data;
 
     // Safety check - ensure runtime context is still valid
     if (!ctx || !ctx->rt || !ctx->rt->ctx) {
-      if (ctx) JSRT_FetchContextFree(ctx);
+      if (ctx)
+        JSRT_FetchContextFree(ctx);
       return;
     }
 
@@ -1073,20 +1096,21 @@ static void JSRT_FetchOnWrite(uv_write_t *req, int status) {
   // Request sent successfully, now wait for response data in JSRT_FetchOnRead
 }
 
-static void JSRT_FetchAllocBuffer(uv_handle_t *handle, size_t suggested_size, uv_buf_t *buf) {
+static void JSRT_FetchAllocBuffer(uv_handle_t* handle, size_t suggested_size, uv_buf_t* buf) {
   buf->base = malloc(suggested_size);
   buf->len = suggested_size;
 }
 
-static void JSRT_FetchOnRead(uv_stream_t *stream, ssize_t nread, const uv_buf_t *buf) {
-  JSRT_FetchContext *ctx = (JSRT_FetchContext *)stream->data;
+static void JSRT_FetchOnRead(uv_stream_t* stream, ssize_t nread, const uv_buf_t* buf) {
+  JSRT_FetchContext* ctx = (JSRT_FetchContext*)stream->data;
 
   // Safety check - ensure runtime context is still valid
   if (!ctx || !ctx->rt || !ctx->rt->ctx) {
     if (ctx) {
-      uv_close((uv_handle_t *)&ctx->tcp_handle, JSRT_FetchOnClose);
+      uv_close((uv_handle_t*)&ctx->tcp_handle, JSRT_FetchOnClose);
     }
-    if (buf->base) free(buf->base);
+    if (buf->base)
+      free(buf->base);
     return;
   }
 
@@ -1101,10 +1125,10 @@ static void JSRT_FetchOnRead(uv_stream_t *stream, ssize_t nread, const uv_buf_t 
     } else {
       // EOF - process response
       if (ctx->response_buffer && ctx->response_size > 0) {
-        JSRT_Response *response = JSRT_FetchParseHttpResponse(ctx->response_buffer, ctx->response_size);
+        JSRT_Response* response = JSRT_FetchParseHttpResponse(ctx->response_buffer, ctx->response_size);
         if (response) {
           // Set the response body from the buffer
-          const char *body_start = strstr(ctx->response_buffer, "\r\n\r\n");
+          const char* body_start = strstr(ctx->response_buffer, "\r\n\r\n");
           if (body_start) {
             body_start += 4;
             response->body = JS_NewString(ctx->rt->ctx, body_start);
@@ -1133,8 +1157,9 @@ static void JSRT_FetchOnRead(uv_stream_t *stream, ssize_t nread, const uv_buf_t 
       }
     }
 
-    uv_close((uv_handle_t *)&ctx->tcp_handle, JSRT_FetchOnClose);
-    if (buf->base) free(buf->base);
+    uv_close((uv_handle_t*)&ctx->tcp_handle, JSRT_FetchOnClose);
+    if (buf->base)
+      free(buf->base);
     return;
   }
 
@@ -1148,8 +1173,9 @@ static void JSRT_FetchOnRead(uv_stream_t *stream, ssize_t nread, const uv_buf_t 
         JS_SetPropertyStr(ctx->rt->ctx, error, "message", JS_NewString(ctx->rt->ctx, "Out of memory"));
         JS_Call(ctx->rt->ctx, ctx->reject_func, JS_UNDEFINED, 1, &error);
         JS_FreeValue(ctx->rt->ctx, error);
-        uv_close((uv_handle_t *)&ctx->tcp_handle, JSRT_FetchOnClose);
-        if (buf->base) free(buf->base);
+        uv_close((uv_handle_t*)&ctx->tcp_handle, JSRT_FetchOnClose);
+        if (buf->base)
+          free(buf->base);
         return;
       }
     }
@@ -1160,29 +1186,31 @@ static void JSRT_FetchOnRead(uv_stream_t *stream, ssize_t nread, const uv_buf_t 
     ctx->response_buffer[ctx->response_size] = '\0';  // Null terminate for string operations
   }
 
-  if (buf->base) free(buf->base);
+  if (buf->base)
+    free(buf->base);
 }
 
 // Close callback - safely free the context after handle is closed
-static void JSRT_FetchOnClose(uv_handle_t *handle) {
-  JSRT_FetchContext *ctx = (JSRT_FetchContext *)handle->data;
+static void JSRT_FetchOnClose(uv_handle_t* handle) {
+  JSRT_FetchContext* ctx = (JSRT_FetchContext*)handle->data;
   if (ctx) {
     JSRT_FetchContextFree(ctx);
   }
 }
 
-static JSRT_Headers *JSRT_HeadersNew() {
-  JSRT_Headers *headers = malloc(sizeof(JSRT_Headers));
+static JSRT_Headers* JSRT_HeadersNew() {
+  JSRT_Headers* headers = malloc(sizeof(JSRT_Headers));
   headers->first = NULL;
   return headers;
 }
 
-static void JSRT_HeadersFree(JSRT_Headers *headers) {
-  if (!headers) return;
+static void JSRT_HeadersFree(JSRT_Headers* headers) {
+  if (!headers)
+    return;
 
-  JSRT_HeaderItem *current = headers->first;
+  JSRT_HeaderItem* current = headers->first;
   while (current) {
-    JSRT_HeaderItem *next = current->next;
+    JSRT_HeaderItem* next = current->next;
     free(current->name);
     free(current->value);
     free(current);
@@ -1191,18 +1219,19 @@ static void JSRT_HeadersFree(JSRT_Headers *headers) {
   free(headers);
 }
 
-static void JSRT_HeadersSet(JSRT_Headers *headers, const char *name, const char *value) {
-  if (!headers || !name || !value) return;
+static void JSRT_HeadersSet(JSRT_Headers* headers, const char* name, const char* value) {
+  if (!headers || !name || !value)
+    return;
 
   // Convert name to lowercase
-  char *lower_name = malloc(strlen(name) + 1);
+  char* lower_name = malloc(strlen(name) + 1);
   for (size_t i = 0; name[i]; i++) {
     lower_name[i] = tolower(name[i]);
   }
   lower_name[strlen(name)] = '\0';
 
   // Check if header already exists
-  JSRT_HeaderItem *item = headers->first;
+  JSRT_HeaderItem* item = headers->first;
   while (item) {
     if (strcmp(item->name, lower_name) == 0) {
       free(item->value);
@@ -1214,24 +1243,25 @@ static void JSRT_HeadersSet(JSRT_Headers *headers, const char *name, const char 
   }
 
   // Add new header
-  JSRT_HeaderItem *new_item = malloc(sizeof(JSRT_HeaderItem));
+  JSRT_HeaderItem* new_item = malloc(sizeof(JSRT_HeaderItem));
   new_item->name = lower_name;
   new_item->value = strdup(value);
   new_item->next = headers->first;
   headers->first = new_item;
 }
 
-static const char *JSRT_HeadersGet(JSRT_Headers *headers, const char *name) {
-  if (!headers || !name) return NULL;
+static const char* JSRT_HeadersGet(JSRT_Headers* headers, const char* name) {
+  if (!headers || !name)
+    return NULL;
 
   // Convert name to lowercase
-  char *lower_name = malloc(strlen(name) + 1);
+  char* lower_name = malloc(strlen(name) + 1);
   for (size_t i = 0; name[i]; i++) {
     lower_name[i] = tolower(name[i]);
   }
   lower_name[strlen(name)] = '\0';
 
-  JSRT_HeaderItem *item = headers->first;
+  JSRT_HeaderItem* item = headers->first;
   while (item) {
     if (strcmp(item->name, lower_name) == 0) {
       free(lower_name);
@@ -1244,22 +1274,25 @@ static const char *JSRT_HeadersGet(JSRT_Headers *headers, const char *name) {
   return NULL;
 }
 
-static bool JSRT_HeadersHas(JSRT_Headers *headers, const char *name) { return JSRT_HeadersGet(headers, name) != NULL; }
+static bool JSRT_HeadersHas(JSRT_Headers* headers, const char* name) {
+  return JSRT_HeadersGet(headers, name) != NULL;
+}
 
-static void JSRT_HeadersDelete(JSRT_Headers *headers, const char *name) {
-  if (!headers || !name) return;
+static void JSRT_HeadersDelete(JSRT_Headers* headers, const char* name) {
+  if (!headers || !name)
+    return;
 
   // Convert name to lowercase
-  char *lower_name = malloc(strlen(name) + 1);
+  char* lower_name = malloc(strlen(name) + 1);
   for (size_t i = 0; name[i]; i++) {
     lower_name[i] = tolower(name[i]);
   }
   lower_name[strlen(name)] = '\0';
 
-  JSRT_HeaderItem **current = &headers->first;
+  JSRT_HeaderItem** current = &headers->first;
   while (*current) {
     if (strcmp((*current)->name, lower_name) == 0) {
-      JSRT_HeaderItem *to_delete = *current;
+      JSRT_HeaderItem* to_delete = *current;
       *current = to_delete->next;
       free(to_delete->name);
       free(to_delete->value);
@@ -1273,7 +1306,7 @@ static void JSRT_HeadersDelete(JSRT_Headers *headers, const char *name) {
 }
 
 // Setup function
-void JSRT_RuntimeSetupStdFetch(JSRT_Runtime *rt) {
+void JSRT_RuntimeSetupStdFetch(JSRT_Runtime* rt) {
   // Register Headers class
   JS_NewClassID(&JSRT_HeadersClassID);
   JS_NewClass(rt->rt, JSRT_HeadersClassID, &JSRT_HeadersClass);

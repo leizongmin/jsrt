@@ -22,7 +22,7 @@
 // Cross-platform dynamic loading abstractions
 #ifdef _WIN32
 extern HMODULE openssl_handle;
-#define JSRT_DLSYM(handle, name) ((void *)GetProcAddress(handle, name))
+#define JSRT_DLSYM(handle, name) ((void*)GetProcAddress(handle, name))
 #else
 
 #define JSRT_DLSYM(handle, name) dlsym(handle, name)
@@ -30,7 +30,7 @@ extern HMODULE openssl_handle;
 
 // Algorithm name to enum mapping
 static const struct {
-  const char *name;
+  const char* name;
   jsrt_crypto_algorithm_t algorithm;
 } algorithm_map[] = {{"SHA-1", JSRT_CRYPTO_ALG_SHA1},
                      {"SHA-256", JSRT_CRYPTO_ALG_SHA256},
@@ -51,10 +51,11 @@ static const struct {
                      {NULL, JSRT_CRYPTO_ALG_UNKNOWN}};
 
 // Parse algorithm parameter
-jsrt_crypto_algorithm_t jsrt_crypto_parse_algorithm(JSContext *ctx, JSValue algorithm) {
+jsrt_crypto_algorithm_t jsrt_crypto_parse_algorithm(JSContext* ctx, JSValue algorithm) {
   if (JS_IsString(algorithm)) {
-    const char *alg_name = JS_ToCString(ctx, algorithm);
-    if (!alg_name) return JSRT_CRYPTO_ALG_UNKNOWN;
+    const char* alg_name = JS_ToCString(ctx, algorithm);
+    if (!alg_name)
+      return JSRT_CRYPTO_ALG_UNKNOWN;
 
     for (int i = 0; algorithm_map[i].name != NULL; i++) {
       if (strcmp(alg_name, algorithm_map[i].name) == 0) {
@@ -66,7 +67,7 @@ jsrt_crypto_algorithm_t jsrt_crypto_parse_algorithm(JSContext *ctx, JSValue algo
   } else if (JS_IsObject(algorithm)) {
     JSValue name_val = JS_GetPropertyStr(ctx, algorithm, "name");
     if (JS_IsString(name_val)) {
-      const char *alg_name = JS_ToCString(ctx, name_val);
+      const char* alg_name = JS_ToCString(ctx, name_val);
       if (alg_name) {
         for (int i = 0; algorithm_map[i].name != NULL; i++) {
           if (strcmp(alg_name, algorithm_map[i].name) == 0) {
@@ -85,7 +86,7 @@ jsrt_crypto_algorithm_t jsrt_crypto_parse_algorithm(JSContext *ctx, JSValue algo
 }
 
 // Convert algorithm enum to string
-const char *jsrt_crypto_algorithm_to_string(jsrt_crypto_algorithm_t alg) {
+const char* jsrt_crypto_algorithm_to_string(jsrt_crypto_algorithm_t alg) {
   for (int i = 0; algorithm_map[i].name != NULL; i++) {
     if (algorithm_map[i].algorithm == alg) {
       return algorithm_map[i].name;
@@ -138,7 +139,7 @@ bool jsrt_crypto_is_algorithm_supported(jsrt_crypto_algorithm_t alg) {
 }
 
 // Throw WebCrypto specific errors
-JSValue jsrt_crypto_throw_error(JSContext *ctx, const char *name, const char *message) {
+JSValue jsrt_crypto_throw_error(JSContext* ctx, const char* name, const char* message) {
   JSValue error = JS_NewError(ctx);
   JS_SetPropertyStr(ctx, error, "name", JS_NewString(ctx, name));
   JS_SetPropertyStr(ctx, error, "message", JS_NewString(ctx, message));
@@ -146,15 +147,15 @@ JSValue jsrt_crypto_throw_error(JSContext *ctx, const char *name, const char *me
 }
 
 // Memory management functions
-JSRTCryptoKey *jsrt_crypto_key_new(void) {
-  JSRTCryptoKey *key = malloc(sizeof(JSRTCryptoKey));
+JSRTCryptoKey* jsrt_crypto_key_new(void) {
+  JSRTCryptoKey* key = malloc(sizeof(JSRTCryptoKey));
   if (key) {
     memset(key, 0, sizeof(JSRTCryptoKey));
   }
   return key;
 }
 
-void jsrt_crypto_key_free(JSRTCryptoKey *key) {
+void jsrt_crypto_key_free(JSRTCryptoKey* key) {
   if (key) {
     free(key->algorithm_name);
     free(key->key_type);
@@ -163,15 +164,15 @@ void jsrt_crypto_key_free(JSRTCryptoKey *key) {
   }
 }
 
-JSRTCryptoAsyncOperation *jsrt_crypto_async_operation_new(void) {
-  JSRTCryptoAsyncOperation *op = malloc(sizeof(JSRTCryptoAsyncOperation));
+JSRTCryptoAsyncOperation* jsrt_crypto_async_operation_new(void) {
+  JSRTCryptoAsyncOperation* op = malloc(sizeof(JSRTCryptoAsyncOperation));
   if (op) {
     memset(op, 0, sizeof(JSRTCryptoAsyncOperation));
   }
   return op;
 }
 
-void jsrt_crypto_async_operation_free(JSRTCryptoAsyncOperation *op) {
+void jsrt_crypto_async_operation_free(JSRTCryptoAsyncOperation* op) {
   if (op) {
     free(op->input_data);
     free(op->output_data);
@@ -184,7 +185,7 @@ void jsrt_crypto_async_operation_free(JSRTCryptoAsyncOperation *op) {
 }
 
 // Create a resolved Promise with the given value
-static JSValue create_resolved_promise(JSContext *ctx, JSValue value) {
+static JSValue create_resolved_promise(JSContext* ctx, JSValue value) {
   JSValue global = JS_GetGlobalObject(ctx);
   JSValue promise_ctor = JS_GetPropertyStr(ctx, global, "Promise");
   JS_FreeValue(ctx, global);
@@ -204,7 +205,7 @@ static JSValue create_resolved_promise(JSContext *ctx, JSValue value) {
 }
 
 // Create a rejected Promise with the given error
-static JSValue create_rejected_promise(JSContext *ctx, JSValue error) {
+static JSValue create_rejected_promise(JSContext* ctx, JSValue error) {
   JSValue global = JS_GetGlobalObject(ctx);
   JSValue promise_ctor = JS_GetPropertyStr(ctx, global, "Promise");
   JS_FreeValue(ctx, global);
@@ -224,7 +225,7 @@ static JSValue create_rejected_promise(JSContext *ctx, JSValue error) {
 }
 
 // crypto.subtle.digest implementation - synchronous for now
-JSValue jsrt_subtle_digest(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv) {
+JSValue jsrt_subtle_digest(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
   if (argc < 2) {
     JSValue error = jsrt_crypto_throw_error(ctx, "TypeError", "digest requires 2 arguments");
     return create_rejected_promise(ctx, error);
@@ -244,7 +245,7 @@ JSValue jsrt_subtle_digest(JSContext *ctx, JSValueConst this_val, int argc, JSVa
 
   // Get data to hash - handle both ArrayBuffer and TypedArray
   size_t data_size;
-  uint8_t *data = NULL;
+  uint8_t* data = NULL;
 
   // Try ArrayBuffer first
   data = JS_GetArrayBuffer(ctx, &data_size, argv[1]);
@@ -258,7 +259,7 @@ JSValue jsrt_subtle_digest(JSContext *ctx, JSValueConst this_val, int argc, JSVa
     if (!JS_IsUndefined(buffer_val) && !JS_IsUndefined(byteOffset_val) && !JS_IsUndefined(byteLength_val)) {
       // This is a TypedArray
       size_t buffer_size;
-      uint8_t *buffer_data = JS_GetArrayBuffer(ctx, &buffer_size, buffer_val);
+      uint8_t* buffer_data = JS_GetArrayBuffer(ctx, &buffer_size, buffer_val);
 
       if (buffer_data) {
         uint32_t offset, length;
@@ -281,7 +282,7 @@ JSValue jsrt_subtle_digest(JSContext *ctx, JSValueConst this_val, int argc, JSVa
   }
 
   // Perform digest operation synchronously
-  uint8_t *digest_output;
+  uint8_t* digest_output;
   size_t digest_length;
 
   int digest_result = jsrt_crypto_digest_data(alg, data, data_size, &digest_output, &digest_length);
@@ -299,7 +300,7 @@ JSValue jsrt_subtle_digest(JSContext *ctx, JSValueConst this_val, int argc, JSVa
 }
 
 // crypto.subtle.encrypt implementation
-JSValue jsrt_subtle_encrypt(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv) {
+JSValue jsrt_subtle_encrypt(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
   if (argc < 3) {
     JSValue error = jsrt_crypto_throw_error(ctx, "TypeError", "encrypt requires 3 arguments");
     return create_rejected_promise(ctx, error);
@@ -333,7 +334,7 @@ JSValue jsrt_subtle_encrypt(JSContext *ctx, JSValueConst this_val, int argc, JSV
   }
 
   size_t key_data_size;
-  uint8_t *key_data = JS_GetArrayBuffer(ctx, &key_data_size, key_data_val);
+  uint8_t* key_data = JS_GetArrayBuffer(ctx, &key_data_size, key_data_val);
   if (!key_data) {
     JS_FreeValue(ctx, key_data_val);
     JSValue error = jsrt_crypto_throw_error(ctx, "InvalidAccessError", "Invalid key data");
@@ -342,7 +343,7 @@ JSValue jsrt_subtle_encrypt(JSContext *ctx, JSValueConst this_val, int argc, JSV
 
   // Get plaintext data (third argument) - handle both ArrayBuffer and TypedArray
   size_t plaintext_size;
-  uint8_t *plaintext_data = NULL;
+  uint8_t* plaintext_data = NULL;
 
   // Try ArrayBuffer first
   plaintext_data = JS_GetArrayBuffer(ctx, &plaintext_size, argv[2]);
@@ -355,7 +356,7 @@ JSValue jsrt_subtle_encrypt(JSContext *ctx, JSValueConst this_val, int argc, JSV
 
     if (!JS_IsUndefined(buffer_val) && !JS_IsUndefined(byteOffset_val) && !JS_IsUndefined(byteLength_val)) {
       size_t buffer_size;
-      uint8_t *buffer_data = JS_GetArrayBuffer(ctx, &buffer_size, buffer_val);
+      uint8_t* buffer_data = JS_GetArrayBuffer(ctx, &buffer_size, buffer_val);
 
       if (buffer_data) {
         uint32_t offset, length;
@@ -389,7 +390,7 @@ JSValue jsrt_subtle_encrypt(JSContext *ctx, JSValueConst this_val, int argc, JSV
     }
 
     size_t iv_size;
-    uint8_t *iv_data = NULL;
+    uint8_t* iv_data = NULL;
 
     // Try ArrayBuffer first
     iv_data = JS_GetArrayBuffer(ctx, &iv_size, iv_val);
@@ -402,7 +403,7 @@ JSValue jsrt_subtle_encrypt(JSContext *ctx, JSValueConst this_val, int argc, JSV
 
       if (!JS_IsUndefined(iv_buffer_val) && !JS_IsUndefined(iv_byteOffset_val) && !JS_IsUndefined(iv_byteLength_val)) {
         size_t buffer_size;
-        uint8_t *buffer_data = JS_GetArrayBuffer(ctx, &buffer_size, iv_buffer_val);
+        uint8_t* buffer_data = JS_GetArrayBuffer(ctx, &buffer_size, iv_buffer_val);
 
         if (buffer_data) {
           uint32_t offset, length;
@@ -427,7 +428,7 @@ JSValue jsrt_subtle_encrypt(JSContext *ctx, JSValueConst this_val, int argc, JSV
     }
 
     // Set up encryption parameters
-    jsrt_symmetric_params_t *params = malloc(sizeof(jsrt_symmetric_params_t));
+    jsrt_symmetric_params_t* params = malloc(sizeof(jsrt_symmetric_params_t));
     if (!params) {
       JS_FreeValue(ctx, key_data_val);
       JS_FreeValue(ctx, iv_val);
@@ -442,7 +443,7 @@ JSValue jsrt_subtle_encrypt(JSContext *ctx, JSValueConst this_val, int argc, JSV
     params->params.cbc.iv_length = iv_size;
 
     // Perform encryption
-    uint8_t *ciphertext_data;
+    uint8_t* ciphertext_data;
     size_t ciphertext_size;
     int result = jsrt_crypto_aes_encrypt(params, plaintext_data, plaintext_size, &ciphertext_data, &ciphertext_size);
 
@@ -472,7 +473,7 @@ JSValue jsrt_subtle_encrypt(JSContext *ctx, JSValueConst this_val, int argc, JSV
     }
 
     size_t iv_size;
-    uint8_t *iv_data = NULL;
+    uint8_t* iv_data = NULL;
 
     // Try ArrayBuffer first
     iv_data = JS_GetArrayBuffer(ctx, &iv_size, iv_val);
@@ -485,7 +486,7 @@ JSValue jsrt_subtle_encrypt(JSContext *ctx, JSValueConst this_val, int argc, JSV
 
       if (!JS_IsUndefined(iv_buffer_val) && !JS_IsUndefined(iv_byteOffset_val) && !JS_IsUndefined(iv_byteLength_val)) {
         size_t buffer_size;
-        uint8_t *buffer_data = JS_GetArrayBuffer(ctx, &buffer_size, iv_buffer_val);
+        uint8_t* buffer_data = JS_GetArrayBuffer(ctx, &buffer_size, iv_buffer_val);
 
         if (buffer_data) {
           uint32_t offset, length;
@@ -511,7 +512,7 @@ JSValue jsrt_subtle_encrypt(JSContext *ctx, JSValueConst this_val, int argc, JSV
 
     // Get optional additionalData
     JSValue additionalData_val = JS_GetPropertyStr(ctx, argv[0], "additionalData");
-    uint8_t *additional_data = NULL;
+    uint8_t* additional_data = NULL;
     size_t additional_data_size = 0;
 
     if (!JS_IsUndefined(additionalData_val) && !JS_IsNull(additionalData_val)) {
@@ -527,7 +528,7 @@ JSValue jsrt_subtle_encrypt(JSContext *ctx, JSValueConst this_val, int argc, JSV
         if (!JS_IsUndefined(aad_buffer_val) && !JS_IsUndefined(aad_byteOffset_val) &&
             !JS_IsUndefined(aad_byteLength_val)) {
           size_t buffer_size;
-          uint8_t *buffer_data = JS_GetArrayBuffer(ctx, &buffer_size, aad_buffer_val);
+          uint8_t* buffer_data = JS_GetArrayBuffer(ctx, &buffer_size, aad_buffer_val);
 
           if (buffer_data) {
             uint32_t offset, length;
@@ -556,7 +557,7 @@ JSValue jsrt_subtle_encrypt(JSContext *ctx, JSValueConst this_val, int argc, JSV
     }
 
     // Set up encryption parameters
-    jsrt_symmetric_params_t *params = malloc(sizeof(jsrt_symmetric_params_t));
+    jsrt_symmetric_params_t* params = malloc(sizeof(jsrt_symmetric_params_t));
     if (!params) {
       JS_FreeValue(ctx, key_data_val);
       JS_FreeValue(ctx, iv_val);
@@ -576,7 +577,7 @@ JSValue jsrt_subtle_encrypt(JSContext *ctx, JSValueConst this_val, int argc, JSV
     params->params.gcm.tag_length = tag_length;
 
     // Perform encryption
-    uint8_t *ciphertext_data;
+    uint8_t* ciphertext_data;
     size_t ciphertext_size;
     int result = jsrt_crypto_aes_encrypt(params, plaintext_data, plaintext_size, &ciphertext_data, &ciphertext_size);
 
@@ -601,7 +602,7 @@ JSValue jsrt_subtle_encrypt(JSContext *ctx, JSValueConst this_val, int argc, JSV
   if (alg == JSRT_CRYPTO_ALG_RSA_OAEP) {
     // Get hash algorithm from algorithm object - can be either string or object with name property
     JSValue hash_val = JS_GetPropertyStr(ctx, argv[0], "hash");
-    const char *hash_name = NULL;
+    const char* hash_name = NULL;
 
     if (JS_IsString(hash_val)) {
       // Hash is a string like "SHA-256"
@@ -623,7 +624,7 @@ JSValue jsrt_subtle_encrypt(JSContext *ctx, JSValueConst this_val, int argc, JSV
 
     // Get optional label parameter
     JSValue label_val = JS_GetPropertyStr(ctx, argv[0], "label");
-    uint8_t *label_data = NULL;
+    uint8_t* label_data = NULL;
     size_t label_size = 0;
 
     if (!JS_IsUndefined(label_val) && !JS_IsNull(label_val)) {
@@ -633,7 +634,7 @@ JSValue jsrt_subtle_encrypt(JSContext *ctx, JSValueConst this_val, int argc, JSV
         JSValue label_buffer_val = JS_GetPropertyStr(ctx, label_val, "buffer");
         if (!JS_IsUndefined(label_buffer_val)) {
           size_t buffer_size;
-          uint8_t *buffer_data = JS_GetArrayBuffer(ctx, &buffer_size, label_buffer_val);
+          uint8_t* buffer_data = JS_GetArrayBuffer(ctx, &buffer_size, label_buffer_val);
           if (buffer_data) {
             JSValue offset_val = JS_GetPropertyStr(ctx, label_val, "byteOffset");
             JSValue length_val = JS_GetPropertyStr(ctx, label_val, "byteLength");
@@ -652,10 +653,10 @@ JSValue jsrt_subtle_encrypt(JSContext *ctx, JSValueConst this_val, int argc, JSV
 
     // Get key type to determine if it's public or private key
     JSValue key_type_val = JS_GetPropertyStr(ctx, argv[1], "type");
-    const char *key_type = JS_ToCString(ctx, key_type_val);
+    const char* key_type = JS_ToCString(ctx, key_type_val);
 
     // Create EVP_PKEY from stored DER data
-    void *rsa_key = NULL;
+    void* rsa_key = NULL;
     if (key_type && strcmp(key_type, "public") == 0) {
       rsa_key = jsrt_crypto_rsa_create_public_key_from_der(key_data, key_data_size);
     } else if (key_type && strcmp(key_type, "private") == 0) {
@@ -680,7 +681,7 @@ JSValue jsrt_subtle_encrypt(JSContext *ctx, JSValueConst this_val, int argc, JSV
     params.params.oaep.label_length = label_size;
 
     // Perform RSA encryption
-    uint8_t *ciphertext_data = NULL;
+    uint8_t* ciphertext_data = NULL;
     size_t ciphertext_size = 0;
     int result = jsrt_crypto_rsa_encrypt(&params, plaintext_data, plaintext_size, &ciphertext_data, &ciphertext_size);
 
@@ -693,7 +694,7 @@ JSValue jsrt_subtle_encrypt(JSContext *ctx, JSValueConst this_val, int argc, JSV
     // Free the created EVP_PKEY
     if (rsa_key) {
       if (openssl_handle) {
-        void (*EVP_PKEY_free)(void *) = JSRT_DLSYM(openssl_handle, "EVP_PKEY_free");
+        void (*EVP_PKEY_free)(void*) = JSRT_DLSYM(openssl_handle, "EVP_PKEY_free");
         if (EVP_PKEY_free) {
           EVP_PKEY_free(rsa_key);
         }
@@ -713,7 +714,7 @@ JSValue jsrt_subtle_encrypt(JSContext *ctx, JSValueConst this_val, int argc, JSV
   // RSA-PKCS1-v1_5 encryption
   if (alg == JSRT_CRYPTO_ALG_RSA_PKCS1_V1_5) {
     // Create EVP_PKEY from DER-encoded key data
-    void *rsa_key = jsrt_crypto_rsa_create_public_key_from_der(key_data, key_data_size);
+    void* rsa_key = jsrt_crypto_rsa_create_public_key_from_der(key_data, key_data_size);
     if (!rsa_key) {
       JS_FreeValue(ctx, key_data_val);
       JSValue error = jsrt_crypto_throw_error(ctx, "OperationError", "Invalid RSA public key");
@@ -727,7 +728,7 @@ JSValue jsrt_subtle_encrypt(JSContext *ctx, JSValueConst this_val, int argc, JSV
     params.rsa_key = rsa_key;
 
     // Perform RSA encryption
-    uint8_t *ciphertext_data = NULL;
+    uint8_t* ciphertext_data = NULL;
     size_t ciphertext_size = 0;
     int result = jsrt_crypto_rsa_encrypt(&params, plaintext_data, plaintext_size, &ciphertext_data, &ciphertext_size);
 
@@ -739,10 +740,10 @@ JSValue jsrt_subtle_encrypt(JSContext *ctx, JSValueConst this_val, int argc, JSV
 #ifdef _WIN32
       extern HMODULE openssl_handle;
 #else
-      extern void *openssl_handle;
+      extern void* openssl_handle;
 #endif
       if (openssl_handle) {
-        void (*EVP_PKEY_free)(void *) = JSRT_DLSYM(openssl_handle, "EVP_PKEY_free");
+        void (*EVP_PKEY_free)(void*) = JSRT_DLSYM(openssl_handle, "EVP_PKEY_free");
         if (EVP_PKEY_free) {
           EVP_PKEY_free(rsa_key);
         }
@@ -764,7 +765,7 @@ JSValue jsrt_subtle_encrypt(JSContext *ctx, JSValueConst this_val, int argc, JSV
   return create_rejected_promise(ctx, error);
 }
 
-JSValue jsrt_subtle_decrypt(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv) {
+JSValue jsrt_subtle_decrypt(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
   if (argc < 3) {
     JSValue error = jsrt_crypto_throw_error(ctx, "TypeError", "decrypt requires 3 arguments");
     return create_rejected_promise(ctx, error);
@@ -798,7 +799,7 @@ JSValue jsrt_subtle_decrypt(JSContext *ctx, JSValueConst this_val, int argc, JSV
   }
 
   size_t key_data_size;
-  uint8_t *key_data = JS_GetArrayBuffer(ctx, &key_data_size, key_data_val);
+  uint8_t* key_data = JS_GetArrayBuffer(ctx, &key_data_size, key_data_val);
   if (!key_data) {
     JS_FreeValue(ctx, key_data_val);
     JSValue error = jsrt_crypto_throw_error(ctx, "InvalidAccessError", "Invalid key data");
@@ -807,7 +808,7 @@ JSValue jsrt_subtle_decrypt(JSContext *ctx, JSValueConst this_val, int argc, JSV
 
   // Get ciphertext data (third argument) - handle both ArrayBuffer and TypedArray
   size_t ciphertext_size;
-  uint8_t *ciphertext_data = NULL;
+  uint8_t* ciphertext_data = NULL;
 
   // Try ArrayBuffer first
   ciphertext_data = JS_GetArrayBuffer(ctx, &ciphertext_size, argv[2]);
@@ -820,7 +821,7 @@ JSValue jsrt_subtle_decrypt(JSContext *ctx, JSValueConst this_val, int argc, JSV
 
     if (!JS_IsUndefined(buffer_val) && !JS_IsUndefined(byteOffset_val) && !JS_IsUndefined(byteLength_val)) {
       size_t buffer_size;
-      uint8_t *buffer_data = JS_GetArrayBuffer(ctx, &buffer_size, buffer_val);
+      uint8_t* buffer_data = JS_GetArrayBuffer(ctx, &buffer_size, buffer_val);
 
       if (buffer_data) {
         uint32_t offset, length;
@@ -854,7 +855,7 @@ JSValue jsrt_subtle_decrypt(JSContext *ctx, JSValueConst this_val, int argc, JSV
     }
 
     size_t iv_size;
-    uint8_t *iv_data = NULL;
+    uint8_t* iv_data = NULL;
 
     // Try ArrayBuffer first
     iv_data = JS_GetArrayBuffer(ctx, &iv_size, iv_val);
@@ -867,7 +868,7 @@ JSValue jsrt_subtle_decrypt(JSContext *ctx, JSValueConst this_val, int argc, JSV
 
       if (!JS_IsUndefined(iv_buffer_val) && !JS_IsUndefined(iv_byteOffset_val) && !JS_IsUndefined(iv_byteLength_val)) {
         size_t buffer_size;
-        uint8_t *buffer_data = JS_GetArrayBuffer(ctx, &buffer_size, iv_buffer_val);
+        uint8_t* buffer_data = JS_GetArrayBuffer(ctx, &buffer_size, iv_buffer_val);
 
         if (buffer_data) {
           uint32_t offset, length;
@@ -892,7 +893,7 @@ JSValue jsrt_subtle_decrypt(JSContext *ctx, JSValueConst this_val, int argc, JSV
     }
 
     // Set up decryption parameters
-    jsrt_symmetric_params_t *params = malloc(sizeof(jsrt_symmetric_params_t));
+    jsrt_symmetric_params_t* params = malloc(sizeof(jsrt_symmetric_params_t));
     if (!params) {
       JS_FreeValue(ctx, key_data_val);
       JS_FreeValue(ctx, iv_val);
@@ -907,7 +908,7 @@ JSValue jsrt_subtle_decrypt(JSContext *ctx, JSValueConst this_val, int argc, JSV
     params->params.cbc.iv_length = iv_size;
 
     // Perform decryption
-    uint8_t *plaintext_data;
+    uint8_t* plaintext_data;
     size_t plaintext_size;
     int result = jsrt_crypto_aes_decrypt(params, ciphertext_data, ciphertext_size, &plaintext_data, &plaintext_size);
 
@@ -937,7 +938,7 @@ JSValue jsrt_subtle_decrypt(JSContext *ctx, JSValueConst this_val, int argc, JSV
     }
 
     size_t iv_size;
-    uint8_t *iv_data = NULL;
+    uint8_t* iv_data = NULL;
 
     // Try ArrayBuffer first
     iv_data = JS_GetArrayBuffer(ctx, &iv_size, iv_val);
@@ -950,7 +951,7 @@ JSValue jsrt_subtle_decrypt(JSContext *ctx, JSValueConst this_val, int argc, JSV
 
       if (!JS_IsUndefined(iv_buffer_val) && !JS_IsUndefined(iv_byteOffset_val) && !JS_IsUndefined(iv_byteLength_val)) {
         size_t buffer_size;
-        uint8_t *buffer_data = JS_GetArrayBuffer(ctx, &buffer_size, iv_buffer_val);
+        uint8_t* buffer_data = JS_GetArrayBuffer(ctx, &buffer_size, iv_buffer_val);
 
         if (buffer_data) {
           uint32_t offset, length;
@@ -976,7 +977,7 @@ JSValue jsrt_subtle_decrypt(JSContext *ctx, JSValueConst this_val, int argc, JSV
 
     // Get optional additionalData
     JSValue additionalData_val = JS_GetPropertyStr(ctx, argv[0], "additionalData");
-    uint8_t *additional_data = NULL;
+    uint8_t* additional_data = NULL;
     size_t additional_data_size = 0;
 
     if (!JS_IsUndefined(additionalData_val) && !JS_IsNull(additionalData_val)) {
@@ -992,7 +993,7 @@ JSValue jsrt_subtle_decrypt(JSContext *ctx, JSValueConst this_val, int argc, JSV
         if (!JS_IsUndefined(aad_buffer_val) && !JS_IsUndefined(aad_byteOffset_val) &&
             !JS_IsUndefined(aad_byteLength_val)) {
           size_t buffer_size;
-          uint8_t *buffer_data = JS_GetArrayBuffer(ctx, &buffer_size, aad_buffer_val);
+          uint8_t* buffer_data = JS_GetArrayBuffer(ctx, &buffer_size, aad_buffer_val);
 
           if (buffer_data) {
             uint32_t offset, length;
@@ -1021,7 +1022,7 @@ JSValue jsrt_subtle_decrypt(JSContext *ctx, JSValueConst this_val, int argc, JSV
     }
 
     // Set up decryption parameters
-    jsrt_symmetric_params_t *params = malloc(sizeof(jsrt_symmetric_params_t));
+    jsrt_symmetric_params_t* params = malloc(sizeof(jsrt_symmetric_params_t));
     if (!params) {
       JS_FreeValue(ctx, key_data_val);
       JS_FreeValue(ctx, iv_val);
@@ -1041,7 +1042,7 @@ JSValue jsrt_subtle_decrypt(JSContext *ctx, JSValueConst this_val, int argc, JSV
     params->params.gcm.tag_length = tag_length;
 
     // Perform decryption
-    uint8_t *plaintext_data;
+    uint8_t* plaintext_data;
     size_t plaintext_size;
     int result = jsrt_crypto_aes_decrypt(params, ciphertext_data, ciphertext_size, &plaintext_data, &plaintext_size);
 
@@ -1066,7 +1067,7 @@ JSValue jsrt_subtle_decrypt(JSContext *ctx, JSValueConst this_val, int argc, JSV
   if (alg == JSRT_CRYPTO_ALG_RSA_OAEP) {
     // Get hash algorithm from algorithm object - can be either string or object with name property
     JSValue hash_val = JS_GetPropertyStr(ctx, argv[0], "hash");
-    const char *hash_name = NULL;
+    const char* hash_name = NULL;
 
     if (JS_IsString(hash_val)) {
       // Hash is a string like "SHA-256"
@@ -1088,7 +1089,7 @@ JSValue jsrt_subtle_decrypt(JSContext *ctx, JSValueConst this_val, int argc, JSV
 
     // Get optional label parameter
     JSValue label_val = JS_GetPropertyStr(ctx, argv[0], "label");
-    uint8_t *label_data = NULL;
+    uint8_t* label_data = NULL;
     size_t label_size = 0;
 
     if (!JS_IsUndefined(label_val) && !JS_IsNull(label_val)) {
@@ -1098,7 +1099,7 @@ JSValue jsrt_subtle_decrypt(JSContext *ctx, JSValueConst this_val, int argc, JSV
         JSValue label_buffer_val = JS_GetPropertyStr(ctx, label_val, "buffer");
         if (!JS_IsUndefined(label_buffer_val)) {
           size_t buffer_size;
-          uint8_t *buffer_data = JS_GetArrayBuffer(ctx, &buffer_size, label_buffer_val);
+          uint8_t* buffer_data = JS_GetArrayBuffer(ctx, &buffer_size, label_buffer_val);
           if (buffer_data) {
             JSValue offset_val = JS_GetPropertyStr(ctx, label_val, "byteOffset");
             JSValue length_val = JS_GetPropertyStr(ctx, label_val, "byteLength");
@@ -1117,10 +1118,10 @@ JSValue jsrt_subtle_decrypt(JSContext *ctx, JSValueConst this_val, int argc, JSV
 
     // Get key type to determine if it's public or private key
     JSValue key_type_val = JS_GetPropertyStr(ctx, argv[1], "type");
-    const char *key_type = JS_ToCString(ctx, key_type_val);
+    const char* key_type = JS_ToCString(ctx, key_type_val);
 
     // Create EVP_PKEY from stored DER data
-    void *rsa_key = NULL;
+    void* rsa_key = NULL;
     if (key_type && strcmp(key_type, "public") == 0) {
       rsa_key = jsrt_crypto_rsa_create_public_key_from_der(key_data, key_data_size);
     } else if (key_type && strcmp(key_type, "private") == 0) {
@@ -1145,7 +1146,7 @@ JSValue jsrt_subtle_decrypt(JSContext *ctx, JSValueConst this_val, int argc, JSV
     params.params.oaep.label_length = label_size;
 
     // Perform RSA decryption
-    uint8_t *plaintext_data = NULL;
+    uint8_t* plaintext_data = NULL;
     size_t plaintext_size = 0;
     int result = jsrt_crypto_rsa_decrypt(&params, ciphertext_data, ciphertext_size, &plaintext_data, &plaintext_size);
 
@@ -1158,7 +1159,7 @@ JSValue jsrt_subtle_decrypt(JSContext *ctx, JSValueConst this_val, int argc, JSV
     // Free the created EVP_PKEY
     if (rsa_key) {
       if (openssl_handle) {
-        void (*EVP_PKEY_free)(void *) = JSRT_DLSYM(openssl_handle, "EVP_PKEY_free");
+        void (*EVP_PKEY_free)(void*) = JSRT_DLSYM(openssl_handle, "EVP_PKEY_free");
         if (EVP_PKEY_free) {
           EVP_PKEY_free(rsa_key);
         }
@@ -1178,7 +1179,7 @@ JSValue jsrt_subtle_decrypt(JSContext *ctx, JSValueConst this_val, int argc, JSV
   // RSA-PKCS1-v1_5 decryption
   if (alg == JSRT_CRYPTO_ALG_RSA_PKCS1_V1_5) {
     // Create EVP_PKEY from DER-encoded key data
-    void *rsa_key = jsrt_crypto_rsa_create_private_key_from_der(key_data, key_data_size);
+    void* rsa_key = jsrt_crypto_rsa_create_private_key_from_der(key_data, key_data_size);
     if (!rsa_key) {
       JS_FreeValue(ctx, key_data_val);
       JSValue error = jsrt_crypto_throw_error(ctx, "OperationError", "Invalid RSA private key");
@@ -1192,7 +1193,7 @@ JSValue jsrt_subtle_decrypt(JSContext *ctx, JSValueConst this_val, int argc, JSV
     params.rsa_key = rsa_key;
 
     // Perform RSA decryption
-    uint8_t *plaintext_data = NULL;
+    uint8_t* plaintext_data = NULL;
     size_t plaintext_size = 0;
     int result = jsrt_crypto_rsa_decrypt(&params, ciphertext_data, ciphertext_size, &plaintext_data, &plaintext_size);
 
@@ -1204,10 +1205,10 @@ JSValue jsrt_subtle_decrypt(JSContext *ctx, JSValueConst this_val, int argc, JSV
 #ifdef _WIN32
       extern HMODULE openssl_handle;
 #else
-      extern void *openssl_handle;
+      extern void* openssl_handle;
 #endif
       if (openssl_handle) {
-        void (*EVP_PKEY_free)(void *) = JSRT_DLSYM(openssl_handle, "EVP_PKEY_free");
+        void (*EVP_PKEY_free)(void*) = JSRT_DLSYM(openssl_handle, "EVP_PKEY_free");
         if (EVP_PKEY_free) {
           EVP_PKEY_free(rsa_key);
         }
@@ -1229,7 +1230,7 @@ JSValue jsrt_subtle_decrypt(JSContext *ctx, JSValueConst this_val, int argc, JSV
   return create_rejected_promise(ctx, error);
 }
 
-JSValue jsrt_subtle_sign(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv) {
+JSValue jsrt_subtle_sign(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
   JSRT_Debug("JSRT_Crypto_Subtle: jsrt_subtle_sign called with %d arguments", argc);
 
   if (argc < 3) {
@@ -1266,7 +1267,7 @@ JSValue jsrt_subtle_sign(JSContext *ctx, JSValueConst this_val, int argc, JSValu
   }
 
   size_t key_data_size;
-  uint8_t *key_data = JS_GetArrayBuffer(ctx, &key_data_size, key_data_val);
+  uint8_t* key_data = JS_GetArrayBuffer(ctx, &key_data_size, key_data_val);
   if (!key_data) {
     JS_FreeValue(ctx, key_data_val);
     JSValue error = jsrt_crypto_throw_error(ctx, "InvalidAccessError", "Invalid key data");
@@ -1275,7 +1276,7 @@ JSValue jsrt_subtle_sign(JSContext *ctx, JSValueConst this_val, int argc, JSValu
 
   // Get data to sign - handle both ArrayBuffer and TypedArray
   size_t data_size;
-  uint8_t *data = NULL;
+  uint8_t* data = NULL;
 
   // Try ArrayBuffer first
   data = JS_GetArrayBuffer(ctx, &data_size, argv[2]);
@@ -1288,7 +1289,7 @@ JSValue jsrt_subtle_sign(JSContext *ctx, JSValueConst this_val, int argc, JSValu
 
     if (!JS_IsUndefined(buffer_val) && !JS_IsUndefined(byteOffset_val) && !JS_IsUndefined(byteLength_val)) {
       size_t buffer_size;
-      uint8_t *buffer_data = JS_GetArrayBuffer(ctx, &buffer_size, buffer_val);
+      uint8_t* buffer_data = JS_GetArrayBuffer(ctx, &buffer_size, buffer_val);
 
       if (buffer_data) {
         uint32_t offset, length;
@@ -1316,7 +1317,7 @@ JSValue jsrt_subtle_sign(JSContext *ctx, JSValueConst this_val, int argc, JSValu
     JSValue key_algorithm_val = JS_GetPropertyStr(ctx, argv[1], "algorithm");
     JSValue hash_val = JS_GetPropertyStr(ctx, key_algorithm_val, "hash");
 
-    const char *hash_name = JS_ToCString(ctx, hash_val);
+    const char* hash_name = JS_ToCString(ctx, hash_val);
     if (!hash_name) {
       JS_FreeValue(ctx, key_data_val);
       JS_FreeValue(ctx, key_algorithm_val);
@@ -1331,7 +1332,7 @@ JSValue jsrt_subtle_sign(JSContext *ctx, JSValueConst this_val, int argc, JSValu
     JS_FreeValue(ctx, key_algorithm_val);
 
     // Set up HMAC parameters
-    jsrt_hmac_params_t *params = malloc(sizeof(jsrt_hmac_params_t));
+    jsrt_hmac_params_t* params = malloc(sizeof(jsrt_hmac_params_t));
     if (!params) {
       JS_FreeValue(ctx, key_data_val);
       JSValue error = jsrt_crypto_throw_error(ctx, "OperationError", "Memory allocation failed");
@@ -1343,7 +1344,7 @@ JSValue jsrt_subtle_sign(JSContext *ctx, JSValueConst this_val, int argc, JSValu
     params->key_length = key_data_size;
 
     // Perform HMAC signing
-    uint8_t *signature_data;
+    uint8_t* signature_data;
     size_t signature_size;
     int result = jsrt_crypto_hmac_sign(params, data, data_size, &signature_data, &signature_size);
 
@@ -1366,7 +1367,7 @@ JSValue jsrt_subtle_sign(JSContext *ctx, JSValueConst this_val, int argc, JSValu
     JSRT_Debug("JSRT_Crypto_Subtle: Starting RSA signature for RSASSA-PKCS1-v1_5");
 
     // Create RSA key from DER-encoded key data
-    void *rsa_private_key = jsrt_crypto_rsa_create_private_key_from_der(key_data, key_data_size);
+    void* rsa_private_key = jsrt_crypto_rsa_create_private_key_from_der(key_data, key_data_size);
     if (!rsa_private_key) {
       JSRT_Debug("JSRT_Crypto_Subtle: Failed to create RSA private key from DER data");
       JS_FreeValue(ctx, key_data_val);
@@ -1383,7 +1384,7 @@ JSValue jsrt_subtle_sign(JSContext *ctx, JSValueConst this_val, int argc, JSValu
     params.hash_algorithm = JSRT_RSA_HASH_SHA256;  // Default to SHA-256
 
     // Perform RSA signature
-    uint8_t *signature_data = NULL;
+    uint8_t* signature_data = NULL;
     size_t signature_size = 0;
     int sign_result = jsrt_crypto_rsa_sign(&params, data, data_size, &signature_data, &signature_size);
 
@@ -1392,7 +1393,7 @@ JSValue jsrt_subtle_sign(JSContext *ctx, JSValueConst this_val, int argc, JSValu
       // Note: Need to add proper OpenSSL EVP_PKEY_free here
 
       if (openssl_handle) {
-        void (*EVP_PKEY_free)(void *pkey) = JSRT_DLSYM(openssl_handle, "EVP_PKEY_free");
+        void (*EVP_PKEY_free)(void* pkey) = JSRT_DLSYM(openssl_handle, "EVP_PKEY_free");
         if (EVP_PKEY_free) {
           EVP_PKEY_free(rsa_private_key);
         }
@@ -1416,7 +1417,7 @@ JSValue jsrt_subtle_sign(JSContext *ctx, JSValueConst this_val, int argc, JSValu
     JSRT_Debug("JSRT_Crypto_Subtle: Starting RSA signature for RSA-PSS");
 
     // Create RSA key from DER-encoded key data
-    void *rsa_private_key = jsrt_crypto_rsa_create_private_key_from_der(key_data, key_data_size);
+    void* rsa_private_key = jsrt_crypto_rsa_create_private_key_from_der(key_data, key_data_size);
     if (!rsa_private_key) {
       JSRT_Debug("JSRT_Crypto_Subtle: Failed to create RSA private key from DER data");
       JS_FreeValue(ctx, key_data_val);
@@ -1445,14 +1446,14 @@ JSValue jsrt_subtle_sign(JSContext *ctx, JSValueConst this_val, int argc, JSValu
     JS_FreeValue(ctx, salt_length_val);
 
     // Perform RSA-PSS signature
-    uint8_t *signature_data = NULL;
+    uint8_t* signature_data = NULL;
     size_t signature_size = 0;
     int sign_result = jsrt_crypto_rsa_sign(&params, data, data_size, &signature_data, &signature_size);
 
     // Cleanup the RSA key
     if (rsa_private_key) {
       if (openssl_handle) {
-        void (*EVP_PKEY_free)(void *pkey) = JSRT_DLSYM(openssl_handle, "EVP_PKEY_free");
+        void (*EVP_PKEY_free)(void* pkey) = JSRT_DLSYM(openssl_handle, "EVP_PKEY_free");
         if (EVP_PKEY_free) {
           EVP_PKEY_free(rsa_private_key);
         }
@@ -1476,11 +1477,11 @@ JSValue jsrt_subtle_sign(JSContext *ctx, JSValueConst this_val, int argc, JSValu
     JSRT_Debug("JSRT_Crypto_Subtle: Starting ECDSA signature");
 
     // Create EC key from DER-encoded key data
-    const unsigned char *key_ptr = key_data;
-    void *ec_private_key = NULL;
+    const unsigned char* key_ptr = key_data;
+    void* ec_private_key = NULL;
 
     if (openssl_handle) {
-      void *(*d2i_AutoPrivateKey)(void **a, const unsigned char **pp, long length) =
+      void* (*d2i_AutoPrivateKey)(void** a, const unsigned char** pp, long length) =
           JSRT_DLSYM(openssl_handle, "d2i_AutoPrivateKey");
       if (d2i_AutoPrivateKey) {
         ec_private_key = d2i_AutoPrivateKey(NULL, &key_ptr, key_data_size);
@@ -1496,7 +1497,7 @@ JSValue jsrt_subtle_sign(JSContext *ctx, JSValueConst this_val, int argc, JSValu
 
     // Get hash algorithm from parameters
     JSValue hash_val = JS_GetPropertyStr(ctx, argv[0], "hash");
-    const char *hash_name = JS_ToCString(ctx, hash_val);
+    const char* hash_name = JS_ToCString(ctx, hash_val);
     if (!hash_name) {
       hash_name = "SHA-256";  // Default
     }
@@ -1516,7 +1517,7 @@ JSValue jsrt_subtle_sign(JSContext *ctx, JSValueConst this_val, int argc, JSValu
 
     // Free the EC key
     if (ec_private_key && openssl_handle) {
-      void (*EVP_PKEY_free)(void *pkey) = JSRT_DLSYM(openssl_handle, "EVP_PKEY_free");
+      void (*EVP_PKEY_free)(void* pkey) = JSRT_DLSYM(openssl_handle, "EVP_PKEY_free");
       if (EVP_PKEY_free) {
         EVP_PKEY_free(ec_private_key);
       }
@@ -1536,7 +1537,7 @@ JSValue jsrt_subtle_sign(JSContext *ctx, JSValueConst this_val, int argc, JSValu
   return create_rejected_promise(ctx, error);
 }
 
-JSValue jsrt_subtle_verify(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv) {
+JSValue jsrt_subtle_verify(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
   if (argc < 4) {
     JSValue error = jsrt_crypto_throw_error(ctx, "TypeError", "verify requires 4 arguments");
     return create_rejected_promise(ctx, error);
@@ -1570,7 +1571,7 @@ JSValue jsrt_subtle_verify(JSContext *ctx, JSValueConst this_val, int argc, JSVa
   }
 
   size_t key_data_size;
-  uint8_t *key_data = JS_GetArrayBuffer(ctx, &key_data_size, key_data_val);
+  uint8_t* key_data = JS_GetArrayBuffer(ctx, &key_data_size, key_data_val);
   if (!key_data) {
     JS_FreeValue(ctx, key_data_val);
     JSValue error = jsrt_crypto_throw_error(ctx, "InvalidAccessError", "Invalid key data");
@@ -1579,7 +1580,7 @@ JSValue jsrt_subtle_verify(JSContext *ctx, JSValueConst this_val, int argc, JSVa
 
   // Get signature to verify - handle both ArrayBuffer and TypedArray (third argument)
   size_t signature_size;
-  uint8_t *signature_data = NULL;
+  uint8_t* signature_data = NULL;
 
   // Try ArrayBuffer first
   signature_data = JS_GetArrayBuffer(ctx, &signature_size, argv[2]);
@@ -1592,7 +1593,7 @@ JSValue jsrt_subtle_verify(JSContext *ctx, JSValueConst this_val, int argc, JSVa
 
     if (!JS_IsUndefined(buffer_val) && !JS_IsUndefined(byteOffset_val) && !JS_IsUndefined(byteLength_val)) {
       size_t buffer_size;
-      uint8_t *buffer_data = JS_GetArrayBuffer(ctx, &buffer_size, buffer_val);
+      uint8_t* buffer_data = JS_GetArrayBuffer(ctx, &buffer_size, buffer_val);
 
       if (buffer_data) {
         uint32_t offset, length;
@@ -1617,7 +1618,7 @@ JSValue jsrt_subtle_verify(JSContext *ctx, JSValueConst this_val, int argc, JSVa
 
   // Get data to verify - handle both ArrayBuffer and TypedArray (fourth argument)
   size_t data_size;
-  uint8_t *data = NULL;
+  uint8_t* data = NULL;
 
   // Try ArrayBuffer first
   data = JS_GetArrayBuffer(ctx, &data_size, argv[3]);
@@ -1630,7 +1631,7 @@ JSValue jsrt_subtle_verify(JSContext *ctx, JSValueConst this_val, int argc, JSVa
 
     if (!JS_IsUndefined(buffer_val) && !JS_IsUndefined(byteOffset_val) && !JS_IsUndefined(byteLength_val)) {
       size_t buffer_size;
-      uint8_t *buffer_data = JS_GetArrayBuffer(ctx, &buffer_size, buffer_val);
+      uint8_t* buffer_data = JS_GetArrayBuffer(ctx, &buffer_size, buffer_val);
 
       if (buffer_data) {
         uint32_t offset, length;
@@ -1658,7 +1659,7 @@ JSValue jsrt_subtle_verify(JSContext *ctx, JSValueConst this_val, int argc, JSVa
     JSValue key_algorithm_val = JS_GetPropertyStr(ctx, argv[1], "algorithm");
     JSValue hash_val = JS_GetPropertyStr(ctx, key_algorithm_val, "hash");
 
-    const char *hash_name = JS_ToCString(ctx, hash_val);
+    const char* hash_name = JS_ToCString(ctx, hash_val);
     if (!hash_name) {
       JS_FreeValue(ctx, key_data_val);
       JS_FreeValue(ctx, key_algorithm_val);
@@ -1673,7 +1674,7 @@ JSValue jsrt_subtle_verify(JSContext *ctx, JSValueConst this_val, int argc, JSVa
     JS_FreeValue(ctx, key_algorithm_val);
 
     // Set up HMAC parameters
-    jsrt_hmac_params_t *params = malloc(sizeof(jsrt_hmac_params_t));
+    jsrt_hmac_params_t* params = malloc(sizeof(jsrt_hmac_params_t));
     if (!params) {
       JS_FreeValue(ctx, key_data_val);
       JSValue error = jsrt_crypto_throw_error(ctx, "OperationError", "Memory allocation failed");
@@ -1699,7 +1700,7 @@ JSValue jsrt_subtle_verify(JSContext *ctx, JSValueConst this_val, int argc, JSVa
   // RSA signature verification
   if (alg == JSRT_CRYPTO_ALG_RSASSA_PKCS1_V1_5) {
     // Create RSA key from DER-encoded key data
-    void *rsa_public_key = jsrt_crypto_rsa_create_public_key_from_der(key_data, key_data_size);
+    void* rsa_public_key = jsrt_crypto_rsa_create_public_key_from_der(key_data, key_data_size);
     if (!rsa_public_key) {
       JS_FreeValue(ctx, key_data_val);
       JSValue error = jsrt_crypto_throw_error(ctx, "OperationError", "Failed to create RSA public key");
@@ -1718,7 +1719,7 @@ JSValue jsrt_subtle_verify(JSContext *ctx, JSValueConst this_val, int argc, JSVa
     // Cleanup the RSA key
     if (rsa_public_key) {
       if (openssl_handle) {
-        void (*EVP_PKEY_free)(void *pkey) = JSRT_DLSYM(openssl_handle, "EVP_PKEY_free");
+        void (*EVP_PKEY_free)(void* pkey) = JSRT_DLSYM(openssl_handle, "EVP_PKEY_free");
         if (EVP_PKEY_free) {
           EVP_PKEY_free(rsa_public_key);
         }
@@ -1737,7 +1738,7 @@ JSValue jsrt_subtle_verify(JSContext *ctx, JSValueConst this_val, int argc, JSVa
     JSRT_Debug("JSRT_Crypto_Subtle: Starting RSA verification for RSA-PSS");
 
     // Create RSA key from DER-encoded key data
-    void *rsa_public_key = jsrt_crypto_rsa_create_public_key_from_der(key_data, key_data_size);
+    void* rsa_public_key = jsrt_crypto_rsa_create_public_key_from_der(key_data, key_data_size);
     if (!rsa_public_key) {
       JS_FreeValue(ctx, key_data_val);
       JSValue error = jsrt_crypto_throw_error(ctx, "OperationError", "Failed to create RSA public key");
@@ -1768,7 +1769,7 @@ JSValue jsrt_subtle_verify(JSContext *ctx, JSValueConst this_val, int argc, JSVa
     // Cleanup the RSA key
     if (rsa_public_key) {
       if (openssl_handle) {
-        void (*EVP_PKEY_free)(void *pkey) = JSRT_DLSYM(openssl_handle, "EVP_PKEY_free");
+        void (*EVP_PKEY_free)(void* pkey) = JSRT_DLSYM(openssl_handle, "EVP_PKEY_free");
         if (EVP_PKEY_free) {
           EVP_PKEY_free(rsa_public_key);
         }
@@ -1787,11 +1788,11 @@ JSValue jsrt_subtle_verify(JSContext *ctx, JSValueConst this_val, int argc, JSVa
     JSRT_Debug("JSRT_Crypto_Subtle: Starting ECDSA verification");
 
     // Create EC key from DER-encoded key data (public key)
-    const unsigned char *key_ptr = key_data;
-    void *ec_public_key = NULL;
+    const unsigned char* key_ptr = key_data;
+    void* ec_public_key = NULL;
 
     if (openssl_handle) {
-      void *(*d2i_PUBKEY)(void **a, const unsigned char **pp, long length) = JSRT_DLSYM(openssl_handle, "d2i_PUBKEY");
+      void* (*d2i_PUBKEY)(void** a, const unsigned char** pp, long length) = JSRT_DLSYM(openssl_handle, "d2i_PUBKEY");
       if (d2i_PUBKEY) {
         ec_public_key = d2i_PUBKEY(NULL, &key_ptr, key_data_size);
       }
@@ -1806,7 +1807,7 @@ JSValue jsrt_subtle_verify(JSContext *ctx, JSValueConst this_val, int argc, JSVa
 
     // Get hash algorithm from parameters
     JSValue hash_val = JS_GetPropertyStr(ctx, argv[0], "hash");
-    const char *hash_name = JS_ToCString(ctx, hash_val);
+    const char* hash_name = JS_ToCString(ctx, hash_val);
     if (!hash_name) {
       hash_name = "SHA-256";  // Default
     }
@@ -1827,7 +1828,7 @@ JSValue jsrt_subtle_verify(JSContext *ctx, JSValueConst this_val, int argc, JSVa
 
     // Free the EC key
     if (ec_public_key && openssl_handle) {
-      void (*EVP_PKEY_free)(void *pkey) = JSRT_DLSYM(openssl_handle, "EVP_PKEY_free");
+      void (*EVP_PKEY_free)(void* pkey) = JSRT_DLSYM(openssl_handle, "EVP_PKEY_free");
       if (EVP_PKEY_free) {
         EVP_PKEY_free(ec_public_key);
       }
@@ -1847,7 +1848,7 @@ JSValue jsrt_subtle_verify(JSContext *ctx, JSValueConst this_val, int argc, JSVa
   return create_rejected_promise(ctx, error);
 }
 
-JSValue jsrt_subtle_generateKey(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv) {
+JSValue jsrt_subtle_generateKey(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
   if (argc < 3) {
     JSValue error = jsrt_crypto_throw_error(ctx, "TypeError", "generateKey requires 3 arguments");
     return create_rejected_promise(ctx, error);
@@ -1886,7 +1887,7 @@ JSValue jsrt_subtle_generateKey(JSContext *ctx, JSValueConst this_val, int argc,
     }
 
     // Generate the key
-    uint8_t *key_data;
+    uint8_t* key_data;
     size_t key_data_length;
     if (jsrt_crypto_generate_aes_key(key_length_bits, &key_data, &key_data_length) != 0) {
       JSValue error = jsrt_crypto_throw_error(ctx, "OperationError", "Failed to generate AES key");
@@ -1918,7 +1919,7 @@ JSValue jsrt_subtle_generateKey(JSContext *ctx, JSValueConst this_val, int argc,
     }
 
     // Parse hash algorithm
-    const char *hash_name = JS_ToCString(ctx, hash_val);
+    const char* hash_name = JS_ToCString(ctx, hash_val);
     if (!hash_name) {
       JS_FreeValue(ctx, hash_val);
       JSValue error = jsrt_crypto_throw_error(ctx, "OperationError", "Invalid hash algorithm for HMAC");
@@ -1935,7 +1936,7 @@ JSValue jsrt_subtle_generateKey(JSContext *ctx, JSValueConst this_val, int argc,
     }
 
     // Generate the HMAC key
-    uint8_t *key_data;
+    uint8_t* key_data;
     size_t key_data_length;
     if (jsrt_crypto_generate_hmac_key(hmac_alg, &key_data, &key_data_length) != 0) {
       JSValue error = jsrt_crypto_throw_error(ctx, "OperationError", "Failed to generate HMAC key");
@@ -1979,7 +1980,7 @@ JSValue jsrt_subtle_generateKey(JSContext *ctx, JSValueConst this_val, int argc,
     if (!JS_IsUndefined(public_exponent_val)) {
       // Handle Uint8Array public exponent
       size_t exp_size;
-      uint8_t *exp_data = JS_GetArrayBuffer(ctx, &exp_size, public_exponent_val);
+      uint8_t* exp_data = JS_GetArrayBuffer(ctx, &exp_size, public_exponent_val);
       if (exp_data && exp_size <= 4) {
         public_exponent = 0;
         for (size_t i = 0; i < exp_size; i++) {
@@ -1991,7 +1992,7 @@ JSValue jsrt_subtle_generateKey(JSContext *ctx, JSValueConst this_val, int argc,
 
     // Get hash algorithm - can be either string or object with name property
     JSValue hash_val = JS_GetPropertyStr(ctx, argv[0], "hash");
-    const char *hash_name = NULL;
+    const char* hash_name = NULL;
 
     if (JS_IsString(hash_val)) {
       // Hash is a string like "SHA-256"
@@ -2012,7 +2013,7 @@ JSValue jsrt_subtle_generateKey(JSContext *ctx, JSValueConst this_val, int argc,
     }
 
     // Generate RSA key pair
-    jsrt_rsa_keypair_t *keypair = NULL;
+    jsrt_rsa_keypair_t* keypair = NULL;
     int result = jsrt_crypto_generate_rsa_keypair(modulus_length, public_exponent, hash_alg, &keypair);
 
     JS_FreeCString(ctx, hash_name);
@@ -2049,7 +2050,7 @@ JSValue jsrt_subtle_generateKey(JSContext *ctx, JSValueConst this_val, int argc,
     JS_SetPropertyStr(ctx, public_alg_obj, "modulusLength", JS_NewInt32(ctx, modulus_length));
 
     // Set public exponent as Uint8Array
-    JSValue exp_array = JS_NewArrayBufferCopy(ctx, (uint8_t *)&public_exponent, 4);
+    JSValue exp_array = JS_NewArrayBufferCopy(ctx, (uint8_t*)&public_exponent, 4);
     JS_SetPropertyStr(ctx, public_alg_obj, "publicExponent", exp_array);
 
     JSValue hash_obj = JS_NewObject(ctx);
@@ -2091,7 +2092,7 @@ JSValue jsrt_subtle_generateKey(JSContext *ctx, JSValueConst this_val, int argc,
   if (alg == JSRT_CRYPTO_ALG_ECDSA || alg == JSRT_CRYPTO_ALG_ECDH) {
     // Get named curve from algorithm object
     JSValue curve_val = JS_GetPropertyStr(ctx, argv[0], "namedCurve");
-    const char *curve_name = JS_ToCString(ctx, curve_val);
+    const char* curve_name = JS_ToCString(ctx, curve_val);
     JS_FreeValue(ctx, curve_val);
 
     if (!curve_name) {
@@ -2108,7 +2109,7 @@ JSValue jsrt_subtle_generateKey(JSContext *ctx, JSValueConst this_val, int argc,
     }
 
     // Get hash algorithm for ECDSA (optional for ECDH)
-    const char *hash_name = NULL;
+    const char* hash_name = NULL;
     if (alg == JSRT_CRYPTO_ALG_ECDSA) {
       JSValue hash_val = JS_GetPropertyStr(ctx, argv[0], "hash");
       if (!JS_IsUndefined(hash_val)) {
@@ -2132,7 +2133,8 @@ JSValue jsrt_subtle_generateKey(JSContext *ctx, JSValueConst this_val, int argc,
 
     // Cleanup
     JS_FreeCString(ctx, curve_name);
-    if (hash_name) JS_FreeCString(ctx, hash_name);
+    if (hash_name)
+      JS_FreeCString(ctx, hash_name);
 
     if (JS_IsException(result)) {
       return create_rejected_promise(ctx, result);
@@ -2145,22 +2147,22 @@ JSValue jsrt_subtle_generateKey(JSContext *ctx, JSValueConst this_val, int argc,
   return create_rejected_promise(ctx, error);
 }
 
-JSValue jsrt_subtle_importKey(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv) {
+JSValue jsrt_subtle_importKey(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
   JSValue error = jsrt_crypto_throw_error(ctx, "NotSupportedError", "importKey not yet implemented");
   return create_rejected_promise(ctx, error);
 }
 
-JSValue jsrt_subtle_exportKey(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv) {
+JSValue jsrt_subtle_exportKey(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
   JSValue error = jsrt_crypto_throw_error(ctx, "NotSupportedError", "exportKey not yet implemented");
   return create_rejected_promise(ctx, error);
 }
 
-JSValue jsrt_subtle_deriveKey(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv) {
+JSValue jsrt_subtle_deriveKey(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
   JSValue error = jsrt_crypto_throw_error(ctx, "NotSupportedError", "deriveKey not yet implemented");
   return create_rejected_promise(ctx, error);
 }
 
-JSValue jsrt_subtle_deriveBits(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv) {
+JSValue jsrt_subtle_deriveBits(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
   if (argc < 3) {
     JSValue error = jsrt_crypto_throw_error(ctx, "TypeError", "deriveBits requires 3 arguments");
     return create_rejected_promise(ctx, error);
@@ -2188,7 +2190,7 @@ JSValue jsrt_subtle_deriveBits(JSContext *ctx, JSValueConst this_val, int argc, 
   }
 
   size_t priv_key_data_size;
-  uint8_t *priv_key_data = JS_GetArrayBuffer(ctx, &priv_key_data_size, priv_key_data_val);
+  uint8_t* priv_key_data = JS_GetArrayBuffer(ctx, &priv_key_data_size, priv_key_data_val);
   if (!priv_key_data) {
     JS_FreeValue(ctx, priv_key_data_val);
     JSValue error = jsrt_crypto_throw_error(ctx, "InvalidAccessError", "Invalid private key data");
@@ -2215,7 +2217,7 @@ JSValue jsrt_subtle_deriveBits(JSContext *ctx, JSValueConst this_val, int argc, 
   }
 
   size_t pub_key_data_size;
-  uint8_t *pub_key_data = JS_GetArrayBuffer(ctx, &pub_key_data_size, pub_key_data_val);
+  uint8_t* pub_key_data = JS_GetArrayBuffer(ctx, &pub_key_data_size, pub_key_data_val);
   if (!pub_key_data) {
     JS_FreeValue(ctx, priv_key_data_val);
     JS_FreeValue(ctx, pub_key_val);
@@ -2234,15 +2236,15 @@ JSValue jsrt_subtle_deriveBits(JSContext *ctx, JSValueConst this_val, int argc, 
   size_t length_bytes = (length_bits + 7) / 8;
 
   // Create EC keys from DER-encoded key data
-  const unsigned char *priv_key_ptr = priv_key_data;
-  const unsigned char *pub_key_ptr = pub_key_data;
-  void *ec_private_key = NULL;
-  void *ec_public_key = NULL;
+  const unsigned char* priv_key_ptr = priv_key_data;
+  const unsigned char* pub_key_ptr = pub_key_data;
+  void* ec_private_key = NULL;
+  void* ec_public_key = NULL;
 
   if (openssl_handle) {
-    void *(*d2i_AutoPrivateKey)(void **a, const unsigned char **pp, long length) =
+    void* (*d2i_AutoPrivateKey)(void** a, const unsigned char** pp, long length) =
         JSRT_DLSYM(openssl_handle, "d2i_AutoPrivateKey");
-    void *(*d2i_PUBKEY)(void **a, const unsigned char **pp, long length) = JSRT_DLSYM(openssl_handle, "d2i_PUBKEY");
+    void* (*d2i_PUBKEY)(void** a, const unsigned char** pp, long length) = JSRT_DLSYM(openssl_handle, "d2i_PUBKEY");
 
     if (d2i_AutoPrivateKey) {
       ec_private_key = d2i_AutoPrivateKey(NULL, &priv_key_ptr, priv_key_data_size);
@@ -2258,12 +2260,14 @@ JSValue jsrt_subtle_deriveBits(JSContext *ctx, JSValueConst this_val, int argc, 
 
   if (!ec_private_key || !ec_public_key) {
     if (ec_private_key && openssl_handle) {
-      void (*EVP_PKEY_free)(void *pkey) = JSRT_DLSYM(openssl_handle, "EVP_PKEY_free");
-      if (EVP_PKEY_free) EVP_PKEY_free(ec_private_key);
+      void (*EVP_PKEY_free)(void* pkey) = JSRT_DLSYM(openssl_handle, "EVP_PKEY_free");
+      if (EVP_PKEY_free)
+        EVP_PKEY_free(ec_private_key);
     }
     if (ec_public_key && openssl_handle) {
-      void (*EVP_PKEY_free)(void *pkey) = JSRT_DLSYM(openssl_handle, "EVP_PKEY_free");
-      if (EVP_PKEY_free) EVP_PKEY_free(ec_public_key);
+      void (*EVP_PKEY_free)(void* pkey) = JSRT_DLSYM(openssl_handle, "EVP_PKEY_free");
+      if (EVP_PKEY_free)
+        EVP_PKEY_free(ec_public_key);
     }
     JSValue error = jsrt_crypto_throw_error(ctx, "OperationError", "Failed to create EC keys");
     return create_rejected_promise(ctx, error);
@@ -2279,12 +2283,14 @@ JSValue jsrt_subtle_deriveBits(JSContext *ctx, JSValueConst this_val, int argc, 
 
   // Free the EC keys
   if (ec_private_key && openssl_handle) {
-    void (*EVP_PKEY_free)(void *pkey) = JSRT_DLSYM(openssl_handle, "EVP_PKEY_free");
-    if (EVP_PKEY_free) EVP_PKEY_free(ec_private_key);
+    void (*EVP_PKEY_free)(void* pkey) = JSRT_DLSYM(openssl_handle, "EVP_PKEY_free");
+    if (EVP_PKEY_free)
+      EVP_PKEY_free(ec_private_key);
   }
   if (ec_public_key && openssl_handle) {
-    void (*EVP_PKEY_free)(void *pkey) = JSRT_DLSYM(openssl_handle, "EVP_PKEY_free");
-    if (EVP_PKEY_free) EVP_PKEY_free(ec_public_key);
+    void (*EVP_PKEY_free)(void* pkey) = JSRT_DLSYM(openssl_handle, "EVP_PKEY_free");
+    if (EVP_PKEY_free)
+      EVP_PKEY_free(ec_public_key);
   }
 
   if (JS_IsException(derived_bits)) {
@@ -2293,7 +2299,7 @@ JSValue jsrt_subtle_deriveBits(JSContext *ctx, JSValueConst this_val, int argc, 
 
   // If the requested length is different from what we got, truncate or error
   size_t derived_size;
-  uint8_t *derived_data = JS_GetArrayBuffer(ctx, &derived_size, derived_bits);
+  uint8_t* derived_data = JS_GetArrayBuffer(ctx, &derived_size, derived_bits);
   if (derived_data && length_bytes < derived_size) {
     // Truncate to requested length
     JSValue truncated = JS_NewArrayBufferCopy(ctx, derived_data, length_bytes);
@@ -2305,7 +2311,7 @@ JSValue jsrt_subtle_deriveBits(JSContext *ctx, JSValueConst this_val, int argc, 
 }
 
 // Create SubtleCrypto object
-JSValue JSRT_CreateSubtleCrypto(JSContext *ctx) {
+JSValue JSRT_CreateSubtleCrypto(JSContext* ctx) {
   JSValue subtle = JS_NewObject(ctx);
 
   // Add methods to subtle crypto object
@@ -2324,4 +2330,6 @@ JSValue JSRT_CreateSubtleCrypto(JSContext *ctx) {
 }
 
 // Setup SubtleCrypto in runtime (called from main crypto setup)
-void JSRT_SetupSubtleCrypto(JSRT_Runtime *rt) { JSRT_Debug("JSRT_SetupSubtleCrypto: initializing SubtleCrypto API"); }
+void JSRT_SetupSubtleCrypto(JSRT_Runtime* rt) {
+  JSRT_Debug("JSRT_SetupSubtleCrypto: initializing SubtleCrypto API");
+}

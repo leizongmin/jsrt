@@ -13,24 +13,24 @@
 typedef struct JSRT_CloneEntry {
   JSValue original;
   JSValue clone;
-  struct JSRT_CloneEntry *next;
+  struct JSRT_CloneEntry* next;
 } JSRT_CloneEntry;
 
 typedef struct {
-  JSRT_CloneEntry *entries;
+  JSRT_CloneEntry* entries;
 } JSRT_CloneMap;
 
-static JSRT_CloneMap *JSRT_CloneMapNew() {
-  JSRT_CloneMap *map = malloc(sizeof(JSRT_CloneMap));
+static JSRT_CloneMap* JSRT_CloneMapNew() {
+  JSRT_CloneMap* map = malloc(sizeof(JSRT_CloneMap));
   map->entries = NULL;
   return map;
 }
 
-static void JSRT_CloneMapFree(JSContext *ctx, JSRT_CloneMap *map) {
+static void JSRT_CloneMapFree(JSContext* ctx, JSRT_CloneMap* map) {
   if (map) {
-    JSRT_CloneEntry *entry = map->entries;
+    JSRT_CloneEntry* entry = map->entries;
     while (entry) {
-      JSRT_CloneEntry *next = entry->next;
+      JSRT_CloneEntry* next = entry->next;
       JS_FreeValue(ctx, entry->original);
       JS_FreeValue(ctx, entry->clone);
       free(entry);
@@ -40,8 +40,8 @@ static void JSRT_CloneMapFree(JSContext *ctx, JSRT_CloneMap *map) {
   }
 }
 
-static JSValue JSRT_CloneMapGet(JSRT_CloneMap *map, JSContext *ctx, JSValue original) {
-  JSRT_CloneEntry *entry = map->entries;
+static JSValue JSRT_CloneMapGet(JSRT_CloneMap* map, JSContext* ctx, JSValue original) {
+  JSRT_CloneEntry* entry = map->entries;
   while (entry) {
     if (JS_VALUE_GET_PTR(entry->original) == JS_VALUE_GET_PTR(original)) {
       return JS_DupValue(ctx, entry->clone);
@@ -51,8 +51,8 @@ static JSValue JSRT_CloneMapGet(JSRT_CloneMap *map, JSContext *ctx, JSValue orig
   return JS_UNDEFINED;
 }
 
-static void JSRT_CloneMapSet(JSRT_CloneMap *map, JSContext *ctx, JSValue original, JSValue clone) {
-  JSRT_CloneEntry *entry = malloc(sizeof(JSRT_CloneEntry));
+static void JSRT_CloneMapSet(JSRT_CloneMap* map, JSContext* ctx, JSValue original, JSValue clone) {
+  JSRT_CloneEntry* entry = malloc(sizeof(JSRT_CloneEntry));
   entry->original = JS_DupValue(ctx, original);
   entry->clone = JS_DupValue(ctx, clone);
   entry->next = map->entries;
@@ -60,9 +60,9 @@ static void JSRT_CloneMapSet(JSRT_CloneMap *map, JSContext *ctx, JSValue origina
 }
 
 // Forward declaration
-static JSValue JSRT_CloneValueInternal(JSContext *ctx, JSValue value, JSRT_CloneMap *map);
+static JSValue JSRT_CloneValueInternal(JSContext* ctx, JSValue value, JSRT_CloneMap* map);
 
-static JSValue JSRT_CloneArray(JSContext *ctx, JSValue array, JSRT_CloneMap *map) {
+static JSValue JSRT_CloneArray(JSContext* ctx, JSValue array, JSRT_CloneMap* map) {
   JSValue length_val = JS_GetPropertyStr(ctx, array, "length");
   if (JS_IsException(length_val)) {
     return JS_EXCEPTION;
@@ -108,7 +108,7 @@ static JSValue JSRT_CloneArray(JSContext *ctx, JSValue array, JSRT_CloneMap *map
   return cloned_array;
 }
 
-static JSValue JSRT_CloneObject(JSContext *ctx, JSValue object, JSRT_CloneMap *map) {
+static JSValue JSRT_CloneObject(JSContext* ctx, JSValue object, JSRT_CloneMap* map) {
   JSValue cloned_object = JS_NewObject(ctx);
   if (JS_IsException(cloned_object)) {
     return JS_EXCEPTION;
@@ -118,7 +118,7 @@ static JSValue JSRT_CloneObject(JSContext *ctx, JSValue object, JSRT_CloneMap *m
   JSRT_CloneMapSet(map, ctx, object, cloned_object);
 
   // Get property names
-  JSPropertyEnum *props = NULL;
+  JSPropertyEnum* props = NULL;
   uint32_t prop_count = 0;
 
   if (JS_GetOwnPropertyNames(ctx, &props, &prop_count, object,
@@ -158,7 +158,7 @@ static JSValue JSRT_CloneObject(JSContext *ctx, JSValue object, JSRT_CloneMap *m
   return cloned_object;
 }
 
-static JSValue JSRT_CloneDate(JSContext *ctx, JSValue date) {
+static JSValue JSRT_CloneDate(JSContext* ctx, JSValue date) {
   // Get the time value from the Date object
   JSValue getTime = JS_GetPropertyStr(ctx, date, "getTime");
   if (JS_IsException(getTime)) {
@@ -181,7 +181,7 @@ static JSValue JSRT_CloneDate(JSContext *ctx, JSValue date) {
   return cloned_date;
 }
 
-static JSValue JSRT_CloneRegExp(JSContext *ctx, JSValue regexp) {
+static JSValue JSRT_CloneRegExp(JSContext* ctx, JSValue regexp) {
   // Get source and flags
   JSValue source = JS_GetPropertyStr(ctx, regexp, "source");
   JSValue flags = JS_GetPropertyStr(ctx, regexp, "flags");
@@ -204,7 +204,7 @@ static JSValue JSRT_CloneRegExp(JSContext *ctx, JSValue regexp) {
   return cloned_regexp;
 }
 
-static JSValue JSRT_CloneValueInternal(JSContext *ctx, JSValue value, JSRT_CloneMap *map) {
+static JSValue JSRT_CloneValueInternal(JSContext* ctx, JSValue value, JSRT_CloneMap* map) {
   uint32_t tag = JS_VALUE_GET_NORM_TAG(value);
 
   // Check for circular reference
@@ -229,7 +229,7 @@ static JSValue JSRT_CloneValueInternal(JSContext *ctx, JSValue value, JSRT_Clone
       if (!JS_IsException(constructor)) {
         JSValue name = JS_GetPropertyStr(ctx, constructor, "name");
         if (!JS_IsException(name)) {
-          const char *name_str = JS_ToCString(ctx, name);
+          const char* name_str = JS_ToCString(ctx, name);
           if (name_str) {
             if (strcmp(name_str, "Array") == 0) {
               JS_FreeCString(ctx, name_str);
@@ -277,12 +277,12 @@ static JSValue JSRT_CloneValueInternal(JSContext *ctx, JSValue value, JSRT_Clone
   }
 }
 
-static JSValue JSRT_StructuredClone(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv) {
+static JSValue JSRT_StructuredClone(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
   if (argc < 1) {
     return JS_ThrowTypeError(ctx, "structuredClone requires 1 argument");
   }
 
-  JSRT_CloneMap *map = JSRT_CloneMapNew();
+  JSRT_CloneMap* map = JSRT_CloneMapNew();
   JSValue result = JSRT_CloneValueInternal(ctx, argv[0], map);
   JSRT_CloneMapFree(ctx, map);
 
@@ -290,8 +290,8 @@ static JSValue JSRT_StructuredClone(JSContext *ctx, JSValueConst this_val, int a
 }
 
 // Setup function
-void JSRT_RuntimeSetupStdClone(JSRT_Runtime *rt) {
-  JSContext *ctx = rt->ctx;
+void JSRT_RuntimeSetupStdClone(JSRT_Runtime* rt) {
+  JSContext* ctx = rt->ctx;
 
   JSRT_Debug("JSRT_RuntimeSetupStdClone: initializing Structured Clone API");
 

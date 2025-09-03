@@ -4,8 +4,8 @@
 #include "../runtime.h"
 #include "../util/dbuf.h"
 
-void JSRT_RuntimeSetupStdConsole(JSRT_Runtime *rt);
-JSValue JSRT_StringFormat(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv, bool colors);
-void JSRT_GetJSValuePrettyString(DynBuf *s, JSContext *ctx, JSValueConst value, const char *name, bool colors);
+void JSRT_RuntimeSetupStdConsole(JSRT_Runtime* rt);
+JSValue JSRT_StringFormat(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv, bool colors);
+void JSRT_GetJSValuePrettyString(DynBuf* s, JSContext* ctx, JSValueConst value, const char* name, bool colors);
 
 #endif

@@ -30,7 +30,8 @@ static int terminal_initialized = 0;
 
 // Initialize terminal for raw mode
 static void init_terminal(void) {
-  if (terminal_initialized) return;
+  if (terminal_initialized)
+    return;
 
   if (tcgetattr(STDIN_FILENO, &orig_termios) == -1) {
     return;
@@ -50,14 +51,16 @@ static void init_terminal(void) {
 
 // Restore terminal settings
 static void restore_terminal(void) {
-  if (!terminal_initialized) return;
+  if (!terminal_initialized)
+    return;
   tcsetattr(STDIN_FILENO, TCSANOW, &orig_termios);
   terminal_initialized = 0;
 }
 
 // Add line to history
 void add_history(const char* line) {
-  if (!line || strlen(line) == 0) return;
+  if (!line || strlen(line) == 0)
+    return;
 
   // Don't add duplicate consecutive entries
   if (history_count > 0 && strcmp(history[history_count - 1], line) == 0) {
@@ -125,7 +128,8 @@ char* readline(const char* prompt) {
   // For CI environments or non-interactive terminals, use simple fgets
   if (!isatty(STDIN_FILENO)) {
     char* line = malloc(1024);
-    if (!line) return NULL;
+    if (!line)
+      return NULL;
 
     if (!fgets(line, 1024, stdin)) {
       free(line);
@@ -145,7 +149,8 @@ char* readline(const char* prompt) {
   init_terminal();
 
   char* line = malloc(1024);
-  if (!line) return NULL;
+  if (!line)
+    return NULL;
 
   int pos = 0;
   int len = 0;
@@ -189,7 +194,8 @@ char* readline(const char* prompt) {
   restore_terminal();
 
   // Update readline state
-  if (rl_line_buffer) free(rl_line_buffer);
+  if (rl_line_buffer)
+    free(rl_line_buffer);
   rl_line_buffer = strdup(line);
   rl_point = len;
   rl_end = len;

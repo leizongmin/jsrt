@@ -21,8 +21,8 @@ typedef struct {
   JSValue reason;
 } JSRT_AbortSignal;
 
-static void JSRT_AbortSignalFinalize(JSRuntime *rt, JSValue val) {
-  JSRT_AbortSignal *signal = JS_GetOpaque(val, JSRT_AbortSignalClassID);
+static void JSRT_AbortSignalFinalize(JSRuntime* rt, JSValue val) {
+  JSRT_AbortSignal* signal = JS_GetOpaque(val, JSRT_AbortSignalClassID);
   if (signal) {
     JS_FreeValueRT(rt, signal->event_target);
     if (!JS_IsUndefined(signal->reason)) {
@@ -37,14 +37,14 @@ static JSClassDef JSRT_AbortSignalClass = {
     .finalizer = JSRT_AbortSignalFinalize,
 };
 
-static JSValue JSRT_AbortSignalConstructor(JSContext *ctx, JSValueConst new_target, int argc, JSValueConst *argv) {
+static JSValue JSRT_AbortSignalConstructor(JSContext* ctx, JSValueConst new_target, int argc, JSValueConst* argv) {
   // AbortSignal constructor should not be called directly
   return JS_ThrowTypeError(ctx, "Illegal constructor");
 }
 
 // Create an AbortSignal instance
-static JSValue JSRT_CreateAbortSignal(JSContext *ctx, bool aborted, JSValue reason) {
-  JSRT_AbortSignal *signal = malloc(sizeof(JSRT_AbortSignal));
+static JSValue JSRT_CreateAbortSignal(JSContext* ctx, bool aborted, JSValue reason) {
+  JSRT_AbortSignal* signal = malloc(sizeof(JSRT_AbortSignal));
   signal->aborted = aborted;
   signal->reason = JS_DupValue(ctx, reason);
 
@@ -60,24 +60,24 @@ static JSValue JSRT_CreateAbortSignal(JSContext *ctx, bool aborted, JSValue reas
   return obj;
 }
 
-static JSValue JSRT_AbortSignalGetAborted(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv) {
-  JSRT_AbortSignal *signal = JS_GetOpaque2(ctx, this_val, JSRT_AbortSignalClassID);
+static JSValue JSRT_AbortSignalGetAborted(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
+  JSRT_AbortSignal* signal = JS_GetOpaque2(ctx, this_val, JSRT_AbortSignalClassID);
   if (!signal) {
     return JS_EXCEPTION;
   }
   return JS_NewBool(ctx, signal->aborted);
 }
 
-static JSValue JSRT_AbortSignalGetReason(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv) {
-  JSRT_AbortSignal *signal = JS_GetOpaque2(ctx, this_val, JSRT_AbortSignalClassID);
+static JSValue JSRT_AbortSignalGetReason(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
+  JSRT_AbortSignal* signal = JS_GetOpaque2(ctx, this_val, JSRT_AbortSignalClassID);
   if (!signal) {
     return JS_EXCEPTION;
   }
   return JS_DupValue(ctx, signal->reason);
 }
 
-static JSValue JSRT_AbortSignalAddEventListener(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv) {
-  JSRT_AbortSignal *signal = JS_GetOpaque2(ctx, this_val, JSRT_AbortSignalClassID);
+static JSValue JSRT_AbortSignalAddEventListener(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
+  JSRT_AbortSignal* signal = JS_GetOpaque2(ctx, this_val, JSRT_AbortSignalClassID);
   if (!signal) {
     return JS_EXCEPTION;
   }
@@ -89,9 +89,9 @@ static JSValue JSRT_AbortSignalAddEventListener(JSContext *ctx, JSValueConst thi
   return result;
 }
 
-static JSValue JSRT_AbortSignalRemoveEventListener(JSContext *ctx, JSValueConst this_val, int argc,
-                                                   JSValueConst *argv) {
-  JSRT_AbortSignal *signal = JS_GetOpaque2(ctx, this_val, JSRT_AbortSignalClassID);
+static JSValue JSRT_AbortSignalRemoveEventListener(JSContext* ctx, JSValueConst this_val, int argc,
+                                                   JSValueConst* argv) {
+  JSRT_AbortSignal* signal = JS_GetOpaque2(ctx, this_val, JSRT_AbortSignalClassID);
   if (!signal) {
     return JS_EXCEPTION;
   }
@@ -103,8 +103,8 @@ static JSValue JSRT_AbortSignalRemoveEventListener(JSContext *ctx, JSValueConst 
   return result;
 }
 
-static JSValue JSRT_AbortSignalDispatchEvent(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv) {
-  JSRT_AbortSignal *signal = JS_GetOpaque2(ctx, this_val, JSRT_AbortSignalClassID);
+static JSValue JSRT_AbortSignalDispatchEvent(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
+  JSRT_AbortSignal* signal = JS_GetOpaque2(ctx, this_val, JSRT_AbortSignalClassID);
   if (!signal) {
     return JS_EXCEPTION;
   }
@@ -117,7 +117,7 @@ static JSValue JSRT_AbortSignalDispatchEvent(JSContext *ctx, JSValueConst this_v
 }
 
 // Static methods
-static JSValue JSRT_AbortSignalAbort(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv) {
+static JSValue JSRT_AbortSignalAbort(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
   JSValue reason = JS_UNDEFINED;
   if (argc > 0) {
     reason = argv[0];
@@ -130,7 +130,7 @@ static JSValue JSRT_AbortSignalAbort(JSContext *ctx, JSValueConst this_val, int 
   return signal;
 }
 
-static JSValue JSRT_AbortSignalTimeout(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv) {
+static JSValue JSRT_AbortSignalTimeout(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
   if (argc < 1) {
     return JS_ThrowTypeError(ctx, "AbortSignal.timeout() requires 1 argument");
   }
@@ -157,8 +157,8 @@ typedef struct {
   JSValue signal;
 } JSRT_AbortController;
 
-static void JSRT_AbortControllerFinalize(JSRuntime *rt, JSValue val) {
-  JSRT_AbortController *controller = JS_GetOpaque(val, JSRT_AbortControllerClassID);
+static void JSRT_AbortControllerFinalize(JSRuntime* rt, JSValue val) {
+  JSRT_AbortController* controller = JS_GetOpaque(val, JSRT_AbortControllerClassID);
   if (controller) {
     JS_FreeValueRT(rt, controller->signal);
     free(controller);
@@ -170,8 +170,8 @@ static JSClassDef JSRT_AbortControllerClass = {
     .finalizer = JSRT_AbortControllerFinalize,
 };
 
-static JSValue JSRT_AbortControllerConstructor(JSContext *ctx, JSValueConst new_target, int argc, JSValueConst *argv) {
-  JSRT_AbortController *controller = malloc(sizeof(JSRT_AbortController));
+static JSValue JSRT_AbortControllerConstructor(JSContext* ctx, JSValueConst new_target, int argc, JSValueConst* argv) {
+  JSRT_AbortController* controller = malloc(sizeof(JSRT_AbortController));
 
   // Create associated AbortSignal
   controller->signal = JSRT_CreateAbortSignal(ctx, false, JS_UNDEFINED);
@@ -181,22 +181,22 @@ static JSValue JSRT_AbortControllerConstructor(JSContext *ctx, JSValueConst new_
   return obj;
 }
 
-static JSValue JSRT_AbortControllerGetSignal(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv) {
-  JSRT_AbortController *controller = JS_GetOpaque2(ctx, this_val, JSRT_AbortControllerClassID);
+static JSValue JSRT_AbortControllerGetSignal(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
+  JSRT_AbortController* controller = JS_GetOpaque2(ctx, this_val, JSRT_AbortControllerClassID);
   if (!controller) {
     return JS_EXCEPTION;
   }
   return JS_DupValue(ctx, controller->signal);
 }
 
-static JSValue JSRT_AbortControllerAbort(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv) {
-  JSRT_AbortController *controller = JS_GetOpaque2(ctx, this_val, JSRT_AbortControllerClassID);
+static JSValue JSRT_AbortControllerAbort(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
+  JSRT_AbortController* controller = JS_GetOpaque2(ctx, this_val, JSRT_AbortControllerClassID);
   if (!controller) {
     return JS_EXCEPTION;
   }
 
   // Get the signal
-  JSRT_AbortSignal *signal = JS_GetOpaque2(ctx, controller->signal, JSRT_AbortSignalClassID);
+  JSRT_AbortSignal* signal = JS_GetOpaque2(ctx, controller->signal, JSRT_AbortSignalClassID);
   if (!signal) {
     return JS_EXCEPTION;
   }
@@ -234,8 +234,8 @@ static JSValue JSRT_AbortControllerAbort(JSContext *ctx, JSValueConst this_val, 
 }
 
 // Setup function
-void JSRT_RuntimeSetupStdAbort(JSRT_Runtime *rt) {
-  JSContext *ctx = rt->ctx;
+void JSRT_RuntimeSetupStdAbort(JSRT_Runtime* rt) {
+  JSContext* ctx = rt->ctx;
 
   JSRT_Debug("JSRT_RuntimeSetupStdAbort: initializing AbortController/AbortSignal API");
 

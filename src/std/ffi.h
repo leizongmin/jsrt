@@ -6,12 +6,12 @@
 #include "../runtime.h"
 
 // Initialize FFI module
-void JSRT_RuntimeSetupStdFFI(JSRT_Runtime *rt);
+void JSRT_RuntimeSetupStdFFI(JSRT_Runtime* rt);
 
 // Cleanup FFI module
-void JSRT_RuntimeCleanupStdFFI(JSContext *ctx);
+void JSRT_RuntimeCleanupStdFFI(JSContext* ctx);
 
 // Create FFI module for require("std:ffi")
-JSValue JSRT_CreateFFIModule(JSContext *ctx);
+JSValue JSRT_CreateFFIModule(JSContext* ctx);
 
 #endif

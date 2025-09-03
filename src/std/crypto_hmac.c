@@ -15,26 +15,26 @@
 // Cross-platform dynamic loading abstractions
 #ifdef _WIN32
 extern HMODULE openssl_handle;
-#define JSRT_DLSYM(handle, name) ((void *)GetProcAddress(handle, name))
+#define JSRT_DLSYM(handle, name) ((void*)GetProcAddress(handle, name))
 #else
-extern void *openssl_handle;
+extern void* openssl_handle;
 #define JSRT_DLSYM(handle, name) dlsym(handle, name)
 #endif
 
 // OpenSSL function pointers for HMAC
 typedef struct {
   // HMAC functions
-  unsigned char *(*HMAC)(const void *evp_md, const void *key, int key_len, const unsigned char *d, size_t n,
-                         unsigned char *md, unsigned int *md_len);
+  unsigned char* (*HMAC)(const void* evp_md, const void* key, int key_len, const unsigned char* d, size_t n,
+                         unsigned char* md, unsigned int* md_len);
 
   // Hash algorithm functions
-  const void *(*EVP_sha1)(void);
-  const void *(*EVP_sha256)(void);
-  const void *(*EVP_sha384)(void);
-  const void *(*EVP_sha512)(void);
+  const void* (*EVP_sha1)(void);
+  const void* (*EVP_sha256)(void);
+  const void* (*EVP_sha384)(void);
+  const void* (*EVP_sha512)(void);
 
   // Random number generation (for key generation)
-  int (*RAND_bytes)(unsigned char *buf, int num);
+  int (*RAND_bytes)(unsigned char* buf, int num);
 } openssl_hmac_funcs_t;
 
 static openssl_hmac_funcs_t openssl_hmac_funcs = {0};
@@ -79,7 +79,7 @@ static bool load_hmac_functions(void) {
 }
 
 // Get OpenSSL hash function for HMAC algorithm
-static const void *get_openssl_hash_func(jsrt_hmac_algorithm_t alg) {
+static const void* get_openssl_hash_func(jsrt_hmac_algorithm_t alg) {
   if (!load_hmac_functions()) {
     return NULL;
   }
@@ -99,7 +99,7 @@ static const void *get_openssl_hash_func(jsrt_hmac_algorithm_t alg) {
 }
 
 // Generate HMAC key
-int jsrt_crypto_generate_hmac_key(jsrt_hmac_algorithm_t alg, uint8_t **key_data, size_t *key_data_length) {
+int jsrt_crypto_generate_hmac_key(jsrt_hmac_algorithm_t alg, uint8_t** key_data, size_t* key_data_length) {
   if (!load_hmac_functions() || !openssl_hmac_funcs.RAND_bytes) {
     JSRT_Debug("JSRT_Crypto_HMAC: OpenSSL functions not available for key generation");
     return -1;
@@ -132,14 +132,14 @@ int jsrt_crypto_generate_hmac_key(jsrt_hmac_algorithm_t alg, uint8_t **key_data,
 }
 
 // HMAC sign (compute MAC)
-int jsrt_crypto_hmac_sign(jsrt_hmac_params_t *params, const uint8_t *data, size_t data_length, uint8_t **signature,
-                          size_t *signature_length) {
+int jsrt_crypto_hmac_sign(jsrt_hmac_params_t* params, const uint8_t* data, size_t data_length, uint8_t** signature,
+                          size_t* signature_length) {
   if (!load_hmac_functions() || !openssl_hmac_funcs.HMAC) {
     JSRT_Debug("JSRT_Crypto_HMAC: OpenSSL HMAC functions not available");
     return -1;
   }
 
-  const void *hash_func = get_openssl_hash_func(params->algorithm);
+  const void* hash_func = get_openssl_hash_func(params->algorithm);
   if (!hash_func) {
     JSRT_Debug("JSRT_Crypto_HMAC: Unsupported HMAC algorithm: %d", params->algorithm);
     return -1;
@@ -155,7 +155,7 @@ int jsrt_crypto_hmac_sign(jsrt_hmac_params_t *params, const uint8_t *data, size_
 
   // Compute HMAC
   unsigned int sig_len = 0;
-  unsigned char *result =
+  unsigned char* result =
       openssl_hmac_funcs.HMAC(hash_func, params->key_data, params->key_length, data, data_length, *signature, &sig_len);
 
   if (!result || sig_len == 0) {
@@ -172,10 +172,10 @@ int jsrt_crypto_hmac_sign(jsrt_hmac_params_t *params, const uint8_t *data, size_
 }
 
 // HMAC verify
-bool jsrt_crypto_hmac_verify(jsrt_hmac_params_t *params, const uint8_t *data, size_t data_length,
-                             const uint8_t *signature, size_t signature_length) {
+bool jsrt_crypto_hmac_verify(jsrt_hmac_params_t* params, const uint8_t* data, size_t data_length,
+                             const uint8_t* signature, size_t signature_length) {
   // Compute HMAC for the data
-  uint8_t *computed_signature;
+  uint8_t* computed_signature;
   size_t computed_length;
 
   int result = jsrt_crypto_hmac_sign(params, data, data_length, &computed_signature, &computed_length);
@@ -202,7 +202,7 @@ bool jsrt_crypto_hmac_verify(jsrt_hmac_params_t *params, const uint8_t *data, si
 }
 
 // Helper functions
-jsrt_hmac_algorithm_t jsrt_crypto_parse_hmac_algorithm(const char *hash_name) {
+jsrt_hmac_algorithm_t jsrt_crypto_parse_hmac_algorithm(const char* hash_name) {
   if (strcmp(hash_name, "SHA-1") == 0) {
     return JSRT_HMAC_SHA1;
   } else if (strcmp(hash_name, "SHA-256") == 0) {
@@ -215,7 +215,7 @@ jsrt_hmac_algorithm_t jsrt_crypto_parse_hmac_algorithm(const char *hash_name) {
   return JSRT_HMAC_SHA256;  // Default fallback
 }
 
-const char *jsrt_crypto_hmac_algorithm_to_string(jsrt_hmac_algorithm_t alg) {
+const char* jsrt_crypto_hmac_algorithm_to_string(jsrt_hmac_algorithm_t alg) {
   switch (alg) {
     case JSRT_HMAC_SHA1:
       return "HMAC-SHA-1";
@@ -257,7 +257,7 @@ size_t jsrt_crypto_get_hmac_hash_size(jsrt_hmac_algorithm_t alg) {
   }
 }
 
-void jsrt_crypto_hmac_params_free(jsrt_hmac_params_t *params) {
+void jsrt_crypto_hmac_params_free(jsrt_hmac_params_t* params) {
   if (params) {
     free(params->key_data);
     free(params);

@@ -13,10 +13,10 @@ JSRT_ReadFileResult JSRT_ReadFileResultDefault() {
   return result;
 }
 
-JSRT_ReadFileResult JSRT_ReadFile(const char *path) {
+JSRT_ReadFileResult JSRT_ReadFile(const char* path) {
   JSRT_ReadFileResult result = JSRT_ReadFileResultDefault();
 
-  FILE *file = fopen(path, "rb");
+  FILE* file = fopen(path, "rb");
   if (file == NULL) {
     result.error = JSRT_READ_FILE_ERROR_FILE_NOT_FOUND;
     goto fail;
@@ -51,14 +51,14 @@ fail:
   return result;
 }
 
-void JSRT_ReadFileResultFree(JSRT_ReadFileResult *result) {
+void JSRT_ReadFileResultFree(JSRT_ReadFileResult* result) {
   free(result->data);
   result->data = NULL;
   result->size = 0;
   result->error = JSRT_READ_FILE_OK;
 }
 
-const char *JSRT_ReadFileErrorToString(JSRT_ReadFileError error) {
+const char* JSRT_ReadFileErrorToString(JSRT_ReadFileError error) {
   switch (error) {
     case JSRT_READ_FILE_OK:
       return "JSRT_READ_FILE_OK";

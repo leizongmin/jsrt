@@ -15,20 +15,20 @@ static JSClassID JSRT_URLSearchParamsClassID;
 
 // URL component structure
 typedef struct {
-  char *href;
-  char *protocol;
-  char *host;
-  char *hostname;
-  char *port;
-  char *pathname;
-  char *search;
-  char *hash;
-  char *origin;
+  char* href;
+  char* protocol;
+  char* host;
+  char* hostname;
+  char* port;
+  char* pathname;
+  char* search;
+  char* hash;
+  char* origin;
 } JSRT_URL;
 
 // Simple URL parser (basic implementation)
-static JSRT_URL *JSRT_ParseURL(const char *url, const char *base) {
-  JSRT_URL *parsed = malloc(sizeof(JSRT_URL));
+static JSRT_URL* JSRT_ParseURL(const char* url, const char* base) {
+  JSRT_URL* parsed = malloc(sizeof(JSRT_URL));
   memset(parsed, 0, sizeof(JSRT_URL));
 
   // Initialize with empty strings to prevent NULL dereference
@@ -45,11 +45,11 @@ static JSRT_URL *JSRT_ParseURL(const char *url, const char *base) {
   // Simple parsing - this is a basic implementation
   // In a production system, you'd want a full URL parser
 
-  char *url_copy = strdup(url);
-  char *ptr = url_copy;
+  char* url_copy = strdup(url);
+  char* ptr = url_copy;
 
   // Extract protocol
-  char *protocol_end = strstr(ptr, "://");
+  char* protocol_end = strstr(ptr, "://");
   if (protocol_end) {
     *protocol_end = '\0';
     free(parsed->protocol);
@@ -59,7 +59,7 @@ static JSRT_URL *JSRT_ParseURL(const char *url, const char *base) {
   }
 
   // Extract hash first (fragment)
-  char *hash_start = strchr(ptr, '#');
+  char* hash_start = strchr(ptr, '#');
   if (hash_start) {
     free(parsed->hash);
     parsed->hash = strdup(hash_start);
@@ -67,7 +67,7 @@ static JSRT_URL *JSRT_ParseURL(const char *url, const char *base) {
   }
 
   // Extract search (query)
-  char *search_start = strchr(ptr, '?');
+  char* search_start = strchr(ptr, '?');
   if (search_start) {
     free(parsed->search);
     parsed->search = strdup(search_start);
@@ -75,7 +75,7 @@ static JSRT_URL *JSRT_ParseURL(const char *url, const char *base) {
   }
 
   // Extract host and pathname
-  char *path_start = strchr(ptr, '/');
+  char* path_start = strchr(ptr, '/');
   if (path_start) {
     free(parsed->pathname);
     parsed->pathname = strdup(path_start);
@@ -91,7 +91,7 @@ static JSRT_URL *JSRT_ParseURL(const char *url, const char *base) {
     parsed->host = strdup(ptr);
 
     // Check for port
-    char *port_start = strchr(ptr, ':');
+    char* port_start = strchr(ptr, ':');
     if (port_start) {
       *port_start = '\0';
       free(parsed->hostname);
@@ -116,7 +116,7 @@ static JSRT_URL *JSRT_ParseURL(const char *url, const char *base) {
   return parsed;
 }
 
-static void JSRT_FreeURL(JSRT_URL *url) {
+static void JSRT_FreeURL(JSRT_URL* url) {
   if (url) {
     free(url->href);
     free(url->protocol);
@@ -131,8 +131,8 @@ static void JSRT_FreeURL(JSRT_URL *url) {
   }
 }
 
-static void JSRT_URLFinalize(JSRuntime *rt, JSValue val) {
-  JSRT_URL *url = JS_GetOpaque(val, JSRT_URLClassID);
+static void JSRT_URLFinalize(JSRuntime* rt, JSValue val) {
+  JSRT_URL* url = JS_GetOpaque(val, JSRT_URLClassID);
   if (url) {
     JSRT_FreeURL(url);
   }
@@ -143,17 +143,17 @@ static JSClassDef JSRT_URLClass = {
     .finalizer = JSRT_URLFinalize,
 };
 
-static JSValue JSRT_URLConstructor(JSContext *ctx, JSValueConst new_target, int argc, JSValueConst *argv) {
+static JSValue JSRT_URLConstructor(JSContext* ctx, JSValueConst new_target, int argc, JSValueConst* argv) {
   if (argc < 1) {
     return JS_ThrowTypeError(ctx, "URL constructor requires at least 1 argument");
   }
 
-  const char *url_str = JS_ToCString(ctx, argv[0]);
+  const char* url_str = JS_ToCString(ctx, argv[0]);
   if (!url_str) {
     return JS_EXCEPTION;
   }
 
-  const char *base_str = NULL;
+  const char* base_str = NULL;
   if (argc >= 2 && !JS_IsUndefined(argv[1])) {
     base_str = JS_ToCString(ctx, argv[1]);
     if (!base_str) {
@@ -162,7 +162,7 @@ static JSValue JSRT_URLConstructor(JSContext *ctx, JSValueConst new_target, int 
     }
   }
 
-  JSRT_URL *url = JSRT_ParseURL(url_str, base_str);
+  JSRT_URL* url = JSRT_ParseURL(url_str, base_str);
 
   JSValue obj = JS_NewObjectClass(ctx, JSRT_URLClassID);
   JS_SetOpaque(obj, url);
@@ -176,84 +176,93 @@ static JSValue JSRT_URLConstructor(JSContext *ctx, JSValueConst new_target, int 
 }
 
 // Property getters
-static JSValue JSRT_URLGetHref(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv) {
-  JSRT_URL *url = JS_GetOpaque2(ctx, this_val, JSRT_URLClassID);
-  if (!url) return JS_EXCEPTION;
+static JSValue JSRT_URLGetHref(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
+  JSRT_URL* url = JS_GetOpaque2(ctx, this_val, JSRT_URLClassID);
+  if (!url)
+    return JS_EXCEPTION;
   return JS_NewString(ctx, url->href);
 }
 
-static JSValue JSRT_URLGetProtocol(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv) {
-  JSRT_URL *url = JS_GetOpaque2(ctx, this_val, JSRT_URLClassID);
-  if (!url) return JS_EXCEPTION;
+static JSValue JSRT_URLGetProtocol(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
+  JSRT_URL* url = JS_GetOpaque2(ctx, this_val, JSRT_URLClassID);
+  if (!url)
+    return JS_EXCEPTION;
   return JS_NewString(ctx, url->protocol);
 }
 
-static JSValue JSRT_URLGetHost(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv) {
-  JSRT_URL *url = JS_GetOpaque2(ctx, this_val, JSRT_URLClassID);
-  if (!url) return JS_EXCEPTION;
+static JSValue JSRT_URLGetHost(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
+  JSRT_URL* url = JS_GetOpaque2(ctx, this_val, JSRT_URLClassID);
+  if (!url)
+    return JS_EXCEPTION;
   return JS_NewString(ctx, url->host);
 }
 
-static JSValue JSRT_URLGetHostname(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv) {
-  JSRT_URL *url = JS_GetOpaque2(ctx, this_val, JSRT_URLClassID);
-  if (!url) return JS_EXCEPTION;
+static JSValue JSRT_URLGetHostname(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
+  JSRT_URL* url = JS_GetOpaque2(ctx, this_val, JSRT_URLClassID);
+  if (!url)
+    return JS_EXCEPTION;
   return JS_NewString(ctx, url->hostname);
 }
 
-static JSValue JSRT_URLGetPort(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv) {
-  JSRT_URL *url = JS_GetOpaque2(ctx, this_val, JSRT_URLClassID);
-  if (!url) return JS_EXCEPTION;
+static JSValue JSRT_URLGetPort(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
+  JSRT_URL* url = JS_GetOpaque2(ctx, this_val, JSRT_URLClassID);
+  if (!url)
+    return JS_EXCEPTION;
   return JS_NewString(ctx, url->port);
 }
 
-static JSValue JSRT_URLGetPathname(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv) {
-  JSRT_URL *url = JS_GetOpaque2(ctx, this_val, JSRT_URLClassID);
-  if (!url) return JS_EXCEPTION;
+static JSValue JSRT_URLGetPathname(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
+  JSRT_URL* url = JS_GetOpaque2(ctx, this_val, JSRT_URLClassID);
+  if (!url)
+    return JS_EXCEPTION;
   return JS_NewString(ctx, url->pathname);
 }
 
-static JSValue JSRT_URLGetSearch(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv) {
-  JSRT_URL *url = JS_GetOpaque2(ctx, this_val, JSRT_URLClassID);
-  if (!url) return JS_EXCEPTION;
+static JSValue JSRT_URLGetSearch(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
+  JSRT_URL* url = JS_GetOpaque2(ctx, this_val, JSRT_URLClassID);
+  if (!url)
+    return JS_EXCEPTION;
   return JS_NewString(ctx, url->search);
 }
 
-static JSValue JSRT_URLGetHash(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv) {
-  JSRT_URL *url = JS_GetOpaque2(ctx, this_val, JSRT_URLClassID);
-  if (!url) return JS_EXCEPTION;
+static JSValue JSRT_URLGetHash(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
+  JSRT_URL* url = JS_GetOpaque2(ctx, this_val, JSRT_URLClassID);
+  if (!url)
+    return JS_EXCEPTION;
   return JS_NewString(ctx, url->hash);
 }
 
-static JSValue JSRT_URLGetOrigin(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv) {
-  JSRT_URL *url = JS_GetOpaque2(ctx, this_val, JSRT_URLClassID);
-  if (!url) return JS_EXCEPTION;
+static JSValue JSRT_URLGetOrigin(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
+  JSRT_URL* url = JS_GetOpaque2(ctx, this_val, JSRT_URLClassID);
+  if (!url)
+    return JS_EXCEPTION;
   return JS_NewString(ctx, url->origin);
 }
 
-static JSValue JSRT_URLToString(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv) {
+static JSValue JSRT_URLToString(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
   return JSRT_URLGetHref(ctx, this_val, argc, argv);
 }
 
-static JSValue JSRT_URLToJSON(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv) {
+static JSValue JSRT_URLToJSON(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
   return JSRT_URLGetHref(ctx, this_val, argc, argv);
 }
 
 // URLSearchParams implementation
 typedef struct JSRT_URLSearchParam {
-  char *name;
-  char *value;
-  struct JSRT_URLSearchParam *next;
+  char* name;
+  char* value;
+  struct JSRT_URLSearchParam* next;
 } JSRT_URLSearchParam;
 
 typedef struct {
-  JSRT_URLSearchParam *params;
+  JSRT_URLSearchParam* params;
 } JSRT_URLSearchParams;
 
-static void JSRT_FreeSearchParams(JSRT_URLSearchParams *search_params) {
+static void JSRT_FreeSearchParams(JSRT_URLSearchParams* search_params) {
   if (search_params) {
-    JSRT_URLSearchParam *param = search_params->params;
+    JSRT_URLSearchParam* param = search_params->params;
     while (param) {
-      JSRT_URLSearchParam *next = param->next;
+      JSRT_URLSearchParam* next = param->next;
       free(param->name);
       free(param->value);
       free(param);
@@ -263,8 +272,8 @@ static void JSRT_FreeSearchParams(JSRT_URLSearchParams *search_params) {
   }
 }
 
-static void JSRT_URLSearchParamsFinalize(JSRuntime *rt, JSValue val) {
-  JSRT_URLSearchParams *search_params = JS_GetOpaque(val, JSRT_URLSearchParamsClassID);
+static void JSRT_URLSearchParamsFinalize(JSRuntime* rt, JSValue val) {
+  JSRT_URLSearchParams* search_params = JS_GetOpaque(val, JSRT_URLSearchParamsClassID);
   if (search_params) {
     JSRT_FreeSearchParams(search_params);
   }
@@ -275,26 +284,27 @@ static JSClassDef JSRT_URLSearchParamsClass = {
     .finalizer = JSRT_URLSearchParamsFinalize,
 };
 
-static JSRT_URLSearchParams *JSRT_ParseSearchParams(const char *search_string) {
-  JSRT_URLSearchParams *search_params = malloc(sizeof(JSRT_URLSearchParams));
+static JSRT_URLSearchParams* JSRT_ParseSearchParams(const char* search_string) {
+  JSRT_URLSearchParams* search_params = malloc(sizeof(JSRT_URLSearchParams));
   search_params->params = NULL;
 
   if (!search_string || strlen(search_string) == 0) {
     return search_params;
   }
 
-  const char *start = search_string;
-  if (start[0] == '?') start++;  // Skip leading '?'
+  const char* start = search_string;
+  if (start[0] == '?')
+    start++;  // Skip leading '?'
 
-  char *params_copy = strdup(start);
-  char *param_str = strtok(params_copy, "&");
+  char* params_copy = strdup(start);
+  char* param_str = strtok(params_copy, "&");
 
-  JSRT_URLSearchParam **tail = &search_params->params;
+  JSRT_URLSearchParam** tail = &search_params->params;
 
   while (param_str) {
-    char *eq_pos = strchr(param_str, '=');
+    char* eq_pos = strchr(param_str, '=');
 
-    JSRT_URLSearchParam *param = malloc(sizeof(JSRT_URLSearchParam));
+    JSRT_URLSearchParam* param = malloc(sizeof(JSRT_URLSearchParam));
     param->next = NULL;
 
     if (eq_pos) {
@@ -316,11 +326,11 @@ static JSRT_URLSearchParams *JSRT_ParseSearchParams(const char *search_string) {
   return search_params;
 }
 
-static JSValue JSRT_URLSearchParamsConstructor(JSContext *ctx, JSValueConst new_target, int argc, JSValueConst *argv) {
-  JSRT_URLSearchParams *search_params;
+static JSValue JSRT_URLSearchParamsConstructor(JSContext* ctx, JSValueConst new_target, int argc, JSValueConst* argv) {
+  JSRT_URLSearchParams* search_params;
 
   if (argc >= 1 && !JS_IsUndefined(argv[0])) {
-    const char *init_str = JS_ToCString(ctx, argv[0]);
+    const char* init_str = JS_ToCString(ctx, argv[0]);
     if (!init_str) {
       return JS_EXCEPTION;
     }
@@ -336,22 +346,22 @@ static JSValue JSRT_URLSearchParamsConstructor(JSContext *ctx, JSValueConst new_
   return obj;
 }
 
-static JSValue JSRT_URLSearchParamsGet(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv) {
+static JSValue JSRT_URLSearchParamsGet(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
   if (argc < 1) {
     return JS_ThrowTypeError(ctx, "get() requires 1 argument");
   }
 
-  JSRT_URLSearchParams *search_params = JS_GetOpaque2(ctx, this_val, JSRT_URLSearchParamsClassID);
+  JSRT_URLSearchParams* search_params = JS_GetOpaque2(ctx, this_val, JSRT_URLSearchParamsClassID);
   if (!search_params) {
     return JS_EXCEPTION;
   }
 
-  const char *name = JS_ToCString(ctx, argv[0]);
+  const char* name = JS_ToCString(ctx, argv[0]);
   if (!name) {
     return JS_EXCEPTION;
   }
 
-  JSRT_URLSearchParam *param = search_params->params;
+  JSRT_URLSearchParam* param = search_params->params;
   while (param) {
     if (strcmp(param->name, name) == 0) {
       JS_FreeCString(ctx, name);
@@ -364,27 +374,27 @@ static JSValue JSRT_URLSearchParamsGet(JSContext *ctx, JSValueConst this_val, in
   return JS_NULL;
 }
 
-static JSValue JSRT_URLSearchParamsSet(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv) {
+static JSValue JSRT_URLSearchParamsSet(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
   if (argc < 2) {
     return JS_ThrowTypeError(ctx, "set() requires 2 arguments");
   }
 
-  JSRT_URLSearchParams *search_params = JS_GetOpaque2(ctx, this_val, JSRT_URLSearchParamsClassID);
+  JSRT_URLSearchParams* search_params = JS_GetOpaque2(ctx, this_val, JSRT_URLSearchParamsClassID);
   if (!search_params) {
     return JS_EXCEPTION;
   }
 
-  const char *name = JS_ToCString(ctx, argv[0]);
-  const char *value = JS_ToCString(ctx, argv[1]);
+  const char* name = JS_ToCString(ctx, argv[0]);
+  const char* value = JS_ToCString(ctx, argv[1]);
   if (!name || !value) {
     return JS_EXCEPTION;
   }
 
   // Remove all existing params with this name
-  JSRT_URLSearchParam **current = &search_params->params;
+  JSRT_URLSearchParam** current = &search_params->params;
   while (*current) {
     if (strcmp((*current)->name, name) == 0) {
-      JSRT_URLSearchParam *to_remove = *current;
+      JSRT_URLSearchParam* to_remove = *current;
       *current = (*current)->next;
       free(to_remove->name);
       free(to_remove->value);
@@ -395,7 +405,7 @@ static JSValue JSRT_URLSearchParamsSet(JSContext *ctx, JSValueConst this_val, in
   }
 
   // Add new param
-  JSRT_URLSearchParam *new_param = malloc(sizeof(JSRT_URLSearchParam));
+  JSRT_URLSearchParam* new_param = malloc(sizeof(JSRT_URLSearchParam));
   new_param->name = strdup(name);
   new_param->value = strdup(value);
   new_param->next = search_params->params;
@@ -406,23 +416,23 @@ static JSValue JSRT_URLSearchParamsSet(JSContext *ctx, JSValueConst this_val, in
   return JS_UNDEFINED;
 }
 
-static JSValue JSRT_URLSearchParamsAppend(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv) {
+static JSValue JSRT_URLSearchParamsAppend(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
   if (argc < 2) {
     return JS_ThrowTypeError(ctx, "append() requires 2 arguments");
   }
 
-  JSRT_URLSearchParams *search_params = JS_GetOpaque2(ctx, this_val, JSRT_URLSearchParamsClassID);
+  JSRT_URLSearchParams* search_params = JS_GetOpaque2(ctx, this_val, JSRT_URLSearchParamsClassID);
   if (!search_params) {
     return JS_EXCEPTION;
   }
 
-  const char *name = JS_ToCString(ctx, argv[0]);
-  const char *value = JS_ToCString(ctx, argv[1]);
+  const char* name = JS_ToCString(ctx, argv[0]);
+  const char* value = JS_ToCString(ctx, argv[1]);
   if (!name || !value) {
     return JS_EXCEPTION;
   }
 
-  JSRT_URLSearchParam *new_param = malloc(sizeof(JSRT_URLSearchParam));
+  JSRT_URLSearchParam* new_param = malloc(sizeof(JSRT_URLSearchParam));
   new_param->name = strdup(name);
   new_param->value = strdup(value);
   new_param->next = search_params->params;
@@ -433,22 +443,22 @@ static JSValue JSRT_URLSearchParamsAppend(JSContext *ctx, JSValueConst this_val,
   return JS_UNDEFINED;
 }
 
-static JSValue JSRT_URLSearchParamsHas(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv) {
+static JSValue JSRT_URLSearchParamsHas(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
   if (argc < 1) {
     return JS_ThrowTypeError(ctx, "has() requires 1 argument");
   }
 
-  JSRT_URLSearchParams *search_params = JS_GetOpaque2(ctx, this_val, JSRT_URLSearchParamsClassID);
+  JSRT_URLSearchParams* search_params = JS_GetOpaque2(ctx, this_val, JSRT_URLSearchParamsClassID);
   if (!search_params) {
     return JS_EXCEPTION;
   }
 
-  const char *name = JS_ToCString(ctx, argv[0]);
+  const char* name = JS_ToCString(ctx, argv[0]);
   if (!name) {
     return JS_EXCEPTION;
   }
 
-  JSRT_URLSearchParam *param = search_params->params;
+  JSRT_URLSearchParam* param = search_params->params;
   while (param) {
     if (strcmp(param->name, name) == 0) {
       JS_FreeCString(ctx, name);
@@ -461,25 +471,25 @@ static JSValue JSRT_URLSearchParamsHas(JSContext *ctx, JSValueConst this_val, in
   return JS_NewBool(ctx, false);
 }
 
-static JSValue JSRT_URLSearchParamsDelete(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv) {
+static JSValue JSRT_URLSearchParamsDelete(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
   if (argc < 1) {
     return JS_ThrowTypeError(ctx, "delete() requires 1 argument");
   }
 
-  JSRT_URLSearchParams *search_params = JS_GetOpaque2(ctx, this_val, JSRT_URLSearchParamsClassID);
+  JSRT_URLSearchParams* search_params = JS_GetOpaque2(ctx, this_val, JSRT_URLSearchParamsClassID);
   if (!search_params) {
     return JS_EXCEPTION;
   }
 
-  const char *name = JS_ToCString(ctx, argv[0]);
+  const char* name = JS_ToCString(ctx, argv[0]);
   if (!name) {
     return JS_EXCEPTION;
   }
 
-  JSRT_URLSearchParam **current = &search_params->params;
+  JSRT_URLSearchParam** current = &search_params->params;
   while (*current) {
     if (strcmp((*current)->name, name) == 0) {
-      JSRT_URLSearchParam *to_remove = *current;
+      JSRT_URLSearchParam* to_remove = *current;
       *current = (*current)->next;
       free(to_remove->name);
       free(to_remove->value);
@@ -493,8 +503,8 @@ static JSValue JSRT_URLSearchParamsDelete(JSContext *ctx, JSValueConst this_val,
   return JS_UNDEFINED;
 }
 
-static JSValue JSRT_URLSearchParamsToString(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv) {
-  JSRT_URLSearchParams *search_params = JS_GetOpaque2(ctx, this_val, JSRT_URLSearchParamsClassID);
+static JSValue JSRT_URLSearchParamsToString(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
+  JSRT_URLSearchParams* search_params = JS_GetOpaque2(ctx, this_val, JSRT_URLSearchParamsClassID);
   if (!search_params) {
     return JS_EXCEPTION;
   }
@@ -505,7 +515,7 @@ static JSValue JSRT_URLSearchParamsToString(JSContext *ctx, JSValueConst this_va
 
   // Calculate total length needed
   size_t total_len = 0;
-  JSRT_URLSearchParam *param = search_params->params;
+  JSRT_URLSearchParam* param = search_params->params;
   int count = 0;
   while (param) {
     total_len += strlen(param->name) + strlen(param->value) + 2;  // name=value&
@@ -517,7 +527,7 @@ static JSValue JSRT_URLSearchParamsToString(JSContext *ctx, JSValueConst this_va
     return JS_NewString(ctx, "");
   }
 
-  char *result = malloc(total_len + 1);
+  char* result = malloc(total_len + 1);
   result[0] = '\0';
 
   param = search_params->params;
@@ -539,8 +549,8 @@ static JSValue JSRT_URLSearchParamsToString(JSContext *ctx, JSValueConst this_va
 }
 
 // Setup function
-void JSRT_RuntimeSetupStdURL(JSRT_Runtime *rt) {
-  JSContext *ctx = rt->ctx;
+void JSRT_RuntimeSetupStdURL(JSRT_Runtime* rt) {
+  JSContext* ctx = rt->ctx;
 
   JSRT_Debug("JSRT_RuntimeSetupStdURL: initializing URL/URLSearchParams API");
 

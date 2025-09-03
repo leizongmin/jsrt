@@ -13,18 +13,18 @@ JSClassID JSRT_FormDataClassID;
 
 // FormData entry
 typedef struct JSRT_FormDataEntry {
-  char *name;
+  char* name;
   JSValue value;
-  char *filename;  // For File entries
-  struct JSRT_FormDataEntry *next;
+  char* filename;  // For File entries
+  struct JSRT_FormDataEntry* next;
 } JSRT_FormDataEntry;
 
 // FormData implementation
 typedef struct {
-  JSRT_FormDataEntry *entries;
+  JSRT_FormDataEntry* entries;
 } JSRT_FormData;
 
-static void JSRT_FormDataEntryFree(JSRuntime *rt, JSRT_FormDataEntry *entry) {
+static void JSRT_FormDataEntryFree(JSRuntime* rt, JSRT_FormDataEntry* entry) {
   if (entry) {
     free(entry->name);
     free(entry->filename);
@@ -33,12 +33,12 @@ static void JSRT_FormDataEntryFree(JSRuntime *rt, JSRT_FormDataEntry *entry) {
   }
 }
 
-static void JSRT_FormDataFinalize(JSRuntime *rt, JSValue val) {
-  JSRT_FormData *formdata = JS_GetOpaque(val, JSRT_FormDataClassID);
+static void JSRT_FormDataFinalize(JSRuntime* rt, JSValue val) {
+  JSRT_FormData* formdata = JS_GetOpaque(val, JSRT_FormDataClassID);
   if (formdata) {
-    JSRT_FormDataEntry *entry = formdata->entries;
+    JSRT_FormDataEntry* entry = formdata->entries;
     while (entry) {
-      JSRT_FormDataEntry *next = entry->next;
+      JSRT_FormDataEntry* next = entry->next;
       JSRT_FormDataEntryFree(rt, entry);
       entry = next;
     }
@@ -51,8 +51,8 @@ static JSClassDef JSRT_FormDataClass = {
     .finalizer = JSRT_FormDataFinalize,
 };
 
-static JSValue JSRT_FormDataConstructor(JSContext *ctx, JSValueConst new_target, int argc, JSValueConst *argv) {
-  JSRT_FormData *formdata = malloc(sizeof(JSRT_FormData));
+static JSValue JSRT_FormDataConstructor(JSContext* ctx, JSValueConst new_target, int argc, JSValueConst* argv) {
+  JSRT_FormData* formdata = malloc(sizeof(JSRT_FormData));
   formdata->entries = NULL;
 
   JSValue obj = JS_NewObjectClass(ctx, JSRT_FormDataClassID);
@@ -60,8 +60,8 @@ static JSValue JSRT_FormDataConstructor(JSContext *ctx, JSValueConst new_target,
   return obj;
 }
 
-static JSRT_FormDataEntry *JSRT_FormDataFindEntry(JSRT_FormData *formdata, const char *name) {
-  JSRT_FormDataEntry *entry = formdata->entries;
+static JSRT_FormDataEntry* JSRT_FormDataFindEntry(JSRT_FormData* formdata, const char* name) {
+  JSRT_FormDataEntry* entry = formdata->entries;
   while (entry) {
     if (strcmp(entry->name, name) == 0) {
       return entry;
@@ -71,9 +71,9 @@ static JSRT_FormDataEntry *JSRT_FormDataFindEntry(JSRT_FormData *formdata, const
   return NULL;
 }
 
-static void JSRT_FormDataAddEntry(JSContext *ctx, JSRT_FormData *formdata, const char *name, JSValue value,
-                                  const char *filename) {
-  JSRT_FormDataEntry *entry = malloc(sizeof(JSRT_FormDataEntry));
+static void JSRT_FormDataAddEntry(JSContext* ctx, JSRT_FormData* formdata, const char* name, JSValue value,
+                                  const char* filename) {
+  JSRT_FormDataEntry* entry = malloc(sizeof(JSRT_FormDataEntry));
   entry->name = strdup(name);
   entry->value = JS_DupValue(ctx, value);
   entry->filename = filename ? strdup(filename) : NULL;
@@ -81,11 +81,11 @@ static void JSRT_FormDataAddEntry(JSContext *ctx, JSRT_FormData *formdata, const
   formdata->entries = entry;
 }
 
-static void JSRT_FormDataRemoveEntry(JSRuntime *rt, JSRT_FormData *formdata, const char *name) {
-  JSRT_FormDataEntry **entry = &formdata->entries;
+static void JSRT_FormDataRemoveEntry(JSRuntime* rt, JSRT_FormData* formdata, const char* name) {
+  JSRT_FormDataEntry** entry = &formdata->entries;
   while (*entry) {
     if (strcmp((*entry)->name, name) == 0) {
-      JSRT_FormDataEntry *to_remove = *entry;
+      JSRT_FormDataEntry* to_remove = *entry;
       *entry = (*entry)->next;
       JSRT_FormDataEntryFree(rt, to_remove);
       return;
@@ -94,8 +94,8 @@ static void JSRT_FormDataRemoveEntry(JSRuntime *rt, JSRT_FormData *formdata, con
   }
 }
 
-static JSValue JSRT_FormDataAppend(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv) {
-  JSRT_FormData *formdata = JS_GetOpaque(this_val, JSRT_FormDataClassID);
+static JSValue JSRT_FormDataAppend(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
+  JSRT_FormData* formdata = JS_GetOpaque(this_val, JSRT_FormDataClassID);
   if (!formdata) {
     return JS_EXCEPTION;
   }
@@ -104,19 +104,20 @@ static JSValue JSRT_FormDataAppend(JSContext *ctx, JSValueConst this_val, int ar
     return JS_ThrowTypeError(ctx, "FormData.append requires at least 2 arguments");
   }
 
-  const char *name = JS_ToCString(ctx, argv[0]);
-  const char *filename = (argc > 2 && JS_IsString(argv[2])) ? JS_ToCString(ctx, argv[2]) : NULL;
+  const char* name = JS_ToCString(ctx, argv[0]);
+  const char* filename = (argc > 2 && JS_IsString(argv[2])) ? JS_ToCString(ctx, argv[2]) : NULL;
 
   JSRT_FormDataAddEntry(ctx, formdata, name, argv[1], filename);
 
   JS_FreeCString(ctx, name);
-  if (filename) JS_FreeCString(ctx, filename);
+  if (filename)
+    JS_FreeCString(ctx, filename);
 
   return JS_UNDEFINED;
 }
 
-static JSValue JSRT_FormDataDelete(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv) {
-  JSRT_FormData *formdata = JS_GetOpaque(this_val, JSRT_FormDataClassID);
+static JSValue JSRT_FormDataDelete(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
+  JSRT_FormData* formdata = JS_GetOpaque(this_val, JSRT_FormDataClassID);
   if (!formdata) {
     return JS_EXCEPTION;
   }
@@ -125,15 +126,15 @@ static JSValue JSRT_FormDataDelete(JSContext *ctx, JSValueConst this_val, int ar
     return JS_ThrowTypeError(ctx, "FormData.delete requires 1 argument");
   }
 
-  const char *name = JS_ToCString(ctx, argv[0]);
+  const char* name = JS_ToCString(ctx, argv[0]);
   JSRT_FormDataRemoveEntry(JS_GetRuntime(ctx), formdata, name);
   JS_FreeCString(ctx, name);
 
   return JS_UNDEFINED;
 }
 
-static JSValue JSRT_FormDataGet(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv) {
-  JSRT_FormData *formdata = JS_GetOpaque(this_val, JSRT_FormDataClassID);
+static JSValue JSRT_FormDataGet(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
+  JSRT_FormData* formdata = JS_GetOpaque(this_val, JSRT_FormDataClassID);
   if (!formdata) {
     return JS_EXCEPTION;
   }
@@ -142,8 +143,8 @@ static JSValue JSRT_FormDataGet(JSContext *ctx, JSValueConst this_val, int argc,
     return JS_ThrowTypeError(ctx, "FormData.get requires 1 argument");
   }
 
-  const char *name = JS_ToCString(ctx, argv[0]);
-  JSRT_FormDataEntry *entry = JSRT_FormDataFindEntry(formdata, name);
+  const char* name = JS_ToCString(ctx, argv[0]);
+  JSRT_FormDataEntry* entry = JSRT_FormDataFindEntry(formdata, name);
   JS_FreeCString(ctx, name);
 
   if (entry) {
@@ -153,8 +154,8 @@ static JSValue JSRT_FormDataGet(JSContext *ctx, JSValueConst this_val, int argc,
   return JS_NULL;
 }
 
-static JSValue JSRT_FormDataGetAll(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv) {
-  JSRT_FormData *formdata = JS_GetOpaque(this_val, JSRT_FormDataClassID);
+static JSValue JSRT_FormDataGetAll(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
+  JSRT_FormData* formdata = JS_GetOpaque(this_val, JSRT_FormDataClassID);
   if (!formdata) {
     return JS_EXCEPTION;
   }
@@ -163,11 +164,11 @@ static JSValue JSRT_FormDataGetAll(JSContext *ctx, JSValueConst this_val, int ar
     return JS_ThrowTypeError(ctx, "FormData.getAll requires 1 argument");
   }
 
-  const char *name = JS_ToCString(ctx, argv[0]);
+  const char* name = JS_ToCString(ctx, argv[0]);
   JSValue result = JS_NewArray(ctx);
   uint32_t index = 0;
 
-  JSRT_FormDataEntry *entry = formdata->entries;
+  JSRT_FormDataEntry* entry = formdata->entries;
   while (entry) {
     if (strcmp(entry->name, name) == 0) {
       JS_SetPropertyUint32(ctx, result, index++, JS_DupValue(ctx, entry->value));
@@ -179,8 +180,8 @@ static JSValue JSRT_FormDataGetAll(JSContext *ctx, JSValueConst this_val, int ar
   return result;
 }
 
-static JSValue JSRT_FormDataHas(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv) {
-  JSRT_FormData *formdata = JS_GetOpaque(this_val, JSRT_FormDataClassID);
+static JSValue JSRT_FormDataHas(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
+  JSRT_FormData* formdata = JS_GetOpaque(this_val, JSRT_FormDataClassID);
   if (!formdata) {
     return JS_EXCEPTION;
   }
@@ -189,15 +190,15 @@ static JSValue JSRT_FormDataHas(JSContext *ctx, JSValueConst this_val, int argc,
     return JS_ThrowTypeError(ctx, "FormData.has requires 1 argument");
   }
 
-  const char *name = JS_ToCString(ctx, argv[0]);
-  JSRT_FormDataEntry *entry = JSRT_FormDataFindEntry(formdata, name);
+  const char* name = JS_ToCString(ctx, argv[0]);
+  JSRT_FormDataEntry* entry = JSRT_FormDataFindEntry(formdata, name);
   JS_FreeCString(ctx, name);
 
   return JS_NewBool(ctx, entry != NULL);
 }
 
-static JSValue JSRT_FormDataSet(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv) {
-  JSRT_FormData *formdata = JS_GetOpaque(this_val, JSRT_FormDataClassID);
+static JSValue JSRT_FormDataSet(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
+  JSRT_FormData* formdata = JS_GetOpaque(this_val, JSRT_FormDataClassID);
   if (!formdata) {
     return JS_EXCEPTION;
   }
@@ -206,23 +207,24 @@ static JSValue JSRT_FormDataSet(JSContext *ctx, JSValueConst this_val, int argc,
     return JS_ThrowTypeError(ctx, "FormData.set requires at least 2 arguments");
   }
 
-  const char *name = JS_ToCString(ctx, argv[0]);
+  const char* name = JS_ToCString(ctx, argv[0]);
 
   // Remove existing entry
   JSRT_FormDataRemoveEntry(JS_GetRuntime(ctx), formdata, name);
 
   // Add new entry
-  const char *filename = (argc > 2 && JS_IsString(argv[2])) ? JS_ToCString(ctx, argv[2]) : NULL;
+  const char* filename = (argc > 2 && JS_IsString(argv[2])) ? JS_ToCString(ctx, argv[2]) : NULL;
   JSRT_FormDataAddEntry(ctx, formdata, name, argv[1], filename);
 
   JS_FreeCString(ctx, name);
-  if (filename) JS_FreeCString(ctx, filename);
+  if (filename)
+    JS_FreeCString(ctx, filename);
 
   return JS_UNDEFINED;
 }
 
-static JSValue JSRT_FormDataForEach(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv) {
-  JSRT_FormData *formdata = JS_GetOpaque(this_val, JSRT_FormDataClassID);
+static JSValue JSRT_FormDataForEach(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
+  JSRT_FormData* formdata = JS_GetOpaque(this_val, JSRT_FormDataClassID);
   if (!formdata) {
     return JS_EXCEPTION;
   }
@@ -234,7 +236,7 @@ static JSValue JSRT_FormDataForEach(JSContext *ctx, JSValueConst this_val, int a
   JSValue callback = argv[0];
   JSValue thisArg = (argc > 1) ? argv[1] : JS_UNDEFINED;
 
-  JSRT_FormDataEntry *entry = formdata->entries;
+  JSRT_FormDataEntry* entry = formdata->entries;
   while (entry) {
     JSValue args[] = {JS_DupValue(ctx, entry->value), JS_NewString(ctx, entry->name), JS_DupValue(ctx, this_val)};
     JSValue result = JS_Call(ctx, callback, thisArg, 3, args);
@@ -255,10 +257,10 @@ static JSValue JSRT_FormDataForEach(JSContext *ctx, JSValueConst this_val, int a
   return JS_UNDEFINED;
 }
 
-void JSRT_RuntimeSetupStdFormData(JSRT_Runtime *rt) {
+void JSRT_RuntimeSetupStdFormData(JSRT_Runtime* rt) {
   JSRT_Debug("JSRT_RuntimeSetupStdFormData: initializing FormData API");
 
-  JSContext *ctx = rt->ctx;
+  JSContext* ctx = rt->ctx;
 
   // Register FormData class
   JS_NewClassID(&JSRT_FormDataClassID);

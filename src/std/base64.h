@@ -3,6 +3,6 @@
 
 #include "../runtime.h"
 
-void JSRT_RuntimeSetupStdBase64(JSRT_Runtime *rt);
+void JSRT_RuntimeSetupStdBase64(JSRT_Runtime* rt);
 
 #endif

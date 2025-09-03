@@ -15,68 +15,68 @@
 // Cross-platform dynamic loading abstractions
 #ifdef _WIN32
 extern HMODULE openssl_handle;
-#define JSRT_DLSYM(handle, name) ((void *)GetProcAddress(handle, name))
+#define JSRT_DLSYM(handle, name) ((void*)GetProcAddress(handle, name))
 #else
-extern void *openssl_handle;
+extern void* openssl_handle;
 #define JSRT_DLSYM(handle, name) dlsym(handle, name)
 #endif
 
 // OpenSSL function pointers for RSA operations
 typedef struct {
   // Key generation and management
-  void *(*EVP_PKEY_new)(void);
-  void (*EVP_PKEY_free)(void *pkey);
-  void *(*EVP_PKEY_CTX_new_id)(int id, void *e);
-  void *(*EVP_PKEY_CTX_new)(void *pkey, void *e);
-  void (*EVP_PKEY_CTX_free)(void *ctx);
-  int (*EVP_PKEY_keygen_init)(void *ctx);
-  int (*EVP_PKEY_keygen)(void *ctx, void **pkey);
-  int (*EVP_PKEY_CTX_ctrl)(void *ctx, int keytype, int optype, int cmd, int p1, void *p2);
+  void* (*EVP_PKEY_new)(void);
+  void (*EVP_PKEY_free)(void* pkey);
+  void* (*EVP_PKEY_CTX_new_id)(int id, void* e);
+  void* (*EVP_PKEY_CTX_new)(void* pkey, void* e);
+  void (*EVP_PKEY_CTX_free)(void* ctx);
+  int (*EVP_PKEY_keygen_init)(void* ctx);
+  int (*EVP_PKEY_keygen)(void* ctx, void** pkey);
+  int (*EVP_PKEY_CTX_ctrl)(void* ctx, int keytype, int optype, int cmd, int p1, void* p2);
 
   // Encryption/Decryption
-  int (*EVP_PKEY_encrypt_init)(void *ctx);
-  int (*EVP_PKEY_encrypt)(void *ctx, unsigned char *out, size_t *outlen, const unsigned char *in, size_t inlen);
-  int (*EVP_PKEY_decrypt_init)(void *ctx);
-  int (*EVP_PKEY_decrypt)(void *ctx, unsigned char *out, size_t *outlen, const unsigned char *in, size_t inlen);
+  int (*EVP_PKEY_encrypt_init)(void* ctx);
+  int (*EVP_PKEY_encrypt)(void* ctx, unsigned char* out, size_t* outlen, const unsigned char* in, size_t inlen);
+  int (*EVP_PKEY_decrypt_init)(void* ctx);
+  int (*EVP_PKEY_decrypt)(void* ctx, unsigned char* out, size_t* outlen, const unsigned char* in, size_t inlen);
 
   // Signature/Verification
-  int (*EVP_PKEY_sign_init)(void *ctx);
-  int (*EVP_PKEY_sign)(void *ctx, unsigned char *sig, size_t *siglen, const unsigned char *tbs, size_t tbslen);
-  int (*EVP_PKEY_verify_init)(void *ctx);
-  int (*EVP_PKEY_verify)(void *ctx, const unsigned char *sig, size_t siglen, const unsigned char *tbs, size_t tbslen);
+  int (*EVP_PKEY_sign_init)(void* ctx);
+  int (*EVP_PKEY_sign)(void* ctx, unsigned char* sig, size_t* siglen, const unsigned char* tbs, size_t tbslen);
+  int (*EVP_PKEY_verify_init)(void* ctx);
+  int (*EVP_PKEY_verify)(void* ctx, const unsigned char* sig, size_t siglen, const unsigned char* tbs, size_t tbslen);
 
   // Digest signature/verification
-  int (*EVP_DigestSignInit)(void *ctx, void **pctx, const void *type, void *e, void *pkey);
-  int (*EVP_DigestSign)(void *ctx, unsigned char *sigret, size_t *siglen, const unsigned char *tbs, size_t tbslen);
-  int (*EVP_DigestVerifyInit)(void *ctx, void **pctx, const void *type, void *e, void *pkey);
-  int (*EVP_DigestVerify)(void *ctx, const unsigned char *sigret, size_t siglen, const unsigned char *tbs,
+  int (*EVP_DigestSignInit)(void* ctx, void** pctx, const void* type, void* e, void* pkey);
+  int (*EVP_DigestSign)(void* ctx, unsigned char* sigret, size_t* siglen, const unsigned char* tbs, size_t tbslen);
+  int (*EVP_DigestVerifyInit)(void* ctx, void** pctx, const void* type, void* e, void* pkey);
+  int (*EVP_DigestVerify)(void* ctx, const unsigned char* sigret, size_t siglen, const unsigned char* tbs,
                           size_t tbslen);
 
   // Hash functions
-  const void *(*EVP_sha1)(void);
-  const void *(*EVP_sha256)(void);
-  const void *(*EVP_sha384)(void);
-  const void *(*EVP_sha512)(void);
+  const void* (*EVP_sha1)(void);
+  const void* (*EVP_sha256)(void);
+  const void* (*EVP_sha384)(void);
+  const void* (*EVP_sha512)(void);
 
   // Digest context functions
-  void *(*EVP_MD_CTX_new)(void);
-  void (*EVP_MD_CTX_free)(void *ctx);
-  int (*EVP_DigestInit_ex)(void *ctx, const void *type, void *impl);
-  int (*EVP_DigestUpdate)(void *ctx, const void *d, size_t cnt);
-  int (*EVP_DigestFinal_ex)(void *ctx, unsigned char *md, unsigned int *s);
-  int (*EVP_PKEY_CTX_set_signature_md)(void *ctx, const void *md);
+  void* (*EVP_MD_CTX_new)(void);
+  void (*EVP_MD_CTX_free)(void* ctx);
+  int (*EVP_DigestInit_ex)(void* ctx, const void* type, void* impl);
+  int (*EVP_DigestUpdate)(void* ctx, const void* d, size_t cnt);
+  int (*EVP_DigestFinal_ex)(void* ctx, unsigned char* md, unsigned int* s);
+  int (*EVP_PKEY_CTX_set_signature_md)(void* ctx, const void* md);
 
   // Additional control function
-  int (*EVP_PKEY_CTX_ctrl_str)(void *ctx, const char *type, const char *value);
+  int (*EVP_PKEY_CTX_ctrl_str)(void* ctx, const char* type, const char* value);
 
   // Random number generation
-  int (*RAND_bytes)(unsigned char *buf, int num);
+  int (*RAND_bytes)(unsigned char* buf, int num);
 
   // Key serialization
-  int (*i2d_PUBKEY)(void *a, unsigned char **pp);
-  int (*i2d_PrivateKey)(void *a, unsigned char **pp);
-  void *(*d2i_PUBKEY)(void **a, const unsigned char **pp, long length);
-  void *(*d2i_PrivateKey)(int type, void **a, const unsigned char **pp, long length);
+  int (*i2d_PUBKEY)(void* a, unsigned char** pp);
+  int (*i2d_PrivateKey)(void* a, unsigned char** pp);
+  void* (*d2i_PUBKEY)(void** a, const unsigned char** pp, long length);
+  void* (*d2i_PrivateKey)(int type, void** a, const unsigned char** pp, long length);
 } openssl_rsa_funcs_t;
 
 static openssl_rsa_funcs_t openssl_rsa_funcs = {0};
@@ -200,7 +200,7 @@ static bool load_rsa_functions(void) {
 }
 
 // Get OpenSSL hash function for RSA hash algorithm
-static const void *get_openssl_hash_func(jsrt_rsa_hash_algorithm_t hash_alg) {
+static const void* get_openssl_hash_func(jsrt_rsa_hash_algorithm_t hash_alg) {
   if (!load_rsa_functions()) {
     return NULL;
   }
@@ -208,7 +208,7 @@ static const void *get_openssl_hash_func(jsrt_rsa_hash_algorithm_t hash_alg) {
   switch (hash_alg) {
     case JSRT_RSA_HASH_SHA1:
       if (openssl_rsa_funcs.EVP_sha1) {
-        const void *sha1_func = openssl_rsa_funcs.EVP_sha1();
+        const void* sha1_func = openssl_rsa_funcs.EVP_sha1();
         JSRT_Debug("JSRT_Crypto_RSA: SHA-1 function: %p", sha1_func);
         return sha1_func;
       }
@@ -227,7 +227,7 @@ static const void *get_openssl_hash_func(jsrt_rsa_hash_algorithm_t hash_alg) {
 
 // Generate RSA key pair
 int jsrt_crypto_generate_rsa_keypair(size_t modulus_length_bits, uint32_t public_exponent,
-                                     jsrt_rsa_hash_algorithm_t hash_alg, jsrt_rsa_keypair_t **keypair) {
+                                     jsrt_rsa_hash_algorithm_t hash_alg, jsrt_rsa_keypair_t** keypair) {
   JSRT_Debug("JSRT_Crypto_RSA: Generating RSA key pair: %zu bits, exp=%u, hash=%d", modulus_length_bits,
              public_exponent, hash_alg);
 
@@ -243,7 +243,7 @@ int jsrt_crypto_generate_rsa_keypair(size_t modulus_length_bits, uint32_t public
   }
 
   // Create key generation context
-  void *ctx = openssl_rsa_funcs.EVP_PKEY_CTX_new_id(EVP_PKEY_RSA, NULL);
+  void* ctx = openssl_rsa_funcs.EVP_PKEY_CTX_new_id(EVP_PKEY_RSA, NULL);
   if (!ctx) {
     JSRT_Debug("JSRT_Crypto_RSA: Failed to create key generation context");
     printf("DEBUG: EVP_PKEY_CTX_new_id failed\n");
@@ -277,7 +277,7 @@ int jsrt_crypto_generate_rsa_keypair(size_t modulus_length_bits, uint32_t public
   // For now, OpenSSL will use the default F4 (65537) which is standard
 
   // Generate key pair
-  void *pkey = NULL;
+  void* pkey = NULL;
   if (openssl_rsa_funcs.EVP_PKEY_keygen(ctx, &pkey) <= 0 || !pkey) {
     openssl_rsa_funcs.EVP_PKEY_CTX_free(ctx);
     JSRT_Debug("JSRT_Crypto_RSA: Failed to generate RSA key pair");
@@ -306,15 +306,15 @@ int jsrt_crypto_generate_rsa_keypair(size_t modulus_length_bits, uint32_t public
 }
 
 // RSA-OAEP encryption
-int jsrt_crypto_rsa_encrypt(jsrt_rsa_params_t *params, const uint8_t *plaintext, size_t plaintext_length,
-                            uint8_t **ciphertext, size_t *ciphertext_length) {
+int jsrt_crypto_rsa_encrypt(jsrt_rsa_params_t* params, const uint8_t* plaintext, size_t plaintext_length,
+                            uint8_t** ciphertext, size_t* ciphertext_length) {
   if (!load_rsa_functions()) {
     JSRT_Debug("JSRT_Crypto_RSA: OpenSSL functions not available for encryption");
     return -1;
   }
 
   // Create encryption context
-  void *ctx = openssl_rsa_funcs.EVP_PKEY_CTX_new(params->rsa_key, NULL);
+  void* ctx = openssl_rsa_funcs.EVP_PKEY_CTX_new(params->rsa_key, NULL);
   if (!ctx) {
     JSRT_Debug("JSRT_Crypto_RSA: Failed to create encryption context");
     return -1;
@@ -340,9 +340,9 @@ int jsrt_crypto_rsa_encrypt(jsrt_rsa_params_t *params, const uint8_t *plaintext,
 
   // For OAEP, set hash function
   if (params->algorithm == JSRT_RSA_OAEP) {
-    const void *md = get_openssl_hash_func(params->hash_algorithm);
+    const void* md = get_openssl_hash_func(params->hash_algorithm);
     if (md && openssl_rsa_funcs.EVP_PKEY_CTX_ctrl(ctx, EVP_PKEY_RSA, EVP_PKEY_OP_ENCRYPT, EVP_PKEY_CTRL_RSA_OAEP_MD, 0,
-                                                  (void *)md) <= 0) {
+                                                  (void*)md) <= 0) {
       openssl_rsa_funcs.EVP_PKEY_CTX_free(ctx);
       JSRT_Debug("JSRT_Crypto_RSA: Failed to set OAEP hash function");
       return -1;
@@ -382,15 +382,15 @@ int jsrt_crypto_rsa_encrypt(jsrt_rsa_params_t *params, const uint8_t *plaintext,
 }
 
 // RSA-OAEP decryption
-int jsrt_crypto_rsa_decrypt(jsrt_rsa_params_t *params, const uint8_t *ciphertext, size_t ciphertext_length,
-                            uint8_t **plaintext, size_t *plaintext_length) {
+int jsrt_crypto_rsa_decrypt(jsrt_rsa_params_t* params, const uint8_t* ciphertext, size_t ciphertext_length,
+                            uint8_t** plaintext, size_t* plaintext_length) {
   if (!load_rsa_functions()) {
     JSRT_Debug("JSRT_Crypto_RSA: OpenSSL functions not available for decryption");
     return -1;
   }
 
   // Create decryption context
-  void *ctx = openssl_rsa_funcs.EVP_PKEY_CTX_new(params->rsa_key, NULL);
+  void* ctx = openssl_rsa_funcs.EVP_PKEY_CTX_new(params->rsa_key, NULL);
   if (!ctx) {
     JSRT_Debug("JSRT_Crypto_RSA: Failed to create decryption context");
     return -1;
@@ -416,9 +416,9 @@ int jsrt_crypto_rsa_decrypt(jsrt_rsa_params_t *params, const uint8_t *ciphertext
 
   // For OAEP, set hash function
   if (params->algorithm == JSRT_RSA_OAEP) {
-    const void *md = get_openssl_hash_func(params->hash_algorithm);
+    const void* md = get_openssl_hash_func(params->hash_algorithm);
     if (md && openssl_rsa_funcs.EVP_PKEY_CTX_ctrl(ctx, EVP_PKEY_RSA, EVP_PKEY_OP_DECRYPT, EVP_PKEY_CTRL_RSA_OAEP_MD, 0,
-                                                  (void *)md) <= 0) {
+                                                  (void*)md) <= 0) {
       openssl_rsa_funcs.EVP_PKEY_CTX_free(ctx);
       JSRT_Debug("JSRT_Crypto_RSA: Failed to set OAEP hash function");
       return -1;
@@ -458,7 +458,7 @@ int jsrt_crypto_rsa_decrypt(jsrt_rsa_params_t *params, const uint8_t *ciphertext
 }
 
 // Helper functions
-jsrt_rsa_algorithm_t jsrt_crypto_parse_rsa_algorithm(const char *algorithm_name) {
+jsrt_rsa_algorithm_t jsrt_crypto_parse_rsa_algorithm(const char* algorithm_name) {
   if (strcmp(algorithm_name, "RSA-OAEP") == 0) {
     return JSRT_RSA_OAEP;
   } else if (strcmp(algorithm_name, "RSA-PKCS1-v1_5") == 0) {
@@ -471,7 +471,7 @@ jsrt_rsa_algorithm_t jsrt_crypto_parse_rsa_algorithm(const char *algorithm_name)
   return JSRT_RSA_OAEP;  // Default fallback
 }
 
-jsrt_rsa_hash_algorithm_t jsrt_crypto_parse_rsa_hash_algorithm(const char *hash_name) {
+jsrt_rsa_hash_algorithm_t jsrt_crypto_parse_rsa_hash_algorithm(const char* hash_name) {
   if (strcmp(hash_name, "SHA-1") == 0) {
     return JSRT_RSA_HASH_SHA1;
   } else if (strcmp(hash_name, "SHA-256") == 0) {
@@ -484,7 +484,7 @@ jsrt_rsa_hash_algorithm_t jsrt_crypto_parse_rsa_hash_algorithm(const char *hash_
   return JSRT_RSA_HASH_SHA256;  // Default fallback
 }
 
-const char *jsrt_crypto_rsa_algorithm_to_string(jsrt_rsa_algorithm_t alg) {
+const char* jsrt_crypto_rsa_algorithm_to_string(jsrt_rsa_algorithm_t alg) {
   switch (alg) {
     case JSRT_RSA_OAEP:
       return "RSA-OAEP";
@@ -499,7 +499,7 @@ const char *jsrt_crypto_rsa_algorithm_to_string(jsrt_rsa_algorithm_t alg) {
   }
 }
 
-const char *jsrt_crypto_rsa_hash_algorithm_to_string(jsrt_rsa_hash_algorithm_t hash_alg) {
+const char* jsrt_crypto_rsa_hash_algorithm_to_string(jsrt_rsa_hash_algorithm_t hash_alg) {
   switch (hash_alg) {
     case JSRT_RSA_HASH_SHA1:
       return "SHA-1";
@@ -542,7 +542,7 @@ bool jsrt_crypto_is_rsa_hash_supported(jsrt_rsa_hash_algorithm_t hash_alg) {
 }
 
 // Memory management
-void jsrt_crypto_rsa_keypair_free(jsrt_rsa_keypair_t *keypair) {
+void jsrt_crypto_rsa_keypair_free(jsrt_rsa_keypair_t* keypair) {
   if (keypair) {
     if (keypair->public_key && openssl_rsa_funcs.EVP_PKEY_free) {
       openssl_rsa_funcs.EVP_PKEY_free(keypair->public_key);
@@ -552,7 +552,7 @@ void jsrt_crypto_rsa_keypair_free(jsrt_rsa_keypair_t *keypair) {
   }
 }
 
-void jsrt_crypto_rsa_params_free(jsrt_rsa_params_t *params) {
+void jsrt_crypto_rsa_params_free(jsrt_rsa_params_t* params) {
   if (params) {
     if (params->algorithm == JSRT_RSA_OAEP) {
       free(params->params.oaep.label);
@@ -562,14 +562,14 @@ void jsrt_crypto_rsa_params_free(jsrt_rsa_params_t *params) {
 }
 
 // Key extraction functions (for serialization)
-int jsrt_crypto_rsa_extract_public_key_data(void *public_key, uint8_t **key_data, size_t *key_data_length) {
+int jsrt_crypto_rsa_extract_public_key_data(void* public_key, uint8_t** key_data, size_t* key_data_length) {
   if (!load_rsa_functions() || !openssl_rsa_funcs.i2d_PUBKEY) {
     JSRT_Debug("JSRT_Crypto_RSA: OpenSSL functions not available for key extraction");
     return -1;
   }
 
   // Serialize public key to DER format
-  unsigned char *der_data = NULL;
+  unsigned char* der_data = NULL;
   int der_length = openssl_rsa_funcs.i2d_PUBKEY(public_key, &der_data);
 
   if (der_length <= 0 || !der_data) {
@@ -592,14 +592,14 @@ int jsrt_crypto_rsa_extract_public_key_data(void *public_key, uint8_t **key_data
   return 0;
 }
 
-int jsrt_crypto_rsa_extract_private_key_data(void *private_key, uint8_t **key_data, size_t *key_data_length) {
+int jsrt_crypto_rsa_extract_private_key_data(void* private_key, uint8_t** key_data, size_t* key_data_length) {
   if (!load_rsa_functions() || !openssl_rsa_funcs.i2d_PrivateKey) {
     JSRT_Debug("JSRT_Crypto_RSA: OpenSSL functions not available for key extraction");
     return -1;
   }
 
   // Serialize private key to DER format
-  unsigned char *der_data = NULL;
+  unsigned char* der_data = NULL;
   int der_length = openssl_rsa_funcs.i2d_PrivateKey(private_key, &der_data);
 
   if (der_length <= 0 || !der_data) {
@@ -623,14 +623,14 @@ int jsrt_crypto_rsa_extract_private_key_data(void *private_key, uint8_t **key_da
 }
 
 // Create EVP_PKEY from DER-encoded public key data
-void *jsrt_crypto_rsa_create_public_key_from_der(const uint8_t *key_data, size_t key_data_length) {
+void* jsrt_crypto_rsa_create_public_key_from_der(const uint8_t* key_data, size_t key_data_length) {
   if (!load_rsa_functions() || !openssl_rsa_funcs.d2i_PUBKEY) {
     JSRT_Debug("JSRT_Crypto_RSA: d2i_PUBKEY function not available");
     return NULL;
   }
 
-  const unsigned char *der_ptr = key_data;
-  void *pkey = openssl_rsa_funcs.d2i_PUBKEY(NULL, &der_ptr, key_data_length);
+  const unsigned char* der_ptr = key_data;
+  void* pkey = openssl_rsa_funcs.d2i_PUBKEY(NULL, &der_ptr, key_data_length);
 
   if (!pkey) {
     JSRT_Debug("JSRT_Crypto_RSA: Failed to deserialize public key from DER data");
@@ -642,14 +642,14 @@ void *jsrt_crypto_rsa_create_public_key_from_der(const uint8_t *key_data, size_t
 }
 
 // Create EVP_PKEY from DER-encoded private key data
-void *jsrt_crypto_rsa_create_private_key_from_der(const uint8_t *key_data, size_t key_data_length) {
+void* jsrt_crypto_rsa_create_private_key_from_der(const uint8_t* key_data, size_t key_data_length) {
   if (!load_rsa_functions() || !openssl_rsa_funcs.d2i_PrivateKey) {
     JSRT_Debug("JSRT_Crypto_RSA: d2i_PrivateKey function not available");
     return NULL;
   }
 
-  const unsigned char *der_ptr = key_data;
-  void *pkey = openssl_rsa_funcs.d2i_PrivateKey(EVP_PKEY_RSA, NULL, &der_ptr, key_data_length);
+  const unsigned char* der_ptr = key_data;
+  void* pkey = openssl_rsa_funcs.d2i_PrivateKey(EVP_PKEY_RSA, NULL, &der_ptr, key_data_length);
 
   if (!pkey) {
     JSRT_Debug("JSRT_Crypto_RSA: Failed to deserialize private key from DER data");
@@ -661,21 +661,21 @@ void *jsrt_crypto_rsa_create_private_key_from_der(const uint8_t *key_data, size_
 }
 
 // Helper function to compute hash
-static int compute_hash(const uint8_t *data, size_t data_length, jsrt_rsa_hash_algorithm_t hash_alg,
-                        uint8_t *hash_output, size_t *hash_length) {
+static int compute_hash(const uint8_t* data, size_t data_length, jsrt_rsa_hash_algorithm_t hash_alg,
+                        uint8_t* hash_output, size_t* hash_length) {
   if (!openssl_rsa_funcs.EVP_MD_CTX_new || !openssl_rsa_funcs.EVP_DigestInit_ex ||
       !openssl_rsa_funcs.EVP_DigestUpdate || !openssl_rsa_funcs.EVP_DigestFinal_ex) {
     JSRT_Debug("JSRT_Crypto_RSA: Hash functions not available");
     return -1;
   }
 
-  const void *md = get_openssl_hash_func(hash_alg);
+  const void* md = get_openssl_hash_func(hash_alg);
   if (!md) {
     JSRT_Debug("JSRT_Crypto_RSA: Unknown hash algorithm: %d", hash_alg);
     return -1;
   }
 
-  void *md_ctx = openssl_rsa_funcs.EVP_MD_CTX_new();
+  void* md_ctx = openssl_rsa_funcs.EVP_MD_CTX_new();
   if (!md_ctx) {
     JSRT_Debug("JSRT_Crypto_RSA: Failed to create hash context");
     return -1;
@@ -706,8 +706,8 @@ static int compute_hash(const uint8_t *data, size_t data_length, jsrt_rsa_hash_a
 }
 
 // RSA signature/verification implementations
-int jsrt_crypto_rsa_sign(jsrt_rsa_params_t *params, const uint8_t *data, size_t data_length, uint8_t **signature,
-                         size_t *signature_length) {
+int jsrt_crypto_rsa_sign(jsrt_rsa_params_t* params, const uint8_t* data, size_t data_length, uint8_t** signature,
+                         size_t* signature_length) {
   JSRT_Debug("JSRT_Crypto_RSA: Starting RSA signature, algorithm=%d, data_length=%zu", params->algorithm, data_length);
 
   if (!load_rsa_functions()) {
@@ -727,21 +727,21 @@ int jsrt_crypto_rsa_sign(jsrt_rsa_params_t *params, const uint8_t *data, size_t 
       return -1;
     }
 
-    const void *md = get_openssl_hash_func(params->hash_algorithm);
+    const void* md = get_openssl_hash_func(params->hash_algorithm);
     if (!md) {
       JSRT_Debug("JSRT_Crypto_RSA: Hash function not available: %d", params->hash_algorithm);
       return -1;
     }
 
     // Create message digest context
-    void *md_ctx = openssl_rsa_funcs.EVP_MD_CTX_new();
+    void* md_ctx = openssl_rsa_funcs.EVP_MD_CTX_new();
     if (!md_ctx) {
       JSRT_Debug("JSRT_Crypto_RSA: Failed to create message digest context");
       return -1;
     }
 
     // Initialize digest signing
-    void *pkey_ctx = NULL;
+    void* pkey_ctx = NULL;
     if (openssl_rsa_funcs.EVP_DigestSignInit(md_ctx, &pkey_ctx, md, NULL, params->rsa_key) <= 0) {
       openssl_rsa_funcs.EVP_MD_CTX_free(md_ctx);
       JSRT_Debug("JSRT_Crypto_RSA: Failed to initialize digest signing");
@@ -811,7 +811,7 @@ int jsrt_crypto_rsa_sign(jsrt_rsa_params_t *params, const uint8_t *data, size_t 
 
   // For other algorithms, use standard EVP_PKEY_sign
   // Create signing context
-  void *ctx = openssl_rsa_funcs.EVP_PKEY_CTX_new(params->rsa_key, NULL);
+  void* ctx = openssl_rsa_funcs.EVP_PKEY_CTX_new(params->rsa_key, NULL);
   if (!ctx) {
     JSRT_Debug("JSRT_Crypto_RSA: Failed to create signing context");
     return -1;
@@ -856,8 +856,8 @@ int jsrt_crypto_rsa_sign(jsrt_rsa_params_t *params, const uint8_t *data, size_t 
   return 0;
 }
 
-bool jsrt_crypto_rsa_verify(jsrt_rsa_params_t *params, const uint8_t *data, size_t data_length,
-                            const uint8_t *signature, size_t signature_length) {
+bool jsrt_crypto_rsa_verify(jsrt_rsa_params_t* params, const uint8_t* data, size_t data_length,
+                            const uint8_t* signature, size_t signature_length) {
   JSRT_Debug("JSRT_Crypto_RSA: Starting RSA verification, algorithm=%d, data_length=%zu", params->algorithm,
              data_length);
 
@@ -873,21 +873,21 @@ bool jsrt_crypto_rsa_verify(jsrt_rsa_params_t *params, const uint8_t *data, size
       return false;
     }
 
-    const void *md = get_openssl_hash_func(params->hash_algorithm);
+    const void* md = get_openssl_hash_func(params->hash_algorithm);
     if (!md) {
       JSRT_Debug("JSRT_Crypto_RSA: Hash function not available: %d", params->hash_algorithm);
       return false;
     }
 
     // Create message digest context
-    void *md_ctx = openssl_rsa_funcs.EVP_MD_CTX_new();
+    void* md_ctx = openssl_rsa_funcs.EVP_MD_CTX_new();
     if (!md_ctx) {
       JSRT_Debug("JSRT_Crypto_RSA: Failed to create message digest context");
       return false;
     }
 
     // Initialize digest verification
-    void *pkey_ctx = NULL;
+    void* pkey_ctx = NULL;
     if (openssl_rsa_funcs.EVP_DigestVerifyInit(md_ctx, &pkey_ctx, md, NULL, params->rsa_key) <= 0) {
       openssl_rsa_funcs.EVP_MD_CTX_free(md_ctx);
       JSRT_Debug("JSRT_Crypto_RSA: Failed to initialize digest verification");
@@ -933,7 +933,7 @@ bool jsrt_crypto_rsa_verify(jsrt_rsa_params_t *params, const uint8_t *data, size
 
   // For other algorithms, use standard EVP_PKEY_verify
   // Create verification context
-  void *ctx = openssl_rsa_funcs.EVP_PKEY_CTX_new(params->rsa_key, NULL);
+  void* ctx = openssl_rsa_funcs.EVP_PKEY_CTX_new(params->rsa_key, NULL);
   if (!ctx) {
     JSRT_Debug("JSRT_Crypto_RSA: Failed to create verification context");
     return false;

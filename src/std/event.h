@@ -7,6 +7,6 @@
 extern JSClassID JSRT_EventClassID;
 extern JSClassID JSRT_EventTargetClassID;
 
-void JSRT_RuntimeSetupStdEvent(JSRT_Runtime *rt);
+void JSRT_RuntimeSetupStdEvent(JSRT_Runtime* rt);
 
 #endif

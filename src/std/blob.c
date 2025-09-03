@@ -13,13 +13,13 @@ JSClassID JSRT_BlobClassID;
 
 // Blob implementation
 typedef struct {
-  uint8_t *data;
+  uint8_t* data;
   size_t size;
-  char *type;
+  char* type;
 } JSRT_Blob;
 
-static void JSRT_BlobFinalize(JSRuntime *rt, JSValue val) {
-  JSRT_Blob *blob = JS_GetOpaque(val, JSRT_BlobClassID);
+static void JSRT_BlobFinalize(JSRuntime* rt, JSValue val) {
+  JSRT_Blob* blob = JS_GetOpaque(val, JSRT_BlobClassID);
   if (blob) {
     free(blob->data);
     free(blob->type);
@@ -32,8 +32,8 @@ static JSClassDef JSRT_BlobClass = {
     .finalizer = JSRT_BlobFinalize,
 };
 
-static JSValue JSRT_BlobConstructor(JSContext *ctx, JSValueConst new_target, int argc, JSValueConst *argv) {
-  JSRT_Blob *blob = malloc(sizeof(JSRT_Blob));
+static JSValue JSRT_BlobConstructor(JSContext* ctx, JSValueConst new_target, int argc, JSValueConst* argv) {
+  JSRT_Blob* blob = malloc(sizeof(JSRT_Blob));
   blob->data = NULL;
   blob->size = 0;
   blob->type = strdup("");  // Default empty type
@@ -46,11 +46,11 @@ static JSValue JSRT_BlobConstructor(JSContext *ctx, JSValueConst new_target, int
     JS_FreeValue(ctx, length_val);
 
     size_t total_size = 0;
-    uint8_t **parts = NULL;
-    size_t *part_sizes = NULL;
+    uint8_t** parts = NULL;
+    size_t* part_sizes = NULL;
 
     if (length > 0) {
-      parts = malloc(length * sizeof(uint8_t *));
+      parts = malloc(length * sizeof(uint8_t*));
       part_sizes = malloc(length * sizeof(size_t));
 
       // Process each array element
@@ -58,7 +58,7 @@ static JSValue JSRT_BlobConstructor(JSContext *ctx, JSValueConst new_target, int
         JSValue element = JS_GetPropertyUint32(ctx, argv[0], i);
 
         if (JS_IsString(element)) {
-          const char *str = JS_ToCString(ctx, element);
+          const char* str = JS_ToCString(ctx, element);
           size_t str_len = strlen(str);
           parts[i] = malloc(str_len);
           memcpy(parts[i], str, str_len);
@@ -97,7 +97,7 @@ static JSValue JSRT_BlobConstructor(JSContext *ctx, JSValueConst new_target, int
   if (argc > 1 && JS_IsObject(argv[1])) {
     JSValue type_val = JS_GetPropertyStr(ctx, argv[1], "type");
     if (!JS_IsUndefined(type_val) && JS_IsString(type_val)) {
-      const char *type_str = JS_ToCString(ctx, type_val);
+      const char* type_str = JS_ToCString(ctx, type_val);
       free(blob->type);
       blob->type = strdup(type_str);
       JS_FreeCString(ctx, type_str);
@@ -110,24 +110,24 @@ static JSValue JSRT_BlobConstructor(JSContext *ctx, JSValueConst new_target, int
   return obj;
 }
 
-static JSValue JSRT_BlobGetSize(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv) {
-  JSRT_Blob *blob = JS_GetOpaque(this_val, JSRT_BlobClassID);
+static JSValue JSRT_BlobGetSize(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
+  JSRT_Blob* blob = JS_GetOpaque(this_val, JSRT_BlobClassID);
   if (!blob) {
     return JS_EXCEPTION;
   }
   return JS_NewBigUint64(ctx, blob->size);
 }
 
-static JSValue JSRT_BlobGetType(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv) {
-  JSRT_Blob *blob = JS_GetOpaque(this_val, JSRT_BlobClassID);
+static JSValue JSRT_BlobGetType(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
+  JSRT_Blob* blob = JS_GetOpaque(this_val, JSRT_BlobClassID);
   if (!blob) {
     return JS_EXCEPTION;
   }
   return JS_NewString(ctx, blob->type);
 }
 
-static JSValue JSRT_BlobSlice(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv) {
-  JSRT_Blob *blob = JS_GetOpaque(this_val, JSRT_BlobClassID);
+static JSValue JSRT_BlobSlice(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
+  JSRT_Blob* blob = JS_GetOpaque(this_val, JSRT_BlobClassID);
   if (!blob) {
     return JS_EXCEPTION;
   }
@@ -143,16 +143,23 @@ static JSValue JSRT_BlobSlice(JSContext *ctx, JSValueConst this_val, int argc, J
   }
 
   // Normalize indices
-  if (start < 0) start = blob->size + start;
-  if (end < 0) end = blob->size + end;
-  if (start < 0) start = 0;
-  if (end < 0) end = 0;
-  if (start > (int64_t)blob->size) start = blob->size;
-  if (end > (int64_t)blob->size) end = blob->size;
-  if (start > end) start = end;
+  if (start < 0)
+    start = blob->size + start;
+  if (end < 0)
+    end = blob->size + end;
+  if (start < 0)
+    start = 0;
+  if (end < 0)
+    end = 0;
+  if (start > (int64_t)blob->size)
+    start = blob->size;
+  if (end > (int64_t)blob->size)
+    end = blob->size;
+  if (start > end)
+    start = end;
 
   // Create new blob with sliced data
-  JSRT_Blob *new_blob = malloc(sizeof(JSRT_Blob));
+  JSRT_Blob* new_blob = malloc(sizeof(JSRT_Blob));
   new_blob->size = end - start;
   new_blob->type = strdup(blob->type);
 
@@ -168,14 +175,14 @@ static JSValue JSRT_BlobSlice(JSContext *ctx, JSValueConst this_val, int argc, J
   return new_obj;
 }
 
-static JSValue JSRT_BlobText(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv) {
-  JSRT_Blob *blob = JS_GetOpaque(this_val, JSRT_BlobClassID);
+static JSValue JSRT_BlobText(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
+  JSRT_Blob* blob = JS_GetOpaque(this_val, JSRT_BlobClassID);
   if (!blob) {
     return JS_EXCEPTION;
   }
 
   // Create text content
-  char *text = malloc(blob->size + 1);
+  char* text = malloc(blob->size + 1);
   if (blob->data && blob->size > 0) {
     memcpy(text, blob->data, blob->size);
   }
@@ -188,8 +195,8 @@ static JSValue JSRT_BlobText(JSContext *ctx, JSValueConst this_val, int argc, JS
   return result;
 }
 
-static JSValue JSRT_BlobArrayBuffer(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv) {
-  JSRT_Blob *blob = JS_GetOpaque(this_val, JSRT_BlobClassID);
+static JSValue JSRT_BlobArrayBuffer(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
+  JSRT_Blob* blob = JS_GetOpaque(this_val, JSRT_BlobClassID);
   if (!blob) {
     return JS_EXCEPTION;
   }
@@ -201,8 +208,8 @@ static JSValue JSRT_BlobArrayBuffer(JSContext *ctx, JSValueConst this_val, int a
   return arraybuffer;
 }
 
-static JSValue JSRT_BlobStream(JSContext *ctx, JSValueConst this_val, int argc, JSValueConst *argv) {
-  JSRT_Blob *blob = JS_GetOpaque(this_val, JSRT_BlobClassID);
+static JSValue JSRT_BlobStream(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
+  JSRT_Blob* blob = JS_GetOpaque(this_val, JSRT_BlobClassID);
   if (!blob) {
     return JS_EXCEPTION;
   }
@@ -220,10 +227,10 @@ static JSValue JSRT_BlobStream(JSContext *ctx, JSValueConst this_val, int argc, 
   return stream;
 }
 
-void JSRT_RuntimeSetupStdBlob(JSRT_Runtime *rt) {
+void JSRT_RuntimeSetupStdBlob(JSRT_Runtime* rt) {
   JSRT_Debug("JSRT_RuntimeSetupStdBlob: initializing Blob API");
 
-  JSContext *ctx = rt->ctx;
+  JSContext* ctx = rt->ctx;
 
   // Register Blob class
   JS_NewClassID(&JSRT_BlobClassID);

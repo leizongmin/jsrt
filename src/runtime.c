@@ -6,6 +6,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <unistd.h>
 #include <uv.h>
 
 #include "std/abort.h"
@@ -164,6 +165,13 @@ JSRT_EvalResult JSRT_RuntimeEval(JSRT_Runtime *rt, const char *filename, const c
   // JSRT_Debug("eval: filename=%s module=%d code=\n%s", filename, is_module, code);
 
   result.value = JS_Eval(rt->ctx, code, length, filename, eval_flags);
+
+  // Set up import.meta for modules loaded directly (not through import)
+  // Note: For modules, we need a different approach since JS_Eval behavior differs
+  if (is_module && !JS_IsException(result.value)) {
+    // For now, we'll implement this when we support import() or explicit module loading
+    // The challenge is that directly evaluated modules don't expose their JSModuleDef easily
+  }
 
   if (JS_IsException(result.value)) {
     result.is_error = true;

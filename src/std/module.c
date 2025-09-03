@@ -4,6 +4,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <unistd.h>
 
 #include "../util/debug.h"
 #include "../util/file.h"
@@ -166,6 +167,34 @@ JSModuleDef *JSRT_ModuleLoader(JSContext *ctx, const char *module_name, void *op
   // Get the module definition from the compiled function
   JSModuleDef *m = JS_VALUE_GET_PTR(func_val);
   JS_FreeValue(ctx, func_val);
+
+  // Set up import.meta for the module
+  JSValue meta_obj = JS_GetImportMeta(ctx, m);
+  if (!JS_IsUndefined(meta_obj)) {
+    // Set import.meta.url
+    char *url = malloc(strlen(module_name) + 8);  // "file://" + module_name + null
+    if (module_name[0] == '/') {
+      // Absolute path
+      snprintf(url, strlen(module_name) + 8, "file://%s", module_name);
+    } else if (strstr(module_name, "://")) {
+      // Already a URL
+      strcpy(url, module_name);
+    } else {
+      // Relative path - make it absolute
+      char cwd[1024];
+      if (getcwd(cwd, sizeof(cwd))) {
+        free(url);
+        url = malloc(strlen(cwd) + strlen(module_name) + 9);  // "file://" + cwd + "/" + module_name + null
+        snprintf(url, strlen(cwd) + strlen(module_name) + 9, "file://%s/%s", cwd, module_name);
+      } else {
+        snprintf(url, strlen(module_name) + 8, "file://%s", module_name);
+      }
+    }
+
+    JS_SetPropertyStr(ctx, meta_obj, "url", JS_NewString(ctx, url));
+    free(url);
+    JS_FreeValue(ctx, meta_obj);
+  }
 
   JSRT_Debug("JSRT_ModuleLoader: successfully loaded ES module '%s'", module_name);
   return m;

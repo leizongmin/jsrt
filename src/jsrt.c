@@ -1,13 +1,91 @@
 #include "jsrt.h"
 
+#include <stdbool.h>
+#include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
+#include <uv.h>
 
 #include "runtime.h"
 #include "std/process.h"
 #include "util/file.h"
+#include "util/http_client.h"
+
+// Forward declarations
+static bool is_url(const char *str);
+static JSRT_ReadFileResult download_url(const char *url);
+
+// Helper function to check if a string is a URL
+static bool is_url(const char *str) {
+  return (strncmp(str, "http://", 7) == 0 || strncmp(str, "https://", 8) == 0 || strncmp(str, "file://", 7) == 0);
+}
+
+// Helper function to download URL content using native HTTP client
+static JSRT_ReadFileResult download_url(const char *url) {
+  JSRT_ReadFileResult result = JSRT_ReadFileResultDefault();
+
+  // Handle file:// URLs
+  if (strncmp(url, "file://", 7) == 0) {
+    const char *filepath = url + 7;
+    return JSRT_ReadFile(filepath);
+  }
+
+  // Handle http:// URLs using direct HTTP client
+  if (strncmp(url, "http://", 7) == 0) {
+    JSRT_HttpResponse http_response = JSRT_HttpGet(url);
+
+    if (http_response.error != JSRT_HTTP_OK) {
+      result.error = JSRT_READ_FILE_ERROR_FILE_NOT_FOUND;
+      JSRT_HttpResponseFree(&http_response);
+      return result;
+    }
+
+    // Check HTTP status
+    if (http_response.status < 200 || http_response.status >= 300) {
+      result.error = JSRT_READ_FILE_ERROR_FILE_NOT_FOUND;
+      JSRT_HttpResponseFree(&http_response);
+      return result;
+    }
+
+    // Copy the response body
+    if (http_response.body && http_response.body_size > 0) {
+      result.data = malloc(http_response.body_size + 1);
+      if (result.data) {
+        memcpy(result.data, http_response.body, http_response.body_size);
+        result.data[http_response.body_size] = '\0';
+        result.size = http_response.body_size;
+        result.error = JSRT_READ_FILE_OK;
+      } else {
+        result.error = JSRT_READ_FILE_ERROR_OUT_OF_MEMORY;
+      }
+    } else {
+      // Empty response is still valid
+      result.data = malloc(1);
+      if (result.data) {
+        result.data[0] = '\0';
+        result.size = 0;
+        result.error = JSRT_READ_FILE_OK;
+      } else {
+        result.error = JSRT_READ_FILE_ERROR_OUT_OF_MEMORY;
+      }
+    }
+
+    JSRT_HttpResponseFree(&http_response);
+    return result;
+  }
+
+  // HTTPS not supported by simple HTTP client - could be extended later
+  if (strncmp(url, "https://", 8) == 0) {
+    result.error = JSRT_READ_FILE_ERROR_FILE_NOT_FOUND;
+    return result;
+  }
+
+  // Unsupported protocol
+  result.error = JSRT_READ_FILE_ERROR_FILE_NOT_FOUND;
+  return result;
+}
 
 int JSRT_CmdRunFile(const char *filename, int argc, char **argv) {
   // Store command line arguments for process module
@@ -20,7 +98,13 @@ int JSRT_CmdRunFile(const char *filename, int argc, char **argv) {
   JSRT_EvalResult res = JSRT_EvalResultDefault();
   JSRT_EvalResult res2 = JSRT_EvalResultDefault();
 
-  file = JSRT_ReadFile(filename);
+  // Check if filename is a URL and handle accordingly
+  if (is_url(filename)) {
+    file = download_url(filename);
+  } else {
+    file = JSRT_ReadFile(filename);
+  }
+
   if (file.error != JSRT_READ_FILE_OK) {
     fprintf(stderr, "Error: %s\n", JSRT_ReadFileErrorToString(file.error));
     ret = 1;
@@ -112,9 +196,40 @@ int JSRT_CmdRunStdin(int argc, char **argv) {
   JSRT_RuntimeRun(rt);
 
 end:
-  if (code) {
-    free(code);
+  if (code) free(code);
+  JSRT_EvalResultFree(&res2);
+  JSRT_EvalResultFree(&res);
+  JSRT_RuntimeFree(rt);
+  return ret;
+}
+
+int JSRT_CmdRunEval(const char *code, int argc, char **argv) {
+  // Store command line arguments for process module
+  g_jsrt_argc = argc;
+  g_jsrt_argv = argv;
+  int ret = 0;
+  JSRT_Runtime *rt = JSRT_RuntimeNew();
+
+  JSRT_EvalResult res = JSRT_EvalResultDefault();
+  JSRT_EvalResult res2 = JSRT_EvalResultDefault();
+
+  res = JSRT_RuntimeEval(rt, "<eval>", code, strlen(code));
+  if (res.is_error) {
+    fprintf(stderr, "%s\n", res.error);
+    ret = 1;
+    goto end;
   }
+
+  res2 = JSRT_RuntimeAwaitEvalResult(rt, &res);
+  if (res2.is_error) {
+    fprintf(stderr, "%s\n", res2.error);
+    ret = 1;
+    goto end;
+  }
+
+  JSRT_RuntimeRun(rt);
+
+end:
   JSRT_EvalResultFree(&res2);
   JSRT_EvalResultFree(&res);
   JSRT_RuntimeFree(rt);

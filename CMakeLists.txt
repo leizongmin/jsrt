@@ -97,26 +97,72 @@ add_subdirectory(deps/libuv)
 # build llhttp (minimal implementation)
 # Check if llhttp generated files exist, if not, build them
 if(NOT EXISTS "${CMAKE_SOURCE_DIR}/deps/llhttp/build/c/llhttp.c")
-    message(STATUS "llhttp build files not found, building llhttp...")
-    find_program(NPM_EXECUTABLE npm REQUIRED)
-    execute_process(
-        COMMAND ${NPM_EXECUTABLE} install
-        WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}/deps/llhttp
-        RESULT_VARIABLE NPM_INSTALL_RESULT
-    )
-    if(NOT NPM_INSTALL_RESULT EQUAL 0)
-        message(FATAL_ERROR "Failed to run npm install in deps/llhttp")
-    endif()
+    message(STATUS "llhttp build files not found, attempting to build llhttp...")
     
-    execute_process(
-        COMMAND ${NPM_EXECUTABLE} run build
-        WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}/deps/llhttp
-        RESULT_VARIABLE NPM_BUILD_RESULT
-    )
-    if(NOT NPM_BUILD_RESULT EQUAL 0)
-        message(FATAL_ERROR "Failed to run npm run build in deps/llhttp")
+    # Try to find npm executable
+    find_program(NPM_EXECUTABLE npm)
+    
+    if(NPM_EXECUTABLE)
+        message(STATUS "Found npm at: ${NPM_EXECUTABLE}")
+        
+        # First try npm install
+        execute_process(
+            COMMAND ${NPM_EXECUTABLE} install
+            WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}/deps/llhttp
+            RESULT_VARIABLE NPM_INSTALL_RESULT
+            OUTPUT_VARIABLE NPM_INSTALL_OUTPUT
+            ERROR_VARIABLE NPM_INSTALL_ERROR
+            OUTPUT_STRIP_TRAILING_WHITESPACE
+            ERROR_STRIP_TRAILING_WHITESPACE
+        )
+        
+        if(NOT NPM_INSTALL_RESULT EQUAL 0)
+            message(STATUS "npm install failed with code: ${NPM_INSTALL_RESULT}")
+            message(STATUS "npm install output: ${NPM_INSTALL_OUTPUT}")
+            message(STATUS "npm install error: ${NPM_INSTALL_ERROR}")
+            message(FATAL_ERROR 
+                "Failed to build llhttp dependencies.\n"
+                "This is likely due to missing Node.js/npm on Windows or permission issues.\n"
+                "Please either:\n"
+                "  1. Install Node.js and npm, then run: npm install && npm run build in deps/llhttp\n"
+                "  2. Or use a pre-built release that includes the generated llhttp files\n"
+                "  3. Or build on a Unix-like system where Node.js toolchain is available")
+        endif()
+        
+        # Then try npm run build
+        execute_process(
+            COMMAND ${NPM_EXECUTABLE} run build
+            WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}/deps/llhttp
+            RESULT_VARIABLE NPM_BUILD_RESULT
+            OUTPUT_VARIABLE NPM_BUILD_OUTPUT
+            ERROR_VARIABLE NPM_BUILD_ERROR
+            OUTPUT_STRIP_TRAILING_WHITESPACE
+            ERROR_STRIP_TRAILING_WHITESPACE
+        )
+        
+        if(NOT NPM_BUILD_RESULT EQUAL 0)
+            message(STATUS "npm run build failed with code: ${NPM_BUILD_RESULT}")
+            message(STATUS "npm run build output: ${NPM_BUILD_OUTPUT}")
+            message(STATUS "npm run build error: ${NPM_BUILD_ERROR}")
+            message(FATAL_ERROR 
+                "Failed to generate llhttp C files.\n"
+                "This requires Node.js with TypeScript support.\n"
+                "Please either:\n"
+                "  1. Ensure Node.js 18+ is installed and run: npm install && npm run build in deps/llhttp\n"
+                "  2. Or use a pre-built release that includes the generated llhttp files\n"
+                "  3. Or build on a Unix-like system where the Node.js toolchain works reliably")
+        endif()
+        
+        message(STATUS "llhttp build completed successfully")
+    else()
+        message(FATAL_ERROR 
+            "llhttp build files are missing and npm is not available.\n"
+            "The llhttp library requires generated C files that are built from TypeScript sources.\n"
+            "Please either:\n"
+            "  1. Install Node.js and npm, then run: git submodule update --init --recursive && cd deps/llhttp && npm install && npm run build\n"
+            "  2. Or use a pre-built release that includes the generated llhttp files\n"
+            "  3. Or build on a system where Node.js/npm is available (Linux/macOS usually work better)")
     endif()
-    message(STATUS "llhttp build completed successfully")
 endif()
 
 add_library(llhttp STATIC

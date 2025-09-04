@@ -354,8 +354,7 @@ JSModuleDef* JSRT_ModuleLoader(JSContext* ctx, const char* module_name, void* op
 
   // Check if this looks like a CommonJS module
   bool is_commonjs = false;
-  if (strstr(file_result.data, "module.exports") != NULL ||
-      strstr(file_result.data, "exports.") != NULL ||
+  if (strstr(file_result.data, "module.exports") != NULL || strstr(file_result.data, "exports.") != NULL ||
       strstr(file_result.data, "exports[") != NULL) {
     is_commonjs = true;
   }
@@ -363,12 +362,12 @@ JSModuleDef* JSRT_ModuleLoader(JSContext* ctx, const char* module_name, void* op
   JSModuleDef* m;
   if (is_commonjs) {
     JSRT_Debug("JSRT_ModuleLoader: detected CommonJS module, wrapping as ES module for '%s'", module_name);
-    
+
     // Create a synthetic ES module
     char* wrapper_code;
     size_t wrapper_size = strlen(file_result.data) + 1024;  // Increased buffer
     wrapper_code = malloc(wrapper_size);
-    
+
     // Create a wrapper that loads the CommonJS module and exports it
     snprintf(wrapper_code, wrapper_size,
              "// Auto-generated ES module wrapper for CommonJS module\n"
@@ -396,10 +395,10 @@ JSModuleDef* JSRT_ModuleLoader(JSContext* ctx, const char* module_name, void* op
              "export default __cjs_module.exports;\n",
              module_name, file_result.data);
 
-    JSValue func_val = JS_Eval(ctx, wrapper_code, strlen(wrapper_code), module_name, 
-                              JS_EVAL_TYPE_MODULE | JS_EVAL_FLAG_COMPILE_ONLY);
+    JSValue func_val =
+        JS_Eval(ctx, wrapper_code, strlen(wrapper_code), module_name, JS_EVAL_TYPE_MODULE | JS_EVAL_FLAG_COMPILE_ONLY);
     free(wrapper_code);
-    
+
     if (JS_IsException(func_val)) {
       JSRT_Debug("JSRT_ModuleLoader: failed to compile CommonJS wrapper for '%s'", module_name);
       JSRT_ReadFileResultFree(&file_result);
@@ -408,7 +407,7 @@ JSModuleDef* JSRT_ModuleLoader(JSContext* ctx, const char* module_name, void* op
 
     m = JS_VALUE_GET_PTR(func_val);
     JS_FreeValue(ctx, func_val);
-    
+
   } else {
     // Compile as ES module - the module loader is only for ES modules
     JSValue func_val =
@@ -597,7 +596,7 @@ static JSValue js_require(JSContext* ctx, JSValueConst this_val, int argc, JSVal
   // Call the wrapper function with CommonJS arguments
   JSValue global = JS_GetGlobalObject(ctx);
   JSValue require_func = JS_GetPropertyStr(ctx, global, "require");
-  
+
   // Calculate __dirname as the directory containing the module file
   char* dirname_str = strdup(final_path);
   char* last_slash = strrchr(dirname_str, '/');
@@ -606,12 +605,10 @@ static JSValue js_require(JSContext* ctx, JSValueConst this_val, int argc, JSVal
   } else {
     strcpy(dirname_str, ".");
   }
-  
-  JSValue args[5] = {
-      JS_DupValue(ctx, exports), require_func, JS_DupValue(ctx, module), JS_NewString(ctx, final_path),
-      JS_NewString(ctx, dirname_str)
-  };
-  
+
+  JSValue args[5] = {JS_DupValue(ctx, exports), require_func, JS_DupValue(ctx, module), JS_NewString(ctx, final_path),
+                     JS_NewString(ctx, dirname_str)};
+
   free(dirname_str);
 
   // Set current module path context for relative require resolution

@@ -3344,6 +3344,11 @@ static uint8_t* base64url_string_to_bigint(JSContext* ctx, JSValue str_val, size
   return result;
 }
 
+// Convert base64url string to binary data (same as bigint but clearer naming)
+static uint8_t* base64url_string_to_binary(JSContext* ctx, JSValue str_val, size_t* out_len) {
+  return base64url_string_to_bigint(ctx, str_val, out_len);
+}
+
 // JWK import implementation for RSA keys
 static JSValue jsrt_import_jwk_rsa_key(JSContext* ctx, JSValue jwk_obj, jsrt_crypto_algorithm_t alg, JSValue crypto_key,
                                        bool extractable, JSValue usages) {
@@ -3486,6 +3491,264 @@ static JSValue jsrt_import_jwk_rsa_key(JSContext* ctx, JSValue jwk_obj, jsrt_cry
   return create_resolved_promise(ctx, crypto_key);
 }
 
+// ECDSA JWK import implementation
+static JSValue jsrt_import_jwk_ec_key(JSContext* ctx, JSValue jwk_obj, jsrt_crypto_algorithm_t alg, JSValue crypto_key,
+                                      bool extractable, JSValue usages) {
+  extern void* openssl_handle;
+  if (!openssl_handle) {
+    return jsrt_crypto_throw_error(ctx, "NotSupportedError", "OpenSSL not available");
+  }
+
+  // Get required parameters: crv (curve), x, y coordinates
+  JSValue crv_val = JS_GetPropertyStr(ctx, jwk_obj, "crv");
+  JSValue x_val = JS_GetPropertyStr(ctx, jwk_obj, "x");
+  JSValue y_val = JS_GetPropertyStr(ctx, jwk_obj, "y");
+
+  if (JS_IsUndefined(crv_val) || JS_IsUndefined(x_val) || JS_IsUndefined(y_val)) {
+    JS_FreeValue(ctx, crv_val);
+    JS_FreeValue(ctx, x_val);
+    JS_FreeValue(ctx, y_val);
+    return jsrt_crypto_throw_error(ctx, "DataError", "Missing required EC parameters 'crv', 'x' or 'y'");
+  }
+
+  const char* crv = JS_ToCString(ctx, crv_val);
+  if (!crv) {
+    JS_FreeValue(ctx, crv_val);
+    JS_FreeValue(ctx, x_val);
+    JS_FreeValue(ctx, y_val);
+    return jsrt_crypto_throw_error(ctx, "DataError", "Invalid 'crv' parameter in EC JWK");
+  }
+
+  // Map curve name to OpenSSL NID
+  int curve_nid = 0;
+  if (strcmp(crv, "P-256") == 0) {
+    curve_nid = 415;  // NID_X9_62_prime256v1
+  } else if (strcmp(crv, "P-384") == 0) {
+    curve_nid = 715;  // NID_secp384r1
+  } else if (strcmp(crv, "P-521") == 0) {
+    curve_nid = 716;  // NID_secp521r1
+  } else {
+    JS_FreeCString(ctx, crv);
+    JS_FreeValue(ctx, crv_val);
+    JS_FreeValue(ctx, x_val);
+    JS_FreeValue(ctx, y_val);
+    JSValue error = jsrt_crypto_throw_error(ctx, "DataError", "Unsupported curve in EC JWK");
+    return create_rejected_promise(ctx, error);
+  }
+
+  JS_FreeCString(ctx, crv);
+  JS_FreeValue(ctx, crv_val);
+
+  // Decode base64url coordinates
+  size_t x_len, y_len;
+  uint8_t* x_data = base64url_string_to_bigint(ctx, x_val, &x_len);
+  uint8_t* y_data = base64url_string_to_bigint(ctx, y_val, &y_len);
+
+  JS_FreeValue(ctx, x_val);
+  JS_FreeValue(ctx, y_val);
+
+  if (!x_data || !y_data) {
+    if (x_data)
+      free(x_data);
+    if (y_data)
+      free(y_data);
+    JSValue error = jsrt_crypto_throw_error(ctx, "DataError", "Invalid base64url encoding in EC parameters");
+    return create_rejected_promise(ctx, error);
+  }
+
+  // Load OpenSSL functions
+  void* (*EVP_PKEY_new)(void) = JSRT_DLSYM(openssl_handle, "EVP_PKEY_new");
+  void* (*EC_KEY_new_by_curve_name)(int) = JSRT_DLSYM(openssl_handle, "EC_KEY_new_by_curve_name");
+  void* (*BN_bin2bn)(const unsigned char*, int, void*) = JSRT_DLSYM(openssl_handle, "BN_bin2bn");
+  int (*EC_KEY_set_public_key_affine_coordinates)(void*, const void*, const void*) =
+      JSRT_DLSYM(openssl_handle, "EC_KEY_set_public_key_affine_coordinates");
+  int (*EVP_PKEY_assign)(void*, int, void*) = JSRT_DLSYM(openssl_handle, "EVP_PKEY_assign");
+
+  if (!EVP_PKEY_new || !EC_KEY_new_by_curve_name || !BN_bin2bn || !EC_KEY_set_public_key_affine_coordinates ||
+      !EVP_PKEY_assign) {
+    free(x_data);
+    free(y_data);
+    return jsrt_crypto_throw_error(ctx, "NotSupportedError", "Missing OpenSSL EC functions");
+  }
+
+  // Create EC key structure
+  void* ec_key = EC_KEY_new_by_curve_name(curve_nid);
+  if (!ec_key) {
+    free(x_data);
+    free(y_data);
+    return jsrt_crypto_throw_error(ctx, "OperationError", "Failed to create EC key");
+  }
+
+  // Convert coordinates to BIGNUMs
+  void* x_bn = BN_bin2bn(x_data, x_len, NULL);
+  void* y_bn = BN_bin2bn(y_data, y_len, NULL);
+
+  free(x_data);
+  free(y_data);
+
+  if (!x_bn || !y_bn) {
+    void (*EC_KEY_free)(void*) = JSRT_DLSYM(openssl_handle, "EC_KEY_free");
+    if (EC_KEY_free)
+      EC_KEY_free(ec_key);
+    return jsrt_crypto_throw_error(ctx, "OperationError", "Failed to convert EC coordinates");
+  }
+
+  // Set public key coordinates
+  if (EC_KEY_set_public_key_affine_coordinates(ec_key, x_bn, y_bn) != 1) {
+    void (*EC_KEY_free)(void*) = JSRT_DLSYM(openssl_handle, "EC_KEY_free");
+    void (*BN_free)(void*) = JSRT_DLSYM(openssl_handle, "BN_free");
+    if (EC_KEY_free)
+      EC_KEY_free(ec_key);
+    if (BN_free) {
+      BN_free(x_bn);
+      BN_free(y_bn);
+    }
+    return jsrt_crypto_throw_error(ctx, "OperationError", "Failed to set EC public key coordinates");
+  }
+
+  // BIGNUMs are now owned by EC_KEY, don't free them manually
+
+  // Create EVP_PKEY and assign EC key
+  void* pkey = EVP_PKEY_new();
+  if (!pkey || EVP_PKEY_assign(pkey, 408 /* EVP_PKEY_EC */, ec_key) != 1) {
+    void (*EC_KEY_free)(void*) = JSRT_DLSYM(openssl_handle, "EC_KEY_free");
+    void (*EVP_PKEY_free)(void*) = JSRT_DLSYM(openssl_handle, "EVP_PKEY_free");
+    if (EC_KEY_free)
+      EC_KEY_free(ec_key);
+    if (pkey && EVP_PKEY_free)
+      EVP_PKEY_free(pkey);
+    return jsrt_crypto_throw_error(ctx, "OperationError", "Failed to create EVP_PKEY");
+  }
+
+  // Serialize key to DER format for storage
+  int (*i2d_PUBKEY)(void*, unsigned char**) = JSRT_DLSYM(openssl_handle, "i2d_PUBKEY");
+  if (!i2d_PUBKEY) {
+    void (*EVP_PKEY_free)(void*) = JSRT_DLSYM(openssl_handle, "EVP_PKEY_free");
+    if (EVP_PKEY_free)
+      EVP_PKEY_free(pkey);
+    return jsrt_crypto_throw_error(ctx, "NotSupportedError", "Missing OpenSSL serialization functions");
+  }
+
+  unsigned char* der_data = NULL;
+  int der_len = i2d_PUBKEY(pkey, &der_data);
+  if (der_len <= 0) {
+    void (*EVP_PKEY_free)(void*) = JSRT_DLSYM(openssl_handle, "EVP_PKEY_free");
+    if (EVP_PKEY_free)
+      EVP_PKEY_free(pkey);
+    return jsrt_crypto_throw_error(ctx, "OperationError", "Failed to serialize EC key");
+  }
+
+  // Create copy of DER data
+  uint8_t* der_copy = malloc(der_len);
+  if (!der_copy) {
+    void (*OPENSSL_free)(void*) = JSRT_DLSYM(openssl_handle, "OPENSSL_free");
+    void (*EVP_PKEY_free)(void*) = JSRT_DLSYM(openssl_handle, "EVP_PKEY_free");
+    if (OPENSSL_free)
+      OPENSSL_free(der_data);
+    if (EVP_PKEY_free)
+      EVP_PKEY_free(pkey);
+    return jsrt_crypto_throw_error(ctx, "OperationError", "Memory allocation failed");
+  }
+  memcpy(der_copy, der_data, der_len);
+
+  // Clean up OpenSSL resources
+  void (*OPENSSL_free)(void*) = JSRT_DLSYM(openssl_handle, "OPENSSL_free");
+  void (*EVP_PKEY_free)(void*) = JSRT_DLSYM(openssl_handle, "EVP_PKEY_free");
+  if (OPENSSL_free)
+    OPENSSL_free(der_data);
+  if (EVP_PKEY_free)
+    EVP_PKEY_free(pkey);
+
+  // Set up crypto key object
+  JS_SetPropertyStr(ctx, crypto_key, "type", JS_NewString(ctx, "public"));
+  JS_SetPropertyStr(ctx, crypto_key, "extractable", JS_NewBool(ctx, extractable));
+  JS_SetPropertyStr(ctx, crypto_key, "usages", JS_DupValue(ctx, usages));
+
+  // Update algorithm object with namedCurve
+  JSValue algorithm = JS_GetPropertyStr(ctx, crypto_key, "algorithm");
+  if (!JS_IsUndefined(algorithm)) {
+    const char* curve_name = NULL;
+    if (curve_nid == 415)
+      curve_name = "P-256";
+    else if (curve_nid == 715)
+      curve_name = "P-384";
+    else if (curve_nid == 716)
+      curve_name = "P-521";
+
+    if (curve_name) {
+      JS_SetPropertyStr(ctx, algorithm, "namedCurve", JS_NewString(ctx, curve_name));
+    }
+    JS_FreeValue(ctx, algorithm);
+  }
+
+  // Store the DER data
+  JSValue key_buffer = JS_NewArrayBuffer(ctx, der_copy, der_len, NULL, NULL, 0);
+  JS_SetPropertyStr(ctx, crypto_key, "__keyData", key_buffer);
+
+  return create_resolved_promise(ctx, crypto_key);
+}
+
+// Symmetric key (oct) JWK import implementation
+static JSValue jsrt_import_jwk_oct_key(JSContext* ctx, JSValue jwk_obj, jsrt_crypto_algorithm_t alg, JSValue crypto_key,
+                                       bool extractable, JSValue usages) {
+  // Get required parameter: k (key value)
+  JSValue k_val = JS_GetPropertyStr(ctx, jwk_obj, "k");
+  if (JS_IsUndefined(k_val)) {
+    JS_FreeValue(ctx, k_val);
+    return jsrt_crypto_throw_error(ctx, "DataError", "Missing required 'k' parameter in symmetric JWK");
+  }
+
+  // Decode base64url key data
+  size_t k_len;
+  uint8_t* k_data = base64url_string_to_binary(ctx, k_val, &k_len);
+
+  JS_FreeValue(ctx, k_val);
+
+  if (!k_data) {
+    JSValue error = jsrt_crypto_throw_error(ctx, "DataError", "Invalid base64url encoding in symmetric key");
+    return create_rejected_promise(ctx, error);
+  }
+
+  // Validate key length for HMAC
+  if (alg == JSRT_CRYPTO_ALG_HMAC) {
+    // HMAC keys should be at least 16 bytes for security
+    if (k_len < 16) {
+      free(k_data);
+      JSValue error = jsrt_crypto_throw_error(ctx, "DataError", "HMAC key too short (minimum 16 bytes)");
+      return create_rejected_promise(ctx, error);
+    }
+  }
+
+  // For AES, validate key length
+  if (alg == JSRT_CRYPTO_ALG_AES_CBC || alg == JSRT_CRYPTO_ALG_AES_GCM || alg == JSRT_CRYPTO_ALG_AES_CTR) {
+    if (k_len != 16 && k_len != 24 && k_len != 32) {
+      free(k_data);
+      JSValue error = jsrt_crypto_throw_error(ctx, "DataError", "Invalid AES key length (must be 16, 24, or 32 bytes)");
+      return create_rejected_promise(ctx, error);
+    }
+  }
+
+  // Create copy of key data for storage
+  uint8_t* key_copy = malloc(k_len);
+  if (!key_copy) {
+    free(k_data);
+    return jsrt_crypto_throw_error(ctx, "OperationError", "Memory allocation failed");
+  }
+  memcpy(key_copy, k_data, k_len);
+  free(k_data);
+
+  // Set up crypto key object
+  JS_SetPropertyStr(ctx, crypto_key, "type", JS_NewString(ctx, "secret"));
+  JS_SetPropertyStr(ctx, crypto_key, "extractable", JS_NewBool(ctx, extractable));
+  JS_SetPropertyStr(ctx, crypto_key, "usages", JS_DupValue(ctx, usages));
+
+  // Store the raw key data
+  JSValue key_buffer = JS_NewArrayBuffer(ctx, key_copy, k_len, NULL, NULL, 0);
+  JS_SetPropertyStr(ctx, crypto_key, "__keyData", key_buffer);
+
+  return create_resolved_promise(ctx, crypto_key);
+}
+
 // JWK import implementation
 JSValue jsrt_import_jwk_key(JSContext* ctx, JSValue jwk_object, jsrt_crypto_algorithm_t alg, JSValue crypto_key) {
   // Get extractable and usages from crypto_key
@@ -3524,13 +3787,22 @@ JSValue jsrt_import_jwk_key(JSContext* ctx, JSValue jwk_object, jsrt_crypto_algo
       result = jsrt_import_jwk_rsa_key(ctx, jwk_object, alg, crypto_key, extractable, usages_val);
     }
   } else if (strcmp(kty, "EC") == 0) {
-    // Handle ECDSA keys - TODO: implement
-    JSValue error = jsrt_crypto_throw_error(ctx, "NotSupportedError", "EC JWK import not yet implemented");
-    result = create_rejected_promise(ctx, error);
+    // Handle ECDSA keys
+    if (alg != JSRT_CRYPTO_ALG_ECDSA && alg != JSRT_CRYPTO_ALG_ECDH) {
+      JSValue error = jsrt_crypto_throw_error(ctx, "DataError", "Algorithm mismatch: expected ECDSA or ECDH algorithm");
+      result = create_rejected_promise(ctx, error);
+    } else {
+      result = jsrt_import_jwk_ec_key(ctx, jwk_object, alg, crypto_key, extractable, usages_val);
+    }
   } else if (strcmp(kty, "oct") == 0) {
-    // Handle symmetric keys - TODO: implement
-    JSValue error = jsrt_crypto_throw_error(ctx, "NotSupportedError", "Symmetric JWK import not yet implemented");
-    result = create_rejected_promise(ctx, error);
+    // Handle symmetric keys
+    if (alg != JSRT_CRYPTO_ALG_HMAC && alg != JSRT_CRYPTO_ALG_AES_CBC && alg != JSRT_CRYPTO_ALG_AES_GCM &&
+        alg != JSRT_CRYPTO_ALG_AES_CTR) {
+      JSValue error = jsrt_crypto_throw_error(ctx, "DataError", "Algorithm mismatch: expected HMAC or AES algorithm");
+      result = create_rejected_promise(ctx, error);
+    } else {
+      result = jsrt_import_jwk_oct_key(ctx, jwk_object, alg, crypto_key, extractable, usages_val);
+    }
   } else {
     JSValue error = jsrt_crypto_throw_error(ctx, "DataError", "Unsupported key type in JWK");
     result = create_rejected_promise(ctx, error);

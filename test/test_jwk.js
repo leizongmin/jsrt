@@ -148,9 +148,9 @@ async function testJWKComprehensive() {
     failed++;
   }
 
-  // Test 5: ECDSA JWK import (should fail with "not implemented")
+  // Test 5: ECDSA JWK import (P-256)
   total++;
-  console.log('Test 5: ECDSA JWK import (not implemented)');
+  console.log('Test 5: ECDSA P-256 JWK import');
   try {
     const ecJwk = {
       kty: 'EC',
@@ -159,64 +159,208 @@ async function testJWKComprehensive() {
       y: '4Etl6SRW2YiLUrN5vfvVHuhp7x8PxltmWWlbbM4IFyM',
     };
 
-    try {
-      await crypto.subtle.importKey(
-        'jwk',
-        ecJwk,
-        { name: 'ECDSA', namedCurve: 'P-256' },
-        true,
-        ['verify']
-      );
-      console.log("❌ FAIL: Should have thrown 'not implemented' error");
-      failed++;
-    } catch (expectedError) {
-      assert.ok(
-        expectedError.message.includes('not yet implemented'),
-        'Should get not implemented error'
-      );
-      console.log('✅ PASS: Correctly rejected ECDSA (not implemented)');
-      passed++;
-    }
+    const importedKey = await crypto.subtle.importKey(
+      'jwk',
+      ecJwk,
+      { name: 'ECDSA', namedCurve: 'P-256' },
+      true,
+      ['verify']
+    );
+
+    assert.ok(importedKey, 'Imported EC key should exist');
+    assert.strictEqual(
+      importedKey.type,
+      'public',
+      "EC key type should be 'public'"
+    );
+    assert.strictEqual(
+      importedKey.algorithm.name,
+      'ECDSA',
+      'Algorithm should be ECDSA'
+    );
+    assert.strictEqual(
+      importedKey.algorithm.namedCurve,
+      'P-256',
+      'Named curve should be P-256'
+    );
+    console.log('✅ PASS: ECDSA P-256 JWK import');
+    passed++;
   } catch (error) {
-    console.log('❌ FAIL: ECDSA test setup - ' + error.message);
+    console.log('❌ FAIL: ECDSA P-256 JWK import - ' + error.message);
     failed++;
   }
 
-  // Test 6: Symmetric (oct) JWK import (should fail with "not implemented")
+  // Test 6: Symmetric (oct) JWK import for HMAC
   total++;
-  console.log('Test 6: Symmetric JWK import (not implemented)');
+  console.log('Test 6: Symmetric HMAC JWK import');
   try {
     const octJwk = {
       kty: 'oct',
-      k: 'GawgguFyGrWKav7AX4VKUg',
+      k: 'GawgguFyGrWKav7AX4VKUg', // Base64URL encoded 16-byte key
+    };
+
+    const importedKey = await crypto.subtle.importKey(
+      'jwk',
+      octJwk,
+      { name: 'HMAC', hash: 'SHA-256' },
+      true,
+      ['sign', 'verify']
+    );
+
+    assert.ok(importedKey, 'Imported HMAC key should exist');
+    assert.strictEqual(
+      importedKey.type,
+      'secret',
+      "HMAC key type should be 'secret'"
+    );
+    assert.strictEqual(
+      importedKey.algorithm.name,
+      'HMAC',
+      'Algorithm should be HMAC'
+    );
+    console.log('✅ PASS: Symmetric HMAC JWK import');
+    passed++;
+  } catch (error) {
+    console.log('❌ FAIL: Symmetric HMAC JWK import - ' + error.message);
+    failed++;
+  }
+
+  // Test 7: AES-256 symmetric key JWK import
+  total++;
+  console.log('Test 7: AES-256 JWK import');
+  try {
+    const aesJwk = {
+      kty: 'oct',
+      k: 'AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8', // 32-byte key for AES-256
+    };
+
+    const importedKey = await crypto.subtle.importKey(
+      'jwk',
+      aesJwk,
+      { name: 'AES-GCM', length: 256 },
+      true,
+      ['encrypt', 'decrypt']
+    );
+
+    assert.ok(importedKey, 'Imported AES key should exist');
+    assert.strictEqual(
+      importedKey.type,
+      'secret',
+      "AES key type should be 'secret'"
+    );
+    assert.strictEqual(
+      importedKey.algorithm.name,
+      'AES-GCM',
+      'Algorithm should be AES-GCM'
+    );
+    console.log('✅ PASS: AES-256 JWK import');
+    passed++;
+  } catch (error) {
+    console.log('❌ FAIL: AES-256 JWK import - ' + error.message);
+    failed++;
+  }
+
+  // Test 8: ECDSA P-384 JWK import
+  total++;
+  console.log('Test 8: ECDSA P-384 JWK import');
+  try {
+    const ecP384Jwk = {
+      kty: 'EC',
+      crv: 'P-384',
+      x: 'usWxHK2PmfnHKwXPS54m0kTcGJ90UiglWiGahtagnv8',
+      y: 'IBOL-C3BtVOrsHat1gE1-T0d-Iicn9_rp4AfPQ6yqtE',
+    };
+
+    const importedKey = await crypto.subtle.importKey(
+      'jwk',
+      ecP384Jwk,
+      { name: 'ECDSA', namedCurve: 'P-384' },
+      true,
+      ['verify']
+    );
+
+    assert.ok(importedKey, 'Imported P-384 EC key should exist');
+    assert.strictEqual(
+      importedKey.algorithm.namedCurve,
+      'P-384',
+      'Named curve should be P-384'
+    );
+    console.log('✅ PASS: ECDSA P-384 JWK import');
+    passed++;
+  } catch (error) {
+    console.log('❌ FAIL: ECDSA P-384 JWK import - ' + error.message);
+    failed++;
+  }
+
+  // Test 9: Invalid EC curve
+  total++;
+  console.log('Test 9: Invalid EC curve in JWK');
+  try {
+    const invalidCurveJwk = {
+      kty: 'EC',
+      crv: 'P-192', // Unsupported curve
+      x: 'MKBCTNIcKUSDii11ySs3526iDZ8AiTo7Tu6KPAqv7D4',
+      y: '4Etl6SRW2YiLUrN5vfvVHuhp7x8PxltmWWlbbM4IFyM',
     };
 
     try {
       await crypto.subtle.importKey(
         'jwk',
-        octJwk,
+        invalidCurveJwk,
+        { name: 'ECDSA', namedCurve: 'P-192' },
+        true,
+        ['verify']
+      );
+      console.log('❌ FAIL: Should have thrown error for unsupported curve');
+      failed++;
+    } catch (expectedError) {
+      assert.ok(
+        expectedError.message.includes('Unsupported curve'),
+        'Error should mention unsupported curve'
+      );
+      console.log('✅ PASS: Correctly rejected unsupported curve');
+      passed++;
+    }
+  } catch (error) {
+    console.log('❌ FAIL: Invalid curve test setup - ' + error.message);
+    failed++;
+  }
+
+  // Test 10: HMAC key too short
+  total++;
+  console.log('Test 10: HMAC key too short');
+  try {
+    const shortHmacJwk = {
+      kty: 'oct',
+      k: 'c2hvcnQ', // "short" - only 5 bytes
+    };
+
+    try {
+      await crypto.subtle.importKey(
+        'jwk',
+        shortHmacJwk,
         { name: 'HMAC', hash: 'SHA-256' },
         true,
         ['sign', 'verify']
       );
-      console.log("❌ FAIL: Should have thrown 'not implemented' error");
+      console.log('❌ FAIL: Should have thrown error for short HMAC key');
       failed++;
     } catch (expectedError) {
       assert.ok(
-        expectedError.message.includes('not yet implemented'),
-        'Should get not implemented error'
+        expectedError.message.includes('too short'),
+        'Error should mention key too short'
       );
-      console.log('✅ PASS: Correctly rejected symmetric (not implemented)');
+      console.log('✅ PASS: Correctly rejected short HMAC key');
       passed++;
     }
   } catch (error) {
-    console.log('❌ FAIL: Symmetric test setup - ' + error.message);
+    console.log('❌ FAIL: Short HMAC key test setup - ' + error.message);
     failed++;
   }
 
-  // Test 7: Invalid base64url encoding
+  // Test 11: Invalid base64url encoding
   total++;
-  console.log('Test 7: Invalid base64url encoding in JWK');
+  console.log('Test 11: Invalid base64url encoding in JWK');
   try {
     const invalidEncodingJwk = {
       kty: 'RSA',

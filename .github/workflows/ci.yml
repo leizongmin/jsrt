@@ -67,6 +67,9 @@ jobs:
         CXX: ${{ matrix.cxx }}
       run: make jsrt_g
 
+    - name: Install npm dependencies
+      run: npm install
+
     - name: Run basic functionality test
       run: |
         echo 'console.log("Hello from CI!");' > test_ci.js
@@ -118,6 +121,10 @@ jobs:
         export CC=gcc
         export CXX=g++
         make jsrt_g
+
+    - name: Install npm dependencies
+      shell: msys2 {0}
+      run: npm install
 
     - name: Run basic functionality test
       shell: msys2 {0}

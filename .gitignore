@@ -72,3 +72,4 @@ test_*.js
 
 # WPT directory (downloaded dynamically)
 wpt/
+wpt-master.zip

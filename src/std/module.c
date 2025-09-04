@@ -42,10 +42,10 @@ static bool is_path_separator(char c) {
 // Find the last path separator in a string
 static char* find_last_separator(const char* path) {
   if (!path) return NULL;
-  
+
   char* last_slash = strrchr(path, '/');
   char* last_backslash = strrchr(path, '\\');
-  
+
   if (last_slash && last_backslash) {
     return (last_slash > last_backslash) ? last_slash : last_backslash;
   } else if (last_slash) {
@@ -58,10 +58,10 @@ static char* find_last_separator(const char* path) {
 // Normalize path separators to be platform-specific
 static char* normalize_path(const char* path) {
   if (!path) return NULL;
-  
+
   char* normalized = strdup(path);
   if (!normalized) return NULL;
-  
+
   // Convert path separators to platform-specific ones
   for (char* p = normalized; *p; p++) {
 #ifdef _WIN32
@@ -70,17 +70,17 @@ static char* normalize_path(const char* path) {
     if (*p == '\\') *p = '/';
 #endif
   }
-  
+
   return normalized;
 }
 
 // Get the parent directory of a path
 static char* get_parent_directory(const char* path) {
   if (!path) return NULL;
-  
+
   char* normalized = normalize_path(path);
   if (!normalized) return NULL;
-  
+
   char* last_sep = find_last_separator(normalized);
   if (last_sep && last_sep != normalized) {
     *last_sep = '\0';
@@ -99,23 +99,23 @@ static char* get_parent_directory(const char* path) {
 // Join two path components with appropriate separator
 static char* path_join(const char* dir, const char* file) {
   if (!dir || !file) return NULL;
-  
+
   size_t dir_len = strlen(dir);
   size_t file_len = strlen(file);
-  
+
   // Check if dir already ends with separator
   bool has_trailing_sep = (dir_len > 0 && is_path_separator(dir[dir_len - 1]));
-  
+
   size_t total_len = dir_len + file_len + (has_trailing_sep ? 0 : 1) + 1;
   char* result = malloc(total_len);
   if (!result) return NULL;
-  
+
   strcpy(result, dir);
   if (!has_trailing_sep) {
     strcat(result, PATH_SEPARATOR_STR);
   }
   strcat(result, file);
-  
+
   char* normalized = normalize_path(result);
   free(result);
   return normalized;
@@ -124,7 +124,7 @@ static char* path_join(const char* dir, const char* file) {
 // Check if a path is absolute
 static bool is_absolute_path(const char* path) {
   if (!path) return false;
-  
+
 #ifdef _WIN32
   // Windows: starts with drive letter (C:) or UNC path (\\) or single slash/backslash
   return (strlen(path) >= 3 && path[1] == ':' && is_path_separator(path[2])) ||
@@ -139,22 +139,18 @@ static bool is_absolute_path(const char* path) {
 // Check if a path is relative (starts with ./ or ../)
 static bool is_relative_path(const char* path) {
   if (!path) return false;
-  
-  return (path[0] == '.' && (is_path_separator(path[1]) || 
+
+  return (path[0] == '.' && (is_path_separator(path[1]) ||
          (path[1] == '.' && is_path_separator(path[2]))));
 }
 
 // Resolve a relative path against a base path
 static char* resolve_relative_path(const char* base_path, const char* relative_path) {
   if (!base_path || !relative_path) return NULL;
-  
-  fprintf(stderr, "[DEBUG] resolve_relative_path: base_path='%s', relative_path='%s'\n", base_path, relative_path);
-  
+
   char* base_dir = get_parent_directory(base_path);
   if (!base_dir) return NULL;
-  
-  fprintf(stderr, "[DEBUG] resolve_relative_path: base_dir='%s'\n", base_dir);
-  
+
   // Handle ./ and ../ prefixes
   const char* clean_relative = relative_path;
   if (relative_path[0] == '.' && is_path_separator(relative_path[1])) {
@@ -167,7 +163,7 @@ static char* resolve_relative_path(const char* base_path, const char* relative_p
     if (!parent_dir) return NULL;
     base_dir = parent_dir;
     clean_relative = relative_path + 3;
-    
+
     // Handle multiple "../" sequences
     while (clean_relative[0] == '.' && clean_relative[1] == '.' && is_path_separator(clean_relative[2])) {
       parent_dir = get_parent_directory(base_dir);
@@ -177,13 +173,10 @@ static char* resolve_relative_path(const char* base_path, const char* relative_p
       clean_relative += 3;
     }
   }
-  
-  fprintf(stderr, "[DEBUG] resolve_relative_path: clean_relative='%s'\n", clean_relative);
-  
+
   char* result = path_join(base_dir, clean_relative);
   free(base_dir);
-  
-  fprintf(stderr, "[DEBUG] resolve_relative_path: final result='%s'\n", result ? result : "NULL");
+
   return result;
 }
 
@@ -225,7 +218,7 @@ static char* find_node_modules_path(const char* start_dir, const char* package_n
   char* current_dir = strdup(start_dir ? start_dir : ".");
   char* normalized_current = normalize_path(current_dir);
   free(current_dir);
-  
+
   char* normalized_dir = jsrt_realpath(normalized_current, NULL);
   free(normalized_current);
 
@@ -236,7 +229,7 @@ static char* find_node_modules_path(const char* start_dir, const char* package_n
   // Normalize the resolved path as well
   char* search_dir = normalize_path(normalized_dir);
   free(normalized_dir);
-  
+
   if (!search_dir) {
     return NULL;
   }
@@ -247,11 +240,11 @@ static char* find_node_modules_path(const char* start_dir, const char* package_n
     // Build node_modules path
     char* node_modules_path = path_join(current_search, "node_modules");
     if (!node_modules_path) break;
-    
+
     // Build package path
     char* package_path = path_join(node_modules_path, package_name);
     free(node_modules_path);
-    
+
     if (!package_path) break;
 
     // Check if the package directory exists using access()
@@ -268,7 +261,7 @@ static char* find_node_modules_path(const char* start_dir, const char* package_n
       free(parent);
       break;
     }
-    
+
     // Update current_search to parent (reuse the same buffer)
     strcpy(current_search, parent);
     free(parent);
@@ -456,7 +449,7 @@ char* JSRT_ModuleNormalize(JSContext* ctx, const char* module_base_name, const c
   // Ensure final normalization
   char* normalized_final = normalize_path(final_path);
   free(final_path);
-  
+
   JSRT_Debug("JSRT_ModuleNormalize: resolved to '%s'", normalized_final);
   return normalized_final;
 }
@@ -693,11 +686,6 @@ static JSValue js_require(JSContext* ctx, JSValueConst this_val, int argc, JSVal
 
   // Use ES module context if available, otherwise current_module_path
   const char* effective_module_path = esm_context_path ? esm_context_path : current_module_path;
-  
-  // Temporary debug output
-  fprintf(stderr, "[DEBUG] js_require: module_name='%s'\n", module_name);
-  fprintf(stderr, "[DEBUG] js_require: esm_context_path='%s'\n", esm_context_path ? esm_context_path : "NULL");
-  fprintf(stderr, "[DEBUG] js_require: effective_module_path='%s'\n", effective_module_path ? effective_module_path : "NULL");
 
   // Handle jsrt: modules
   if (strncmp(module_name, "jsrt:", 5) == 0) {
@@ -731,9 +719,7 @@ static JSValue js_require(JSContext* ctx, JSValueConst this_val, int argc, JSVal
 
   // Check if this is a bare module name (npm package)
   char* resolved_path;
-  fprintf(stderr, "[DEBUG] js_require: is_relative=%d, is_absolute=%d\n", 
-          is_relative_path(module_name), is_absolute_path(module_name));
-  
+
   if (!is_relative_path(module_name) && !is_absolute_path(module_name)) {
     // Try npm module resolution first
     JSRT_Debug("js_require: trying npm module resolution");
@@ -748,9 +734,7 @@ static JSValue js_require(JSContext* ctx, JSValueConst this_val, int argc, JSVal
     JSRT_Debug("js_require: resolving relative/absolute path");
     resolved_path = resolve_module_path(module_name, effective_module_path);
   }
-  fprintf(stderr, "[DEBUG] js_require: resolved_path='%s'\n", resolved_path ? resolved_path : "NULL");
   char* final_path = try_extensions(resolved_path);
-  fprintf(stderr, "[DEBUG] js_require: final_path='%s'\n", final_path ? final_path : "NULL");
 
   if (!final_path) {
     final_path = resolved_path;

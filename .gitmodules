@@ -4,3 +4,6 @@
 [submodule "deps/libuv"]
 	path = deps/libuv
 	url = https://github.com/libuv/libuv.git
+[submodule "wpt"]
+	path = wpt
+	url = https://github.com/web-platform-tests/wpt.git

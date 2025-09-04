@@ -72,3 +72,18 @@ coverage: test_cov
 	@echo "Coverage report generated in target/coverage/html/"
 	@echo "Overall coverage:"
 	lcov --summary target/coverage/coverage_filtered.info
+
+.PHONY: wpt
+wpt: jsrt
+	@echo "Running Web Platform Tests for WinterCG Minimum Common API..."
+	python3 scripts/run-wpt.py --jsrt $(CURDIR)/target/release/jsrt --wpt-dir $(CURDIR)/wpt
+
+.PHONY: wpt_g
+wpt_g: jsrt_g
+	@echo "Running Web Platform Tests with debug build..."
+	python3 scripts/run-wpt.py --jsrt $(CURDIR)/target/debug/jsrt --wpt-dir $(CURDIR)/wpt --verbose
+
+.PHONY: wpt-list
+wpt-list:
+	@echo "Available WPT test categories:"
+	python3 scripts/run-wpt.py --list-categories

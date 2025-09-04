@@ -4,6 +4,17 @@ set(CMAKE_C_STANDARD 11)
 set(CMAKE_CXX_FLAGS "-Wall -Wextra")
 set(CMAKE_CFLAGS "-Wall -Wextra")
 
+# Check if git submodules are initialized
+if(NOT EXISTS "${CMAKE_SOURCE_DIR}/deps/quickjs/quickjs.h")
+    message(FATAL_ERROR "Git submodules are not initialized. Please run: git submodule update --init --recursive")
+endif()
+if(NOT EXISTS "${CMAKE_SOURCE_DIR}/deps/libuv/CMakeLists.txt")
+    message(FATAL_ERROR "Git submodules are not initialized. Please run: git submodule update --init --recursive")
+endif()
+if(NOT EXISTS "${CMAKE_SOURCE_DIR}/deps/llhttp/package.json")
+    message(FATAL_ERROR "Git submodules are not initialized. Please run: git submodule update --init --recursive")
+endif()
+
 # optimization flags
 if(CMAKE_BUILD_TYPE STREQUAL "Release")
     set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -s")
@@ -84,6 +95,30 @@ endif()
 add_subdirectory(deps/libuv)
 
 # build llhttp (minimal implementation)
+# Check if llhttp generated files exist, if not, build them
+if(NOT EXISTS "${CMAKE_SOURCE_DIR}/deps/llhttp/build/c/llhttp.c")
+    message(STATUS "llhttp build files not found, building llhttp...")
+    find_program(NPM_EXECUTABLE npm REQUIRED)
+    execute_process(
+        COMMAND ${NPM_EXECUTABLE} install
+        WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}/deps/llhttp
+        RESULT_VARIABLE NPM_INSTALL_RESULT
+    )
+    if(NOT NPM_INSTALL_RESULT EQUAL 0)
+        message(FATAL_ERROR "Failed to run npm install in deps/llhttp")
+    endif()
+    
+    execute_process(
+        COMMAND ${NPM_EXECUTABLE} run build
+        WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}/deps/llhttp
+        RESULT_VARIABLE NPM_BUILD_RESULT
+    )
+    if(NOT NPM_BUILD_RESULT EQUAL 0)
+        message(FATAL_ERROR "Failed to run npm run build in deps/llhttp")
+    endif()
+    message(STATUS "llhttp build completed successfully")
+endif()
+
 add_library(llhttp STATIC
     deps/llhttp/build/c/llhttp.c
     deps/llhttp/src/native/api.c

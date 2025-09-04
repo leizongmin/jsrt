@@ -8,8 +8,8 @@
 
 #include "../util/debug.h"
 #include "../util/file.h"
-#include "../util/path.h"
 #include "../util/json.h"
+#include "../util/path.h"
 #include "assert.h"
 #include "ffi.h"
 #include "process.h"
@@ -47,16 +47,16 @@ static int js_std_ffi_init(JSContext* ctx, JSModuleDef* m) {
 // Node.js module resolution functions
 static char* find_node_modules_path(const char* start_dir, const char* package_name) {
   JSRT_Debug("find_node_modules_path: start_dir='%s', package_name='%s'", start_dir, package_name);
-  
+
   // Start from the given directory and walk up the tree
   char* current_dir = strdup(start_dir ? start_dir : ".");
   char* normalized_dir = realpath(current_dir, NULL);
   free(current_dir);
-  
+
   if (!normalized_dir) {
     return NULL;
   }
-  
+
   // Walk up the directory tree looking for node_modules
   char* search_dir = normalized_dir;
   while (search_dir && strlen(search_dir) > 1) {
@@ -64,7 +64,7 @@ static char* find_node_modules_path(const char* start_dir, const char* package_n
     size_t path_len = strlen(search_dir) + strlen(package_name) + 20;
     char* package_path = malloc(path_len);
     snprintf(package_path, path_len, "%s/node_modules/%s", search_dir, package_name);
-    
+
     // Check if the package directory exists using access()
     if (access(package_path, F_OK) == 0) {
       JSRT_Debug("find_node_modules_path: found package at '%s'", package_path);
@@ -72,7 +72,7 @@ static char* find_node_modules_path(const char* start_dir, const char* package_n
       return package_path;
     }
     free(package_path);
-    
+
     // Move up one directory
     char* parent = strrchr(search_dir, '/');
     if (parent && parent != search_dir) {
@@ -81,7 +81,7 @@ static char* find_node_modules_path(const char* start_dir, const char* package_n
       break;
     }
   }
-  
+
   free(normalized_dir);
   JSRT_Debug("find_node_modules_path: package '%s' not found", package_name);
   return NULL;
@@ -89,26 +89,26 @@ static char* find_node_modules_path(const char* start_dir, const char* package_n
 
 static char* resolve_package_main(const char* package_dir, bool is_esm) {
   JSRT_Debug("resolve_package_main: package_dir='%s', is_esm=%d", package_dir, is_esm);
-  
+
   // Try to read package.json
   size_t package_json_path_len = strlen(package_dir) + 15;
   char* package_json_path = malloc(package_json_path_len);
   snprintf(package_json_path, package_json_path_len, "%s/package.json", package_dir);
-  
+
   JSRT_ReadFileResult json_result = JSRT_ReadFile(package_json_path);
   free(package_json_path);
-  
+
   if (json_result.error == JSRT_READ_FILE_OK) {
     // Parse package.json
     JSRuntime* rt = JS_NewRuntime();
     JSContext* ctx = JS_NewContext(rt);
-    
+
     JSValue package_json = JSRT_ParseJSON(ctx, json_result.data);
     JSRT_ReadFileResultFree(&json_result);
-    
+
     if (!JS_IsNull(package_json) && !JS_IsException(package_json)) {
       const char* entry_point = NULL;
-      
+
       if (is_esm) {
         // For ES modules, prefer "module" field over "main"
         entry_point = JSRT_GetPackageModule(ctx, package_json);
@@ -119,12 +119,12 @@ static char* resolve_package_main(const char* package_dir, bool is_esm) {
         // For CommonJS, use "main" field
         entry_point = JSRT_GetPackageMain(ctx, package_json);
       }
-      
+
       if (entry_point) {
         size_t full_path_len = strlen(package_dir) + strlen(entry_point) + 2;
         char* full_path = malloc(full_path_len);
         snprintf(full_path, full_path_len, "%s/%s", package_dir, entry_point);
-        
+
         // Free the JSON parsing resources
         if (entry_point != JSRT_GetPackageMain(ctx, package_json)) {
           JS_FreeCString(ctx, entry_point);
@@ -133,34 +133,34 @@ static char* resolve_package_main(const char* package_dir, bool is_esm) {
         JS_FreeValue(ctx, package_json);
         JS_FreeContext(ctx);
         JS_FreeRuntime(rt);
-        
+
         JSRT_Debug("resolve_package_main: resolved to '%s'", full_path);
         return full_path;
       }
-      
+
       JS_FreeValue(ctx, package_json);
     }
-    
+
     JS_FreeContext(ctx);
     JS_FreeRuntime(rt);
   } else {
     JSRT_ReadFileResultFree(&json_result);
   }
-  
+
   // Fallback to index.js or index.mjs
   const char* default_file = is_esm ? "index.mjs" : "index.js";
   size_t default_path_len = strlen(package_dir) + strlen(default_file) + 2;
   char* default_path = malloc(default_path_len);
   snprintf(default_path, default_path_len, "%s/%s", package_dir, default_file);
-  
+
   JSRT_Debug("resolve_package_main: falling back to '%s'", default_path);
   return default_path;
 }
 
 static char* resolve_npm_module(const char* module_name, const char* base_path, bool is_esm) {
-  JSRT_Debug("resolve_npm_module: module_name='%s', base_path='%s', is_esm=%d", 
-             module_name, base_path ? base_path : "null", is_esm);
-  
+  JSRT_Debug("resolve_npm_module: module_name='%s', base_path='%s', is_esm=%d", module_name,
+             base_path ? base_path : "null", is_esm);
+
   // Determine the starting directory for resolution
   char* start_dir = NULL;
   if (base_path) {
@@ -176,19 +176,19 @@ static char* resolve_npm_module(const char* module_name, const char* base_path, 
   } else {
     start_dir = strdup(".");
   }
-  
+
   // Find the package directory
   char* package_dir = find_node_modules_path(start_dir, module_name);
   free(start_dir);
-  
+
   if (!package_dir) {
     return NULL;
   }
-  
+
   // Resolve the main entry point
   char* main_path = resolve_package_main(package_dir, is_esm);
   free(package_dir);
-  
+
   return main_path;
 }
 

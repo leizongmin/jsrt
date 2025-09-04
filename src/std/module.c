@@ -10,12 +10,16 @@
 #include <windows.h>
 #define F_OK 0
 #define access _access
+#define PATH_SEPARATOR '\\'
+#define PATH_SEPARATOR_STR "\\"
 // Windows implementation of realpath using _fullpath
 static char* jsrt_realpath(const char* path, char* resolved_path) {
   return _fullpath(resolved_path, path, _MAX_PATH);
 }
 #else
 #include <unistd.h>
+#define PATH_SEPARATOR '/'
+#define PATH_SEPARATOR_STR "/"
 // Unix implementation uses system realpath
 #define jsrt_realpath(path, resolved) realpath(path, resolved)
 #endif
@@ -27,6 +31,161 @@ static char* jsrt_realpath(const char* path, char* resolved_path) {
 #include "assert.h"
 #include "ffi.h"
 #include "process.h"
+
+// ==== Cross-platform Path Handling Functions ====
+
+// Check if a character is a path separator (/ or \)
+static bool is_path_separator(char c) {
+  return c == '/' || c == '\\';
+}
+
+// Find the last path separator in a string
+static char* find_last_separator(const char* path) {
+  if (!path) return NULL;
+  
+  char* last_slash = strrchr(path, '/');
+  char* last_backslash = strrchr(path, '\\');
+  
+  if (last_slash && last_backslash) {
+    return (last_slash > last_backslash) ? last_slash : last_backslash;
+  } else if (last_slash) {
+    return last_slash;
+  } else {
+    return last_backslash;
+  }
+}
+
+// Normalize path separators to be platform-specific
+static char* normalize_path(const char* path) {
+  if (!path) return NULL;
+  
+  char* normalized = strdup(path);
+  if (!normalized) return NULL;
+  
+  // Convert path separators to platform-specific ones
+  for (char* p = normalized; *p; p++) {
+#ifdef _WIN32
+    if (*p == '/') *p = '\\';
+#else
+    if (*p == '\\') *p = '/';
+#endif
+  }
+  
+  return normalized;
+}
+
+// Get the parent directory of a path
+static char* get_parent_directory(const char* path) {
+  if (!path) return NULL;
+  
+  char* normalized = normalize_path(path);
+  if (!normalized) return NULL;
+  
+  char* last_sep = find_last_separator(normalized);
+  if (last_sep && last_sep != normalized) {
+    *last_sep = '\0';
+    return normalized;
+  } else if (last_sep == normalized) {
+    // Path is at root
+    normalized[1] = '\0';
+    return normalized;
+  } else {
+    // No separator found, return current directory
+    free(normalized);
+    return strdup(".");
+  }
+}
+
+// Join two path components with appropriate separator
+static char* path_join(const char* dir, const char* file) {
+  if (!dir || !file) return NULL;
+  
+  size_t dir_len = strlen(dir);
+  size_t file_len = strlen(file);
+  
+  // Check if dir already ends with separator
+  bool has_trailing_sep = (dir_len > 0 && is_path_separator(dir[dir_len - 1]));
+  
+  size_t total_len = dir_len + file_len + (has_trailing_sep ? 0 : 1) + 1;
+  char* result = malloc(total_len);
+  if (!result) return NULL;
+  
+  strcpy(result, dir);
+  if (!has_trailing_sep) {
+    strcat(result, PATH_SEPARATOR_STR);
+  }
+  strcat(result, file);
+  
+  char* normalized = normalize_path(result);
+  free(result);
+  return normalized;
+}
+
+// Check if a path is absolute
+static bool is_absolute_path(const char* path) {
+  if (!path) return false;
+  
+#ifdef _WIN32
+  // Windows: starts with drive letter (C:) or UNC path (\\) or single slash/backslash
+  return (strlen(path) >= 3 && path[1] == ':' && is_path_separator(path[2])) ||
+         (strlen(path) >= 2 && path[0] == '\\' && path[1] == '\\') ||
+         is_path_separator(path[0]);
+#else
+  // Unix: starts with /
+  return path[0] == '/';
+#endif
+}
+
+// Check if a path is relative (starts with ./ or ../)
+static bool is_relative_path(const char* path) {
+  if (!path) return false;
+  
+  return (path[0] == '.' && (is_path_separator(path[1]) || 
+         (path[1] == '.' && is_path_separator(path[2]))));
+}
+
+// Resolve a relative path against a base path
+static char* resolve_relative_path(const char* base_path, const char* relative_path) {
+  if (!base_path || !relative_path) return NULL;
+  
+  fprintf(stderr, "[DEBUG] resolve_relative_path: base_path='%s', relative_path='%s'\n", base_path, relative_path);
+  
+  char* base_dir = get_parent_directory(base_path);
+  if (!base_dir) return NULL;
+  
+  fprintf(stderr, "[DEBUG] resolve_relative_path: base_dir='%s'\n", base_dir);
+  
+  // Handle ./ and ../ prefixes
+  const char* clean_relative = relative_path;
+  if (relative_path[0] == '.' && is_path_separator(relative_path[1])) {
+    // Skip "./" prefix
+    clean_relative = relative_path + 2;
+  } else if (relative_path[0] == '.' && relative_path[1] == '.' && is_path_separator(relative_path[2])) {
+    // Handle "../" - need to go up one more level
+    char* parent_dir = get_parent_directory(base_dir);
+    free(base_dir);
+    if (!parent_dir) return NULL;
+    base_dir = parent_dir;
+    clean_relative = relative_path + 3;
+    
+    // Handle multiple "../" sequences
+    while (clean_relative[0] == '.' && clean_relative[1] == '.' && is_path_separator(clean_relative[2])) {
+      parent_dir = get_parent_directory(base_dir);
+      free(base_dir);
+      if (!parent_dir) return NULL;
+      base_dir = parent_dir;
+      clean_relative += 3;
+    }
+  }
+  
+  fprintf(stderr, "[DEBUG] resolve_relative_path: clean_relative='%s'\n", clean_relative);
+  
+  char* result = path_join(base_dir, clean_relative);
+  free(base_dir);
+  
+  fprintf(stderr, "[DEBUG] resolve_relative_path: final result='%s'\n", result ? result : "NULL");
+  return result;
+}
 
 // Module init function for jsrt:assert ES module
 static int js_std_assert_init(JSContext* ctx, JSModuleDef* m) {
@@ -64,39 +223,58 @@ static char* find_node_modules_path(const char* start_dir, const char* package_n
 
   // Start from the given directory and walk up the tree
   char* current_dir = strdup(start_dir ? start_dir : ".");
-  char* normalized_dir = jsrt_realpath(current_dir, NULL);
+  char* normalized_current = normalize_path(current_dir);
   free(current_dir);
+  
+  char* normalized_dir = jsrt_realpath(normalized_current, NULL);
+  free(normalized_current);
 
   if (!normalized_dir) {
     return NULL;
   }
 
+  // Normalize the resolved path as well
+  char* search_dir = normalize_path(normalized_dir);
+  free(normalized_dir);
+  
+  if (!search_dir) {
+    return NULL;
+  }
+
   // Walk up the directory tree looking for node_modules
-  char* search_dir = normalized_dir;
-  while (search_dir && strlen(search_dir) > 1) {
-    // Build node_modules/package_name path
-    size_t path_len = strlen(search_dir) + strlen(package_name) + 20;
-    char* package_path = malloc(path_len);
-    snprintf(package_path, path_len, "%s/node_modules/%s", search_dir, package_name);
+  char* current_search = search_dir;
+  while (current_search && strlen(current_search) > 1) {
+    // Build node_modules path
+    char* node_modules_path = path_join(current_search, "node_modules");
+    if (!node_modules_path) break;
+    
+    // Build package path
+    char* package_path = path_join(node_modules_path, package_name);
+    free(node_modules_path);
+    
+    if (!package_path) break;
 
     // Check if the package directory exists using access()
     if (access(package_path, F_OK) == 0) {
       JSRT_Debug("find_node_modules_path: found package at '%s'", package_path);
-      free(normalized_dir);
+      free(search_dir);
       return package_path;
     }
     free(package_path);
 
-    // Move up one directory
-    char* parent = strrchr(search_dir, '/');
-    if (parent && parent != search_dir) {
-      *parent = '\0';
-    } else {
+    // Move up one directory using our path helper
+    char* parent = get_parent_directory(current_search);
+    if (!parent || strcmp(parent, current_search) == 0) {
+      free(parent);
       break;
     }
+    
+    // Update current_search to parent (reuse the same buffer)
+    strcpy(current_search, parent);
+    free(parent);
   }
 
-  free(normalized_dir);
+  free(search_dir);
   JSRT_Debug("find_node_modules_path: package '%s' not found", package_name);
   return NULL;
 }
@@ -105,9 +283,8 @@ static char* resolve_package_main(const char* package_dir, bool is_esm) {
   JSRT_Debug("resolve_package_main: package_dir='%s', is_esm=%d", package_dir, is_esm);
 
   // Try to read package.json
-  size_t package_json_path_len = strlen(package_dir) + 15;
-  char* package_json_path = malloc(package_json_path_len);
-  snprintf(package_json_path, package_json_path_len, "%s/package.json", package_dir);
+  char* package_json_path = path_join(package_dir, "package.json");
+  if (!package_json_path) return NULL;
 
   JSRT_ReadFileResult json_result = JSRT_ReadFile(package_json_path);
   free(package_json_path);
@@ -135,9 +312,7 @@ static char* resolve_package_main(const char* package_dir, bool is_esm) {
       }
 
       if (entry_point) {
-        size_t full_path_len = strlen(package_dir) + strlen(entry_point) + 2;
-        char* full_path = malloc(full_path_len);
-        snprintf(full_path, full_path_len, "%s/%s", package_dir, entry_point);
+        char* full_path = path_join(package_dir, entry_point);
 
         // Free the JSON parsing resources
         if (entry_point != JSRT_GetPackageMain(ctx, package_json)) {
@@ -148,7 +323,7 @@ static char* resolve_package_main(const char* package_dir, bool is_esm) {
         JS_FreeContext(ctx);
         JS_FreeRuntime(rt);
 
-        JSRT_Debug("resolve_package_main: resolved to '%s'", full_path);
+        JSRT_Debug("resolve_package_main: resolved to '%s'", full_path ? full_path : "NULL");
         return full_path;
       }
 
@@ -163,11 +338,9 @@ static char* resolve_package_main(const char* package_dir, bool is_esm) {
 
   // Fallback to index.js or index.mjs
   const char* default_file = is_esm ? "index.mjs" : "index.js";
-  size_t default_path_len = strlen(package_dir) + strlen(default_file) + 2;
-  char* default_path = malloc(default_path_len);
-  snprintf(default_path, default_path_len, "%s/%s", package_dir, default_file);
+  char* default_path = path_join(package_dir, default_file);
 
-  JSRT_Debug("resolve_package_main: falling back to '%s'", default_path);
+  JSRT_Debug("resolve_package_main: falling back to '%s'", default_path ? default_path : "NULL");
   return default_path;
 }
 
@@ -178,13 +351,8 @@ static char* resolve_npm_module(const char* module_name, const char* base_path, 
   // Determine the starting directory for resolution
   char* start_dir = NULL;
   if (base_path) {
-    char* base_copy = strdup(base_path);
-    char* last_slash = strrchr(base_copy, '/');
-    if (last_slash) {
-      *last_slash = '\0';
-      start_dir = base_copy;
-    } else {
-      free(base_copy);
+    start_dir = get_parent_directory(base_path);
+    if (!start_dir) {
       start_dir = strdup(".");
     }
   } else {
@@ -210,32 +378,16 @@ static char* resolve_module_path(const char* module_name, const char* base_path)
   JSRT_Debug("resolve_module_path: module_name='%s', base_path='%s'", module_name, base_path ? base_path : "null");
 
   // Handle absolute paths
-  if (module_name[0] == '/') {
-    return strdup(module_name);
+  if (is_absolute_path(module_name)) {
+    return normalize_path(module_name);
   }
 
   // Handle relative paths
-  if (module_name[0] == '.' && (module_name[1] == '/' || (module_name[1] == '.' && module_name[2] == '/'))) {
+  if (is_relative_path(module_name)) {
     if (!base_path) {
-      return strdup(module_name);
+      return normalize_path(module_name);
     }
-
-    // Find the directory of base_path
-    char* base_dir = strdup(base_path);
-    char* last_slash = strrchr(base_dir, '/');
-    if (last_slash) {
-      *last_slash = '\0';
-    } else {
-      strcpy(base_dir, ".");
-    }
-
-    // Build the resolved path
-    size_t path_len = strlen(base_dir) + strlen(module_name) + 2;
-    char* resolved_path = malloc(path_len);
-    snprintf(resolved_path, path_len, "%s/%s", base_dir, module_name);
-
-    free(base_dir);
-    return resolved_path;
+    return resolve_relative_path(base_path, module_name);
   }
 
   // Handle bare module names (npm packages) - try npm resolution first
@@ -245,7 +397,7 @@ static char* resolve_module_path(const char* module_name, const char* base_path)
   }
 
   // Fallback: treat as relative to current directory (original behavior)
-  return strdup(module_name);
+  return normalize_path(module_name);
 }
 
 static char* try_extensions(const char* base_path) {
@@ -281,8 +433,8 @@ char* JSRT_ModuleNormalize(JSContext* ctx, const char* module_base_name, const c
     return strdup(module_name);
   }
 
-  // Check if this is a bare module name (not starting with . or /)
-  if (module_name[0] != '.' && module_name[0] != '/') {
+  // Check if this is a bare module name (not absolute or relative)
+  if (!is_absolute_path(module_name) && !is_relative_path(module_name)) {
     // Try npm module resolution for ES modules
     char* npm_path = resolve_npm_module(module_name, module_base_name, true);
     if (npm_path) {
@@ -301,8 +453,12 @@ char* JSRT_ModuleNormalize(JSContext* ctx, const char* module_base_name, const c
     free(resolved_path);
   }
 
-  JSRT_Debug("JSRT_ModuleNormalize: resolved to '%s'", final_path);
-  return final_path;
+  // Ensure final normalization
+  char* normalized_final = normalize_path(final_path);
+  free(final_path);
+  
+  JSRT_Debug("JSRT_ModuleNormalize: resolved to '%s'", normalized_final);
+  return normalized_final;
 }
 
 JSModuleDef* JSRT_ModuleLoader(JSContext* ctx, const char* module_name, void* opaque) {
@@ -368,32 +524,52 @@ JSModuleDef* JSRT_ModuleLoader(JSContext* ctx, const char* module_name, void* op
     size_t wrapper_size = strlen(file_result.data) + 1024;  // Increased buffer
     wrapper_code = malloc(wrapper_size);
 
-    // Create a wrapper that loads the CommonJS module and exports it
+    // Create a simple wrapper that uses the global require with proper context
+    // First, escape backslashes in the module_name for JavaScript string literal
+    size_t escaped_name_len = strlen(module_name) * 2 + 1; // Worst case: every char needs escaping
+    char* escaped_module_name = malloc(escaped_name_len);
+    char* dst = escaped_module_name;
+    for (const char* src = module_name; *src; src++) {
+      if (*src == '\\') {
+        *dst++ = '\\';
+        *dst++ = '\\';
+      } else if (*src == '"') {
+        *dst++ = '\\';
+        *dst++ = '"';
+      } else {
+        *dst++ = *src;
+      }
+    }
+    *dst = '\0';
+
     snprintf(wrapper_code, wrapper_size,
              "// Auto-generated ES module wrapper for CommonJS module\n"
              "const __cjs_module = { exports: {} };\n"
              "const __cjs_exports = __cjs_module.exports;\n"
-             "const __cjs_filename = '%s';\n"
-             "const __cjs_dirname = __cjs_filename.substring(0, __cjs_filename.lastIndexOf('/') || 0);\n"
+             "const __cjs_filename = \"%s\";\n"
+             "const __cjs_dirname = (() => {\n"
+             "  const lastSlash = __cjs_filename.lastIndexOf('/');\n"
+             "  const lastBackslash = __cjs_filename.lastIndexOf('\\\\');\n"
+             "  const lastSep = Math.max(lastSlash, lastBackslash);\n"
+             "  return lastSep > 0 ? __cjs_filename.substring(0, lastSep) : '.';\n"
+             "})();\n"
              "\n"
-             "// Create a context-aware require function\n"
-             "const __cjs_require = function(modulePath) {\n"
-             "  if (modulePath.startsWith('./') || modulePath.startsWith('../')) {\n"
-             "    // Resolve relative path relative to current module\n"
-             "    let resolvedPath = __cjs_dirname + '/' + modulePath.substring(2);\n"
-             "    return globalThis.require(resolvedPath);\n"
-             "  }\n"
-             "  return globalThis.require(modulePath);\n"
-             "};\n"
+             "// Set context for require resolution\n"
+             "globalThis.__esm_module_context = __cjs_filename;\n"
              "\n"
              "// CommonJS module code starts here\n"
              "(function(exports, require, module, __filename, __dirname) {\n"
              "%s\n"
-             "})(__cjs_exports, __cjs_require, __cjs_module, __cjs_filename, __cjs_dirname);\n"
+             "})(__cjs_exports, globalThis.require, __cjs_module, __cjs_filename, __cjs_dirname);\n"
+             "\n"
+             "// Clear context\n"
+             "globalThis.__esm_module_context = undefined;\n"
              "\n"
              "// ES module exports\n"
              "export default __cjs_module.exports;\n",
-             module_name, file_result.data);
+             escaped_module_name, file_result.data);
+
+    free(escaped_module_name);
 
     JSValue func_val =
         JS_Eval(ctx, wrapper_code, strlen(wrapper_code), module_name, JS_EVAL_TYPE_MODULE | JS_EVAL_FLAG_COMPILE_ONLY);
@@ -501,6 +677,28 @@ static JSValue js_require(JSContext* ctx, JSValueConst this_val, int argc, JSVal
 
   JSRT_Debug("js_require: loading CommonJS module '%s'", module_name);
 
+  // Check for ES module context
+  JSValue global = JS_GetGlobalObject(ctx);
+  JSValue esm_context_prop = JS_GetPropertyStr(ctx, global, "__esm_module_context");
+  char* esm_context_path = NULL;
+  if (!JS_IsUndefined(esm_context_prop) && !JS_IsNull(esm_context_prop)) {
+    const char* path_str = JS_ToCString(ctx, esm_context_prop);
+    if (path_str) {
+      esm_context_path = strdup(path_str);
+      JS_FreeCString(ctx, path_str);
+    }
+  }
+  JS_FreeValue(ctx, esm_context_prop);
+  JS_FreeValue(ctx, global);
+
+  // Use ES module context if available, otherwise current_module_path
+  const char* effective_module_path = esm_context_path ? esm_context_path : current_module_path;
+  
+  // Temporary debug output
+  fprintf(stderr, "[DEBUG] js_require: module_name='%s'\n", module_name);
+  fprintf(stderr, "[DEBUG] js_require: esm_context_path='%s'\n", esm_context_path ? esm_context_path : "NULL");
+  fprintf(stderr, "[DEBUG] js_require: effective_module_path='%s'\n", effective_module_path ? effective_module_path : "NULL");
+
   // Handle jsrt: modules
   if (strncmp(module_name, "jsrt:", 5) == 0) {
     const char* std_module = module_name + 5;  // Skip "jsrt:" prefix
@@ -508,41 +706,51 @@ static JSValue js_require(JSContext* ctx, JSValueConst this_val, int argc, JSVal
     if (strcmp(std_module, "assert") == 0) {
       JSValue result = JSRT_CreateAssertModule(ctx);
       JS_FreeCString(ctx, module_name);
+      free(esm_context_path);
       return result;
     }
 
     if (strcmp(std_module, "process") == 0) {
       JSValue result = JSRT_CreateProcessModule(ctx);
       JS_FreeCString(ctx, module_name);
+      free(esm_context_path);
       return result;
     }
 
     if (strcmp(std_module, "ffi") == 0) {
       JSValue result = JSRT_CreateFFIModule(ctx);
       JS_FreeCString(ctx, module_name);
+      free(esm_context_path);
       return result;
     }
 
     JS_FreeCString(ctx, module_name);
+    free(esm_context_path);
     return JS_ThrowReferenceError(ctx, "Unknown jsrt module '%s'", std_module);
   }
 
   // Check if this is a bare module name (npm package)
   char* resolved_path;
-  if (module_name[0] != '.' && module_name[0] != '/') {
+  fprintf(stderr, "[DEBUG] js_require: is_relative=%d, is_absolute=%d\n", 
+          is_relative_path(module_name), is_absolute_path(module_name));
+  
+  if (!is_relative_path(module_name) && !is_absolute_path(module_name)) {
     // Try npm module resolution first
-    resolved_path = resolve_npm_module(module_name, current_module_path, false);
+    JSRT_Debug("js_require: trying npm module resolution");
+    resolved_path = resolve_npm_module(module_name, effective_module_path, false);
     if (!resolved_path) {
       // Fallback to treating as relative path
-      resolved_path = resolve_module_path(module_name, current_module_path);
+      JSRT_Debug("js_require: npm resolution failed, falling back to module path resolution");
+      resolved_path = resolve_module_path(module_name, effective_module_path);
     }
   } else {
     // Resolve relative/absolute paths normally
-    resolved_path = resolve_module_path(module_name, current_module_path);
+    JSRT_Debug("js_require: resolving relative/absolute path");
+    resolved_path = resolve_module_path(module_name, effective_module_path);
   }
-  JSRT_Debug("js_require: resolved_path='%s'", resolved_path);
+  fprintf(stderr, "[DEBUG] js_require: resolved_path='%s'\n", resolved_path ? resolved_path : "NULL");
   char* final_path = try_extensions(resolved_path);
-  JSRT_Debug("js_require: after try_extensions, final_path='%s'", final_path ? final_path : "NULL");
+  fprintf(stderr, "[DEBUG] js_require: final_path='%s'\n", final_path ? final_path : "NULL");
 
   if (!final_path) {
     final_path = resolved_path;
@@ -557,6 +765,7 @@ static JSValue js_require(JSContext* ctx, JSValueConst this_val, int argc, JSVal
   if (!JS_IsUndefined(cached)) {
     JS_FreeCString(ctx, module_name);
     free(final_path);
+    free(esm_context_path);
     return cached;
   }
 
@@ -565,6 +774,7 @@ static JSValue js_require(JSContext* ctx, JSValueConst this_val, int argc, JSVal
   if (file_result.error != JSRT_READ_FILE_OK) {
     JS_FreeCString(ctx, module_name);
     free(final_path);
+    free(esm_context_path);
     JSRT_ReadFileResultFree(&file_result);
     return JS_ThrowReferenceError(ctx, "Cannot find module '%s'", module_name);
   }
@@ -588,22 +798,20 @@ static JSValue js_require(JSContext* ctx, JSValueConst this_val, int argc, JSVal
     JSRT_ReadFileResultFree(&file_result);
     JS_FreeCString(ctx, module_name);
     free(final_path);
+    free(esm_context_path);
     JS_FreeValue(ctx, module);
     JS_FreeValue(ctx, exports);
     return func;
   }
 
   // Call the wrapper function with CommonJS arguments
-  JSValue global = JS_GetGlobalObject(ctx);
-  JSValue require_func = JS_GetPropertyStr(ctx, global, "require");
+  JSValue global_obj = JS_GetGlobalObject(ctx);
+  JSValue require_func = JS_GetPropertyStr(ctx, global_obj, "require");
 
   // Calculate __dirname as the directory containing the module file
-  char* dirname_str = strdup(final_path);
-  char* last_slash = strrchr(dirname_str, '/');
-  if (last_slash) {
-    *last_slash = '\0';
-  } else {
-    strcpy(dirname_str, ".");
+  char* dirname_str = get_parent_directory(final_path);
+  if (!dirname_str) {
+    dirname_str = strdup(".");
   }
 
   JSValue args[5] = {JS_DupValue(ctx, exports), require_func, JS_DupValue(ctx, module), JS_NewString(ctx, final_path),
@@ -615,7 +823,7 @@ static JSValue js_require(JSContext* ctx, JSValueConst this_val, int argc, JSVal
   char* old_module_path = current_module_path;
   current_module_path = strdup(final_path);
 
-  JSValue result = JS_Call(ctx, func, global, 5, args);
+  JSValue result = JS_Call(ctx, func, global_obj, 5, args);
 
   // Restore previous module path context
   free(current_module_path);
@@ -624,7 +832,7 @@ static JSValue js_require(JSContext* ctx, JSValueConst this_val, int argc, JSVal
   // Clean up
   JSRT_ReadFileResultFree(&file_result);
   JS_FreeValue(ctx, func);
-  JS_FreeValue(ctx, global);
+  JS_FreeValue(ctx, global_obj);
   for (int i = 0; i < 5; i++) {
     JS_FreeValue(ctx, args[i]);
   }
@@ -632,6 +840,7 @@ static JSValue js_require(JSContext* ctx, JSValueConst this_val, int argc, JSVal
   if (JS_IsException(result)) {
     JS_FreeCString(ctx, module_name);
     free(final_path);
+    free(esm_context_path);
     JS_FreeValue(ctx, module);
     JS_FreeValue(ctx, exports);
     return result;
@@ -649,6 +858,7 @@ static JSValue js_require(JSContext* ctx, JSValueConst this_val, int argc, JSVal
 
   JS_FreeCString(ctx, module_name);
   free(final_path);
+  free(esm_context_path);
 
   return module_exports;
 }

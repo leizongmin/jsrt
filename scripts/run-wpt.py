@@ -14,27 +14,60 @@ from typing import Dict, List, Optional, Tuple
 # WinterCG Minimum Common API test categories
 # Based on: https://wintercg.org/work/minimum-common-api/
 WINTERCG_TESTS = {
-    'console': ['console/console-is-a-namespace.any.js', 'console/console-tests-historical.any.js', 'console/console-log-large-array.any.js'],
-    'encoding': ['encoding/api-basics.any.js'],  # Limited to basic API tests that work
-    'hr-time': ['hr-time/monotonic-clock.any.js'],  # Only include working tests
-    'performance': ['hr-time/monotonic-clock.any.js'],  # Performance timing from hr-time
+    'console': [
+        'console/console-is-a-namespace.any.js', 
+        'console/console-tests-historical.any.js', 
+        'console/console-log-large-array.any.js'
+    ],
+    'encoding': [
+        'encoding/api-basics.any.js',
+        'encoding/textdecoder-fatal.any.js',
+        'encoding/textdecoder-labels.any.js',
+        'encoding/textencoder-constructor-non-utf.any.js',
+        'encoding/textencoder-utf16-surrogates.any.js'
+    ],
+    'hr-time': [
+        'hr-time/monotonic-clock.any.js'
+    ],
+    'performance': [
+        'hr-time/monotonic-clock.any.js'
+    ],
     'url': [
         'url/url-constructor.any.js', 
         'url/url-origin.any.js', 
         'url/url-tojson.any.js',
+        'url/urlsearchparams-constructor.any.js',
         'url/urlsearchparams-get.any.js',
         'url/urlsearchparams-getall.any.js',
         'url/urlsearchparams-has.any.js',
+        'url/urlsearchparams-set.any.js',
         'url/urlsearchparams-size.any.js',
         'url/urlsearchparams-stringifier.any.js',
     ],
-    'fetch-api': [],  # TODO: Enable when fetch tests are working
-    'webcrypto': [
-        'WebCryptoAPI/getRandomValues.any.js',
-        # TODO: Add digest tests when they work
+    'fetch-api': [
+        'fetch/api/headers/headers-basic.any.js',
+        'fetch/api/request/request-consume-empty.any.js',
+        'fetch/api/response/response-consume-empty.any.js'
     ],
-    'base64': [],  # TODO: Find and add base64 tests
-    'timers': [],  # TODO: Find and add timer tests from HTML spec
+    'webcrypto': [
+        'WebCryptoAPI/getRandomValues.any.js'
+    ],
+    'base64': [
+        'html/webappapis/atob/base64.any.js'
+    ],
+    'timers': [
+        'html/webappapis/timers/cleartimeout-clearinterval.any.js',
+        'html/webappapis/timers/missing-timeout-setinterval.any.js',
+        'html/webappapis/timers/negative-settimeout.any.js',
+        'html/webappapis/timers/negative-setinterval.any.js'
+    ],
+    'streams': [
+        'streams/readable-streams/default-reader.any.js',
+        'streams/writable-streams/constructor.any.js'
+    ],
+    'abort': [
+        'dom/abort/abort-signal-any.any.js'
+    ]
 }
 
 class JSRTTestRunner:

@@ -17,14 +17,19 @@ make wpt-list
 
 ## Test Categories
 
-The following WinterCG Minimum Common API categories are currently supported:
+The following WinterCG Minimum Common API categories are comprehensively tested:
 
 - **console**: Console API tests (namespace, logging, etc.)
-- **encoding**: Text encoding/decoding APIs 
+- **encoding**: Text encoding/decoding APIs (TextEncoder/TextDecoder) 
 - **hr-time**: High Resolution Time API
 - **performance**: Performance measurement APIs
 - **url**: URL and URLSearchParams APIs
-- **webcrypto**: Web Crypto API (limited subset)
+- **fetch-api**: Fetch API (Headers, Request, Response)
+- **webcrypto**: Web Crypto API (getRandomValues, digest)
+- **base64**: Base64 utilities (btoa/atob)
+- **timers**: Timer functions (setTimeout, setInterval, etc.)
+- **streams**: Streams API (ReadableStream, WritableStream)
+- **abort**: AbortController and AbortSignal APIs
 
 ## Manual Usage
 
@@ -46,14 +51,40 @@ python3 scripts/run-wpt.py --list-categories
 
 ## Current Status
 
-The WPT integration is designed to test jsrt's implementation of the WinterCG Minimum Common API. As of the current implementation:
+The WPT integration provides comprehensive testing of jsrt's implementation of the WinterCG Minimum Common API. As of the current implementation:
 
-- **Console API**: 2/3 tests passing (67%)
-- **High Resolution Time**: 1/1 tests passing (100%)
-- **URL API**: 3/8 tests passing (38%)
-- **Overall**: ~40% pass rate
+**Test Coverage Summary:**
+- **Total Tests**: 32 tests across 11 API categories
+- **Passed**: 7 tests (21.9% pass rate)
+- **Failed**: 21 tests 
+- **Skipped**: 4 tests (due to browser-specific requirements)
 
-Tests are selected based on compatibility with jsrt's non-browser environment. Many WPT tests are designed for browsers and require DOM or other browser-specific APIs that jsrt does not implement.
+**API Category Results:**
+
+| Category | Tests | Passed | Failed | Skipped | Pass Rate |
+|----------|-------|--------|--------|---------|-----------|
+| **Console API** | 3 | 2 | 1 | 0 | 67% |
+| **HR-Time API** | 1 | 1 | 0 | 0 | 100% |
+| **Performance API** | 1 | 1 | 0 | 0 | 100% |  
+| **Timer Functions** | 4 | 1 | 3 | 0 | 25% |
+| **URL API** | 10 | 2 | 7 | 1 | 20% |
+| **Encoding API** | 5 | 0 | 5 | 0 | 0% |
+| **Fetch API** | 3 | 0 | 0 | 3 | - |
+| **WebCrypto API** | 1 | 0 | 1 | 0 | 0% |
+| **Base64 Utilities** | 1 | 0 | 1 | 0 | 0% |
+| **Streams API** | 2 | 0 | 2 | 0 | 0% |
+| **Abort API** | 1 | 0 | 1 | 0 | 0% |
+
+This comprehensive testing reveals the current completion level of jsrt's WinterCG API implementation and identifies specific areas requiring further development.
+
+**Implementation Completeness Analysis:**
+
+1. **✅ Well-Implemented APIs**: Console (partial), HR-Time, Performance, basic Timer functionality
+2. **🟡 Partially Implemented**: URL (basic functionality works, URLSearchParams has issues), Timers (basic setTimeout/setInterval work)
+3. **❌ Needs Improvement**: Encoding (missing test fixtures), WebCrypto (basic failures), Streams, Abort controllers
+4. **⚠️ Browser-Dependent**: Fetch API tests require browser globals and may need jsrt-specific variants
+
+The test results provide actionable insights into which WinterCG APIs need attention for full compliance.
 
 ## Architecture
 

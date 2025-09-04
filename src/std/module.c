@@ -4,7 +4,21 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+
+#ifdef _WIN32
+#include <io.h>  // for _access
+#include <windows.h>
+#define F_OK 0
+#define access _access
+// Windows implementation of realpath using _fullpath
+static char* jsrt_realpath(const char* path, char* resolved_path) {
+  return _fullpath(resolved_path, path, _MAX_PATH);
+}
+#else
 #include <unistd.h>
+// Unix implementation uses system realpath
+#define jsrt_realpath(path, resolved) realpath(path, resolved)
+#endif
 
 #include "../util/debug.h"
 #include "../util/file.h"
@@ -50,7 +64,7 @@ static char* find_node_modules_path(const char* start_dir, const char* package_n
 
   // Start from the given directory and walk up the tree
   char* current_dir = strdup(start_dir ? start_dir : ".");
-  char* normalized_dir = realpath(current_dir, NULL);
+  char* normalized_dir = jsrt_realpath(current_dir, NULL);
   free(current_dir);
 
   if (!normalized_dir) {

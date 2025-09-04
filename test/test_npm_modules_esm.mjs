@@ -19,7 +19,9 @@ try {
   );
 } catch (error) {
   console.log('❌ Lodash ES import not yet supported:', error.message);
-  console.log('   (This is expected - ES imports for npm packages are still being developed)');
+  console.log(
+    '   (This is expected - ES imports for npm packages are still being developed)'
+  );
 }
 
 // Test 2: Try to import moment
@@ -34,7 +36,9 @@ try {
   console.log('  current time:', moment().format('YYYY-MM-DD HH:mm:ss'));
 } catch (error) {
   console.log('❌ Moment ES import not yet supported:', error.message);
-  console.log('   (This is expected - ES imports for npm packages are still being developed)');
+  console.log(
+    '   (This is expected - ES imports for npm packages are still being developed)'
+  );
 }
 
 // Test 3: Non-existent package (should work for error handling)
@@ -54,5 +58,7 @@ try {
 }
 
 console.log('\n=== NPM ES module tests completed ===');
-console.log('Note: Full ES module support for npm packages is still in development.');
+console.log(
+  'Note: Full ES module support for npm packages is still in development.'
+);
 console.log('CommonJS require() works fully for npm packages.');

@@ -2333,10 +2333,16 @@ JSValue jsrt_subtle_importKey(JSContext* ctx, JSValueConst this_val, int argc, J
     return create_rejected_promise(ctx, error);
   }
 
-  // For now, only support "raw" format
-  if (strcmp(format, "raw") != 0) {
+  // Support multiple key formats
+  bool is_raw = (strcmp(format, "raw") == 0);
+  bool is_spki = (strcmp(format, "spki") == 0);
+  bool is_pkcs8 = (strcmp(format, "pkcs8") == 0);
+  bool is_jwk = (strcmp(format, "jwk") == 0);
+
+  if (!is_raw && !is_spki && !is_pkcs8 && !is_jwk) {
     JS_FreeCString(ctx, format);
-    JSValue error = jsrt_crypto_throw_error(ctx, "NotSupportedError", "Only 'raw' format supported currently");
+    JSValue error =
+        jsrt_crypto_throw_error(ctx, "NotSupportedError", "Supported formats: 'raw', 'spki', 'pkcs8', 'jwk'");
     return create_rejected_promise(ctx, error);
   }
   JS_FreeCString(ctx, format);
@@ -2383,31 +2389,156 @@ JSValue jsrt_subtle_importKey(JSContext* ctx, JSValueConst this_val, int argc, J
   // Get usages (fifth argument)
   // For now, just store the usages array as-is
 
-  // Create a copy of the key data
-  uint8_t* key_data_copy = malloc(key_data_size);
-  if (!key_data_copy) {
-    JSValue error = jsrt_crypto_throw_error(ctx, "OperationError", "Failed to allocate key data");
-    return create_rejected_promise(ctx, error);
-  }
-  memcpy(key_data_copy, key_data, key_data_size);
-
-  // Create CryptoKey object
+  // Handle different key formats
   JSValue crypto_key = JS_NewObject(ctx);
-  JS_SetPropertyStr(ctx, crypto_key, "type", JS_NewString(ctx, "secret"));
   JS_SetPropertyStr(ctx, crypto_key, "extractable", JS_NewBool(ctx, extractable));
   JS_SetPropertyStr(ctx, crypto_key, "usages", JS_DupValue(ctx, argv[4]));
   JS_SetPropertyStr(ctx, crypto_key, "algorithm", JS_DupValue(ctx, argv[2]));
 
-  // Store the key data as ArrayBuffer
-  JSValue key_buffer = JS_NewArrayBuffer(ctx, key_data_copy, key_data_size, NULL, NULL, 0);
-  JS_SetPropertyStr(ctx, crypto_key, "__keyData", key_buffer);
+  if (is_raw) {
+    // Handle raw format (existing logic)
+    uint8_t* key_data_copy = malloc(key_data_size);
+    if (!key_data_copy) {
+      JS_FreeValue(ctx, crypto_key);
+      JSValue error = jsrt_crypto_throw_error(ctx, "OperationError", "Failed to allocate key data");
+      return create_rejected_promise(ctx, error);
+    }
+    memcpy(key_data_copy, key_data, key_data_size);
 
-  return create_resolved_promise(ctx, crypto_key);
+    JS_SetPropertyStr(ctx, crypto_key, "type", JS_NewString(ctx, "secret"));
+    JSValue key_buffer = JS_NewArrayBuffer(ctx, key_data_copy, key_data_size, NULL, NULL, 0);
+    JS_SetPropertyStr(ctx, crypto_key, "__keyData", key_buffer);
+
+    return create_resolved_promise(ctx, crypto_key);
+  } else if (is_spki) {
+    // Handle SPKI format (SubjectPublicKeyInfo for public keys)
+    return jsrt_import_spki_key(ctx, key_data, key_data_size, alg, crypto_key);
+  } else if (is_pkcs8) {
+    // Handle PKCS8 format (PKCS#8 for private keys)
+    return jsrt_import_pkcs8_key(ctx, key_data, key_data_size, alg, crypto_key);
+  } else if (is_jwk) {
+    // Handle JWK format (JSON Web Key)
+    JS_FreeValue(ctx, crypto_key);
+    JSValue error = jsrt_crypto_throw_error(ctx, "NotSupportedError", "JWK format not yet implemented");
+    return create_rejected_promise(ctx, error);
+  }
+
+  // Should not reach here
+  JS_FreeValue(ctx, crypto_key);
+  JSValue error = jsrt_crypto_throw_error(ctx, "OperationError", "Unknown key format");
+  return create_rejected_promise(ctx, error);
 }
 
 JSValue jsrt_subtle_exportKey(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
-  JSValue error = jsrt_crypto_throw_error(ctx, "NotSupportedError", "exportKey not yet implemented");
-  return create_rejected_promise(ctx, error);
+  if (argc < 2) {
+    JSValue error = jsrt_crypto_throw_error(ctx, "TypeError", "exportKey requires 2 arguments");
+    return create_rejected_promise(ctx, error);
+  }
+
+  // Get format (first argument)
+  const char* format = JS_ToCString(ctx, argv[0]);
+  if (!format) {
+    JSValue error = jsrt_crypto_throw_error(ctx, "TypeError", "Invalid format parameter");
+    return create_rejected_promise(ctx, error);
+  }
+
+  // Support basic formats
+  bool is_raw = (strcmp(format, "raw") == 0);
+  bool is_spki = (strcmp(format, "spki") == 0);
+  bool is_pkcs8 = (strcmp(format, "pkcs8") == 0);
+
+  if (!is_raw && !is_spki && !is_pkcs8) {
+    JS_FreeCString(ctx, format);
+    JSValue error =
+        jsrt_crypto_throw_error(ctx, "NotSupportedError", "Supported export formats: 'raw', 'spki', 'pkcs8'");
+    return create_rejected_promise(ctx, error);
+  }
+
+  // Get the key object (second argument)
+  JSValue key_obj = argv[1];
+
+  // Check if key is extractable
+  JSValue extractable_val = JS_GetPropertyStr(ctx, key_obj, "extractable");
+  bool extractable = JS_ToBool(ctx, extractable_val);
+  JS_FreeValue(ctx, extractable_val);
+
+  if (!extractable) {
+    JS_FreeCString(ctx, format);
+    JSValue error = jsrt_crypto_throw_error(ctx, "InvalidAccessError", "Key is not extractable");
+    return create_rejected_promise(ctx, error);
+  }
+
+  // Get key data
+  JSValue key_data_val = JS_GetPropertyStr(ctx, key_obj, "__keyData");
+  if (JS_IsUndefined(key_data_val)) {
+    JS_FreeCString(ctx, format);
+    JSValue error = jsrt_crypto_throw_error(ctx, "OperationError", "Key data not found");
+    return create_rejected_promise(ctx, error);
+  }
+
+  size_t key_data_size;
+  uint8_t* key_data = JS_GetArrayBuffer(ctx, &key_data_size, key_data_val);
+  if (!key_data) {
+    JS_FreeValue(ctx, key_data_val);
+    JS_FreeCString(ctx, format);
+    JSValue error = jsrt_crypto_throw_error(ctx, "OperationError", "Invalid key data");
+    return create_rejected_promise(ctx, error);
+  }
+
+  // Get key type
+  JSValue type_val = JS_GetPropertyStr(ctx, key_obj, "type");
+  const char* key_type = JS_ToCString(ctx, type_val);
+  JS_FreeValue(ctx, type_val);
+
+  if (is_raw) {
+    // For raw format, just return the key data as-is (only for secret keys)
+    if (strcmp(key_type, "secret") != 0) {
+      JS_FreeCString(ctx, key_type);
+      JS_FreeValue(ctx, key_data_val);
+      JS_FreeCString(ctx, format);
+      JSValue error = jsrt_crypto_throw_error(ctx, "InvalidAccessError", "Raw format only supports secret keys");
+      return create_rejected_promise(ctx, error);
+    }
+
+    // Create a copy of the key data
+    uint8_t* exported_data = malloc(key_data_size);
+    if (!exported_data) {
+      JS_FreeCString(ctx, key_type);
+      JS_FreeValue(ctx, key_data_val);
+      JS_FreeCString(ctx, format);
+      JSValue error = jsrt_crypto_throw_error(ctx, "OperationError", "Memory allocation failed");
+      return create_rejected_promise(ctx, error);
+    }
+    memcpy(exported_data, key_data, key_data_size);
+
+    JS_FreeCString(ctx, key_type);
+    JS_FreeValue(ctx, key_data_val);
+    JS_FreeCString(ctx, format);
+
+    JSValue result = JS_NewArrayBuffer(ctx, exported_data, key_data_size, NULL, NULL, 0);
+    return create_resolved_promise(ctx, result);
+  } else if (is_spki && strcmp(key_type, "public") == 0) {
+    // Export public key in SPKI format
+    JSValue result = jsrt_export_spki_key(ctx, key_data, key_data_size);
+    JS_FreeCString(ctx, key_type);
+    JS_FreeValue(ctx, key_data_val);
+    JS_FreeCString(ctx, format);
+    return result;
+  } else if (is_pkcs8 && strcmp(key_type, "private") == 0) {
+    // Export private key in PKCS8 format
+    JSValue result = jsrt_export_pkcs8_key(ctx, key_data, key_data_size);
+    JS_FreeCString(ctx, key_type);
+    JS_FreeValue(ctx, key_data_val);
+    JS_FreeCString(ctx, format);
+    return result;
+  } else {
+    // Format/key type mismatch
+    JS_FreeCString(ctx, key_type);
+    JS_FreeValue(ctx, key_data_val);
+    JS_FreeCString(ctx, format);
+    JSValue error = jsrt_crypto_throw_error(ctx, "InvalidAccessError", "Format does not match key type");
+    return create_rejected_promise(ctx, error);
+  }
 }
 
 JSValue jsrt_subtle_deriveKey(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
@@ -2826,6 +2957,259 @@ JSValue jsrt_subtle_deriveBits(JSContext* ctx, JSValueConst this_val, int argc, 
   }
 
   return create_resolved_promise(ctx, derived_bits);
+}
+
+// SPKI (SubjectPublicKeyInfo) key import function
+JSValue jsrt_import_spki_key(JSContext* ctx, const uint8_t* key_data, size_t key_data_size, jsrt_crypto_algorithm_t alg,
+                             JSValue crypto_key) {
+  // Get OpenSSL handle
+  extern void* openssl_handle;
+  if (!openssl_handle) {
+    JS_FreeValue(ctx, crypto_key);
+    JSValue error = jsrt_crypto_throw_error(ctx, "OperationError", "OpenSSL not available");
+    return create_rejected_promise(ctx, error);
+  }
+
+  // Load OpenSSL functions
+  void* (*d2i_PUBKEY)(void** a, const unsigned char** pp, long length) = JSRT_DLSYM(openssl_handle, "d2i_PUBKEY");
+  void (*EVP_PKEY_free)(void* pkey) = JSRT_DLSYM(openssl_handle, "EVP_PKEY_free");
+  int (*i2d_PUBKEY)(void* a, unsigned char** pp) = JSRT_DLSYM(openssl_handle, "i2d_PUBKEY");
+
+  if (!d2i_PUBKEY || !EVP_PKEY_free || !i2d_PUBKEY) {
+    JS_FreeValue(ctx, crypto_key);
+    JSValue error = jsrt_crypto_throw_error(ctx, "OperationError", "Required OpenSSL functions not available");
+    return create_rejected_promise(ctx, error);
+  }
+
+  // Parse SPKI data to create EVP_PKEY
+  const unsigned char* key_ptr = key_data;
+  void* pkey = d2i_PUBKEY(NULL, &key_ptr, key_data_size);
+  if (!pkey) {
+    JS_FreeValue(ctx, crypto_key);
+    JSValue error = jsrt_crypto_throw_error(ctx, "DataError", "Invalid SPKI key data");
+    return create_rejected_promise(ctx, error);
+  }
+
+  // Convert back to DER to store in key object
+  unsigned char* der_data = NULL;
+  int der_len = i2d_PUBKEY(pkey, &der_data);
+  if (der_len <= 0 || !der_data) {
+    EVP_PKEY_free(pkey);
+    JS_FreeValue(ctx, crypto_key);
+    JSValue error = jsrt_crypto_throw_error(ctx, "OperationError", "Failed to serialize public key");
+    return create_rejected_promise(ctx, error);
+  }
+
+  // Create a copy of the DER data for the key object
+  uint8_t* der_copy = malloc(der_len);
+  if (!der_copy) {
+    EVP_PKEY_free(pkey);
+    void (*OPENSSL_free)(void*) = JSRT_DLSYM(openssl_handle, "OPENSSL_free");
+    if (OPENSSL_free)
+      OPENSSL_free(der_data);
+    JS_FreeValue(ctx, crypto_key);
+    JSValue error = jsrt_crypto_throw_error(ctx, "OperationError", "Memory allocation failed");
+    return create_rejected_promise(ctx, error);
+  }
+  memcpy(der_copy, der_data, der_len);
+
+  // Clean up OpenSSL resources
+  EVP_PKEY_free(pkey);
+  void (*OPENSSL_free)(void*) = JSRT_DLSYM(openssl_handle, "OPENSSL_free");
+  if (OPENSSL_free)
+    OPENSSL_free(der_data);
+
+  // Set key properties
+  JS_SetPropertyStr(ctx, crypto_key, "type", JS_NewString(ctx, "public"));
+  JSValue key_buffer = JS_NewArrayBuffer(ctx, der_copy, der_len, NULL, NULL, 0);
+  JS_SetPropertyStr(ctx, crypto_key, "__keyData", key_buffer);
+
+  JSRT_Debug("JSRT_Crypto: Successfully imported SPKI public key (%d bytes)", der_len);
+  return create_resolved_promise(ctx, crypto_key);
+}
+
+// PKCS8 private key import function
+JSValue jsrt_import_pkcs8_key(JSContext* ctx, const uint8_t* key_data, size_t key_data_size,
+                              jsrt_crypto_algorithm_t alg, JSValue crypto_key) {
+  // Get OpenSSL handle
+  extern void* openssl_handle;
+  if (!openssl_handle) {
+    JS_FreeValue(ctx, crypto_key);
+    JSValue error = jsrt_crypto_throw_error(ctx, "OperationError", "OpenSSL not available");
+    return create_rejected_promise(ctx, error);
+  }
+
+  // Load OpenSSL functions
+  void* (*d2i_PrivateKey)(int type, void** a, const unsigned char** pp, long length) =
+      JSRT_DLSYM(openssl_handle, "d2i_PrivateKey");
+  void* (*d2i_PKCS8_PRIV_KEY_INFO)(void** a, const unsigned char** pp, long length) =
+      JSRT_DLSYM(openssl_handle, "d2i_PKCS8_PRIV_KEY_INFO");
+  void* (*EVP_PKCS82PKEY)(void* p8) = JSRT_DLSYM(openssl_handle, "EVP_PKCS82PKEY");
+  void (*EVP_PKEY_free)(void* pkey) = JSRT_DLSYM(openssl_handle, "EVP_PKEY_free");
+  void (*PKCS8_PRIV_KEY_INFO_free)(void* a) = JSRT_DLSYM(openssl_handle, "PKCS8_PRIV_KEY_INFO_free");
+  int (*i2d_PrivateKey)(void* a, unsigned char** pp) = JSRT_DLSYM(openssl_handle, "i2d_PrivateKey");
+
+  if (!d2i_PKCS8_PRIV_KEY_INFO || !EVP_PKCS82PKEY || !EVP_PKEY_free || !PKCS8_PRIV_KEY_INFO_free || !i2d_PrivateKey) {
+    JS_FreeValue(ctx, crypto_key);
+    JSValue error = jsrt_crypto_throw_error(ctx, "OperationError", "Required OpenSSL functions not available");
+    return create_rejected_promise(ctx, error);
+  }
+
+  // Parse PKCS8 data
+  const unsigned char* key_ptr = key_data;
+  void* p8inf = d2i_PKCS8_PRIV_KEY_INFO(NULL, &key_ptr, key_data_size);
+  if (!p8inf) {
+    JS_FreeValue(ctx, crypto_key);
+    JSValue error = jsrt_crypto_throw_error(ctx, "DataError", "Invalid PKCS8 key data");
+    return create_rejected_promise(ctx, error);
+  }
+
+  // Convert PKCS8 to EVP_PKEY
+  void* pkey = EVP_PKCS82PKEY(p8inf);
+  PKCS8_PRIV_KEY_INFO_free(p8inf);
+
+  if (!pkey) {
+    JS_FreeValue(ctx, crypto_key);
+    JSValue error = jsrt_crypto_throw_error(ctx, "DataError", "Failed to parse PKCS8 private key");
+    return create_rejected_promise(ctx, error);
+  }
+
+  // Convert to DER format for storage
+  unsigned char* der_data = NULL;
+  int der_len = i2d_PrivateKey(pkey, &der_data);
+  if (der_len <= 0 || !der_data) {
+    EVP_PKEY_free(pkey);
+    JS_FreeValue(ctx, crypto_key);
+    JSValue error = jsrt_crypto_throw_error(ctx, "OperationError", "Failed to serialize private key");
+    return create_rejected_promise(ctx, error);
+  }
+
+  // Create a copy of the DER data
+  uint8_t* der_copy = malloc(der_len);
+  if (!der_copy) {
+    EVP_PKEY_free(pkey);
+    void (*OPENSSL_free)(void*) = JSRT_DLSYM(openssl_handle, "OPENSSL_free");
+    if (OPENSSL_free)
+      OPENSSL_free(der_data);
+    JS_FreeValue(ctx, crypto_key);
+    JSValue error = jsrt_crypto_throw_error(ctx, "OperationError", "Memory allocation failed");
+    return create_rejected_promise(ctx, error);
+  }
+  memcpy(der_copy, der_data, der_len);
+
+  // Clean up OpenSSL resources
+  EVP_PKEY_free(pkey);
+  void (*OPENSSL_free)(void*) = JSRT_DLSYM(openssl_handle, "OPENSSL_free");
+  if (OPENSSL_free)
+    OPENSSL_free(der_data);
+
+  // Set key properties
+  JS_SetPropertyStr(ctx, crypto_key, "type", JS_NewString(ctx, "private"));
+  JSValue key_buffer = JS_NewArrayBuffer(ctx, der_copy, der_len, NULL, NULL, 0);
+  JS_SetPropertyStr(ctx, crypto_key, "__keyData", key_buffer);
+
+  JSRT_Debug("JSRT_Crypto: Successfully imported PKCS8 private key (%d bytes)", der_len);
+  return create_resolved_promise(ctx, crypto_key);
+}
+
+// Export public key in SPKI format
+JSValue jsrt_export_spki_key(JSContext* ctx, const uint8_t* key_data, size_t key_data_size) {
+  // Get OpenSSL handle
+  extern void* openssl_handle;
+  if (!openssl_handle) {
+    JSValue error = jsrt_crypto_throw_error(ctx, "OperationError", "OpenSSL not available");
+    return create_rejected_promise(ctx, error);
+  }
+
+  // The key_data should already be in DER format from internal storage
+  // For SPKI export, we need to convert from our internal DER format to SPKI format
+  // In our implementation, RSA/EC public keys are already stored as SPKI DER format
+  // So we can directly return them
+
+  // Create a copy of the key data
+  uint8_t* spki_data = malloc(key_data_size);
+  if (!spki_data) {
+    JSValue error = jsrt_crypto_throw_error(ctx, "OperationError", "Memory allocation failed");
+    return create_rejected_promise(ctx, error);
+  }
+  memcpy(spki_data, key_data, key_data_size);
+
+  JSValue result = JS_NewArrayBuffer(ctx, spki_data, key_data_size, NULL, NULL, 0);
+  JSRT_Debug("JSRT_Crypto: Successfully exported SPKI public key (%zu bytes)", key_data_size);
+  return create_resolved_promise(ctx, result);
+}
+
+// Export private key in PKCS8 format
+JSValue jsrt_export_pkcs8_key(JSContext* ctx, const uint8_t* key_data, size_t key_data_size) {
+  // Get OpenSSL handle
+  extern void* openssl_handle;
+  if (!openssl_handle) {
+    JSValue error = jsrt_crypto_throw_error(ctx, "OperationError", "OpenSSL not available");
+    return create_rejected_promise(ctx, error);
+  }
+
+  // Load OpenSSL functions for converting DER private key to PKCS8
+  void* (*d2i_PrivateKey)(int type, void** a, const unsigned char** pp, long length) =
+      JSRT_DLSYM(openssl_handle, "d2i_PrivateKey");
+  void* (*EVP_PKEY2PKCS8)(void* pkey) = JSRT_DLSYM(openssl_handle, "EVP_PKEY2PKCS8");
+  int (*i2d_PKCS8_PRIV_KEY_INFO)(void* a, unsigned char** pp) = JSRT_DLSYM(openssl_handle, "i2d_PKCS8_PRIV_KEY_INFO");
+  void (*EVP_PKEY_free)(void* pkey) = JSRT_DLSYM(openssl_handle, "EVP_PKEY_free");
+  void (*PKCS8_PRIV_KEY_INFO_free)(void* a) = JSRT_DLSYM(openssl_handle, "PKCS8_PRIV_KEY_INFO_free");
+
+  if (!d2i_PrivateKey || !EVP_PKEY2PKCS8 || !i2d_PKCS8_PRIV_KEY_INFO || !EVP_PKEY_free || !PKCS8_PRIV_KEY_INFO_free) {
+    JSValue error = jsrt_crypto_throw_error(ctx, "OperationError", "Required OpenSSL functions not available");
+    return create_rejected_promise(ctx, error);
+  }
+
+  // Parse the DER private key
+  const unsigned char* key_ptr = key_data;
+  void* pkey = d2i_PrivateKey(0, NULL, &key_ptr, key_data_size);
+  if (!pkey) {
+    JSValue error = jsrt_crypto_throw_error(ctx, "OperationError", "Failed to parse private key");
+    return create_rejected_promise(ctx, error);
+  }
+
+  // Convert to PKCS8
+  void* p8inf = EVP_PKEY2PKCS8(pkey);
+  if (!p8inf) {
+    EVP_PKEY_free(pkey);
+    JSValue error = jsrt_crypto_throw_error(ctx, "OperationError", "Failed to convert to PKCS8 format");
+    return create_rejected_promise(ctx, error);
+  }
+
+  // Serialize PKCS8 to DER
+  unsigned char* pkcs8_data = NULL;
+  int pkcs8_len = i2d_PKCS8_PRIV_KEY_INFO(p8inf, &pkcs8_data);
+  if (pkcs8_len <= 0 || !pkcs8_data) {
+    PKCS8_PRIV_KEY_INFO_free(p8inf);
+    EVP_PKEY_free(pkey);
+    JSValue error = jsrt_crypto_throw_error(ctx, "OperationError", "Failed to serialize PKCS8 key");
+    return create_rejected_promise(ctx, error);
+  }
+
+  // Create a copy for JavaScript
+  uint8_t* pkcs8_copy = malloc(pkcs8_len);
+  if (!pkcs8_copy) {
+    void (*OPENSSL_free)(void*) = JSRT_DLSYM(openssl_handle, "OPENSSL_free");
+    if (OPENSSL_free)
+      OPENSSL_free(pkcs8_data);
+    PKCS8_PRIV_KEY_INFO_free(p8inf);
+    EVP_PKEY_free(pkey);
+    JSValue error = jsrt_crypto_throw_error(ctx, "OperationError", "Memory allocation failed");
+    return create_rejected_promise(ctx, error);
+  }
+  memcpy(pkcs8_copy, pkcs8_data, pkcs8_len);
+
+  // Clean up OpenSSL resources
+  void (*OPENSSL_free)(void*) = JSRT_DLSYM(openssl_handle, "OPENSSL_free");
+  if (OPENSSL_free)
+    OPENSSL_free(pkcs8_data);
+  PKCS8_PRIV_KEY_INFO_free(p8inf);
+  EVP_PKEY_free(pkey);
+
+  JSValue result = JS_NewArrayBuffer(ctx, pkcs8_copy, pkcs8_len, NULL, NULL, 0);
+  JSRT_Debug("JSRT_Crypto: Successfully exported PKCS8 private key (%d bytes)", pkcs8_len);
+  return create_resolved_promise(ctx, result);
 }
 
 // Create SubtleCrypto object

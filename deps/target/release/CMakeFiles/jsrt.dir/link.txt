@@ -1,0 +1,1 @@
+/usr/bin/cc -O3 -DNDEBUG  -s CMakeFiles/jsrt.dir/src/main.c.o CMakeFiles/jsrt.dir/src/build.c.o -o jsrt  libjsrtcore.a libquickjs.a deps/libuv/libuv.a libllhttp.a libreadline.a -ldl -lm -lpthread -lrt 

@@ -1,0 +1,422 @@
+[
+{
+  "directory": "/home/lei/work/jsrt/deps/target/release/deps/libuv",
+  "command": "/usr/bin/cc -D_FILE_OFFSET_BITS=64 -D_GNU_SOURCE -D_LARGEFILE_SOURCE -D_POSIX_C_SOURCE=200112 -I/home/lei/work/jsrt/src -I/home/lei/work/jsrt/deps/quickjs -I/home/lei/work/jsrt/deps/libuv/include -I/home/lei/work/jsrt/deps/libuv/src -I/home/lei/work/jsrt/deps/readline -I/home/lei/work/jsrt/deps/llhttp/include -O3 -DNDEBUG -std=gnu90 -fvisibility=hidden -Wstrict-prototypes -Wextra -Wall -Wno-unused-parameter -fno-strict-aliasing -o CMakeFiles/uv_a.dir/src/fs-poll.c.o -c /home/lei/work/jsrt/deps/libuv/src/fs-poll.c",
+  "file": "/home/lei/work/jsrt/deps/libuv/src/fs-poll.c",
+  "output": "deps/libuv/CMakeFiles/uv_a.dir/src/fs-poll.c.o"
+},
+{
+  "directory": "/home/lei/work/jsrt/deps/target/release/deps/libuv",
+  "command": "/usr/bin/cc -D_FILE_OFFSET_BITS=64 -D_GNU_SOURCE -D_LARGEFILE_SOURCE -D_POSIX_C_SOURCE=200112 -I/home/lei/work/jsrt/src -I/home/lei/work/jsrt/deps/quickjs -I/home/lei/work/jsrt/deps/libuv/include -I/home/lei/work/jsrt/deps/libuv/src -I/home/lei/work/jsrt/deps/readline -I/home/lei/work/jsrt/deps/llhttp/include -O3 -DNDEBUG -std=gnu90 -fvisibility=hidden -Wstrict-prototypes -Wextra -Wall -Wno-unused-parameter -fno-strict-aliasing -o CMakeFiles/uv_a.dir/src/idna.c.o -c /home/lei/work/jsrt/deps/libuv/src/idna.c",
+  "file": "/home/lei/work/jsrt/deps/libuv/src/idna.c",
+  "output": "deps/libuv/CMakeFiles/uv_a.dir/src/idna.c.o"
+},
+{
+  "directory": "/home/lei/work/jsrt/deps/target/release/deps/libuv",
+  "command": "/usr/bin/cc -D_FILE_OFFSET_BITS=64 -D_GNU_SOURCE -D_LARGEFILE_SOURCE -D_POSIX_C_SOURCE=200112 -I/home/lei/work/jsrt/src -I/home/lei/work/jsrt/deps/quickjs -I/home/lei/work/jsrt/deps/libuv/include -I/home/lei/work/jsrt/deps/libuv/src -I/home/lei/work/jsrt/deps/readline -I/home/lei/work/jsrt/deps/llhttp/include -O3 -DNDEBUG -std=gnu90 -fvisibility=hidden -Wstrict-prototypes -Wextra -Wall -Wno-unused-parameter -fno-strict-aliasing -o CMakeFiles/uv_a.dir/src/inet.c.o -c /home/lei/work/jsrt/deps/libuv/src/inet.c",
+  "file": "/home/lei/work/jsrt/deps/libuv/src/inet.c",
+  "output": "deps/libuv/CMakeFiles/uv_a.dir/src/inet.c.o"
+},
+{
+  "directory": "/home/lei/work/jsrt/deps/target/release/deps/libuv",
+  "command": "/usr/bin/cc -D_FILE_OFFSET_BITS=64 -D_GNU_SOURCE -D_LARGEFILE_SOURCE -D_POSIX_C_SOURCE=200112 -I/home/lei/work/jsrt/src -I/home/lei/work/jsrt/deps/quickjs -I/home/lei/work/jsrt/deps/libuv/include -I/home/lei/work/jsrt/deps/libuv/src -I/home/lei/work/jsrt/deps/readline -I/home/lei/work/jsrt/deps/llhttp/include -O3 -DNDEBUG -std=gnu90 -fvisibility=hidden -Wstrict-prototypes -Wextra -Wall -Wno-unused-parameter -fno-strict-aliasing -o CMakeFiles/uv_a.dir/src/random.c.o -c /home/lei/work/jsrt/deps/libuv/src/random.c",
+  "file": "/home/lei/work/jsrt/deps/libuv/src/random.c",
+  "output": "deps/libuv/CMakeFiles/uv_a.dir/src/random.c.o"
+},
+{
+  "directory": "/home/lei/work/jsrt/deps/target/release/deps/libuv",
+  "command": "/usr/bin/cc -D_FILE_OFFSET_BITS=64 -D_GNU_SOURCE -D_LARGEFILE_SOURCE -D_POSIX_C_SOURCE=200112 -I/home/lei/work/jsrt/src -I/home/lei/work/jsrt/deps/quickjs -I/home/lei/work/jsrt/deps/libuv/include -I/home/lei/work/jsrt/deps/libuv/src -I/home/lei/work/jsrt/deps/readline -I/home/lei/work/jsrt/deps/llhttp/include -O3 -DNDEBUG -std=gnu90 -fvisibility=hidden -Wstrict-prototypes -Wextra -Wall -Wno-unused-parameter -fno-strict-aliasing -o CMakeFiles/uv_a.dir/src/strscpy.c.o -c /home/lei/work/jsrt/deps/libuv/src/strscpy.c",
+  "file": "/home/lei/work/jsrt/deps/libuv/src/strscpy.c",
+  "output": "deps/libuv/CMakeFiles/uv_a.dir/src/strscpy.c.o"
+},
+{
+  "directory": "/home/lei/work/jsrt/deps/target/release/deps/libuv",
+  "command": "/usr/bin/cc -D_FILE_OFFSET_BITS=64 -D_GNU_SOURCE -D_LARGEFILE_SOURCE -D_POSIX_C_SOURCE=200112 -I/home/lei/work/jsrt/src -I/home/lei/work/jsrt/deps/quickjs -I/home/lei/work/jsrt/deps/libuv/include -I/home/lei/work/jsrt/deps/libuv/src -I/home/lei/work/jsrt/deps/readline -I/home/lei/work/jsrt/deps/llhttp/include -O3 -DNDEBUG -std=gnu90 -fvisibility=hidden -Wstrict-prototypes -Wextra -Wall -Wno-unused-parameter -fno-strict-aliasing -o CMakeFiles/uv_a.dir/src/strtok.c.o -c /home/lei/work/jsrt/deps/libuv/src/strtok.c",
+  "file": "/home/lei/work/jsrt/deps/libuv/src/strtok.c",
+  "output": "deps/libuv/CMakeFiles/uv_a.dir/src/strtok.c.o"
+},
+{
+  "directory": "/home/lei/work/jsrt/deps/target/release/deps/libuv",
+  "command": "/usr/bin/cc -D_FILE_OFFSET_BITS=64 -D_GNU_SOURCE -D_LARGEFILE_SOURCE -D_POSIX_C_SOURCE=200112 -I/home/lei/work/jsrt/src -I/home/lei/work/jsrt/deps/quickjs -I/home/lei/work/jsrt/deps/libuv/include -I/home/lei/work/jsrt/deps/libuv/src -I/home/lei/work/jsrt/deps/readline -I/home/lei/work/jsrt/deps/llhttp/include -O3 -DNDEBUG -std=gnu90 -fvisibility=hidden -Wstrict-prototypes -Wextra -Wall -Wno-unused-parameter -fno-strict-aliasing -o CMakeFiles/uv_a.dir/src/thread-common.c.o -c /home/lei/work/jsrt/deps/libuv/src/thread-common.c",
+  "file": "/home/lei/work/jsrt/deps/libuv/src/thread-common.c",
+  "output": "deps/libuv/CMakeFiles/uv_a.dir/src/thread-common.c.o"
+},
+{
+  "directory": "/home/lei/work/jsrt/deps/target/release/deps/libuv",
+  "command": "/usr/bin/cc -D_FILE_OFFSET_BITS=64 -D_GNU_SOURCE -D_LARGEFILE_SOURCE -D_POSIX_C_SOURCE=200112 -I/home/lei/work/jsrt/src -I/home/lei/work/jsrt/deps/quickjs -I/home/lei/work/jsrt/deps/libuv/include -I/home/lei/work/jsrt/deps/libuv/src -I/home/lei/work/jsrt/deps/readline -I/home/lei/work/jsrt/deps/llhttp/include -O3 -DNDEBUG -std=gnu90 -fvisibility=hidden -Wstrict-prototypes -Wextra -Wall -Wno-unused-parameter -fno-strict-aliasing -o CMakeFiles/uv_a.dir/src/threadpool.c.o -c /home/lei/work/jsrt/deps/libuv/src/threadpool.c",
+  "file": "/home/lei/work/jsrt/deps/libuv/src/threadpool.c",
+  "output": "deps/libuv/CMakeFiles/uv_a.dir/src/threadpool.c.o"
+},
+{
+  "directory": "/home/lei/work/jsrt/deps/target/release/deps/libuv",
+  "command": "/usr/bin/cc -D_FILE_OFFSET_BITS=64 -D_GNU_SOURCE -D_LARGEFILE_SOURCE -D_POSIX_C_SOURCE=200112 -I/home/lei/work/jsrt/src -I/home/lei/work/jsrt/deps/quickjs -I/home/lei/work/jsrt/deps/libuv/include -I/home/lei/work/jsrt/deps/libuv/src -I/home/lei/work/jsrt/deps/readline -I/home/lei/work/jsrt/deps/llhttp/include -O3 -DNDEBUG -std=gnu90 -fvisibility=hidden -Wstrict-prototypes -Wextra -Wall -Wno-unused-parameter -fno-strict-aliasing -o CMakeFiles/uv_a.dir/src/timer.c.o -c /home/lei/work/jsrt/deps/libuv/src/timer.c",
+  "file": "/home/lei/work/jsrt/deps/libuv/src/timer.c",
+  "output": "deps/libuv/CMakeFiles/uv_a.dir/src/timer.c.o"
+},
+{
+  "directory": "/home/lei/work/jsrt/deps/target/release/deps/libuv",
+  "command": "/usr/bin/cc -D_FILE_OFFSET_BITS=64 -D_GNU_SOURCE -D_LARGEFILE_SOURCE -D_POSIX_C_SOURCE=200112 -I/home/lei/work/jsrt/src -I/home/lei/work/jsrt/deps/quickjs -I/home/lei/work/jsrt/deps/libuv/include -I/home/lei/work/jsrt/deps/libuv/src -I/home/lei/work/jsrt/deps/readline -I/home/lei/work/jsrt/deps/llhttp/include -O3 -DNDEBUG -std=gnu90 -fvisibility=hidden -Wstrict-prototypes -Wextra -Wall -Wno-unused-parameter -fno-strict-aliasing -o CMakeFiles/uv_a.dir/src/uv-common.c.o -c /home/lei/work/jsrt/deps/libuv/src/uv-common.c",
+  "file": "/home/lei/work/jsrt/deps/libuv/src/uv-common.c",
+  "output": "deps/libuv/CMakeFiles/uv_a.dir/src/uv-common.c.o"
+},
+{
+  "directory": "/home/lei/work/jsrt/deps/target/release/deps/libuv",
+  "command": "/usr/bin/cc -D_FILE_OFFSET_BITS=64 -D_GNU_SOURCE -D_LARGEFILE_SOURCE -D_POSIX_C_SOURCE=200112 -I/home/lei/work/jsrt/src -I/home/lei/work/jsrt/deps/quickjs -I/home/lei/work/jsrt/deps/libuv/include -I/home/lei/work/jsrt/deps/libuv/src -I/home/lei/work/jsrt/deps/readline -I/home/lei/work/jsrt/deps/llhttp/include -O3 -DNDEBUG -std=gnu90 -fvisibility=hidden -Wstrict-prototypes -Wextra -Wall -Wno-unused-parameter -fno-strict-aliasing -o CMakeFiles/uv_a.dir/src/uv-data-getter-setters.c.o -c /home/lei/work/jsrt/deps/libuv/src/uv-data-getter-setters.c",
+  "file": "/home/lei/work/jsrt/deps/libuv/src/uv-data-getter-setters.c",
+  "output": "deps/libuv/CMakeFiles/uv_a.dir/src/uv-data-getter-setters.c.o"
+},
+{
+  "directory": "/home/lei/work/jsrt/deps/target/release/deps/libuv",
+  "command": "/usr/bin/cc -D_FILE_OFFSET_BITS=64 -D_GNU_SOURCE -D_LARGEFILE_SOURCE -D_POSIX_C_SOURCE=200112 -I/home/lei/work/jsrt/src -I/home/lei/work/jsrt/deps/quickjs -I/home/lei/work/jsrt/deps/libuv/include -I/home/lei/work/jsrt/deps/libuv/src -I/home/lei/work/jsrt/deps/readline -I/home/lei/work/jsrt/deps/llhttp/include -O3 -DNDEBUG -std=gnu90 -fvisibility=hidden -Wstrict-prototypes -Wextra -Wall -Wno-unused-parameter -fno-strict-aliasing -o CMakeFiles/uv_a.dir/src/version.c.o -c /home/lei/work/jsrt/deps/libuv/src/version.c",
+  "file": "/home/lei/work/jsrt/deps/libuv/src/version.c",
+  "output": "deps/libuv/CMakeFiles/uv_a.dir/src/version.c.o"
+},
+{
+  "directory": "/home/lei/work/jsrt/deps/target/release/deps/libuv",
+  "command": "/usr/bin/cc -D_FILE_OFFSET_BITS=64 -D_GNU_SOURCE -D_LARGEFILE_SOURCE -D_POSIX_C_SOURCE=200112 -I/home/lei/work/jsrt/src -I/home/lei/work/jsrt/deps/quickjs -I/home/lei/work/jsrt/deps/libuv/include -I/home/lei/work/jsrt/deps/libuv/src -I/home/lei/work/jsrt/deps/readline -I/home/lei/work/jsrt/deps/llhttp/include -O3 -DNDEBUG -std=gnu90 -fvisibility=hidden -Wstrict-prototypes -Wextra -Wall -Wno-unused-parameter -fno-strict-aliasing -o CMakeFiles/uv_a.dir/src/unix/async.c.o -c /home/lei/work/jsrt/deps/libuv/src/unix/async.c",
+  "file": "/home/lei/work/jsrt/deps/libuv/src/unix/async.c",
+  "output": "deps/libuv/CMakeFiles/uv_a.dir/src/unix/async.c.o"
+},
+{
+  "directory": "/home/lei/work/jsrt/deps/target/release/deps/libuv",
+  "command": "/usr/bin/cc -D_FILE_OFFSET_BITS=64 -D_GNU_SOURCE -D_LARGEFILE_SOURCE -D_POSIX_C_SOURCE=200112 -I/home/lei/work/jsrt/src -I/home/lei/work/jsrt/deps/quickjs -I/home/lei/work/jsrt/deps/libuv/include -I/home/lei/work/jsrt/deps/libuv/src -I/home/lei/work/jsrt/deps/readline -I/home/lei/work/jsrt/deps/llhttp/include -O3 -DNDEBUG -std=gnu90 -fvisibility=hidden -Wstrict-prototypes -Wextra -Wall -Wno-unused-parameter -fno-strict-aliasing -o CMakeFiles/uv_a.dir/src/unix/core.c.o -c /home/lei/work/jsrt/deps/libuv/src/unix/core.c",
+  "file": "/home/lei/work/jsrt/deps/libuv/src/unix/core.c",
+  "output": "deps/libuv/CMakeFiles/uv_a.dir/src/unix/core.c.o"
+},
+{
+  "directory": "/home/lei/work/jsrt/deps/target/release/deps/libuv",
+  "command": "/usr/bin/cc -D_FILE_OFFSET_BITS=64 -D_GNU_SOURCE -D_LARGEFILE_SOURCE -D_POSIX_C_SOURCE=200112 -I/home/lei/work/jsrt/src -I/home/lei/work/jsrt/deps/quickjs -I/home/lei/work/jsrt/deps/libuv/include -I/home/lei/work/jsrt/deps/libuv/src -I/home/lei/work/jsrt/deps/readline -I/home/lei/work/jsrt/deps/llhttp/include -O3 -DNDEBUG -std=gnu90 -fvisibility=hidden -Wstrict-prototypes -Wextra -Wall -Wno-unused-parameter -fno-strict-aliasing -o CMakeFiles/uv_a.dir/src/unix/dl.c.o -c /home/lei/work/jsrt/deps/libuv/src/unix/dl.c",
+  "file": "/home/lei/work/jsrt/deps/libuv/src/unix/dl.c",
+  "output": "deps/libuv/CMakeFiles/uv_a.dir/src/unix/dl.c.o"
+},
+{
+  "directory": "/home/lei/work/jsrt/deps/target/release/deps/libuv",
+  "command": "/usr/bin/cc -D_FILE_OFFSET_BITS=64 -D_GNU_SOURCE -D_LARGEFILE_SOURCE -D_POSIX_C_SOURCE=200112 -I/home/lei/work/jsrt/src -I/home/lei/work/jsrt/deps/quickjs -I/home/lei/work/jsrt/deps/libuv/include -I/home/lei/work/jsrt/deps/libuv/src -I/home/lei/work/jsrt/deps/readline -I/home/lei/work/jsrt/deps/llhttp/include -O3 -DNDEBUG -std=gnu90 -fvisibility=hidden -Wstrict-prototypes -Wextra -Wall -Wno-unused-parameter -fno-strict-aliasing -o CMakeFiles/uv_a.dir/src/unix/fs.c.o -c /home/lei/work/jsrt/deps/libuv/src/unix/fs.c",
+  "file": "/home/lei/work/jsrt/deps/libuv/src/unix/fs.c",
+  "output": "deps/libuv/CMakeFiles/uv_a.dir/src/unix/fs.c.o"
+},
+{
+  "directory": "/home/lei/work/jsrt/deps/target/release/deps/libuv",
+  "command": "/usr/bin/cc -D_FILE_OFFSET_BITS=64 -D_GNU_SOURCE -D_LARGEFILE_SOURCE -D_POSIX_C_SOURCE=200112 -I/home/lei/work/jsrt/src -I/home/lei/work/jsrt/deps/quickjs -I/home/lei/work/jsrt/deps/libuv/include -I/home/lei/work/jsrt/deps/libuv/src -I/home/lei/work/jsrt/deps/readline -I/home/lei/work/jsrt/deps/llhttp/include -O3 -DNDEBUG -std=gnu90 -fvisibility=hidden -Wstrict-prototypes -Wextra -Wall -Wno-unused-parameter -fno-strict-aliasing -o CMakeFiles/uv_a.dir/src/unix/getaddrinfo.c.o -c /home/lei/work/jsrt/deps/libuv/src/unix/getaddrinfo.c",
+  "file": "/home/lei/work/jsrt/deps/libuv/src/unix/getaddrinfo.c",
+  "output": "deps/libuv/CMakeFiles/uv_a.dir/src/unix/getaddrinfo.c.o"
+},
+{
+  "directory": "/home/lei/work/jsrt/deps/target/release/deps/libuv",
+  "command": "/usr/bin/cc -D_FILE_OFFSET_BITS=64 -D_GNU_SOURCE -D_LARGEFILE_SOURCE -D_POSIX_C_SOURCE=200112 -I/home/lei/work/jsrt/src -I/home/lei/work/jsrt/deps/quickjs -I/home/lei/work/jsrt/deps/libuv/include -I/home/lei/work/jsrt/deps/libuv/src -I/home/lei/work/jsrt/deps/readline -I/home/lei/work/jsrt/deps/llhttp/include -O3 -DNDEBUG -std=gnu90 -fvisibility=hidden -Wstrict-prototypes -Wextra -Wall -Wno-unused-parameter -fno-strict-aliasing -o CMakeFiles/uv_a.dir/src/unix/getnameinfo.c.o -c /home/lei/work/jsrt/deps/libuv/src/unix/getnameinfo.c",
+  "file": "/home/lei/work/jsrt/deps/libuv/src/unix/getnameinfo.c",
+  "output": "deps/libuv/CMakeFiles/uv_a.dir/src/unix/getnameinfo.c.o"
+},
+{
+  "directory": "/home/lei/work/jsrt/deps/target/release/deps/libuv",
+  "command": "/usr/bin/cc -D_FILE_OFFSET_BITS=64 -D_GNU_SOURCE -D_LARGEFILE_SOURCE -D_POSIX_C_SOURCE=200112 -I/home/lei/work/jsrt/src -I/home/lei/work/jsrt/deps/quickjs -I/home/lei/work/jsrt/deps/libuv/include -I/home/lei/work/jsrt/deps/libuv/src -I/home/lei/work/jsrt/deps/readline -I/home/lei/work/jsrt/deps/llhttp/include -O3 -DNDEBUG -std=gnu90 -fvisibility=hidden -Wstrict-prototypes -Wextra -Wall -Wno-unused-parameter -fno-strict-aliasing -o CMakeFiles/uv_a.dir/src/unix/loop-watcher.c.o -c /home/lei/work/jsrt/deps/libuv/src/unix/loop-watcher.c",
+  "file": "/home/lei/work/jsrt/deps/libuv/src/unix/loop-watcher.c",
+  "output": "deps/libuv/CMakeFiles/uv_a.dir/src/unix/loop-watcher.c.o"
+},
+{
+  "directory": "/home/lei/work/jsrt/deps/target/release/deps/libuv",
+  "command": "/usr/bin/cc -D_FILE_OFFSET_BITS=64 -D_GNU_SOURCE -D_LARGEFILE_SOURCE -D_POSIX_C_SOURCE=200112 -I/home/lei/work/jsrt/src -I/home/lei/work/jsrt/deps/quickjs -I/home/lei/work/jsrt/deps/libuv/include -I/home/lei/work/jsrt/deps/libuv/src -I/home/lei/work/jsrt/deps/readline -I/home/lei/work/jsrt/deps/llhttp/include -O3 -DNDEBUG -std=gnu90 -fvisibility=hidden -Wstrict-prototypes -Wextra -Wall -Wno-unused-parameter -fno-strict-aliasing -o CMakeFiles/uv_a.dir/src/unix/loop.c.o -c /home/lei/work/jsrt/deps/libuv/src/unix/loop.c",
+  "file": "/home/lei/work/jsrt/deps/libuv/src/unix/loop.c",
+  "output": "deps/libuv/CMakeFiles/uv_a.dir/src/unix/loop.c.o"
+},
+{
+  "directory": "/home/lei/work/jsrt/deps/target/release/deps/libuv",
+  "command": "/usr/bin/cc -D_FILE_OFFSET_BITS=64 -D_GNU_SOURCE -D_LARGEFILE_SOURCE -D_POSIX_C_SOURCE=200112 -I/home/lei/work/jsrt/src -I/home/lei/work/jsrt/deps/quickjs -I/home/lei/work/jsrt/deps/libuv/include -I/home/lei/work/jsrt/deps/libuv/src -I/home/lei/work/jsrt/deps/readline -I/home/lei/work/jsrt/deps/llhttp/include -O3 -DNDEBUG -std=gnu90 -fvisibility=hidden -Wstrict-prototypes -Wextra -Wall -Wno-unused-parameter -fno-strict-aliasing -o CMakeFiles/uv_a.dir/src/unix/pipe.c.o -c /home/lei/work/jsrt/deps/libuv/src/unix/pipe.c",
+  "file": "/home/lei/work/jsrt/deps/libuv/src/unix/pipe.c",
+  "output": "deps/libuv/CMakeFiles/uv_a.dir/src/unix/pipe.c.o"
+},
+{
+  "directory": "/home/lei/work/jsrt/deps/target/release/deps/libuv",
+  "command": "/usr/bin/cc -D_FILE_OFFSET_BITS=64 -D_GNU_SOURCE -D_LARGEFILE_SOURCE -D_POSIX_C_SOURCE=200112 -I/home/lei/work/jsrt/src -I/home/lei/work/jsrt/deps/quickjs -I/home/lei/work/jsrt/deps/libuv/include -I/home/lei/work/jsrt/deps/libuv/src -I/home/lei/work/jsrt/deps/readline -I/home/lei/work/jsrt/deps/llhttp/include -O3 -DNDEBUG -std=gnu90 -fvisibility=hidden -Wstrict-prototypes -Wextra -Wall -Wno-unused-parameter -fno-strict-aliasing -o CMakeFiles/uv_a.dir/src/unix/poll.c.o -c /home/lei/work/jsrt/deps/libuv/src/unix/poll.c",
+  "file": "/home/lei/work/jsrt/deps/libuv/src/unix/poll.c",
+  "output": "deps/libuv/CMakeFiles/uv_a.dir/src/unix/poll.c.o"
+},
+{
+  "directory": "/home/lei/work/jsrt/deps/target/release/deps/libuv",
+  "command": "/usr/bin/cc -D_FILE_OFFSET_BITS=64 -D_GNU_SOURCE -D_LARGEFILE_SOURCE -D_POSIX_C_SOURCE=200112 -I/home/lei/work/jsrt/src -I/home/lei/work/jsrt/deps/quickjs -I/home/lei/work/jsrt/deps/libuv/include -I/home/lei/work/jsrt/deps/libuv/src -I/home/lei/work/jsrt/deps/readline -I/home/lei/work/jsrt/deps/llhttp/include -O3 -DNDEBUG -std=gnu90 -fvisibility=hidden -Wstrict-prototypes -Wextra -Wall -Wno-unused-parameter -fno-strict-aliasing -o CMakeFiles/uv_a.dir/src/unix/process.c.o -c /home/lei/work/jsrt/deps/libuv/src/unix/process.c",
+  "file": "/home/lei/work/jsrt/deps/libuv/src/unix/process.c",
+  "output": "deps/libuv/CMakeFiles/uv_a.dir/src/unix/process.c.o"
+},
+{
+  "directory": "/home/lei/work/jsrt/deps/target/release/deps/libuv",
+  "command": "/usr/bin/cc -D_FILE_OFFSET_BITS=64 -D_GNU_SOURCE -D_LARGEFILE_SOURCE -D_POSIX_C_SOURCE=200112 -I/home/lei/work/jsrt/src -I/home/lei/work/jsrt/deps/quickjs -I/home/lei/work/jsrt/deps/libuv/include -I/home/lei/work/jsrt/deps/libuv/src -I/home/lei/work/jsrt/deps/readline -I/home/lei/work/jsrt/deps/llhttp/include -O3 -DNDEBUG -std=gnu90 -fvisibility=hidden -Wstrict-prototypes -Wextra -Wall -Wno-unused-parameter -fno-strict-aliasing -o CMakeFiles/uv_a.dir/src/unix/random-devurandom.c.o -c /home/lei/work/jsrt/deps/libuv/src/unix/random-devurandom.c",
+  "file": "/home/lei/work/jsrt/deps/libuv/src/unix/random-devurandom.c",
+  "output": "deps/libuv/CMakeFiles/uv_a.dir/src/unix/random-devurandom.c.o"
+},
+{
+  "directory": "/home/lei/work/jsrt/deps/target/release/deps/libuv",
+  "command": "/usr/bin/cc -D_FILE_OFFSET_BITS=64 -D_GNU_SOURCE -D_LARGEFILE_SOURCE -D_POSIX_C_SOURCE=200112 -I/home/lei/work/jsrt/src -I/home/lei/work/jsrt/deps/quickjs -I/home/lei/work/jsrt/deps/libuv/include -I/home/lei/work/jsrt/deps/libuv/src -I/home/lei/work/jsrt/deps/readline -I/home/lei/work/jsrt/deps/llhttp/include -O3 -DNDEBUG -std=gnu90 -fvisibility=hidden -Wstrict-prototypes -Wextra -Wall -Wno-unused-parameter -fno-strict-aliasing -o CMakeFiles/uv_a.dir/src/unix/signal.c.o -c /home/lei/work/jsrt/deps/libuv/src/unix/signal.c",
+  "file": "/home/lei/work/jsrt/deps/libuv/src/unix/signal.c",
+  "output": "deps/libuv/CMakeFiles/uv_a.dir/src/unix/signal.c.o"
+},
+{
+  "directory": "/home/lei/work/jsrt/deps/target/release/deps/libuv",
+  "command": "/usr/bin/cc -D_FILE_OFFSET_BITS=64 -D_GNU_SOURCE -D_LARGEFILE_SOURCE -D_POSIX_C_SOURCE=200112 -I/home/lei/work/jsrt/src -I/home/lei/work/jsrt/deps/quickjs -I/home/lei/work/jsrt/deps/libuv/include -I/home/lei/work/jsrt/deps/libuv/src -I/home/lei/work/jsrt/deps/readline -I/home/lei/work/jsrt/deps/llhttp/include -O3 -DNDEBUG -std=gnu90 -fvisibility=hidden -Wstrict-prototypes -Wextra -Wall -Wno-unused-parameter -fno-strict-aliasing -o CMakeFiles/uv_a.dir/src/unix/stream.c.o -c /home/lei/work/jsrt/deps/libuv/src/unix/stream.c",
+  "file": "/home/lei/work/jsrt/deps/libuv/src/unix/stream.c",
+  "output": "deps/libuv/CMakeFiles/uv_a.dir/src/unix/stream.c.o"
+},
+{
+  "directory": "/home/lei/work/jsrt/deps/target/release/deps/libuv",
+  "command": "/usr/bin/cc -D_FILE_OFFSET_BITS=64 -D_GNU_SOURCE -D_LARGEFILE_SOURCE -D_POSIX_C_SOURCE=200112 -I/home/lei/work/jsrt/src -I/home/lei/work/jsrt/deps/quickjs -I/home/lei/work/jsrt/deps/libuv/include -I/home/lei/work/jsrt/deps/libuv/src -I/home/lei/work/jsrt/deps/readline -I/home/lei/work/jsrt/deps/llhttp/include -O3 -DNDEBUG -std=gnu90 -fvisibility=hidden -Wstrict-prototypes -Wextra -Wall -Wno-unused-parameter -fno-strict-aliasing -o CMakeFiles/uv_a.dir/src/unix/tcp.c.o -c /home/lei/work/jsrt/deps/libuv/src/unix/tcp.c",
+  "file": "/home/lei/work/jsrt/deps/libuv/src/unix/tcp.c",
+  "output": "deps/libuv/CMakeFiles/uv_a.dir/src/unix/tcp.c.o"
+},
+{
+  "directory": "/home/lei/work/jsrt/deps/target/release/deps/libuv",
+  "command": "/usr/bin/cc -D_FILE_OFFSET_BITS=64 -D_GNU_SOURCE -D_LARGEFILE_SOURCE -D_POSIX_C_SOURCE=200112 -I/home/lei/work/jsrt/src -I/home/lei/work/jsrt/deps/quickjs -I/home/lei/work/jsrt/deps/libuv/include -I/home/lei/work/jsrt/deps/libuv/src -I/home/lei/work/jsrt/deps/readline -I/home/lei/work/jsrt/deps/llhttp/include -O3 -DNDEBUG -std=gnu90 -fvisibility=hidden -Wstrict-prototypes -Wextra -Wall -Wno-unused-parameter -fno-strict-aliasing -o CMakeFiles/uv_a.dir/src/unix/thread.c.o -c /home/lei/work/jsrt/deps/libuv/src/unix/thread.c",
+  "file": "/home/lei/work/jsrt/deps/libuv/src/unix/thread.c",
+  "output": "deps/libuv/CMakeFiles/uv_a.dir/src/unix/thread.c.o"
+},
+{
+  "directory": "/home/lei/work/jsrt/deps/target/release/deps/libuv",
+  "command": "/usr/bin/cc -D_FILE_OFFSET_BITS=64 -D_GNU_SOURCE -D_LARGEFILE_SOURCE -D_POSIX_C_SOURCE=200112 -I/home/lei/work/jsrt/src -I/home/lei/work/jsrt/deps/quickjs -I/home/lei/work/jsrt/deps/libuv/include -I/home/lei/work/jsrt/deps/libuv/src -I/home/lei/work/jsrt/deps/readline -I/home/lei/work/jsrt/deps/llhttp/include -O3 -DNDEBUG -std=gnu90 -fvisibility=hidden -Wstrict-prototypes -Wextra -Wall -Wno-unused-parameter -fno-strict-aliasing -o CMakeFiles/uv_a.dir/src/unix/tty.c.o -c /home/lei/work/jsrt/deps/libuv/src/unix/tty.c",
+  "file": "/home/lei/work/jsrt/deps/libuv/src/unix/tty.c",
+  "output": "deps/libuv/CMakeFiles/uv_a.dir/src/unix/tty.c.o"
+},
+{
+  "directory": "/home/lei/work/jsrt/deps/target/release/deps/libuv",
+  "command": "/usr/bin/cc -D_FILE_OFFSET_BITS=64 -D_GNU_SOURCE -D_LARGEFILE_SOURCE -D_POSIX_C_SOURCE=200112 -I/home/lei/work/jsrt/src -I/home/lei/work/jsrt/deps/quickjs -I/home/lei/work/jsrt/deps/libuv/include -I/home/lei/work/jsrt/deps/libuv/src -I/home/lei/work/jsrt/deps/readline -I/home/lei/work/jsrt/deps/llhttp/include -O3 -DNDEBUG -std=gnu90 -fvisibility=hidden -Wstrict-prototypes -Wextra -Wall -Wno-unused-parameter -fno-strict-aliasing -o CMakeFiles/uv_a.dir/src/unix/udp.c.o -c /home/lei/work/jsrt/deps/libuv/src/unix/udp.c",
+  "file": "/home/lei/work/jsrt/deps/libuv/src/unix/udp.c",
+  "output": "deps/libuv/CMakeFiles/uv_a.dir/src/unix/udp.c.o"
+},
+{
+  "directory": "/home/lei/work/jsrt/deps/target/release/deps/libuv",
+  "command": "/usr/bin/cc -D_FILE_OFFSET_BITS=64 -D_GNU_SOURCE -D_LARGEFILE_SOURCE -D_POSIX_C_SOURCE=200112 -I/home/lei/work/jsrt/src -I/home/lei/work/jsrt/deps/quickjs -I/home/lei/work/jsrt/deps/libuv/include -I/home/lei/work/jsrt/deps/libuv/src -I/home/lei/work/jsrt/deps/readline -I/home/lei/work/jsrt/deps/llhttp/include -O3 -DNDEBUG -std=gnu90 -fvisibility=hidden -Wstrict-prototypes -Wextra -Wall -Wno-unused-parameter -fno-strict-aliasing -o CMakeFiles/uv_a.dir/src/unix/proctitle.c.o -c /home/lei/work/jsrt/deps/libuv/src/unix/proctitle.c",
+  "file": "/home/lei/work/jsrt/deps/libuv/src/unix/proctitle.c",
+  "output": "deps/libuv/CMakeFiles/uv_a.dir/src/unix/proctitle.c.o"
+},
+{
+  "directory": "/home/lei/work/jsrt/deps/target/release/deps/libuv",
+  "command": "/usr/bin/cc -D_FILE_OFFSET_BITS=64 -D_GNU_SOURCE -D_LARGEFILE_SOURCE -D_POSIX_C_SOURCE=200112 -I/home/lei/work/jsrt/src -I/home/lei/work/jsrt/deps/quickjs -I/home/lei/work/jsrt/deps/libuv/include -I/home/lei/work/jsrt/deps/libuv/src -I/home/lei/work/jsrt/deps/readline -I/home/lei/work/jsrt/deps/llhttp/include -O3 -DNDEBUG -std=gnu90 -fvisibility=hidden -Wstrict-prototypes -Wextra -Wall -Wno-unused-parameter -fno-strict-aliasing -o CMakeFiles/uv_a.dir/src/unix/linux.c.o -c /home/lei/work/jsrt/deps/libuv/src/unix/linux.c",
+  "file": "/home/lei/work/jsrt/deps/libuv/src/unix/linux.c",
+  "output": "deps/libuv/CMakeFiles/uv_a.dir/src/unix/linux.c.o"
+},
+{
+  "directory": "/home/lei/work/jsrt/deps/target/release/deps/libuv",
+  "command": "/usr/bin/cc -D_FILE_OFFSET_BITS=64 -D_GNU_SOURCE -D_LARGEFILE_SOURCE -D_POSIX_C_SOURCE=200112 -I/home/lei/work/jsrt/src -I/home/lei/work/jsrt/deps/quickjs -I/home/lei/work/jsrt/deps/libuv/include -I/home/lei/work/jsrt/deps/libuv/src -I/home/lei/work/jsrt/deps/readline -I/home/lei/work/jsrt/deps/llhttp/include -O3 -DNDEBUG -std=gnu90 -fvisibility=hidden -Wstrict-prototypes -Wextra -Wall -Wno-unused-parameter -fno-strict-aliasing -o CMakeFiles/uv_a.dir/src/unix/procfs-exepath.c.o -c /home/lei/work/jsrt/deps/libuv/src/unix/procfs-exepath.c",
+  "file": "/home/lei/work/jsrt/deps/libuv/src/unix/procfs-exepath.c",
+  "output": "deps/libuv/CMakeFiles/uv_a.dir/src/unix/procfs-exepath.c.o"
+},
+{
+  "directory": "/home/lei/work/jsrt/deps/target/release/deps/libuv",
+  "command": "/usr/bin/cc -D_FILE_OFFSET_BITS=64 -D_GNU_SOURCE -D_LARGEFILE_SOURCE -D_POSIX_C_SOURCE=200112 -I/home/lei/work/jsrt/src -I/home/lei/work/jsrt/deps/quickjs -I/home/lei/work/jsrt/deps/libuv/include -I/home/lei/work/jsrt/deps/libuv/src -I/home/lei/work/jsrt/deps/readline -I/home/lei/work/jsrt/deps/llhttp/include -O3 -DNDEBUG -std=gnu90 -fvisibility=hidden -Wstrict-prototypes -Wextra -Wall -Wno-unused-parameter -fno-strict-aliasing -o CMakeFiles/uv_a.dir/src/unix/random-getrandom.c.o -c /home/lei/work/jsrt/deps/libuv/src/unix/random-getrandom.c",
+  "file": "/home/lei/work/jsrt/deps/libuv/src/unix/random-getrandom.c",
+  "output": "deps/libuv/CMakeFiles/uv_a.dir/src/unix/random-getrandom.c.o"
+},
+{
+  "directory": "/home/lei/work/jsrt/deps/target/release/deps/libuv",
+  "command": "/usr/bin/cc -D_FILE_OFFSET_BITS=64 -D_GNU_SOURCE -D_LARGEFILE_SOURCE -D_POSIX_C_SOURCE=200112 -I/home/lei/work/jsrt/src -I/home/lei/work/jsrt/deps/quickjs -I/home/lei/work/jsrt/deps/libuv/include -I/home/lei/work/jsrt/deps/libuv/src -I/home/lei/work/jsrt/deps/readline -I/home/lei/work/jsrt/deps/llhttp/include -O3 -DNDEBUG -std=gnu90 -fvisibility=hidden -Wstrict-prototypes -Wextra -Wall -Wno-unused-parameter -fno-strict-aliasing -o CMakeFiles/uv_a.dir/src/unix/random-sysctl-linux.c.o -c /home/lei/work/jsrt/deps/libuv/src/unix/random-sysctl-linux.c",
+  "file": "/home/lei/work/jsrt/deps/libuv/src/unix/random-sysctl-linux.c",
+  "output": "deps/libuv/CMakeFiles/uv_a.dir/src/unix/random-sysctl-linux.c.o"
+},
+{
+  "directory": "/home/lei/work/jsrt/deps/target/release/deps/libuv",
+  "command": "/usr/bin/cc -DBUILDING_UV_SHARED=1 -D_FILE_OFFSET_BITS=64 -D_GNU_SOURCE -D_LARGEFILE_SOURCE -D_POSIX_C_SOURCE=200112 -Duv_EXPORTS -I/home/lei/work/jsrt/src -I/home/lei/work/jsrt/deps/quickjs -I/home/lei/work/jsrt/deps/libuv/include -I/home/lei/work/jsrt/deps/libuv/src -I/home/lei/work/jsrt/deps/readline -I/home/lei/work/jsrt/deps/llhttp/include -O3 -DNDEBUG -std=gnu90 -fPIC -fvisibility=hidden -Wstrict-prototypes -Wextra -Wall -Wno-unused-parameter -fno-strict-aliasing -o CMakeFiles/uv.dir/src/fs-poll.c.o -c /home/lei/work/jsrt/deps/libuv/src/fs-poll.c",
+  "file": "/home/lei/work/jsrt/deps/libuv/src/fs-poll.c",
+  "output": "deps/libuv/CMakeFiles/uv.dir/src/fs-poll.c.o"
+},
+{
+  "directory": "/home/lei/work/jsrt/deps/target/release/deps/libuv",
+  "command": "/usr/bin/cc -DBUILDING_UV_SHARED=1 -D_FILE_OFFSET_BITS=64 -D_GNU_SOURCE -D_LARGEFILE_SOURCE -D_POSIX_C_SOURCE=200112 -Duv_EXPORTS -I/home/lei/work/jsrt/src -I/home/lei/work/jsrt/deps/quickjs -I/home/lei/work/jsrt/deps/libuv/include -I/home/lei/work/jsrt/deps/libuv/src -I/home/lei/work/jsrt/deps/readline -I/home/lei/work/jsrt/deps/llhttp/include -O3 -DNDEBUG -std=gnu90 -fPIC -fvisibility=hidden -Wstrict-prototypes -Wextra -Wall -Wno-unused-parameter -fno-strict-aliasing -o CMakeFiles/uv.dir/src/idna.c.o -c /home/lei/work/jsrt/deps/libuv/src/idna.c",
+  "file": "/home/lei/work/jsrt/deps/libuv/src/idna.c",
+  "output": "deps/libuv/CMakeFiles/uv.dir/src/idna.c.o"
+},
+{
+  "directory": "/home/lei/work/jsrt/deps/target/release/deps/libuv",
+  "command": "/usr/bin/cc -DBUILDING_UV_SHARED=1 -D_FILE_OFFSET_BITS=64 -D_GNU_SOURCE -D_LARGEFILE_SOURCE -D_POSIX_C_SOURCE=200112 -Duv_EXPORTS -I/home/lei/work/jsrt/src -I/home/lei/work/jsrt/deps/quickjs -I/home/lei/work/jsrt/deps/libuv/include -I/home/lei/work/jsrt/deps/libuv/src -I/home/lei/work/jsrt/deps/readline -I/home/lei/work/jsrt/deps/llhttp/include -O3 -DNDEBUG -std=gnu90 -fPIC -fvisibility=hidden -Wstrict-prototypes -Wextra -Wall -Wno-unused-parameter -fno-strict-aliasing -o CMakeFiles/uv.dir/src/inet.c.o -c /home/lei/work/jsrt/deps/libuv/src/inet.c",
+  "file": "/home/lei/work/jsrt/deps/libuv/src/inet.c",
+  "output": "deps/libuv/CMakeFiles/uv.dir/src/inet.c.o"
+},
+{
+  "directory": "/home/lei/work/jsrt/deps/target/release/deps/libuv",
+  "command": "/usr/bin/cc -DBUILDING_UV_SHARED=1 -D_FILE_OFFSET_BITS=64 -D_GNU_SOURCE -D_LARGEFILE_SOURCE -D_POSIX_C_SOURCE=200112 -Duv_EXPORTS -I/home/lei/work/jsrt/src -I/home/lei/work/jsrt/deps/quickjs -I/home/lei/work/jsrt/deps/libuv/include -I/home/lei/work/jsrt/deps/libuv/src -I/home/lei/work/jsrt/deps/readline -I/home/lei/work/jsrt/deps/llhttp/include -O3 -DNDEBUG -std=gnu90 -fPIC -fvisibility=hidden -Wstrict-prototypes -Wextra -Wall -Wno-unused-parameter -fno-strict-aliasing -o CMakeFiles/uv.dir/src/random.c.o -c /home/lei/work/jsrt/deps/libuv/src/random.c",
+  "file": "/home/lei/work/jsrt/deps/libuv/src/random.c",
+  "output": "deps/libuv/CMakeFiles/uv.dir/src/random.c.o"
+},
+{
+  "directory": "/home/lei/work/jsrt/deps/target/release/deps/libuv",
+  "command": "/usr/bin/cc -DBUILDING_UV_SHARED=1 -D_FILE_OFFSET_BITS=64 -D_GNU_SOURCE -D_LARGEFILE_SOURCE -D_POSIX_C_SOURCE=200112 -Duv_EXPORTS -I/home/lei/work/jsrt/src -I/home/lei/work/jsrt/deps/quickjs -I/home/lei/work/jsrt/deps/libuv/include -I/home/lei/work/jsrt/deps/libuv/src -I/home/lei/work/jsrt/deps/readline -I/home/lei/work/jsrt/deps/llhttp/include -O3 -DNDEBUG -std=gnu90 -fPIC -fvisibility=hidden -Wstrict-prototypes -Wextra -Wall -Wno-unused-parameter -fno-strict-aliasing -o CMakeFiles/uv.dir/src/strscpy.c.o -c /home/lei/work/jsrt/deps/libuv/src/strscpy.c",
+  "file": "/home/lei/work/jsrt/deps/libuv/src/strscpy.c",
+  "output": "deps/libuv/CMakeFiles/uv.dir/src/strscpy.c.o"
+},
+{
+  "directory": "/home/lei/work/jsrt/deps/target/release/deps/libuv",
+  "command": "/usr/bin/cc -DBUILDING_UV_SHARED=1 -D_FILE_OFFSET_BITS=64 -D_GNU_SOURCE -D_LARGEFILE_SOURCE -D_POSIX_C_SOURCE=200112 -Duv_EXPORTS -I/home/lei/work/jsrt/src -I/home/lei/work/jsrt/deps/quickjs -I/home/lei/work/jsrt/deps/libuv/include -I/home/lei/work/jsrt/deps/libuv/src -I/home/lei/work/jsrt/deps/readline -I/home/lei/work/jsrt/deps/llhttp/include -O3 -DNDEBUG -std=gnu90 -fPIC -fvisibility=hidden -Wstrict-prototypes -Wextra -Wall -Wno-unused-parameter -fno-strict-aliasing -o CMakeFiles/uv.dir/src/strtok.c.o -c /home/lei/work/jsrt/deps/libuv/src/strtok.c",
+  "file": "/home/lei/work/jsrt/deps/libuv/src/strtok.c",
+  "output": "deps/libuv/CMakeFiles/uv.dir/src/strtok.c.o"
+},
+{
+  "directory": "/home/lei/work/jsrt/deps/target/release/deps/libuv",
+  "command": "/usr/bin/cc -DBUILDING_UV_SHARED=1 -D_FILE_OFFSET_BITS=64 -D_GNU_SOURCE -D_LARGEFILE_SOURCE -D_POSIX_C_SOURCE=200112 -Duv_EXPORTS -I/home/lei/work/jsrt/src -I/home/lei/work/jsrt/deps/quickjs -I/home/lei/work/jsrt/deps/libuv/include -I/home/lei/work/jsrt/deps/libuv/src -I/home/lei/work/jsrt/deps/readline -I/home/lei/work/jsrt/deps/llhttp/include -O3 -DNDEBUG -std=gnu90 -fPIC -fvisibility=hidden -Wstrict-prototypes -Wextra -Wall -Wno-unused-parameter -fno-strict-aliasing -o CMakeFiles/uv.dir/src/thread-common.c.o -c /home/lei/work/jsrt/deps/libuv/src/thread-common.c",
+  "file": "/home/lei/work/jsrt/deps/libuv/src/thread-common.c",
+  "output": "deps/libuv/CMakeFiles/uv.dir/src/thread-common.c.o"
+},
+{
+  "directory": "/home/lei/work/jsrt/deps/target/release/deps/libuv",
+  "command": "/usr/bin/cc -DBUILDING_UV_SHARED=1 -D_FILE_OFFSET_BITS=64 -D_GNU_SOURCE -D_LARGEFILE_SOURCE -D_POSIX_C_SOURCE=200112 -Duv_EXPORTS -I/home/lei/work/jsrt/src -I/home/lei/work/jsrt/deps/quickjs -I/home/lei/work/jsrt/deps/libuv/include -I/home/lei/work/jsrt/deps/libuv/src -I/home/lei/work/jsrt/deps/readline -I/home/lei/work/jsrt/deps/llhttp/include -O3 -DNDEBUG -std=gnu90 -fPIC -fvisibility=hidden -Wstrict-prototypes -Wextra -Wall -Wno-unused-parameter -fno-strict-aliasing -o CMakeFiles/uv.dir/src/threadpool.c.o -c /home/lei/work/jsrt/deps/libuv/src/threadpool.c",
+  "file": "/home/lei/work/jsrt/deps/libuv/src/threadpool.c",
+  "output": "deps/libuv/CMakeFiles/uv.dir/src/threadpool.c.o"
+},
+{
+  "directory": "/home/lei/work/jsrt/deps/target/release/deps/libuv",
+  "command": "/usr/bin/cc -DBUILDING_UV_SHARED=1 -D_FILE_OFFSET_BITS=64 -D_GNU_SOURCE -D_LARGEFILE_SOURCE -D_POSIX_C_SOURCE=200112 -Duv_EXPORTS -I/home/lei/work/jsrt/src -I/home/lei/work/jsrt/deps/quickjs -I/home/lei/work/jsrt/deps/libuv/include -I/home/lei/work/jsrt/deps/libuv/src -I/home/lei/work/jsrt/deps/readline -I/home/lei/work/jsrt/deps/llhttp/include -O3 -DNDEBUG -std=gnu90 -fPIC -fvisibility=hidden -Wstrict-prototypes -Wextra -Wall -Wno-unused-parameter -fno-strict-aliasing -o CMakeFiles/uv.dir/src/timer.c.o -c /home/lei/work/jsrt/deps/libuv/src/timer.c",
+  "file": "/home/lei/work/jsrt/deps/libuv/src/timer.c",
+  "output": "deps/libuv/CMakeFiles/uv.dir/src/timer.c.o"
+},
+{
+  "directory": "/home/lei/work/jsrt/deps/target/release/deps/libuv",
+  "command": "/usr/bin/cc -DBUILDING_UV_SHARED=1 -D_FILE_OFFSET_BITS=64 -D_GNU_SOURCE -D_LARGEFILE_SOURCE -D_POSIX_C_SOURCE=200112 -Duv_EXPORTS -I/home/lei/work/jsrt/src -I/home/lei/work/jsrt/deps/quickjs -I/home/lei/work/jsrt/deps/libuv/include -I/home/lei/work/jsrt/deps/libuv/src -I/home/lei/work/jsrt/deps/readline -I/home/lei/work/jsrt/deps/llhttp/include -O3 -DNDEBUG -std=gnu90 -fPIC -fvisibility=hidden -Wstrict-prototypes -Wextra -Wall -Wno-unused-parameter -fno-strict-aliasing -o CMakeFiles/uv.dir/src/uv-common.c.o -c /home/lei/work/jsrt/deps/libuv/src/uv-common.c",
+  "file": "/home/lei/work/jsrt/deps/libuv/src/uv-common.c",
+  "output": "deps/libuv/CMakeFiles/uv.dir/src/uv-common.c.o"
+},
+{
+  "directory": "/home/lei/work/jsrt/deps/target/release/deps/libuv",
+  "command": "/usr/bin/cc -DBUILDING_UV_SHARED=1 -D_FILE_OFFSET_BITS=64 -D_GNU_SOURCE -D_LARGEFILE_SOURCE -D_POSIX_C_SOURCE=200112 -Duv_EXPORTS -I/home/lei/work/jsrt/src -I/home/lei/work/jsrt/deps/quickjs -I/home/lei/work/jsrt/deps/libuv/include -I/home/lei/work/jsrt/deps/libuv/src -I/home/lei/work/jsrt/deps/readline -I/home/lei/work/jsrt/deps/llhttp/include -O3 -DNDEBUG -std=gnu90 -fPIC -fvisibility=hidden -Wstrict-prototypes -Wextra -Wall -Wno-unused-parameter -fno-strict-aliasing -o CMakeFiles/uv.dir/src/uv-data-getter-setters.c.o -c /home/lei/work/jsrt/deps/libuv/src/uv-data-getter-setters.c",
+  "file": "/home/lei/work/jsrt/deps/libuv/src/uv-data-getter-setters.c",
+  "output": "deps/libuv/CMakeFiles/uv.dir/src/uv-data-getter-setters.c.o"
+},
+{
+  "directory": "/home/lei/work/jsrt/deps/target/release/deps/libuv",
+  "command": "/usr/bin/cc -DBUILDING_UV_SHARED=1 -D_FILE_OFFSET_BITS=64 -D_GNU_SOURCE -D_LARGEFILE_SOURCE -D_POSIX_C_SOURCE=200112 -Duv_EXPORTS -I/home/lei/work/jsrt/src -I/home/lei/work/jsrt/deps/quickjs -I/home/lei/work/jsrt/deps/libuv/include -I/home/lei/work/jsrt/deps/libuv/src -I/home/lei/work/jsrt/deps/readline -I/home/lei/work/jsrt/deps/llhttp/include -O3 -DNDEBUG -std=gnu90 -fPIC -fvisibility=hidden -Wstrict-prototypes -Wextra -Wall -Wno-unused-parameter -fno-strict-aliasing -o CMakeFiles/uv.dir/src/version.c.o -c /home/lei/work/jsrt/deps/libuv/src/version.c",
+  "file": "/home/lei/work/jsrt/deps/libuv/src/version.c",
+  "output": "deps/libuv/CMakeFiles/uv.dir/src/version.c.o"
+},
+{
+  "directory": "/home/lei/work/jsrt/deps/target/release/deps/libuv",
+  "command": "/usr/bin/cc -DBUILDING_UV_SHARED=1 -D_FILE_OFFSET_BITS=64 -D_GNU_SOURCE -D_LARGEFILE_SOURCE -D_POSIX_C_SOURCE=200112 -Duv_EXPORTS -I/home/lei/work/jsrt/src -I/home/lei/work/jsrt/deps/quickjs -I/home/lei/work/jsrt/deps/libuv/include -I/home/lei/work/jsrt/deps/libuv/src -I/home/lei/work/jsrt/deps/readline -I/home/lei/work/jsrt/deps/llhttp/include -O3 -DNDEBUG -std=gnu90 -fPIC -fvisibility=hidden -Wstrict-prototypes -Wextra -Wall -Wno-unused-parameter -fno-strict-aliasing -o CMakeFiles/uv.dir/src/unix/async.c.o -c /home/lei/work/jsrt/deps/libuv/src/unix/async.c",
+  "file": "/home/lei/work/jsrt/deps/libuv/src/unix/async.c",
+  "output": "deps/libuv/CMakeFiles/uv.dir/src/unix/async.c.o"
+},
+{
+  "directory": "/home/lei/work/jsrt/deps/target/release/deps/libuv",
+  "command": "/usr/bin/cc -DBUILDING_UV_SHARED=1 -D_FILE_OFFSET_BITS=64 -D_GNU_SOURCE -D_LARGEFILE_SOURCE -D_POSIX_C_SOURCE=200112 -Duv_EXPORTS -I/home/lei/work/jsrt/src -I/home/lei/work/jsrt/deps/quickjs -I/home/lei/work/jsrt/deps/libuv/include -I/home/lei/work/jsrt/deps/libuv/src -I/home/lei/work/jsrt/deps/readline -I/home/lei/work/jsrt/deps/llhttp/include -O3 -DNDEBUG -std=gnu90 -fPIC -fvisibility=hidden -Wstrict-prototypes -Wextra -Wall -Wno-unused-parameter -fno-strict-aliasing -o CMakeFiles/uv.dir/src/unix/core.c.o -c /home/lei/work/jsrt/deps/libuv/src/unix/core.c",
+  "file": "/home/lei/work/jsrt/deps/libuv/src/unix/core.c",
+  "output": "deps/libuv/CMakeFiles/uv.dir/src/unix/core.c.o"
+},
+{
+  "directory": "/home/lei/work/jsrt/deps/target/release/deps/libuv",
+  "command": "/usr/bin/cc -DBUILDING_UV_SHARED=1 -D_FILE_OFFSET_BITS=64 -D_GNU_SOURCE -D_LARGEFILE_SOURCE -D_POSIX_C_SOURCE=200112 -Duv_EXPORTS -I/home/lei/work/jsrt/src -I/home/lei/work/jsrt/deps/quickjs -I/home/lei/work/jsrt/deps/libuv/include -I/home/lei/work/jsrt/deps/libuv/src -I/home/lei/work/jsrt/deps/readline -I/home/lei/work/jsrt/deps/llhttp/include -O3 -DNDEBUG -std=gnu90 -fPIC -fvisibility=hidden -Wstrict-prototypes -Wextra -Wall -Wno-unused-parameter -fno-strict-aliasing -o CMakeFiles/uv.dir/src/unix/dl.c.o -c /home/lei/work/jsrt/deps/libuv/src/unix/dl.c",
+  "file": "/home/lei/work/jsrt/deps/libuv/src/unix/dl.c",
+  "output": "deps/libuv/CMakeFiles/uv.dir/src/unix/dl.c.o"
+},
+{
+  "directory": "/home/lei/work/jsrt/deps/target/release/deps/libuv",
+  "command": "/usr/bin/cc -DBUILDING_UV_SHARED=1 -D_FILE_OFFSET_BITS=64 -D_GNU_SOURCE -D_LARGEFILE_SOURCE -D_POSIX_C_SOURCE=200112 -Duv_EXPORTS -I/home/lei/work/jsrt/src -I/home/lei/work/jsrt/deps/quickjs -I/home/lei/work/jsrt/deps/libuv/include -I/home/lei/work/jsrt/deps/libuv/src -I/home/lei/work/jsrt/deps/readline -I/home/lei/work/jsrt/deps/llhttp/include -O3 -DNDEBUG -std=gnu90 -fPIC -fvisibility=hidden -Wstrict-prototypes -Wextra -Wall -Wno-unused-parameter -fno-strict-aliasing -o CMakeFiles/uv.dir/src/unix/fs.c.o -c /home/lei/work/jsrt/deps/libuv/src/unix/fs.c",
+  "file": "/home/lei/work/jsrt/deps/libuv/src/unix/fs.c",
+  "output": "deps/libuv/CMakeFiles/uv.dir/src/unix/fs.c.o"
+},
+{
+  "directory": "/home/lei/work/jsrt/deps/target/release/deps/libuv",
+  "command": "/usr/bin/cc -DBUILDING_UV_SHARED=1 -D_FILE_OFFSET_BITS=64 -D_GNU_SOURCE -D_LARGEFILE_SOURCE -D_POSIX_C_SOURCE=200112 -Duv_EXPORTS -I/home/lei/work/jsrt/src -I/home/lei/work/jsrt/deps/quickjs -I/home/lei/work/jsrt/deps/libuv/include -I/home/lei/work/jsrt/deps/libuv/src -I/home/lei/work/jsrt/deps/readline -I/home/lei/work/jsrt/deps/llhttp/include -O3 -DNDEBUG -std=gnu90 -fPIC -fvisibility=hidden -Wstrict-prototypes -Wextra -Wall -Wno-unused-parameter -fno-strict-aliasing -o CMakeFiles/uv.dir/src/unix/getaddrinfo.c.o -c /home/lei/work/jsrt/deps/libuv/src/unix/getaddrinfo.c",
+  "file": "/home/lei/work/jsrt/deps/libuv/src/unix/getaddrinfo.c",
+  "output": "deps/libuv/CMakeFiles/uv.dir/src/unix/getaddrinfo.c.o"
+},
+{
+  "directory": "/home/lei/work/jsrt/deps/target/release/deps/libuv",
+  "command": "/usr/bin/cc -DBUILDING_UV_SHARED=1 -D_FILE_OFFSET_BITS=64 -D_GNU_SOURCE -D_LARGEFILE_SOURCE -D_POSIX_C_SOURCE=200112 -Duv_EXPORTS -I/home/lei/work/jsrt/src -I/home/lei/work/jsrt/deps/quickjs -I/home/lei/work/jsrt/deps/libuv/include -I/home/lei/work/jsrt/deps/libuv/src -I/home/lei/work/jsrt/deps/readline -I/home/lei/work/jsrt/deps/llhttp/include -O3 -DNDEBUG -std=gnu90 -fPIC -fvisibility=hidden -Wstrict-prototypes -Wextra -Wall -Wno-unused-parameter -fno-strict-aliasing -o CMakeFiles/uv.dir/src/unix/getnameinfo.c.o -c /home/lei/work/jsrt/deps/libuv/src/unix/getnameinfo.c",
+  "file": "/home/lei/work/jsrt/deps/libuv/src/unix/getnameinfo.c",
+  "output": "deps/libuv/CMakeFiles/uv.dir/src/unix/getnameinfo.c.o"
+},
+{
+  "directory": "/home/lei/work/jsrt/deps/target/release/deps/libuv",
+  "command": "/usr/bin/cc -DBUILDING_UV_SHARED=1 -D_FILE_OFFSET_BITS=64 -D_GNU_SOURCE -D_LARGEFILE_SOURCE -D_POSIX_C_SOURCE=200112 -Duv_EXPORTS -I/home/lei/work/jsrt/src -I/home/lei/work/jsrt/deps/quickjs -I/home/lei/work/jsrt/deps/libuv/include -I/home/lei/work/jsrt/deps/libuv/src -I/home/lei/work/jsrt/deps/readline -I/home/lei/work/jsrt/deps/llhttp/include -O3 -DNDEBUG -std=gnu90 -fPIC -fvisibility=hidden -Wstrict-prototypes -Wextra -Wall -Wno-unused-parameter -fno-strict-aliasing -o CMakeFiles/uv.dir/src/unix/loop-watcher.c.o -c /home/lei/work/jsrt/deps/libuv/src/unix/loop-watcher.c",
+  "file": "/home/lei/work/jsrt/deps/libuv/src/unix/loop-watcher.c",
+  "output": "deps/libuv/CMakeFiles/uv.dir/src/unix/loop-watcher.c.o"
+},
+{
+  "directory": "/home/lei/work/jsrt/deps/target/release/deps/libuv",
+  "command": "/usr/bin/cc -DBUILDING_UV_SHARED=1 -D_FILE_OFFSET_BITS=64 -D_GNU_SOURCE -D_LARGEFILE_SOURCE -D_POSIX_C_SOURCE=200112 -Duv_EXPORTS -I/home/lei/work/jsrt/src -I/home/lei/work/jsrt/deps/quickjs -I/home/lei/work/jsrt/deps/libuv/include -I/home/lei/work/jsrt/deps/libuv/src -I/home/lei/work/jsrt/deps/readline -I/home/lei/work/jsrt/deps/llhttp/include -O3 -DNDEBUG -std=gnu90 -fPIC -fvisibility=hidden -Wstrict-prototypes -Wextra -Wall -Wno-unused-parameter -fno-strict-aliasing -o CMakeFiles/uv.dir/src/unix/loop.c.o -c /home/lei/work/jsrt/deps/libuv/src/unix/loop.c",
+  "file": "/home/lei/work/jsrt/deps/libuv/src/unix/loop.c",
+  "output": "deps/libuv/CMakeFiles/uv.dir/src/unix/loop.c.o"
+},
+{
+  "directory": "/home/lei/work/jsrt/deps/target/release/deps/libuv",
+  "command": "/usr/bin/cc -DBUILDING_UV_SHARED=1 -D_FILE_OFFSET_BITS=64 -D_GNU_SOURCE -D_LARGEFILE_SOURCE -D_POSIX_C_SOURCE=200112 -Duv_EXPORTS -I/home/lei/work/jsrt/src -I/home/lei/work/jsrt/deps/quickjs -I/home/lei/work/jsrt/deps/libuv/include -I/home/lei/work/jsrt/deps/libuv/src -I/home/lei/work/jsrt/deps/readline -I/home/lei/work/jsrt/deps/llhttp/include -O3 -DNDEBUG -std=gnu90 -fPIC -fvisibility=hidden -Wstrict-prototypes -Wextra -Wall -Wno-unused-parameter -fno-strict-aliasing -o CMakeFiles/uv.dir/src/unix/pipe.c.o -c /home/lei/work/jsrt/deps/libuv/src/unix/pipe.c",
+  "file": "/home/lei/work/jsrt/deps/libuv/src/unix/pipe.c",
+  "output": "deps/libuv/CMakeFiles/uv.dir/src/unix/pipe.c.o"
+},
+{
+  "directory": "/home/lei/work/jsrt/deps/target/release/deps/libuv",
+  "command": "/usr/bin/cc -DBUILDING_UV_SHARED=1 -D_FILE_OFFSET_BITS=64 -D_GNU_SOURCE -D_LARGEFILE_SOURCE -D_POSIX_C_SOURCE=200112 -Duv_EXPORTS -I/home/lei/work/jsrt/src -I/home/lei/work/jsrt/deps/quickjs -I/home/lei/work/jsrt/deps/libuv/include -I/home/lei/work/jsrt/deps/libuv/src -I/home/lei/work/jsrt/deps/readline -I/home/lei/work/jsrt/deps/llhttp/include -O3 -DNDEBUG -std=gnu90 -fPIC -fvisibility=hidden -Wstrict-prototypes -Wextra -Wall -Wno-unused-parameter -fno-strict-aliasing -o CMakeFiles/uv.dir/src/unix/poll.c.o -c /home/lei/work/jsrt/deps/libuv/src/unix/poll.c",
+  "file": "/home/lei/work/jsrt/deps/libuv/src/unix/poll.c",
+  "output": "deps/libuv/CMakeFiles/uv.dir/src/unix/poll.c.o"
+},
+{
+  "directory": "/home/lei/work/jsrt/deps/target/release/deps/libuv",
+  "command": "/usr/bin/cc -DBUILDING_UV_SHARED=1 -D_FILE_OFFSET_BITS=64 -D_GNU_SOURCE -D_LARGEFILE_SOURCE -D_POSIX_C_SOURCE=200112 -Duv_EXPORTS -I/home/lei/work/jsrt/src -I/home/lei/work/jsrt/deps/quickjs -I/home/lei/work/jsrt/deps/libuv/include -I/home/lei/work/jsrt/deps/libuv/src -I/home/lei/work/jsrt/deps/readline -I/home/lei/work/jsrt/deps/llhttp/include -O3 -DNDEBUG -std=gnu90 -fPIC -fvisibility=hidden -Wstrict-prototypes -Wextra -Wall -Wno-unused-parameter -fno-strict-aliasing -o CMakeFiles/uv.dir/src/unix/process.c.o -c /home/lei/work/jsrt/deps/libuv/src/unix/process.c",
+  "file": "/home/lei/work/jsrt/deps/libuv/src/unix/process.c",
+  "output": "deps/libuv/CMakeFiles/uv.dir/src/unix/process.c.o"
+},
+{
+  "directory": "/home/lei/work/jsrt/deps/target/release/deps/libuv",
+  "command": "/usr/bin/cc -DBUILDING_UV_SHARED=1 -D_FILE_OFFSET_BITS=64 -D_GNU_SOURCE -D_LARGEFILE_SOURCE -D_POSIX_C_SOURCE=200112 -Duv_EXPORTS -I/home/lei/work/jsrt/src -I/home/lei/work/jsrt/deps/quickjs -I/home/lei/work/jsrt/deps/libuv/include -I/home/lei/work/jsrt/deps/libuv/src -I/home/lei/work/jsrt/deps/readline -I/home/lei/work/jsrt/deps/llhttp/include -O3 -DNDEBUG -std=gnu90 -fPIC -fvisibility=hidden -Wstrict-prototypes -Wextra -Wall -Wno-unused-parameter -fno-strict-aliasing -o CMakeFiles/uv.dir/src/unix/random-devurandom.c.o -c /home/lei/work/jsrt/deps/libuv/src/unix/random-devurandom.c",
+  "file": "/home/lei/work/jsrt/deps/libuv/src/unix/random-devurandom.c",
+  "output": "deps/libuv/CMakeFiles/uv.dir/src/unix/random-devurandom.c.o"
+},
+{
+  "directory": "/home/lei/work/jsrt/deps/target/release/deps/libuv",
+  "command": "/usr/bin/cc -DBUILDING_UV_SHARED=1 -D_FILE_OFFSET_BITS=64 -D_GNU_SOURCE -D_LARGEFILE_SOURCE -D_POSIX_C_SOURCE=200112 -Duv_EXPORTS -I/home/lei/work/jsrt/src -I/home/lei/work/jsrt/deps/quickjs -I/home/lei/work/jsrt/deps/libuv/include -I/home/lei/work/jsrt/deps/libuv/src -I/home/lei/work/jsrt/deps/readline -I/home/lei/work/jsrt/deps/llhttp/include -O3 -DNDEBUG -std=gnu90 -fPIC -fvisibility=hidden -Wstrict-prototypes -Wextra -Wall -Wno-unused-parameter -fno-strict-aliasing -o CMakeFiles/uv.dir/src/unix/signal.c.o -c /home/lei/work/jsrt/deps/libuv/src/unix/signal.c",
+  "file": "/home/lei/work/jsrt/deps/libuv/src/unix/signal.c",
+  "output": "deps/libuv/CMakeFiles/uv.dir/src/unix/signal.c.o"
+},
+{
+  "directory": "/home/lei/work/jsrt/deps/target/release/deps/libuv",
+  "command": "/usr/bin/cc -DBUILDING_UV_SHARED=1 -D_FILE_OFFSET_BITS=64 -D_GNU_SOURCE -D_LARGEFILE_SOURCE -D_POSIX_C_SOURCE=200112 -Duv_EXPORTS -I/home/lei/work/jsrt/src -I/home/lei/work/jsrt/deps/quickjs -I/home/lei/work/jsrt/deps/libuv/include -I/home/lei/work/jsrt/deps/libuv/src -I/home/lei/work/jsrt/deps/readline -I/home/lei/work/jsrt/deps/llhttp/include -O3 -DNDEBUG -std=gnu90 -fPIC -fvisibility=hidden -Wstrict-prototypes -Wextra -Wall -Wno-unused-parameter -fno-strict-aliasing -o CMakeFiles/uv.dir/src/unix/stream.c.o -c /home/lei/work/jsrt/deps/libuv/src/unix/stream.c",
+  "file": "/home/lei/work/jsrt/deps/libuv/src/unix/stream.c",
+  "output": "deps/libuv/CMakeFiles/uv.dir/src/unix/stream.c.o"
+},
+{
+  "directory": "/home/lei/work/jsrt/deps/target/release/deps/libuv",
+  "command": "/usr/bin/cc -DBUILDING_UV_SHARED=1 -D_FILE_OFFSET_BITS=64 -D_GNU_SOURCE -D_LARGEFILE_SOURCE -D_POSIX_C_SOURCE=200112 -Duv_EXPORTS -I/home/lei/work/jsrt/src -I/home/lei/work/jsrt/deps/quickjs -I/home/lei/work/jsrt/deps/libuv/include -I/home/lei/work/jsrt/deps/libuv/src -I/home/lei/work/jsrt/deps/readline -I/home/lei/work/jsrt/deps/llhttp/include -O3 -DNDEBUG -std=gnu90 -fPIC -fvisibility=hidden -Wstrict-prototypes -Wextra -Wall -Wno-unused-parameter -fno-strict-aliasing -o CMakeFiles/uv.dir/src/unix/tcp.c.o -c /home/lei/work/jsrt/deps/libuv/src/unix/tcp.c",
+  "file": "/home/lei/work/jsrt/deps/libuv/src/unix/tcp.c",
+  "output": "deps/libuv/CMakeFiles/uv.dir/src/unix/tcp.c.o"
+},
+{
+  "directory": "/home/lei/work/jsrt/deps/target/release/deps/libuv",
+  "command": "/usr/bin/cc -DBUILDING_UV_SHARED=1 -D_FILE_OFFSET_BITS=64 -D_GNU_SOURCE -D_LARGEFILE_SOURCE -D_POSIX_C_SOURCE=200112 -Duv_EXPORTS -I/home/lei/work/jsrt/src -I/home/lei/work/jsrt/deps/quickjs -I/home/lei/work/jsrt/deps/libuv/include -I/home/lei/work/jsrt/deps/libuv/src -I/home/lei/work/jsrt/deps/readline -I/home/lei/work/jsrt/deps/llhttp/include -O3 -DNDEBUG -std=gnu90 -fPIC -fvisibility=hidden -Wstrict-prototypes -Wextra -Wall -Wno-unused-parameter -fno-strict-aliasing -o CMakeFiles/uv.dir/src/unix/thread.c.o -c /home/lei/work/jsrt/deps/libuv/src/unix/thread.c",
+  "file": "/home/lei/work/jsrt/deps/libuv/src/unix/thread.c",
+  "output": "deps/libuv/CMakeFiles/uv.dir/src/unix/thread.c.o"
+},
+{
+  "directory": "/home/lei/work/jsrt/deps/target/release/deps/libuv",
+  "command": "/usr/bin/cc -DBUILDING_UV_SHARED=1 -D_FILE_OFFSET_BITS=64 -D_GNU_SOURCE -D_LARGEFILE_SOURCE -D_POSIX_C_SOURCE=200112 -Duv_EXPORTS -I/home/lei/work/jsrt/src -I/home/lei/work/jsrt/deps/quickjs -I/home/lei/work/jsrt/deps/libuv/include -I/home/lei/work/jsrt/deps/libuv/src -I/home/lei/work/jsrt/deps/readline -I/home/lei/work/jsrt/deps/llhttp/include -O3 -DNDEBUG -std=gnu90 -fPIC -fvisibility=hidden -Wstrict-prototypes -Wextra -Wall -Wno-unused-parameter -fno-strict-aliasing -o CMakeFiles/uv.dir/src/unix/tty.c.o -c /home/lei/work/jsrt/deps/libuv/src/unix/tty.c",
+  "file": "/home/lei/work/jsrt/deps/libuv/src/unix/tty.c",
+  "output": "deps/libuv/CMakeFiles/uv.dir/src/unix/tty.c.o"
+},
+{
+  "directory": "/home/lei/work/jsrt/deps/target/release/deps/libuv",
+  "command": "/usr/bin/cc -DBUILDING_UV_SHARED=1 -D_FILE_OFFSET_BITS=64 -D_GNU_SOURCE -D_LARGEFILE_SOURCE -D_POSIX_C_SOURCE=200112 -Duv_EXPORTS -I/home/lei/work/jsrt/src -I/home/lei/work/jsrt/deps/quickjs -I/home/lei/work/jsrt/deps/libuv/include -I/home/lei/work/jsrt/deps/libuv/src -I/home/lei/work/jsrt/deps/readline -I/home/lei/work/jsrt/deps/llhttp/include -O3 -DNDEBUG -std=gnu90 -fPIC -fvisibility=hidden -Wstrict-prototypes -Wextra -Wall -Wno-unused-parameter -fno-strict-aliasing -o CMakeFiles/uv.dir/src/unix/udp.c.o -c /home/lei/work/jsrt/deps/libuv/src/unix/udp.c",
+  "file": "/home/lei/work/jsrt/deps/libuv/src/unix/udp.c",
+  "output": "deps/libuv/CMakeFiles/uv.dir/src/unix/udp.c.o"
+},
+{
+  "directory": "/home/lei/work/jsrt/deps/target/release/deps/libuv",
+  "command": "/usr/bin/cc -DBUILDING_UV_SHARED=1 -D_FILE_OFFSET_BITS=64 -D_GNU_SOURCE -D_LARGEFILE_SOURCE -D_POSIX_C_SOURCE=200112 -Duv_EXPORTS -I/home/lei/work/jsrt/src -I/home/lei/work/jsrt/deps/quickjs -I/home/lei/work/jsrt/deps/libuv/include -I/home/lei/work/jsrt/deps/libuv/src -I/home/lei/work/jsrt/deps/readline -I/home/lei/work/jsrt/deps/llhttp/include -O3 -DNDEBUG -std=gnu90 -fPIC -fvisibility=hidden -Wstrict-prototypes -Wextra -Wall -Wno-unused-parameter -fno-strict-aliasing -o CMakeFiles/uv.dir/src/unix/proctitle.c.o -c /home/lei/work/jsrt/deps/libuv/src/unix/proctitle.c",
+  "file": "/home/lei/work/jsrt/deps/libuv/src/unix/proctitle.c",
+  "output": "deps/libuv/CMakeFiles/uv.dir/src/unix/proctitle.c.o"
+},
+{
+  "directory": "/home/lei/work/jsrt/deps/target/release/deps/libuv",
+  "command": "/usr/bin/cc -DBUILDING_UV_SHARED=1 -D_FILE_OFFSET_BITS=64 -D_GNU_SOURCE -D_LARGEFILE_SOURCE -D_POSIX_C_SOURCE=200112 -Duv_EXPORTS -I/home/lei/work/jsrt/src -I/home/lei/work/jsrt/deps/quickjs -I/home/lei/work/jsrt/deps/libuv/include -I/home/lei/work/jsrt/deps/libuv/src -I/home/lei/work/jsrt/deps/readline -I/home/lei/work/jsrt/deps/llhttp/include -O3 -DNDEBUG -std=gnu90 -fPIC -fvisibility=hidden -Wstrict-prototypes -Wextra -Wall -Wno-unused-parameter -fno-strict-aliasing -o CMakeFiles/uv.dir/src/unix/linux.c.o -c /home/lei/work/jsrt/deps/libuv/src/unix/linux.c",
+  "file": "/home/lei/work/jsrt/deps/libuv/src/unix/linux.c",
+  "output": "deps/libuv/CMakeFiles/uv.dir/src/unix/linux.c.o"
+},
+{
+  "directory": "/home/lei/work/jsrt/deps/target/release/deps/libuv",
+  "command": "/usr/bin/cc -DBUILDING_UV_SHARED=1 -D_FILE_OFFSET_BITS=64 -D_GNU_SOURCE -D_LARGEFILE_SOURCE -D_POSIX_C_SOURCE=200112 -Duv_EXPORTS -I/home/lei/work/jsrt/src -I/home/lei/work/jsrt/deps/quickjs -I/home/lei/work/jsrt/deps/libuv/include -I/home/lei/work/jsrt/deps/libuv/src -I/home/lei/work/jsrt/deps/readline -I/home/lei/work/jsrt/deps/llhttp/include -O3 -DNDEBUG -std=gnu90 -fPIC -fvisibility=hidden -Wstrict-prototypes -Wextra -Wall -Wno-unused-parameter -fno-strict-aliasing -o CMakeFiles/uv.dir/src/unix/procfs-exepath.c.o -c /home/lei/work/jsrt/deps/libuv/src/unix/procfs-exepath.c",
+  "file": "/home/lei/work/jsrt/deps/libuv/src/unix/procfs-exepath.c",
+  "output": "deps/libuv/CMakeFiles/uv.dir/src/unix/procfs-exepath.c.o"
+},
+{
+  "directory": "/home/lei/work/jsrt/deps/target/release/deps/libuv",
+  "command": "/usr/bin/cc -DBUILDING_UV_SHARED=1 -D_FILE_OFFSET_BITS=64 -D_GNU_SOURCE -D_LARGEFILE_SOURCE -D_POSIX_C_SOURCE=200112 -Duv_EXPORTS -I/home/lei/work/jsrt/src -I/home/lei/work/jsrt/deps/quickjs -I/home/lei/work/jsrt/deps/libuv/include -I/home/lei/work/jsrt/deps/libuv/src -I/home/lei/work/jsrt/deps/readline -I/home/lei/work/jsrt/deps/llhttp/include -O3 -DNDEBUG -std=gnu90 -fPIC -fvisibility=hidden -Wstrict-prototypes -Wextra -Wall -Wno-unused-parameter -fno-strict-aliasing -o CMakeFiles/uv.dir/src/unix/random-getrandom.c.o -c /home/lei/work/jsrt/deps/libuv/src/unix/random-getrandom.c",
+  "file": "/home/lei/work/jsrt/deps/libuv/src/unix/random-getrandom.c",
+  "output": "deps/libuv/CMakeFiles/uv.dir/src/unix/random-getrandom.c.o"
+},
+{
+  "directory": "/home/lei/work/jsrt/deps/target/release/deps/libuv",
+  "command": "/usr/bin/cc -DBUILDING_UV_SHARED=1 -D_FILE_OFFSET_BITS=64 -D_GNU_SOURCE -D_LARGEFILE_SOURCE -D_POSIX_C_SOURCE=200112 -Duv_EXPORTS -I/home/lei/work/jsrt/src -I/home/lei/work/jsrt/deps/quickjs -I/home/lei/work/jsrt/deps/libuv/include -I/home/lei/work/jsrt/deps/libuv/src -I/home/lei/work/jsrt/deps/readline -I/home/lei/work/jsrt/deps/llhttp/include -O3 -DNDEBUG -std=gnu90 -fPIC -fvisibility=hidden -Wstrict-prototypes -Wextra -Wall -Wno-unused-parameter -fno-strict-aliasing -o CMakeFiles/uv.dir/src/unix/random-sysctl-linux.c.o -c /home/lei/work/jsrt/deps/libuv/src/unix/random-sysctl-linux.c",
+  "file": "/home/lei/work/jsrt/deps/libuv/src/unix/random-sysctl-linux.c",
+  "output": "deps/libuv/CMakeFiles/uv.dir/src/unix/random-sysctl-linux.c.o"
+}
+]

@@ -45,7 +45,7 @@ else()
     set(FFI_LIBRARIES "")
 endif()
 
-include_directories(src deps/quickjs deps/libuv/include deps/libuv/src deps/readline)
+include_directories(src deps/quickjs deps/libuv/include deps/libuv/src deps/readline deps/llhttp/include)
 
 # Read jsrt version from VERSION file
 file(STRINGS VERSION JSRT_VERSION)
@@ -82,6 +82,13 @@ endif()
 
 # build libuv
 add_subdirectory(deps/libuv)
+
+# build llhttp (minimal implementation)
+add_library(llhttp STATIC
+    deps/llhttp/src/llhttp.c
+)
+target_include_directories(llhttp PUBLIC deps/llhttp/include)
+target_compile_definitions(llhttp PRIVATE _GNU_SOURCE)
 
 # Try to find system readline with robust detection
 set(READLINE_WORKING FALSE)
@@ -177,9 +184,11 @@ endif()
 # build jsrt
 file(GLOB_RECURSE JSRT_STD_FILES "src/std/*.c")
 file(GLOB_RECURSE JSRT_UTIL_FILES "src/util/*.c")
+file(GLOB_RECURSE JSRT_HTTP_FILES "src/http/*.c")
 set(JSRT_LIB_FILES
     ${JSRT_STD_FILES}
     ${JSRT_UTIL_FILES}
+    ${JSRT_HTTP_FILES}
     src/jsrt.c
     src/repl.c
     src/runtime.c)
@@ -187,6 +196,7 @@ set(JSRT_LINK_LIBS
     jsrtcore
     quickjs
     uv_a
+    llhttp
     readline
     ${JSRT_PLATFORM_LIBS}
     ${FFI_LIBRARIES})

@@ -9,6 +9,7 @@
 #include <unistd.h>
 #include <uv.h>
 
+#include "http/fetch.h"
 #include "std/abort.h"
 #include "std/base64.h"
 #include "std/blob.h"
@@ -69,7 +70,8 @@ JSRT_Runtime* JSRT_RuntimeNew() {
   JSRT_RuntimeSetupStdStreams(rt);
   JSRT_RuntimeSetupStdBlob(rt);
   JSRT_RuntimeSetupStdFormData(rt);
-  JSRT_RuntimeSetupStdFetch(rt);
+  // JSRT_RuntimeSetupStdFetch(rt);  // Replaced with llhttp version
+  JSRT_RuntimeSetupHttpFetch(rt);
   JSRT_RuntimeSetupStdCrypto(rt);
   JSRT_RuntimeSetupStdFFI(rt);
   JSRT_RuntimeSetupStdProcess(rt);

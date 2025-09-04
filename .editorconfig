@@ -22,3 +22,6 @@ indent_size = 2
 
 [VERSION]
 insert_final_newline = false
+
+[.clang-format]
+indent_size = 2

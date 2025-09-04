@@ -1,2 +1,0 @@
-/usr/bin/ar qc libreadline.a CMakeFiles/readline.dir/src/minimal_readline.c.o
-/usr/bin/ranlib libreadline.a

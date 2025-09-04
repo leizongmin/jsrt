@@ -13,6 +13,10 @@ make wpt_g
 
 # List available test categories
 make wpt-list
+
+# Download/update WPT tests manually
+make wpt-download   # Download if not present
+make wpt-update     # Re-download latest version
 ```
 
 ## Test Categories
@@ -90,10 +94,16 @@ The test results provide actionable insights into which WinterCG APIs need atten
 
 The WPT integration consists of:
 
-1. **WPT Submodule** (`wpt/`): The official Web Platform Tests repository
+1. **WPT Directory** (`wpt/`): Dynamically downloaded Web Platform Tests repository (latest master branch)
 2. **Test Runner** (`scripts/run-wpt.py`): Python script to run selected WPT tests
 3. **Test Harness** (`scripts/wpt-testharness.js`): jsrt-compatible test harness that adapts WPT assertions to jsrt's environment
-4. **Make Targets**: Convenient `make wpt` commands
+4. **Make Targets**: Convenient `make wpt` commands with automatic WPT downloading
+
+**WPT Download System:**
+- WPT tests are downloaded automatically when running `make wpt` or `make wpt-download`
+- Uses the latest master branch from https://github.com/web-platform-tests/wpt
+- `make wpt-update` refreshes to the latest version
+- No git submodule dependency for faster repository cloning
 
 ## Test Selection Criteria
 

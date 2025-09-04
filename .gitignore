@@ -69,3 +69,6 @@ test_*.js
 
 # Claude settings
 .claude/settings.local.json
+
+# WPT directory (downloaded dynamically)
+wpt/

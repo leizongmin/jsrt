@@ -51,6 +51,16 @@ prettier:
 test: jsrt
 	cd target/release && ctest --verbose
 
+# Fast parallel test execution (4 jobs)
+.PHONY: test-fast
+test-fast: jsrt
+	cd target/release && ctest --verbose --parallel 4
+
+# Quick test - only essential tests without network dependencies  
+.PHONY: test-quick
+test-quick: jsrt
+	cd target/release && ctest --verbose -R "test_(assert|base64|console|timer|http_llhttp_fast)"
+
 .PHONY: test_g
 test_g: jsrt_g
 	cd target/debug && ctest --verbose

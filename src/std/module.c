@@ -9,6 +9,7 @@
 #include "../util/debug.h"
 #include "../util/file.h"
 #include "../util/path.h"
+#include "../util/json.h"
 #include "assert.h"
 #include "ffi.h"
 #include "process.h"
@@ -43,6 +44,154 @@ static int js_std_ffi_init(JSContext* ctx, JSModuleDef* m) {
   return 0;
 }
 
+// Node.js module resolution functions
+static char* find_node_modules_path(const char* start_dir, const char* package_name) {
+  JSRT_Debug("find_node_modules_path: start_dir='%s', package_name='%s'", start_dir, package_name);
+  
+  // Start from the given directory and walk up the tree
+  char* current_dir = strdup(start_dir ? start_dir : ".");
+  char* normalized_dir = realpath(current_dir, NULL);
+  free(current_dir);
+  
+  if (!normalized_dir) {
+    return NULL;
+  }
+  
+  // Walk up the directory tree looking for node_modules
+  char* search_dir = normalized_dir;
+  while (search_dir && strlen(search_dir) > 1) {
+    // Build node_modules/package_name path
+    size_t path_len = strlen(search_dir) + strlen(package_name) + 20;
+    char* package_path = malloc(path_len);
+    snprintf(package_path, path_len, "%s/node_modules/%s", search_dir, package_name);
+    
+    // Check if the package directory exists using access()
+    if (access(package_path, F_OK) == 0) {
+      JSRT_Debug("find_node_modules_path: found package at '%s'", package_path);
+      free(normalized_dir);
+      return package_path;
+    }
+    free(package_path);
+    
+    // Move up one directory
+    char* parent = strrchr(search_dir, '/');
+    if (parent && parent != search_dir) {
+      *parent = '\0';
+    } else {
+      break;
+    }
+  }
+  
+  free(normalized_dir);
+  JSRT_Debug("find_node_modules_path: package '%s' not found", package_name);
+  return NULL;
+}
+
+static char* resolve_package_main(const char* package_dir, bool is_esm) {
+  JSRT_Debug("resolve_package_main: package_dir='%s', is_esm=%d", package_dir, is_esm);
+  
+  // Try to read package.json
+  size_t package_json_path_len = strlen(package_dir) + 15;
+  char* package_json_path = malloc(package_json_path_len);
+  snprintf(package_json_path, package_json_path_len, "%s/package.json", package_dir);
+  
+  JSRT_ReadFileResult json_result = JSRT_ReadFile(package_json_path);
+  free(package_json_path);
+  
+  if (json_result.error == JSRT_READ_FILE_OK) {
+    // Parse package.json
+    JSRuntime* rt = JS_NewRuntime();
+    JSContext* ctx = JS_NewContext(rt);
+    
+    JSValue package_json = JSRT_ParseJSON(ctx, json_result.data);
+    JSRT_ReadFileResultFree(&json_result);
+    
+    if (!JS_IsNull(package_json) && !JS_IsException(package_json)) {
+      const char* entry_point = NULL;
+      
+      if (is_esm) {
+        // For ES modules, prefer "module" field over "main"
+        entry_point = JSRT_GetPackageModule(ctx, package_json);
+        if (!entry_point) {
+          entry_point = JSRT_GetPackageMain(ctx, package_json);
+        }
+      } else {
+        // For CommonJS, use "main" field
+        entry_point = JSRT_GetPackageMain(ctx, package_json);
+      }
+      
+      if (entry_point) {
+        size_t full_path_len = strlen(package_dir) + strlen(entry_point) + 2;
+        char* full_path = malloc(full_path_len);
+        snprintf(full_path, full_path_len, "%s/%s", package_dir, entry_point);
+        
+        // Free the JSON parsing resources
+        if (entry_point != JSRT_GetPackageMain(ctx, package_json)) {
+          JS_FreeCString(ctx, entry_point);
+        }
+        JS_FreeCString(ctx, JSRT_GetPackageMain(ctx, package_json));
+        JS_FreeValue(ctx, package_json);
+        JS_FreeContext(ctx);
+        JS_FreeRuntime(rt);
+        
+        JSRT_Debug("resolve_package_main: resolved to '%s'", full_path);
+        return full_path;
+      }
+      
+      JS_FreeValue(ctx, package_json);
+    }
+    
+    JS_FreeContext(ctx);
+    JS_FreeRuntime(rt);
+  } else {
+    JSRT_ReadFileResultFree(&json_result);
+  }
+  
+  // Fallback to index.js or index.mjs
+  const char* default_file = is_esm ? "index.mjs" : "index.js";
+  size_t default_path_len = strlen(package_dir) + strlen(default_file) + 2;
+  char* default_path = malloc(default_path_len);
+  snprintf(default_path, default_path_len, "%s/%s", package_dir, default_file);
+  
+  JSRT_Debug("resolve_package_main: falling back to '%s'", default_path);
+  return default_path;
+}
+
+static char* resolve_npm_module(const char* module_name, const char* base_path, bool is_esm) {
+  JSRT_Debug("resolve_npm_module: module_name='%s', base_path='%s', is_esm=%d", 
+             module_name, base_path ? base_path : "null", is_esm);
+  
+  // Determine the starting directory for resolution
+  char* start_dir = NULL;
+  if (base_path) {
+    char* base_copy = strdup(base_path);
+    char* last_slash = strrchr(base_copy, '/');
+    if (last_slash) {
+      *last_slash = '\0';
+      start_dir = base_copy;
+    } else {
+      free(base_copy);
+      start_dir = strdup(".");
+    }
+  } else {
+    start_dir = strdup(".");
+  }
+  
+  // Find the package directory
+  char* package_dir = find_node_modules_path(start_dir, module_name);
+  free(start_dir);
+  
+  if (!package_dir) {
+    return NULL;
+  }
+  
+  // Resolve the main entry point
+  char* main_path = resolve_package_main(package_dir, is_esm);
+  free(package_dir);
+  
+  return main_path;
+}
+
 static char* resolve_module_path(const char* module_name, const char* base_path) {
   JSRT_Debug("resolve_module_path: module_name='%s', base_path='%s'", module_name, base_path ? base_path : "null");
 
@@ -75,7 +224,13 @@ static char* resolve_module_path(const char* module_name, const char* base_path)
     return resolved_path;
   }
 
-  // Handle bare module names (for now, just treat as relative to current directory)
+  // Handle bare module names (npm packages) - try npm resolution first
+  char* npm_path = resolve_npm_module(module_name, base_path, false);
+  if (npm_path) {
+    return npm_path;
+  }
+
+  // Fallback: treat as relative to current directory (original behavior)
   return strdup(module_name);
 }
 
@@ -83,7 +238,7 @@ static char* try_extensions(const char* base_path) {
   const char* extensions[] = {".js", ".mjs", ""};
   size_t base_len = strlen(base_path);
 
-  for (int i = 0; extensions[i][0] != '\0' || i == 2; i++) {
+  for (int i = 0; i < 3; i++) {
     const char* ext = extensions[i];
     size_t ext_len = strlen(ext);
     char* full_path = malloc(base_len + ext_len + 1);
@@ -110,6 +265,16 @@ char* JSRT_ModuleNormalize(JSContext* ctx, const char* module_base_name, const c
   // Handle jsrt: modules specially - don't try to resolve them as files
   if (strncmp(module_name, "jsrt:", 5) == 0) {
     return strdup(module_name);
+  }
+
+  // Check if this is a bare module name (not starting with . or /)
+  if (module_name[0] != '.' && module_name[0] != '/') {
+    // Try npm module resolution for ES modules
+    char* npm_path = resolve_npm_module(module_name, module_base_name, true);
+    if (npm_path) {
+      JSRT_Debug("JSRT_ModuleNormalize: resolved npm module to '%s'", npm_path);
+      return npm_path;
+    }
   }
 
   // module_name is what we want to import, module_base_name is the importing module
@@ -288,8 +453,19 @@ static JSValue js_require(JSContext* ctx, JSValueConst this_val, int argc, JSVal
     return JS_ThrowReferenceError(ctx, "Unknown jsrt module '%s'", std_module);
   }
 
-  // Resolve the module path
-  char* resolved_path = resolve_module_path(module_name, NULL);
+  // Check if this is a bare module name (npm package)
+  char* resolved_path;
+  if (module_name[0] != '.' && module_name[0] != '/') {
+    // Try npm module resolution first
+    resolved_path = resolve_npm_module(module_name, NULL, false);
+    if (!resolved_path) {
+      // Fallback to treating as relative path
+      resolved_path = resolve_module_path(module_name, NULL);
+    }
+  } else {
+    // Resolve relative/absolute paths normally
+    resolved_path = resolve_module_path(module_name, NULL);
+  }
   JSRT_Debug("js_require: resolved_path='%s'", resolved_path);
   char* final_path = try_extensions(resolved_path);
   JSRT_Debug("js_require: after try_extensions, final_path='%s'", final_path ? final_path : "NULL");

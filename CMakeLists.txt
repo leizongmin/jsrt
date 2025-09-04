@@ -99,15 +99,45 @@ add_subdirectory(deps/libuv)
 if(NOT EXISTS "${CMAKE_SOURCE_DIR}/deps/llhttp/build/c/llhttp.c")
     message(STATUS "llhttp build files not found, attempting to build llhttp...")
     
-    # Try to find npm executable
-    find_program(NPM_EXECUTABLE npm)
+    # Cross-platform approach to finding and running npm
+    set(NPM_COMMAND "")
+    set(NPM_INSTALL_COMMAND "")
+    set(NPM_BUILD_COMMAND "")
     
-    if(NPM_EXECUTABLE)
-        message(STATUS "Found npm at: ${NPM_EXECUTABLE}")
+    if(WIN32)
+        # On Windows, try multiple approaches to find working npm
+        find_program(NPM_EXECUTABLE npm HINTS "C:/Program Files/nodejs" "C:/Program Files (x86)/nodejs")
+        find_program(NODE_EXECUTABLE node HINTS "C:/Program Files/nodejs" "C:/Program Files (x86)/nodejs")
+        find_program(CMD_EXECUTABLE cmd)
         
-        # First try npm install
+        if(NPM_EXECUTABLE AND CMD_EXECUTABLE)
+            # Try using cmd.exe to run npm (works better with shell scripts on Windows)
+            set(NPM_INSTALL_COMMAND ${CMD_EXECUTABLE} /c ${NPM_EXECUTABLE} install)
+            set(NPM_BUILD_COMMAND ${CMD_EXECUTABLE} /c ${NPM_EXECUTABLE} run build)
+            message(STATUS "Found npm at: ${NPM_EXECUTABLE} (using cmd.exe wrapper)")
+        elseif(NODE_EXECUTABLE)
+            # Fallback: use node directly with npm scripts
+            find_file(NPM_CLI_JS npm-cli.js HINTS "C:/Program Files/nodejs/node_modules/npm/bin" "C:/Program Files (x86)/nodejs/node_modules/npm/bin")
+            if(NPM_CLI_JS)
+                set(NPM_INSTALL_COMMAND ${NODE_EXECUTABLE} ${NPM_CLI_JS} install)
+                set(NPM_BUILD_COMMAND ${NODE_EXECUTABLE} ${NPM_CLI_JS} run build)
+                message(STATUS "Found node at: ${NODE_EXECUTABLE} (using npm-cli.js)")
+            endif()
+        endif()
+    else()
+        # On Unix-like systems, npm should work normally
+        find_program(NPM_EXECUTABLE npm)
+        if(NPM_EXECUTABLE)
+            set(NPM_INSTALL_COMMAND ${NPM_EXECUTABLE} install)
+            set(NPM_BUILD_COMMAND ${NPM_EXECUTABLE} run build)
+            message(STATUS "Found npm at: ${NPM_EXECUTABLE}")
+        endif()
+    endif()
+    
+    if(NPM_INSTALL_COMMAND)
+        # Try npm install
         execute_process(
-            COMMAND ${NPM_EXECUTABLE} install
+            COMMAND ${NPM_INSTALL_COMMAND}
             WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}/deps/llhttp
             RESULT_VARIABLE NPM_INSTALL_RESULT
             OUTPUT_VARIABLE NPM_INSTALL_OUTPUT
@@ -120,18 +150,36 @@ if(NOT EXISTS "${CMAKE_SOURCE_DIR}/deps/llhttp/build/c/llhttp.c")
             message(STATUS "npm install failed with code: ${NPM_INSTALL_RESULT}")
             message(STATUS "npm install output: ${NPM_INSTALL_OUTPUT}")
             message(STATUS "npm install error: ${NPM_INSTALL_ERROR}")
-            message(FATAL_ERROR 
-                "Failed to build llhttp dependencies.\n"
-                "This is likely due to missing Node.js/npm on Windows or permission issues.\n"
-                "Please either:\n"
-                "  1. Install Node.js and npm, then run: npm install && npm run build in deps/llhttp\n"
-                "  2. Or use a pre-built release that includes the generated llhttp files\n"
-                "  3. Or build on a Unix-like system where Node.js toolchain is available")
+            
+            # On Windows, provide specific troubleshooting
+            if(WIN32)
+                message(FATAL_ERROR 
+                    "Failed to build llhttp dependencies on Windows.\n"
+                    "This commonly happens due to Node.js/npm execution issues in Windows build environments.\n"
+                    "\n"
+                    "Possible solutions:\n"
+                    "  1. Use WSL (Windows Subsystem for Linux) for building: wsl git clone ... && wsl make\n"
+                    "  2. Use pre-built binaries from the releases page\n"
+                    "  3. Manually run in Command Prompt: cd deps\\llhttp && npm install && npm run build\n"
+                    "  4. Install Node.js from nodejs.org (not via package managers like chocolatey)\n"
+                    "\n"
+                    "Debug info:\n"
+                    "  npm install command: ${NPM_INSTALL_COMMAND}\n"
+                    "  exit code: ${NPM_INSTALL_RESULT}\n"
+                    "  output: ${NPM_INSTALL_OUTPUT}\n"
+                    "  error: ${NPM_INSTALL_ERROR}")
+            else()
+                message(FATAL_ERROR 
+                    "Failed to build llhttp dependencies.\n"
+                    "Please either:\n"
+                    "  1. Install Node.js and npm, then run: npm install && npm run build in deps/llhttp\n"
+                    "  2. Or use a pre-built release that includes the generated llhttp files")
+            endif()
         endif()
         
-        # Then try npm run build
+        # Try npm run build
         execute_process(
-            COMMAND ${NPM_EXECUTABLE} run build
+            COMMAND ${NPM_BUILD_COMMAND}
             WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}/deps/llhttp
             RESULT_VARIABLE NPM_BUILD_RESULT
             OUTPUT_VARIABLE NPM_BUILD_OUTPUT
@@ -144,24 +192,55 @@ if(NOT EXISTS "${CMAKE_SOURCE_DIR}/deps/llhttp/build/c/llhttp.c")
             message(STATUS "npm run build failed with code: ${NPM_BUILD_RESULT}")
             message(STATUS "npm run build output: ${NPM_BUILD_OUTPUT}")
             message(STATUS "npm run build error: ${NPM_BUILD_ERROR}")
-            message(FATAL_ERROR 
-                "Failed to generate llhttp C files.\n"
-                "This requires Node.js with TypeScript support.\n"
-                "Please either:\n"
-                "  1. Ensure Node.js 18+ is installed and run: npm install && npm run build in deps/llhttp\n"
-                "  2. Or use a pre-built release that includes the generated llhttp files\n"
-                "  3. Or build on a Unix-like system where the Node.js toolchain works reliably")
+            
+            if(WIN32)
+                message(FATAL_ERROR 
+                    "Failed to generate llhttp C files on Windows.\n"
+                    "This requires Node.js with TypeScript support.\n"
+                    "\n"
+                    "Recommended solutions:\n"
+                    "  1. Use WSL for building: wsl git clone ... && wsl make\n"
+                    "  2. Use pre-built binaries from the releases page\n"
+                    "  3. Build on Linux/macOS where Node.js toolchain works more reliably\n"
+                    "\n"
+                    "Debug info:\n"
+                    "  npm build command: ${NPM_BUILD_COMMAND}\n"
+                    "  exit code: ${NPM_BUILD_RESULT}\n"
+                    "  output: ${NPM_BUILD_OUTPUT}\n"
+                    "  error: ${NPM_BUILD_ERROR}")
+            else()
+                message(FATAL_ERROR 
+                    "Failed to generate llhttp C files.\n"
+                    "This requires Node.js with TypeScript support.\n"
+                    "Please either:\n"
+                    "  1. Ensure Node.js 18+ is installed and run: npm install && npm run build in deps/llhttp\n"
+                    "  2. Or use a pre-built release that includes the generated llhttp files")
+            endif()
         endif()
         
         message(STATUS "llhttp build completed successfully")
     else()
-        message(FATAL_ERROR 
-            "llhttp build files are missing and npm is not available.\n"
-            "The llhttp library requires generated C files that are built from TypeScript sources.\n"
-            "Please either:\n"
-            "  1. Install Node.js and npm, then run: git submodule update --init --recursive && cd deps/llhttp && npm install && npm run build\n"
-            "  2. Or use a pre-built release that includes the generated llhttp files\n"
-            "  3. Or build on a system where Node.js/npm is available (Linux/macOS usually work better)")
+        # No npm found
+        if(WIN32)
+            message(FATAL_ERROR 
+                "llhttp build files are missing and Node.js/npm is not available on Windows.\n"
+                "The llhttp library requires generated C files that are built from TypeScript sources.\n"
+                "\n"
+                "Recommended solutions:\n"
+                "  1. Install Node.js from https://nodejs.org/\n"
+                "  2. Use pre-built binaries from GitHub releases\n"
+                "  3. Use WSL (Windows Subsystem for Linux): wsl git clone ... && wsl make\n"
+                "  4. Build on Linux/macOS where the toolchain is more reliable\n"
+                "\n"
+                "If Node.js is installed but not found, check your PATH environment variable.")
+        else()
+            message(FATAL_ERROR 
+                "llhttp build files are missing and npm is not available.\n"
+                "The llhttp library requires generated C files that are built from TypeScript sources.\n"
+                "Please either:\n"
+                "  1. Install Node.js and npm, then run: git submodule update --init --recursive && cd deps/llhttp && npm install && npm run build\n"
+                "  2. Or use a pre-built release that includes the generated llhttp files")
+        endif()
     endif()
 endif()
 

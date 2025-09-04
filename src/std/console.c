@@ -520,9 +520,13 @@ void JSRT_GetJSValuePrettyString(DynBuf* s, JSContext* ctx, JSValueConst value, 
     case JS_TAG_UNDEFINED: {
       str = JS_ToCStringLen(ctx, &len, value);
       colors&& dbuf_putstr(s, JSRT_ColorizeFontBlack);
-      dbuf_putstr(s, str);
+      if (str) {
+        dbuf_putstr(s, str);
+        JS_FreeCString(ctx, str);
+      } else {
+        dbuf_putstr(s, "undefined");
+      }
       colors&& dbuf_putstr(s, JSRT_ColorizeClear);
-      JS_FreeCString(ctx, str);
       break;
     }
     case JS_TAG_BIG_INT:
@@ -533,25 +537,37 @@ void JSRT_GetJSValuePrettyString(DynBuf* s, JSContext* ctx, JSValueConst value, 
     case JS_TAG_SYMBOL: {
       str = JS_ToCStringLen(ctx, &len, value);
       colors&& dbuf_putstr(s, JSRT_ColorizeFontYellow);
-      dbuf_putstr(s, str);
+      if (str) {
+        dbuf_putstr(s, str);
+        JS_FreeCString(ctx, str);
+      } else {
+        dbuf_putstr(s, "[invalid value]");
+      }
       colors&& dbuf_putstr(s, JSRT_ColorizeClear);
-      JS_FreeCString(ctx, str);
       break;
     }
     case JS_TAG_NULL: {
       str = JS_ToCStringLen(ctx, &len, value);
       colors&& dbuf_putstr(s, JSRT_ColorizeFontWhiteBold);
-      dbuf_putstr(s, str);
+      if (str) {
+        dbuf_putstr(s, str);
+        JS_FreeCString(ctx, str);
+      } else {
+        dbuf_putstr(s, "null");
+      }
       colors&& dbuf_putstr(s, JSRT_ColorizeClear);
-      JS_FreeCString(ctx, str);
       break;
     }
     case JS_TAG_STRING: {
       str = JS_ToCStringLen(ctx, &len, value);
       colors&& dbuf_putstr(s, JSRT_ColorizeFontGreen);
-      dbuf_putstr(s, str);
+      if (str) {
+        dbuf_putstr(s, str);
+        JS_FreeCString(ctx, str);
+      } else {
+        dbuf_putstr(s, "[invalid string]");
+      }
       colors&& dbuf_putstr(s, JSRT_ColorizeClear);
-      JS_FreeCString(ctx, str);
       break;
     }
     case JS_TAG_OBJECT: {
@@ -560,8 +576,12 @@ void JSRT_GetJSValuePrettyString(DynBuf* s, JSContext* ctx, JSValueConst value, 
         dbuf_putstr(s, "[Function: ");
         JSValue n = JS_GetPropertyStr(ctx, value, "name");
         str = JS_ToCStringLen(ctx, &len, n);
-        dbuf_putstr(s, str);
-        JS_FreeCString(ctx, str);
+        if (str) {
+          dbuf_putstr(s, str);
+          JS_FreeCString(ctx, str);
+        } else {
+          dbuf_putstr(s, "anonymous");
+        }
         JS_FreeValue(ctx, n);
         dbuf_putstr(s, "]");
         colors&& dbuf_putstr(s, JSRT_ColorizeClear);
@@ -592,14 +612,24 @@ void JSRT_GetJSValuePrettyString(DynBuf* s, JSContext* ctx, JSValueConst value, 
           for (uint32_t i = 0; i < keys_len; i++) {
             // k is an number?
             k = JS_AtomToCString(ctx, tab[i].atom);
-            dbuf_putstr(s, k);
-            dbuf_putstr(s, ": ");
-            v = JS_GetProperty(ctx, value, tab[i].atom);
-            JSRT_GetJSValuePrettyString(s, ctx, v, k, colors);
-            JS_FreeCString(ctx, k);
-            JS_FreeValue(ctx, v);
-            if (i < keys_len - 1) {
-              dbuf_putstr(s, ", ");
+            if (k) {
+              dbuf_putstr(s, k);
+              dbuf_putstr(s, ": ");
+              v = JS_GetProperty(ctx, value, tab[i].atom);
+              JSRT_GetJSValuePrettyString(s, ctx, v, k, colors);
+              JS_FreeCString(ctx, k);
+              JS_FreeValue(ctx, v);
+              if (i < keys_len - 1) {
+                dbuf_putstr(s, ", ");
+              }
+            } else {
+              dbuf_putstr(s, "[invalid key]: ");
+              v = JS_GetProperty(ctx, value, tab[i].atom);
+              JSRT_GetJSValuePrettyString(s, ctx, v, NULL, colors);
+              JS_FreeValue(ctx, v);
+              if (i < keys_len - 1) {
+                dbuf_putstr(s, ", ");
+              }
             }
           }
         }

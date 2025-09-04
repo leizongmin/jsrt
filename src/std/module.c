@@ -41,7 +41,8 @@ static bool is_path_separator(char c) {
 
 // Find the last path separator in a string
 static char* find_last_separator(const char* path) {
-  if (!path) return NULL;
+  if (!path)
+    return NULL;
 
   char* last_slash = strrchr(path, '/');
   char* last_backslash = strrchr(path, '\\');
@@ -57,17 +58,21 @@ static char* find_last_separator(const char* path) {
 
 // Normalize path separators to be platform-specific
 static char* normalize_path(const char* path) {
-  if (!path) return NULL;
+  if (!path)
+    return NULL;
 
   char* normalized = strdup(path);
-  if (!normalized) return NULL;
+  if (!normalized)
+    return NULL;
 
   // Convert path separators to platform-specific ones
   for (char* p = normalized; *p; p++) {
 #ifdef _WIN32
-    if (*p == '/') *p = '\\';
+    if (*p == '/')
+      *p = '\\';
 #else
-    if (*p == '\\') *p = '/';
+    if (*p == '\\')
+      *p = '/';
 #endif
   }
 
@@ -76,10 +81,12 @@ static char* normalize_path(const char* path) {
 
 // Get the parent directory of a path
 static char* get_parent_directory(const char* path) {
-  if (!path) return NULL;
+  if (!path)
+    return NULL;
 
   char* normalized = normalize_path(path);
-  if (!normalized) return NULL;
+  if (!normalized)
+    return NULL;
 
   char* last_sep = find_last_separator(normalized);
   if (last_sep && last_sep != normalized) {
@@ -98,7 +105,8 @@ static char* get_parent_directory(const char* path) {
 
 // Join two path components with appropriate separator
 static char* path_join(const char* dir, const char* file) {
-  if (!dir || !file) return NULL;
+  if (!dir || !file)
+    return NULL;
 
   size_t dir_len = strlen(dir);
   size_t file_len = strlen(file);
@@ -108,7 +116,8 @@ static char* path_join(const char* dir, const char* file) {
 
   size_t total_len = dir_len + file_len + (has_trailing_sep ? 0 : 1) + 1;
   char* result = malloc(total_len);
-  if (!result) return NULL;
+  if (!result)
+    return NULL;
 
   strcpy(result, dir);
   if (!has_trailing_sep) {
@@ -123,13 +132,13 @@ static char* path_join(const char* dir, const char* file) {
 
 // Check if a path is absolute
 static bool is_absolute_path(const char* path) {
-  if (!path) return false;
+  if (!path)
+    return false;
 
 #ifdef _WIN32
   // Windows: starts with drive letter (C:) or UNC path (\\) or single slash/backslash
   return (strlen(path) >= 3 && path[1] == ':' && is_path_separator(path[2])) ||
-         (strlen(path) >= 2 && path[0] == '\\' && path[1] == '\\') ||
-         is_path_separator(path[0]);
+         (strlen(path) >= 2 && path[0] == '\\' && path[1] == '\\') || is_path_separator(path[0]);
 #else
   // Unix: starts with /
   return path[0] == '/';
@@ -138,18 +147,20 @@ static bool is_absolute_path(const char* path) {
 
 // Check if a path is relative (starts with ./ or ../)
 static bool is_relative_path(const char* path) {
-  if (!path) return false;
+  if (!path)
+    return false;
 
-  return (path[0] == '.' && (is_path_separator(path[1]) ||
-         (path[1] == '.' && is_path_separator(path[2]))));
+  return (path[0] == '.' && (is_path_separator(path[1]) || (path[1] == '.' && is_path_separator(path[2]))));
 }
 
 // Resolve a relative path against a base path
 static char* resolve_relative_path(const char* base_path, const char* relative_path) {
-  if (!base_path || !relative_path) return NULL;
+  if (!base_path || !relative_path)
+    return NULL;
 
   char* base_dir = get_parent_directory(base_path);
-  if (!base_dir) return NULL;
+  if (!base_dir)
+    return NULL;
 
   // Handle ./ and ../ prefixes
   const char* clean_relative = relative_path;
@@ -160,7 +171,8 @@ static char* resolve_relative_path(const char* base_path, const char* relative_p
     // Handle "../" - need to go up one more level
     char* parent_dir = get_parent_directory(base_dir);
     free(base_dir);
-    if (!parent_dir) return NULL;
+    if (!parent_dir)
+      return NULL;
     base_dir = parent_dir;
     clean_relative = relative_path + 3;
 
@@ -168,7 +180,8 @@ static char* resolve_relative_path(const char* base_path, const char* relative_p
     while (clean_relative[0] == '.' && clean_relative[1] == '.' && is_path_separator(clean_relative[2])) {
       parent_dir = get_parent_directory(base_dir);
       free(base_dir);
-      if (!parent_dir) return NULL;
+      if (!parent_dir)
+        return NULL;
       base_dir = parent_dir;
       clean_relative += 3;
     }
@@ -239,13 +252,15 @@ static char* find_node_modules_path(const char* start_dir, const char* package_n
   while (current_search && strlen(current_search) > 1) {
     // Build node_modules path
     char* node_modules_path = path_join(current_search, "node_modules");
-    if (!node_modules_path) break;
+    if (!node_modules_path)
+      break;
 
     // Build package path
     char* package_path = path_join(node_modules_path, package_name);
     free(node_modules_path);
 
-    if (!package_path) break;
+    if (!package_path)
+      break;
 
     // Check if the package directory exists using access()
     if (access(package_path, F_OK) == 0) {
@@ -277,7 +292,8 @@ static char* resolve_package_main(const char* package_dir, bool is_esm) {
 
   // Try to read package.json
   char* package_json_path = path_join(package_dir, "package.json");
-  if (!package_json_path) return NULL;
+  if (!package_json_path)
+    return NULL;
 
   JSRT_ReadFileResult json_result = JSRT_ReadFile(package_json_path);
   free(package_json_path);
@@ -519,7 +535,7 @@ JSModuleDef* JSRT_ModuleLoader(JSContext* ctx, const char* module_name, void* op
 
     // Create a simple wrapper that uses the global require with proper context
     // First, escape backslashes in the module_name for JavaScript string literal
-    size_t escaped_name_len = strlen(module_name) * 2 + 1; // Worst case: every char needs escaping
+    size_t escaped_name_len = strlen(module_name) * 2 + 1;  // Worst case: every char needs escaping
     char* escaped_module_name = malloc(escaped_name_len);
     char* dst = escaped_module_name;
     for (const char* src = module_name; *src; src++) {

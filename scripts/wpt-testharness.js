@@ -193,6 +193,50 @@ function async_test(func, name) {
     return t;
 }
 
+function promise_test(func, name) {
+    testCounter++;
+    const testName = name || `Promise Test ${testCounter}`;
+    
+    const testObj = {
+        name: testName,
+        func: func,
+        status: null,
+        message: null
+    };
+    
+    tests.push(testObj);
+    currentTest = testObj;
+    
+    try {
+        const result = func();
+        if (result && typeof result.then === 'function') {
+            // It's a promise
+            result.then(() => {
+                testObj.status = TEST_PASS;
+                testObj.message = 'OK';
+                console.log(`✅ ${testName}`);
+            }).catch(e => {
+                testObj.status = TEST_FAIL;
+                testObj.message = e.message;
+                console.log(`❌ ${testName}: ${e.message}`);
+            }).finally(() => {
+                currentTest = null;
+            });
+        } else {
+            // Sync function that returned
+            testObj.status = TEST_PASS;
+            testObj.message = 'OK';
+            console.log(`✅ ${testName}`);
+            currentTest = null;
+        }
+    } catch (e) {
+        testObj.status = TEST_FAIL;
+        testObj.message = e.message;
+        console.log(`❌ ${testName}: ${e.message}`);
+        currentTest = null;
+    }
+}
+
 // Setup function (no-op for jsrt)
 function setup() {
     // No-op in jsrt environment
@@ -208,6 +252,7 @@ globalThis.assert_throws = assert_throws;
 globalThis.assert_unreached = assert_unreached;
 globalThis.test = test;
 globalThis.async_test = async_test;
+globalThis.promise_test = promise_test;
 globalThis.setup = setup;
 
 // For compatibility with different global objects
@@ -251,6 +296,7 @@ if (typeof module !== 'undefined' && module.exports) {
         assert_unreached,
         test,
         async_test,
+        promise_test,
         setup
     };
 }

@@ -76,12 +76,12 @@ coverage: test_cov
 .PHONY: wpt
 wpt: jsrt
 	@echo "Running Web Platform Tests for WinterCG Minimum Common API..."
-	python3 scripts/run-wpt.py --jsrt target/release/jsrt --wpt-dir wpt
+	python3 scripts/run-wpt.py --jsrt $(CURDIR)/target/release/jsrt --wpt-dir $(CURDIR)/wpt
 
 .PHONY: wpt_g
 wpt_g: jsrt_g
 	@echo "Running Web Platform Tests with debug build..."
-	python3 scripts/run-wpt.py --jsrt target/debug/jsrt --wpt-dir wpt --verbose
+	python3 scripts/run-wpt.py --jsrt $(CURDIR)/target/debug/jsrt --wpt-dir $(CURDIR)/wpt --verbose
 
 .PHONY: wpt-list
 wpt-list:

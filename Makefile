@@ -38,10 +38,74 @@ jsrt_s: jsrt
 clean:
 	rm -rf target core.*
 
+# clang-format version standardization
+# Ensures all environments use consistent clang-format version for code formatting
+# Downloads and installs clang-format v20 to target/tools/ if not available
+CLANG_FORMAT_VERSION = 20
+CLANG_FORMAT_DIR = target/tools
+CLANG_FORMAT_BIN = $(CLANG_FORMAT_DIR)/clang-format-$(CLANG_FORMAT_VERSION)
+
+# Check and install clang-format v20 if needed
+.PHONY: ensure-clang-format
+ensure-clang-format:
+	@if [ ! -f "$(CLANG_FORMAT_BIN)" ] || ! $(CLANG_FORMAT_BIN) --version 2>/dev/null | grep -q "version $(CLANG_FORMAT_VERSION)"; then \
+		echo "Setting up clang-format v$(CLANG_FORMAT_VERSION)..."; \
+		mkdir -p $(CLANG_FORMAT_DIR); \
+		cd $(CLANG_FORMAT_DIR) && \
+		if command -v clang-format-$(CLANG_FORMAT_VERSION) >/dev/null 2>&1; then \
+			echo "Using system clang-format-$(CLANG_FORMAT_VERSION)"; \
+			ln -sf $$(which clang-format-$(CLANG_FORMAT_VERSION)) clang-format-$(CLANG_FORMAT_VERSION); \
+		elif command -v apt-get >/dev/null 2>&1; then \
+			echo "Installing clang-format-$(CLANG_FORMAT_VERSION) via apt..."; \
+			if ! apt-cache search clang-format-$(CLANG_FORMAT_VERSION) | grep -q clang-format-$(CLANG_FORMAT_VERSION); then \
+				echo "Adding LLVM repository..."; \
+				wget -qO- https://apt.llvm.org/llvm-snapshot.gpg.key | sudo tee /etc/apt/trusted.gpg.d/apt.llvm.org.asc >/dev/null; \
+				echo "deb http://apt.llvm.org/jammy/ llvm-toolchain-jammy-$(CLANG_FORMAT_VERSION) main" | sudo tee /etc/apt/sources.list.d/llvm-toolchain-jammy-$(CLANG_FORMAT_VERSION).list >/dev/null; \
+				sudo apt-get update >/dev/null 2>&1; \
+			fi; \
+			sudo apt-get install -y clang-format-$(CLANG_FORMAT_VERSION) >/dev/null 2>&1 && \
+			ln -sf $$(which clang-format-$(CLANG_FORMAT_VERSION)) clang-format-$(CLANG_FORMAT_VERSION); \
+		elif command -v snap >/dev/null 2>&1; then \
+			echo "Attempting to install via snap..."; \
+			sudo snap install clang-format-$(CLANG_FORMAT_VERSION) --devmode 2>/dev/null || \
+			sudo snap install clang-format --devmode 2>/dev/null; \
+			ln -sf $$(which clang-format) clang-format-$(CLANG_FORMAT_VERSION) 2>/dev/null; \
+		else \
+			echo "Package manager not found. Creating symlink to system clang-format..."; \
+			which clang-format >/dev/null 2>&1 && \
+			ln -sf $$(which clang-format) clang-format-$(CLANG_FORMAT_VERSION) || \
+			( echo "Error: clang-format not found. Please install clang-format manually."; exit 1 ); \
+		fi; \
+		if [ -f clang-format-$(CLANG_FORMAT_VERSION) ] || [ -L clang-format-$(CLANG_FORMAT_VERSION) ]; then \
+			chmod +x clang-format-$(CLANG_FORMAT_VERSION) 2>/dev/null || true; \
+			version_output=$$(./clang-format-$(CLANG_FORMAT_VERSION) --version 2>/dev/null || echo "unknown"); \
+			if echo "$$version_output" | grep -q "version $(CLANG_FORMAT_VERSION)"; then \
+				echo "✓ clang-format v$(CLANG_FORMAT_VERSION) setup completed"; \
+			else \
+				echo "⚠ Warning: Using clang-format ($$version_output) - not exactly v$(CLANG_FORMAT_VERSION)"; \
+			fi; \
+		else \
+			echo "Warning: Failed to setup clang-format v$(CLANG_FORMAT_VERSION), falling back to system version"; \
+			which clang-format >/dev/null 2>&1 && \
+			ln -sf $$(which clang-format) clang-format-$(CLANG_FORMAT_VERSION) || \
+			( echo "Error: No clang-format available. Please install clang-format manually."; exit 1 ); \
+		fi; \
+	else \
+		version_output=$$($(CLANG_FORMAT_BIN) --version 2>/dev/null || echo "unknown"); \
+		if echo "$$version_output" | grep -q "version $(CLANG_FORMAT_VERSION)"; then \
+			echo "✓ clang-format v$(CLANG_FORMAT_VERSION) already available"; \
+		else \
+			echo "✓ clang-format available ($$version_output)"; \
+		fi; \
+	fi
+
 .PHONY: clang-format
-clang-format:
-	find src -type f -name "*.c" -o -name "*.h" | xargs clang-format -i
-	find test -type f -name "*.c" -o -name "*.h" | xargs clang-format -i
+clang-format: ensure-clang-format
+	@echo "Formatting C/C++ code with clang-format v$(CLANG_FORMAT_VERSION)..."
+	@$(CLANG_FORMAT_BIN) --version | head -1
+	@find src -type f -name "*.c" -o -name "*.h" | xargs -r $(CLANG_FORMAT_BIN) -i
+	@find test -type f -name "*.c" -o -name "*.h" | xargs -r $(CLANG_FORMAT_BIN) -i
+	@echo "✓ Code formatting completed"
 
 .PHONY: prettier
 prettier:

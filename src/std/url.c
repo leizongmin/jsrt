@@ -13,8 +13,11 @@
 static JSClassID JSRT_URLClassID;
 static JSClassID JSRT_URLSearchParamsClassID;
 
+// Forward declare
+struct JSRT_URL;
+
 // URL component structure
-typedef struct {
+typedef struct JSRT_URL {
   char* href;
   char* protocol;
   char* host;
@@ -24,6 +27,8 @@ typedef struct {
   char* search;
   char* hash;
   char* origin;
+  JSValue search_params;  // Cached URLSearchParams object
+  JSContext* ctx;         // Context for managing search_params
 } JSRT_URL;
 
 // Simple URL parser (basic implementation)
@@ -41,6 +46,8 @@ static JSRT_URL* JSRT_ParseURL(const char* url, const char* base) {
   parsed->search = strdup("");
   parsed->hash = strdup("");
   parsed->origin = strdup("");
+  parsed->search_params = JS_UNDEFINED;
+  parsed->ctx = NULL;
 
   // Simple parsing - this is a basic implementation
   // In a production system, you'd want a full URL parser
@@ -118,6 +125,9 @@ static JSRT_URL* JSRT_ParseURL(const char* url, const char* base) {
 
 static void JSRT_FreeURL(JSRT_URL* url) {
   if (url) {
+    if (url->ctx && !JS_IsUndefined(url->search_params)) {
+      JS_FreeValue(url->ctx, url->search_params);
+    }
     free(url->href);
     free(url->protocol);
     free(url->host);
@@ -163,6 +173,7 @@ static JSValue JSRT_URLConstructor(JSContext* ctx, JSValueConst new_target, int 
   }
 
   JSRT_URL* url = JSRT_ParseURL(url_str, base_str);
+  url->ctx = ctx;  // Set context for managing search_params
 
   JSValue obj = JS_NewObjectClass(ctx, JSRT_URLClassID);
   JS_SetOpaque(obj, url);
@@ -237,6 +248,24 @@ static JSValue JSRT_URLGetOrigin(JSContext* ctx, JSValueConst this_val, int argc
   if (!url)
     return JS_EXCEPTION;
   return JS_NewString(ctx, url->origin);
+}
+
+static JSValue JSRT_URLGetSearchParams(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
+  JSRT_URL* url = JS_GetOpaque2(ctx, this_val, JSRT_URLClassID);
+  if (!url)
+    return JS_EXCEPTION;
+
+  // Create URLSearchParams object if not already cached
+  if (JS_IsUndefined(url->search_params)) {
+    JSValue search_params_ctor = JS_GetPropertyStr(ctx, JS_GetGlobalObject(ctx), "URLSearchParams");
+    JSValue search_value = JS_NewString(ctx, url->search);
+    url->search_params = JS_CallConstructor(ctx, search_params_ctor, 1, &search_value);
+
+    JS_FreeValue(ctx, search_params_ctor);
+    JS_FreeValue(ctx, search_value);
+  }
+
+  return JS_DupValue(ctx, url->search_params);
 }
 
 static JSValue JSRT_URLToString(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
@@ -503,6 +532,52 @@ static JSValue JSRT_URLSearchParamsDelete(JSContext* ctx, JSValueConst this_val,
   return JS_UNDEFINED;
 }
 
+static JSValue JSRT_URLSearchParamsGetAll(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
+  if (argc < 1) {
+    return JS_ThrowTypeError(ctx, "getAll() requires 1 argument");
+  }
+
+  JSRT_URLSearchParams* search_params = JS_GetOpaque2(ctx, this_val, JSRT_URLSearchParamsClassID);
+  if (!search_params) {
+    return JS_EXCEPTION;
+  }
+
+  const char* name = JS_ToCString(ctx, argv[0]);
+  if (!name) {
+    return JS_EXCEPTION;
+  }
+
+  JSValue result_array = JS_NewArray(ctx);
+  int array_index = 0;
+
+  JSRT_URLSearchParam* param = search_params->params;
+  while (param) {
+    if (strcmp(param->name, name) == 0) {
+      JS_SetPropertyUint32(ctx, result_array, array_index++, JS_NewString(ctx, param->value));
+    }
+    param = param->next;
+  }
+
+  JS_FreeCString(ctx, name);
+  return result_array;
+}
+
+static JSValue JSRT_URLSearchParamsGetSize(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
+  JSRT_URLSearchParams* search_params = JS_GetOpaque2(ctx, this_val, JSRT_URLSearchParamsClassID);
+  if (!search_params) {
+    return JS_EXCEPTION;
+  }
+
+  int count = 0;
+  JSRT_URLSearchParam* param = search_params->params;
+  while (param) {
+    count++;
+    param = param->next;
+  }
+
+  return JS_NewInt32(ctx, count);
+}
+
 static JSValue JSRT_URLSearchParamsToString(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
   JSRT_URLSearchParams* search_params = JS_GetOpaque2(ctx, this_val, JSRT_URLSearchParamsClassID);
   if (!search_params) {
@@ -570,6 +645,7 @@ void JSRT_RuntimeSetupStdURL(JSRT_Runtime* rt) {
   JSValue get_search = JS_NewCFunction(ctx, JSRT_URLGetSearch, "get search", 0);
   JSValue get_hash = JS_NewCFunction(ctx, JSRT_URLGetHash, "get hash", 0);
   JSValue get_origin = JS_NewCFunction(ctx, JSRT_URLGetOrigin, "get origin", 0);
+  JSValue get_search_params = JS_NewCFunction(ctx, JSRT_URLGetSearchParams, "get searchParams", 0);
 
   JSAtom href_atom = JS_NewAtom(ctx, "href");
   JSAtom protocol_atom = JS_NewAtom(ctx, "protocol");
@@ -580,6 +656,7 @@ void JSRT_RuntimeSetupStdURL(JSRT_Runtime* rt) {
   JSAtom search_atom = JS_NewAtom(ctx, "search");
   JSAtom hash_atom = JS_NewAtom(ctx, "hash");
   JSAtom origin_atom = JS_NewAtom(ctx, "origin");
+  JSAtom search_params_atom = JS_NewAtom(ctx, "searchParams");
 
   JS_DefinePropertyGetSet(ctx, url_proto, href_atom, get_href, JS_UNDEFINED, JS_PROP_CONFIGURABLE);
   JS_DefinePropertyGetSet(ctx, url_proto, protocol_atom, get_protocol, JS_UNDEFINED, JS_PROP_CONFIGURABLE);
@@ -590,6 +667,7 @@ void JSRT_RuntimeSetupStdURL(JSRT_Runtime* rt) {
   JS_DefinePropertyGetSet(ctx, url_proto, search_atom, get_search, JS_UNDEFINED, JS_PROP_CONFIGURABLE);
   JS_DefinePropertyGetSet(ctx, url_proto, hash_atom, get_hash, JS_UNDEFINED, JS_PROP_CONFIGURABLE);
   JS_DefinePropertyGetSet(ctx, url_proto, origin_atom, get_origin, JS_UNDEFINED, JS_PROP_CONFIGURABLE);
+  JS_DefinePropertyGetSet(ctx, url_proto, search_params_atom, get_search_params, JS_UNDEFINED, JS_PROP_CONFIGURABLE);
 
   JS_FreeAtom(ctx, href_atom);
   JS_FreeAtom(ctx, protocol_atom);
@@ -600,6 +678,7 @@ void JSRT_RuntimeSetupStdURL(JSRT_Runtime* rt) {
   JS_FreeAtom(ctx, search_atom);
   JS_FreeAtom(ctx, hash_atom);
   JS_FreeAtom(ctx, origin_atom);
+  JS_FreeAtom(ctx, search_params_atom);
 
   // Methods
   JS_SetPropertyStr(ctx, url_proto, "toString", JS_NewCFunction(ctx, JSRT_URLToString, "toString", 0));
@@ -616,12 +695,19 @@ void JSRT_RuntimeSetupStdURL(JSRT_Runtime* rt) {
 
   JSValue search_params_proto = JS_NewObject(ctx);
   JS_SetPropertyStr(ctx, search_params_proto, "get", JS_NewCFunction(ctx, JSRT_URLSearchParamsGet, "get", 1));
+  JS_SetPropertyStr(ctx, search_params_proto, "getAll", JS_NewCFunction(ctx, JSRT_URLSearchParamsGetAll, "getAll", 1));
   JS_SetPropertyStr(ctx, search_params_proto, "set", JS_NewCFunction(ctx, JSRT_URLSearchParamsSet, "set", 2));
   JS_SetPropertyStr(ctx, search_params_proto, "append", JS_NewCFunction(ctx, JSRT_URLSearchParamsAppend, "append", 2));
   JS_SetPropertyStr(ctx, search_params_proto, "has", JS_NewCFunction(ctx, JSRT_URLSearchParamsHas, "has", 1));
   JS_SetPropertyStr(ctx, search_params_proto, "delete", JS_NewCFunction(ctx, JSRT_URLSearchParamsDelete, "delete", 1));
   JS_SetPropertyStr(ctx, search_params_proto, "toString",
                     JS_NewCFunction(ctx, JSRT_URLSearchParamsToString, "toString", 0));
+
+  // Add size property as getter
+  JSValue get_size = JS_NewCFunction(ctx, JSRT_URLSearchParamsGetSize, "get size", 0);
+  JSAtom size_atom = JS_NewAtom(ctx, "size");
+  JS_DefinePropertyGetSet(ctx, search_params_proto, size_atom, get_size, JS_UNDEFINED, JS_PROP_CONFIGURABLE);
+  JS_FreeAtom(ctx, size_atom);
 
   JS_SetClassProto(ctx, JSRT_URLSearchParamsClassID, search_params_proto);
 

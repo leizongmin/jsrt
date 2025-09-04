@@ -166,19 +166,27 @@ class JSRTTestRunner:
         
         return meta_directives
     
-    def load_resource_file(self, resource_path: str, base_dir: Path) -> str:
+    def load_resource_file(self, resource_path: str, test_dir: Path) -> str:
         """Load a WPT resource file."""
         # Resource paths in META directives are relative to the test directory
-        full_path = base_dir / resource_path
+        # First try relative to test directory
+        full_path = test_dir / resource_path
+        
+        # If not found, try relative to WPT root (some tests may use absolute paths from WPT root)
+        if not full_path.exists():
+            full_path = self.wpt_path / resource_path
+            
         if full_path.exists():
             try:
                 with open(full_path, 'r', encoding='utf-8') as f:
-                    return f.read()
+                    content = f.read()
+                    self.log(f"Loaded resource: {resource_path} from {full_path}")
+                    return content
             except Exception as e:
                 self.log(f"Warning: Could not read resource file {resource_path}: {e}")
-                return f"// Error loading resource: {resource_path}\n"
+                return f"// Error loading resource: {resource_path} - {e}\n"
         else:
-            self.log(f"Warning: Resource file not found: {full_path}")
+            self.log(f"Warning: Resource file not found: {resource_path} (tried {test_dir / resource_path} and {self.wpt_path / resource_path})")
             return f"// Resource file not found: {resource_path}\n"
     
     def create_test_wrapper(self, test_path: Path) -> Path:

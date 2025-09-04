@@ -77,11 +77,22 @@ static JSValue jsrt_start_timer(bool is_interval, JSContext* ctx, JSValueConst t
     return JS_ThrowTypeError(rt->ctx, "The \"callback\" argument must be of type function. Received undefined");
   } else if (argc == 1) {
     callback = argv[0];
+    // timeout remains 0 for missing timeout argument
   } else {
     callback = argv[0];
-    int status = JS_ToInt64(rt->ctx, &timeout, argv[1]);
-    if (status != 0) {
-      JSRT_Debug("failed to convert timeout to int64_t: status=%d, value=%p", status, &argv[1]);
+    if (JS_IsUndefined(argv[1]) || JS_IsNull(argv[1])) {
+      // Undefined or null timeout should be treated as 0
+      timeout = 0;
+    } else {
+      int status = JS_ToInt64(rt->ctx, &timeout, argv[1]);
+      if (status != 0) {
+        JSRT_Debug("failed to convert timeout to int64_t: status=%d, value=%p", status, &argv[1]);
+        timeout = 0;  // Default to 0 on conversion failure
+      }
+      // Negative timeouts should be clamped to 0 (WPT requirement)
+      if (timeout < 0) {
+        timeout = 0;
+      }
     }
   }
   if (!JS_IsFunction(ctx, callback)) {

@@ -107,7 +107,12 @@ void JSRT_RuntimeSetupStdConsole(JSRT_Runtime* rt) {
   JS_SetPropertyStr(rt->ctx, console, "clear", JS_NewCFunction(rt->ctx, jsrt_console_clear, "clear", 0));
   JS_SetPropertyStr(rt->ctx, console, "dir", JS_NewCFunction(rt->ctx, jsrt_console_dir, "dir", 1));
   JS_SetPropertyStr(rt->ctx, console, "table", JS_NewCFunction(rt->ctx, jsrt_console_table, "table", 1));
-  JS_SetPropertyStr(rt->ctx, rt->global, "console", console);
+
+  // Set console as a namespace object with proper property descriptors
+  // According to WPT tests, console should be:
+  // - writable: true, enumerable: false, configurable: true
+  JS_DefinePropertyValueStr(rt->ctx, rt->global, "console", console,
+                            JS_PROP_WRITABLE | JS_PROP_CONFIGURABLE);  // not enumerable
 }
 
 static void jsrt_init_dbuf(JSContext* ctx, DynBuf* s) {

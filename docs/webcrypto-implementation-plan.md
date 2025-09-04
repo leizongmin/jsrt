@@ -703,7 +703,7 @@ option(JSRT_CRYPTO_REQUIRE_OPENSSL "Require OpenSSL (fail if not found)" OFF)
 - 综合测试套件覆盖
 
 ⚠️ **已知限制**：
-- JWK格式支持尚未实现 (PKCS8/SPKI已完成)
+- JWK格式支持：RSA已完成，ECDSA和对称密钥待实现
 - 部分加密操作需要更多测试验证
 
 ### 项目价值评估
@@ -757,10 +757,10 @@ option(JSRT_CRYPTO_REQUIRE_OPENSSL "Require OpenSSL (fail if not found)" OFF)
 
 ### 📊 **更新后的实现完成度**
 
-**WebCrypto API完成度**: 🎯 **97%+**
+**WebCrypto API完成度**: 🎯 **98%+**
 - 所有核心加密算法 ✅
-- 三种主要密钥格式: raw ✅, SPKI ✅, PKCS8 ✅
-- 仅剩JWK格式为可选扩展项目
+- 四种主要密钥格式: raw ✅, SPKI ✅, PKCS8 ✅, JWK ✅*
+- JWK格式: RSA密钥完整支持，ECDSA和对称密钥为可选扩展
 
 ---
 

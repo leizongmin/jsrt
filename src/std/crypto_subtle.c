@@ -29,6 +29,103 @@ extern HMODULE openssl_handle;
 #define JSRT_DLSYM(handle, name) dlsym(handle, name)
 #endif
 
+// Base64URL encoding table (RFC 7515 - differs from standard Base64)
+static const char base64url_encode_table[] = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_";
+
+// Base64URL decoding table
+static const uint8_t base64url_decode_table[256] = {
+    255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255,
+    255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255,
+    255, 62,  255, 255, 52,  53,  54,  55,  56,  57,  58,  59,  60,  61,  255, 255, 255, 255, 255, 255, 255, 0,
+    1,   2,   3,   4,   5,   6,   7,   8,   9,   10,  11,  12,  13,  14,  15,  16,  17,  18,  19,  20,  21,  22,
+    23,  24,  25,  255, 255, 255, 255, 63,  255, 26,  27,  28,  29,  30,  31,  32,  33,  34,  35,  36,  37,  38,
+    39,  40,  41,  42,  43,  44,  45,  46,  47,  48,  49,  50,  51,  255, 255, 255, 255, 255, 255, 255, 255, 255,
+    255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255,
+    255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255,
+    255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255,
+    255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255,
+    255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255,
+    255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255, 255};
+
+// Base64URL encode function (no padding)
+static char* base64url_encode(const uint8_t* input, size_t input_len, size_t* output_len) {
+  if (!input || input_len == 0) {
+    if (output_len)
+      *output_len = 0;
+    return NULL;
+  }
+
+  *output_len = 4 * ((input_len + 2) / 3);
+  char* output = malloc(*output_len + 1);
+  if (!output)
+    return NULL;
+
+  size_t j = 0;
+  for (size_t i = 0; i < input_len; i += 3) {
+    uint32_t octet_a = input[i];
+    uint32_t octet_b = (i + 1 < input_len) ? input[i + 1] : 0;
+    uint32_t octet_c = (i + 2 < input_len) ? input[i + 2] : 0;
+
+    uint32_t triple = (octet_a << 16) + (octet_b << 8) + octet_c;
+
+    output[j++] = base64url_encode_table[(triple >> 18) & 63];
+    output[j++] = base64url_encode_table[(triple >> 12) & 63];
+    if (i + 1 < input_len) {
+      output[j++] = base64url_encode_table[(triple >> 6) & 63];
+    }
+    if (i + 2 < input_len) {
+      output[j++] = base64url_encode_table[triple & 63];
+    }
+  }
+
+  *output_len = j;  // Actual length without padding
+  output[j] = '\0';
+  return output;
+}
+
+// Base64URL decode function (no padding expected)
+static uint8_t* base64url_decode(const char* input, size_t input_len, size_t* output_len) {
+  if (!input || input_len == 0) {
+    if (output_len)
+      *output_len = 0;
+    return NULL;
+  }
+
+  // Calculate output length
+  *output_len = input_len * 3 / 4;
+  if (input_len % 4 == 2)
+    *output_len += 1;
+  else if (input_len % 4 == 3)
+    *output_len += 2;
+
+  uint8_t* output = malloc(*output_len + 1);
+  if (!output)
+    return NULL;
+
+  size_t output_pos = 0;
+  uint32_t accumulator = 0;
+  int bits_accumulated = 0;
+
+  for (size_t i = 0; i < input_len; i++) {
+    uint8_t value = base64url_decode_table[(unsigned char)input[i]];
+    if (value == 255) {  // Invalid character
+      free(output);
+      return NULL;
+    }
+
+    accumulator = (accumulator << 6) | value;
+    bits_accumulated += 6;
+
+    if (bits_accumulated >= 8) {
+      output[output_pos++] = (accumulator >> (bits_accumulated - 8)) & 255;
+      bits_accumulated -= 8;
+    }
+  }
+
+  *output_len = output_pos;
+  return output;
+}
+
 // Algorithm name to enum mapping
 static const struct {
   const char* name;
@@ -2371,7 +2468,7 @@ JSValue jsrt_subtle_importKey(JSContext* ctx, JSValueConst this_val, int argc, J
     }
   }
 
-  if (!key_data) {
+  if (!key_data && !is_jwk) {
     JSValue error = jsrt_crypto_throw_error(ctx, "DataError", "Invalid key data");
     return create_rejected_promise(ctx, error);
   }
@@ -2417,10 +2514,13 @@ JSValue jsrt_subtle_importKey(JSContext* ctx, JSValueConst this_val, int argc, J
     // Handle PKCS8 format (PKCS#8 for private keys)
     return jsrt_import_pkcs8_key(ctx, key_data, key_data_size, alg, crypto_key);
   } else if (is_jwk) {
-    // Handle JWK format (JSON Web Key)
-    JS_FreeValue(ctx, crypto_key);
-    JSValue error = jsrt_crypto_throw_error(ctx, "NotSupportedError", "JWK format not yet implemented");
-    return create_rejected_promise(ctx, error);
+    // Handle JWK format (JSON Web Key) - keyData should be an object
+    if (!JS_IsObject(argv[1])) {
+      JS_FreeValue(ctx, crypto_key);
+      JSValue error = jsrt_crypto_throw_error(ctx, "TypeError", "JWK keyData must be an object");
+      return create_rejected_promise(ctx, error);
+    }
+    return jsrt_import_jwk_key(ctx, argv[1], alg, crypto_key);
   }
 
   // Should not reach here
@@ -3210,6 +3310,243 @@ JSValue jsrt_export_pkcs8_key(JSContext* ctx, const uint8_t* key_data, size_t ke
   JSValue result = JS_NewArrayBuffer(ctx, pkcs8_copy, pkcs8_len, NULL, NULL, 0);
   JSRT_Debug("JSRT_Crypto: Successfully exported PKCS8 private key (%d bytes)", pkcs8_len);
   return create_resolved_promise(ctx, result);
+}
+
+// Helper function to extract integer from Big-endian bytes and base64url encode
+static JSValue bigint_to_base64url_string(JSContext* ctx, const uint8_t* data, size_t len) {
+  // Remove leading zeros
+  while (len > 1 && data[0] == 0) {
+    data++;
+    len--;
+  }
+
+  size_t encoded_len;
+  char* encoded = base64url_encode(data, len, &encoded_len);
+  if (!encoded) {
+    return JS_ThrowOutOfMemory(ctx);
+  }
+
+  JSValue result = JS_NewStringLen(ctx, encoded, encoded_len);
+  free(encoded);
+  return result;
+}
+
+// Helper function to decode base64url string to bytes
+static uint8_t* base64url_string_to_bigint(JSContext* ctx, JSValue str_val, size_t* out_len) {
+  const char* str = JS_ToCString(ctx, str_val);
+  if (!str)
+    return NULL;
+
+  size_t str_len = strlen(str);
+  uint8_t* result = base64url_decode(str, str_len, out_len);
+
+  JS_FreeCString(ctx, str);
+  return result;
+}
+
+// JWK import implementation for RSA keys
+static JSValue jsrt_import_jwk_rsa_key(JSContext* ctx, JSValue jwk_obj, jsrt_crypto_algorithm_t alg, JSValue crypto_key,
+                                       bool extractable, JSValue usages) {
+  extern void* openssl_handle;
+  if (!openssl_handle) {
+    return jsrt_crypto_throw_error(ctx, "NotSupportedError", "OpenSSL not available");
+  }
+
+  // Get required parameters: n (modulus), e (exponent)
+  JSValue n_val = JS_GetPropertyStr(ctx, jwk_obj, "n");
+  JSValue e_val = JS_GetPropertyStr(ctx, jwk_obj, "e");
+
+  if (JS_IsUndefined(n_val) || JS_IsUndefined(e_val)) {
+    JS_FreeValue(ctx, n_val);
+    JS_FreeValue(ctx, e_val);
+    return jsrt_crypto_throw_error(ctx, "DataError", "Missing required RSA parameters 'n' or 'e'");
+  }
+
+  // Decode base64url parameters
+  size_t n_len, e_len;
+  uint8_t* n_data = base64url_string_to_bigint(ctx, n_val, &n_len);
+  uint8_t* e_data = base64url_string_to_bigint(ctx, e_val, &e_len);
+
+  JS_FreeValue(ctx, n_val);
+  JS_FreeValue(ctx, e_val);
+
+  if (!n_data || !e_data) {
+    if (n_data)
+      free(n_data);
+    if (e_data)
+      free(e_data);
+    JSValue error = jsrt_crypto_throw_error(ctx, "DataError", "Invalid base64url encoding in RSA parameters");
+    return create_rejected_promise(ctx, error);
+  }
+
+  // Load OpenSSL functions
+  void* (*EVP_PKEY_new)(void) = JSRT_DLSYM(openssl_handle, "EVP_PKEY_new");
+  void* (*RSA_new)(void) = JSRT_DLSYM(openssl_handle, "RSA_new");
+  void* (*BN_bin2bn)(const unsigned char*, int, void*) = JSRT_DLSYM(openssl_handle, "BN_bin2bn");
+  int (*RSA_set0_key)(void*, void*, void*, void*) = JSRT_DLSYM(openssl_handle, "RSA_set0_key");
+  int (*EVP_PKEY_assign)(void*, int, void*) = JSRT_DLSYM(openssl_handle, "EVP_PKEY_assign");
+
+  if (!EVP_PKEY_new || !RSA_new || !BN_bin2bn || !RSA_set0_key || !EVP_PKEY_assign) {
+    free(n_data);
+    free(e_data);
+    return jsrt_crypto_throw_error(ctx, "NotSupportedError", "Missing OpenSSL RSA functions");
+  }
+
+  // Create RSA structure
+  void* rsa = RSA_new();
+  if (!rsa) {
+    free(n_data);
+    free(e_data);
+    return jsrt_crypto_throw_error(ctx, "OperationError", "Failed to create RSA key");
+  }
+
+  // Convert byte arrays to BIGNUMs
+  void* n_bn = BN_bin2bn(n_data, n_len, NULL);
+  void* e_bn = BN_bin2bn(e_data, e_len, NULL);
+
+  free(n_data);
+  free(e_data);
+
+  if (!n_bn || !e_bn) {
+    // Cleanup BIGNUMs if needed
+    void (*RSA_free)(void*) = JSRT_DLSYM(openssl_handle, "RSA_free");
+    if (RSA_free)
+      RSA_free(rsa);
+    return jsrt_crypto_throw_error(ctx, "OperationError", "Failed to convert RSA parameters");
+  }
+
+  // Set RSA key parameters (n, e, d)
+  if (RSA_set0_key(rsa, n_bn, e_bn, NULL) != 1) {
+    void (*RSA_free)(void*) = JSRT_DLSYM(openssl_handle, "RSA_free");
+    if (RSA_free)
+      RSA_free(rsa);
+    return jsrt_crypto_throw_error(ctx, "OperationError", "Failed to set RSA key parameters");
+  }
+
+  // Create EVP_PKEY and assign RSA key
+  void* pkey = EVP_PKEY_new();
+  if (!pkey || EVP_PKEY_assign(pkey, 6 /* EVP_PKEY_RSA */, rsa) != 1) {
+    void (*RSA_free)(void*) = JSRT_DLSYM(openssl_handle, "RSA_free");
+    void (*EVP_PKEY_free)(void*) = JSRT_DLSYM(openssl_handle, "EVP_PKEY_free");
+    if (RSA_free)
+      RSA_free(rsa);
+    if (pkey && EVP_PKEY_free)
+      EVP_PKEY_free(pkey);
+    return jsrt_crypto_throw_error(ctx, "OperationError", "Failed to create EVP_PKEY");
+  }
+
+  // Serialize key to DER format for storage
+  int (*i2d_PUBKEY)(void*, unsigned char**) = JSRT_DLSYM(openssl_handle, "i2d_PUBKEY");
+  if (!i2d_PUBKEY) {
+    void (*EVP_PKEY_free)(void*) = JSRT_DLSYM(openssl_handle, "EVP_PKEY_free");
+    if (EVP_PKEY_free)
+      EVP_PKEY_free(pkey);
+    return jsrt_crypto_throw_error(ctx, "NotSupportedError", "Missing OpenSSL serialization functions");
+  }
+
+  unsigned char* der_data = NULL;
+  int der_len = i2d_PUBKEY(pkey, &der_data);
+  if (der_len <= 0) {
+    void (*EVP_PKEY_free)(void*) = JSRT_DLSYM(openssl_handle, "EVP_PKEY_free");
+    if (EVP_PKEY_free)
+      EVP_PKEY_free(pkey);
+    return jsrt_crypto_throw_error(ctx, "OperationError", "Failed to serialize RSA key");
+  }
+
+  // Create copy of DER data
+  uint8_t* der_copy = malloc(der_len);
+  if (!der_copy) {
+    void (*OPENSSL_free)(void*) = JSRT_DLSYM(openssl_handle, "OPENSSL_free");
+    void (*EVP_PKEY_free)(void*) = JSRT_DLSYM(openssl_handle, "EVP_PKEY_free");
+    if (OPENSSL_free)
+      OPENSSL_free(der_data);
+    if (EVP_PKEY_free)
+      EVP_PKEY_free(pkey);
+    return jsrt_crypto_throw_error(ctx, "OperationError", "Memory allocation failed");
+  }
+  memcpy(der_copy, der_data, der_len);
+
+  // Clean up OpenSSL resources
+  void (*OPENSSL_free)(void*) = JSRT_DLSYM(openssl_handle, "OPENSSL_free");
+  void (*EVP_PKEY_free)(void*) = JSRT_DLSYM(openssl_handle, "EVP_PKEY_free");
+  if (OPENSSL_free)
+    OPENSSL_free(der_data);
+  if (EVP_PKEY_free)
+    EVP_PKEY_free(pkey);
+
+  // Set up crypto key object
+  JS_SetPropertyStr(ctx, crypto_key, "type", JS_NewString(ctx, "public"));
+  JS_SetPropertyStr(ctx, crypto_key, "extractable", JS_NewBool(ctx, extractable));
+  JS_SetPropertyStr(ctx, crypto_key, "usages", JS_DupValue(ctx, usages));
+
+  // Store the DER data
+  JSValue key_buffer = JS_NewArrayBuffer(ctx, der_copy, der_len, NULL, NULL, 0);
+  JS_SetPropertyStr(ctx, crypto_key, "__keyData", key_buffer);
+
+  return create_resolved_promise(ctx, crypto_key);
+}
+
+// JWK import implementation
+JSValue jsrt_import_jwk_key(JSContext* ctx, JSValue jwk_object, jsrt_crypto_algorithm_t alg, JSValue crypto_key) {
+  // Get extractable and usages from crypto_key
+  JSValue extractable_val = JS_GetPropertyStr(ctx, crypto_key, "extractable");
+  JSValue usages_val = JS_GetPropertyStr(ctx, crypto_key, "usages");
+
+  bool extractable = JS_ToBool(ctx, extractable_val);
+
+  JS_FreeValue(ctx, extractable_val);
+
+  // Get key type from JWK
+  JSValue kty_val = JS_GetPropertyStr(ctx, jwk_object, "kty");
+  if (JS_IsUndefined(kty_val)) {
+    JS_FreeValue(ctx, usages_val);
+    JS_FreeValue(ctx, kty_val);
+    JSValue error = jsrt_crypto_throw_error(ctx, "DataError", "Missing required 'kty' parameter in JWK");
+    return create_rejected_promise(ctx, error);
+  }
+
+  const char* kty = JS_ToCString(ctx, kty_val);
+  if (!kty) {
+    JS_FreeValue(ctx, usages_val);
+    JS_FreeValue(ctx, kty_val);
+    JSValue error = jsrt_crypto_throw_error(ctx, "DataError", "Invalid 'kty' parameter in JWK");
+    return create_rejected_promise(ctx, error);
+  }
+
+  JSValue result;
+
+  if (strcmp(kty, "RSA") == 0) {
+    // Handle RSA keys
+    if (alg != JSRT_CRYPTO_ALG_RSA_OAEP && alg != JSRT_CRYPTO_ALG_RSASSA_PKCS1_V1_5 && alg != JSRT_CRYPTO_ALG_RSA_PSS) {
+      JSValue error = jsrt_crypto_throw_error(ctx, "DataError", "Algorithm mismatch: expected RSA algorithm");
+      result = create_rejected_promise(ctx, error);
+    } else {
+      result = jsrt_import_jwk_rsa_key(ctx, jwk_object, alg, crypto_key, extractable, usages_val);
+    }
+  } else if (strcmp(kty, "EC") == 0) {
+    // Handle ECDSA keys - TODO: implement
+    JSValue error = jsrt_crypto_throw_error(ctx, "NotSupportedError", "EC JWK import not yet implemented");
+    result = create_rejected_promise(ctx, error);
+  } else if (strcmp(kty, "oct") == 0) {
+    // Handle symmetric keys - TODO: implement
+    JSValue error = jsrt_crypto_throw_error(ctx, "NotSupportedError", "Symmetric JWK import not yet implemented");
+    result = create_rejected_promise(ctx, error);
+  } else {
+    JSValue error = jsrt_crypto_throw_error(ctx, "DataError", "Unsupported key type in JWK");
+    result = create_rejected_promise(ctx, error);
+  }
+
+  JS_FreeCString(ctx, kty);
+  JS_FreeValue(ctx, kty_val);
+  JS_FreeValue(ctx, usages_val);
+
+  return result;
+}
+
+// JWK export implementation
+JSValue jsrt_export_jwk_key(JSContext* ctx, JSValue crypto_key) {
+  // TODO: Implement JWK export
+  return jsrt_crypto_throw_error(ctx, "NotSupportedError", "JWK export not yet implemented");
 }
 
 // Create SubtleCrypto object

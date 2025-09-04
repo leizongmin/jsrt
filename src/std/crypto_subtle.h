@@ -124,6 +124,10 @@ JSValue jsrt_import_pkcs8_key(JSContext* ctx, const uint8_t* key_data, size_t ke
 JSValue jsrt_export_spki_key(JSContext* ctx, const uint8_t* key_data, size_t key_data_size);
 JSValue jsrt_export_pkcs8_key(JSContext* ctx, const uint8_t* key_data, size_t key_data_size);
 
+// JWK format import/export functions
+JSValue jsrt_import_jwk_key(JSContext* ctx, JSValue jwk_object, jsrt_crypto_algorithm_t alg, JSValue crypto_key);
+JSValue jsrt_export_jwk_key(JSContext* ctx, JSValue crypto_key);
+
 // Memory management
 JSRTCryptoKey* jsrt_crypto_key_new(void);
 void jsrt_crypto_key_free(JSRTCryptoKey* key);

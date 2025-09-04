@@ -7,3 +7,6 @@
 [submodule "deps/llhttp"]
 	path = deps/llhttp
 	url = https://github.com/nodejs/llhttp.git
+[submodule "wpt"]
+	path = wpt
+	url = https://github.com/web-platform-tests/wpt.git

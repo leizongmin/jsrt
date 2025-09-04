@@ -210,10 +210,15 @@ make jsrt_cov  # Coverage instrumentation build
 # Run all tests
 make test
 
+# Run Web Platform Tests for standards compliance
+make wpt
+
 # Generate coverage report
 make coverage
 # Report available at: target/coverage/html/index.html
 ```
+
+JSRT includes [Web Platform Tests (WPT)](docs/WPT.md) integration to validate compliance with web standards and the WinterCG Minimum Common API. See [docs/WPT.md](docs/WPT.md) for details.
 
 ### 🎯 Code Quality
 

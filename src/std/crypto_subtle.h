@@ -114,6 +114,16 @@ bool jsrt_crypto_is_algorithm_supported(jsrt_crypto_algorithm_t alg);
 // Error handling
 JSValue jsrt_crypto_throw_error(JSContext* ctx, const char* name, const char* message);
 
+// Key format import functions
+JSValue jsrt_import_spki_key(JSContext* ctx, const uint8_t* key_data, size_t key_data_size, jsrt_crypto_algorithm_t alg,
+                             JSValue crypto_key);
+JSValue jsrt_import_pkcs8_key(JSContext* ctx, const uint8_t* key_data, size_t key_data_size,
+                              jsrt_crypto_algorithm_t alg, JSValue crypto_key);
+
+// Key format export functions
+JSValue jsrt_export_spki_key(JSContext* ctx, const uint8_t* key_data, size_t key_data_size);
+JSValue jsrt_export_pkcs8_key(JSContext* ctx, const uint8_t* key_data, size_t key_data_size);
+
 // Memory management
 JSRTCryptoKey* jsrt_crypto_key_new(void);
 void jsrt_crypto_key_free(JSRTCryptoKey* key);

@@ -352,20 +352,78 @@ JSModuleDef* JSRT_ModuleLoader(JSContext* ctx, const char* module_name, void* op
     return NULL;
   }
 
-  // Always compile as ES module - the module loader is only for ES modules
-  JSValue func_val =
-      JS_Eval(ctx, file_result.data, file_result.size, module_name, JS_EVAL_TYPE_MODULE | JS_EVAL_FLAG_COMPILE_ONLY);
-
-  JSRT_ReadFileResultFree(&file_result);
-
-  if (JS_IsException(func_val)) {
-    JSRT_Debug("JSRT_ModuleLoader: failed to compile module '%s'", module_name);
-    return NULL;
+  // Check if this looks like a CommonJS module
+  bool is_commonjs = false;
+  if (strstr(file_result.data, "module.exports") != NULL ||
+      strstr(file_result.data, "exports.") != NULL ||
+      strstr(file_result.data, "exports[") != NULL) {
+    is_commonjs = true;
   }
 
-  // Get the module definition from the compiled function
-  JSModuleDef* m = JS_VALUE_GET_PTR(func_val);
-  JS_FreeValue(ctx, func_val);
+  JSModuleDef* m;
+  if (is_commonjs) {
+    JSRT_Debug("JSRT_ModuleLoader: detected CommonJS module, wrapping as ES module for '%s'", module_name);
+    
+    // Create a synthetic ES module
+    char* wrapper_code;
+    size_t wrapper_size = strlen(file_result.data) + 1024;  // Increased buffer
+    wrapper_code = malloc(wrapper_size);
+    
+    // Create a wrapper that loads the CommonJS module and exports it
+    snprintf(wrapper_code, wrapper_size,
+             "// Auto-generated ES module wrapper for CommonJS module\n"
+             "const __cjs_module = { exports: {} };\n"
+             "const __cjs_exports = __cjs_module.exports;\n"
+             "const __cjs_filename = '%s';\n"
+             "const __cjs_dirname = __cjs_filename.substring(0, __cjs_filename.lastIndexOf('/') || 0);\n"
+             "\n"
+             "// Create a context-aware require function\n"
+             "const __cjs_require = function(modulePath) {\n"
+             "  if (modulePath.startsWith('./') || modulePath.startsWith('../')) {\n"
+             "    // Resolve relative path relative to current module\n"
+             "    let resolvedPath = __cjs_dirname + '/' + modulePath.substring(2);\n"
+             "    return globalThis.require(resolvedPath);\n"
+             "  }\n"
+             "  return globalThis.require(modulePath);\n"
+             "};\n"
+             "\n"
+             "// CommonJS module code starts here\n"
+             "(function(exports, require, module, __filename, __dirname) {\n"
+             "%s\n"
+             "})(__cjs_exports, __cjs_require, __cjs_module, __cjs_filename, __cjs_dirname);\n"
+             "\n"
+             "// ES module exports\n"
+             "export default __cjs_module.exports;\n",
+             module_name, file_result.data);
+
+    JSValue func_val = JS_Eval(ctx, wrapper_code, strlen(wrapper_code), module_name, 
+                              JS_EVAL_TYPE_MODULE | JS_EVAL_FLAG_COMPILE_ONLY);
+    free(wrapper_code);
+    
+    if (JS_IsException(func_val)) {
+      JSRT_Debug("JSRT_ModuleLoader: failed to compile CommonJS wrapper for '%s'", module_name);
+      JSRT_ReadFileResultFree(&file_result);
+      return NULL;
+    }
+
+    m = JS_VALUE_GET_PTR(func_val);
+    JS_FreeValue(ctx, func_val);
+    
+  } else {
+    // Compile as ES module - the module loader is only for ES modules
+    JSValue func_val =
+        JS_Eval(ctx, file_result.data, file_result.size, module_name, JS_EVAL_TYPE_MODULE | JS_EVAL_FLAG_COMPILE_ONLY);
+
+    if (JS_IsException(func_val)) {
+      JSRT_Debug("JSRT_ModuleLoader: failed to compile ES module '%s'", module_name);
+      JSRT_ReadFileResultFree(&file_result);
+      return NULL;
+    }
+
+    // Get the module definition from the compiled function
+    m = JS_VALUE_GET_PTR(func_val);
+    JS_FreeValue(ctx, func_val);
+  }
 
   // Set up import.meta for the module
   JSValue meta_obj = JS_GetImportMeta(ctx, m);
@@ -399,7 +457,7 @@ JSModuleDef* JSRT_ModuleLoader(JSContext* ctx, const char* module_name, void* op
   return m;
 }
 
-// Simple module cache for require()
+// Module cache for require()
 typedef struct {
   char* name;
   JSValue exports;
@@ -408,6 +466,9 @@ typedef struct {
 static RequireModuleCache* module_cache = NULL;
 static size_t module_cache_size = 0;
 static size_t module_cache_capacity = 0;
+
+// Current module path context for relative require resolution
+static char* current_module_path = NULL;
 
 static JSValue get_cached_module(JSContext* ctx, const char* name) {
   for (size_t i = 0; i < module_cache_size; i++) {
@@ -471,14 +532,14 @@ static JSValue js_require(JSContext* ctx, JSValueConst this_val, int argc, JSVal
   char* resolved_path;
   if (module_name[0] != '.' && module_name[0] != '/') {
     // Try npm module resolution first
-    resolved_path = resolve_npm_module(module_name, NULL, false);
+    resolved_path = resolve_npm_module(module_name, current_module_path, false);
     if (!resolved_path) {
       // Fallback to treating as relative path
-      resolved_path = resolve_module_path(module_name, NULL);
+      resolved_path = resolve_module_path(module_name, current_module_path);
     }
   } else {
     // Resolve relative/absolute paths normally
-    resolved_path = resolve_module_path(module_name, NULL);
+    resolved_path = resolve_module_path(module_name, current_module_path);
   }
   JSRT_Debug("js_require: resolved_path='%s'", resolved_path);
   char* final_path = try_extensions(resolved_path);
@@ -536,12 +597,32 @@ static JSValue js_require(JSContext* ctx, JSValueConst this_val, int argc, JSVal
   // Call the wrapper function with CommonJS arguments
   JSValue global = JS_GetGlobalObject(ctx);
   JSValue require_func = JS_GetPropertyStr(ctx, global, "require");
+  
+  // Calculate __dirname as the directory containing the module file
+  char* dirname_str = strdup(final_path);
+  char* last_slash = strrchr(dirname_str, '/');
+  if (last_slash) {
+    *last_slash = '\0';
+  } else {
+    strcpy(dirname_str, ".");
+  }
+  
   JSValue args[5] = {
       JS_DupValue(ctx, exports), require_func, JS_DupValue(ctx, module), JS_NewString(ctx, final_path),
-      JS_NewString(ctx, ".")  // Simple __dirname
+      JS_NewString(ctx, dirname_str)
   };
+  
+  free(dirname_str);
+
+  // Set current module path context for relative require resolution
+  char* old_module_path = current_module_path;
+  current_module_path = strdup(final_path);
 
   JSValue result = JS_Call(ctx, func, global, 5, args);
+
+  // Restore previous module path context
+  free(current_module_path);
+  current_module_path = old_module_path;
 
   // Clean up
   JSRT_ReadFileResultFree(&file_result);

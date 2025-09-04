@@ -3063,7 +3063,11 @@ JSValue jsrt_subtle_deriveBits(JSContext* ctx, JSValueConst this_val, int argc, 
 JSValue jsrt_import_spki_key(JSContext* ctx, const uint8_t* key_data, size_t key_data_size, jsrt_crypto_algorithm_t alg,
                              JSValue crypto_key) {
   // Get OpenSSL handle
+#ifdef _WIN32
+  extern HMODULE openssl_handle;
+#else
   extern void* openssl_handle;
+#endif
   if (!openssl_handle) {
     JS_FreeValue(ctx, crypto_key);
     JSValue error = jsrt_crypto_throw_error(ctx, "OperationError", "OpenSSL not available");
@@ -3132,7 +3136,11 @@ JSValue jsrt_import_spki_key(JSContext* ctx, const uint8_t* key_data, size_t key
 JSValue jsrt_import_pkcs8_key(JSContext* ctx, const uint8_t* key_data, size_t key_data_size,
                               jsrt_crypto_algorithm_t alg, JSValue crypto_key) {
   // Get OpenSSL handle
+#ifdef _WIN32
+  extern HMODULE openssl_handle;
+#else
   extern void* openssl_handle;
+#endif
   if (!openssl_handle) {
     JS_FreeValue(ctx, crypto_key);
     JSValue error = jsrt_crypto_throw_error(ctx, "OperationError", "OpenSSL not available");
@@ -3215,7 +3223,11 @@ JSValue jsrt_import_pkcs8_key(JSContext* ctx, const uint8_t* key_data, size_t ke
 // Export public key in SPKI format
 JSValue jsrt_export_spki_key(JSContext* ctx, const uint8_t* key_data, size_t key_data_size) {
   // Get OpenSSL handle
+#ifdef _WIN32
+  extern HMODULE openssl_handle;
+#else
   extern void* openssl_handle;
+#endif
   if (!openssl_handle) {
     JSValue error = jsrt_crypto_throw_error(ctx, "OperationError", "OpenSSL not available");
     return create_rejected_promise(ctx, error);
@@ -3242,7 +3254,11 @@ JSValue jsrt_export_spki_key(JSContext* ctx, const uint8_t* key_data, size_t key
 // Export private key in PKCS8 format
 JSValue jsrt_export_pkcs8_key(JSContext* ctx, const uint8_t* key_data, size_t key_data_size) {
   // Get OpenSSL handle
+#ifdef _WIN32
+  extern HMODULE openssl_handle;
+#else
   extern void* openssl_handle;
+#endif
   if (!openssl_handle) {
     JSValue error = jsrt_crypto_throw_error(ctx, "OperationError", "OpenSSL not available");
     return create_rejected_promise(ctx, error);
@@ -3352,7 +3368,11 @@ static uint8_t* base64url_string_to_binary(JSContext* ctx, JSValue str_val, size
 // JWK import implementation for RSA keys
 static JSValue jsrt_import_jwk_rsa_key(JSContext* ctx, JSValue jwk_obj, jsrt_crypto_algorithm_t alg, JSValue crypto_key,
                                        bool extractable, JSValue usages) {
+#ifdef _WIN32
+  extern HMODULE openssl_handle;
+#else
   extern void* openssl_handle;
+#endif
   if (!openssl_handle) {
     return jsrt_crypto_throw_error(ctx, "NotSupportedError", "OpenSSL not available");
   }
@@ -3494,7 +3514,11 @@ static JSValue jsrt_import_jwk_rsa_key(JSContext* ctx, JSValue jwk_obj, jsrt_cry
 // ECDSA JWK import implementation
 static JSValue jsrt_import_jwk_ec_key(JSContext* ctx, JSValue jwk_obj, jsrt_crypto_algorithm_t alg, JSValue crypto_key,
                                       bool extractable, JSValue usages) {
+#ifdef _WIN32
+  extern HMODULE openssl_handle;
+#else
   extern void* openssl_handle;
+#endif
   if (!openssl_handle) {
     return jsrt_crypto_throw_error(ctx, "NotSupportedError", "OpenSSL not available");
   }

@@ -349,7 +349,7 @@ def main():
     wpt_path = Path(args.wpt_dir)
     if not wpt_path.exists():
         print(f"Error: WPT directory not found at {wpt_path}")
-        print("Please ensure WPT submodule is initialized")
+        print("Please run 'make wpt-download' or 'make wpt' to download WPT tests")
         return 1
     
     # Run tests

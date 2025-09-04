@@ -83,13 +83,39 @@ coverage: test_cov
 	@echo "Overall coverage:"
 	lcov --summary target/coverage/coverage_filtered.info
 
+.PHONY: wpt-download
+wpt-download:
+	@echo "Downloading Web Platform Tests..."
+	@if [ ! -d "wpt" ]; then \
+		echo "Creating wpt directory..."; \
+		mkdir -p wpt; \
+		echo "Downloading WPT master branch..."; \
+		curl -L https://github.com/web-platform-tests/wpt/archive/refs/heads/master.zip -o wpt-master.zip; \
+		echo "Extracting WPT..."; \
+		unzip -q wpt-master.zip; \
+		mv wpt-master/* wpt/; \
+		mv wpt-master/.* wpt/ 2>/dev/null || true; \
+		rm -rf wpt-master; \
+		rm wpt-master.zip; \
+		echo "WPT downloaded successfully"; \
+	else \
+		echo "WPT directory already exists. Use 'make wpt-update' to refresh."; \
+	fi
+
+.PHONY: wpt-update
+wpt-update:
+	@echo "Updating Web Platform Tests..."
+	@echo "Removing existing WPT directory..."
+	@rm -rf wpt
+	@$(MAKE) wpt-download
+
 .PHONY: wpt
-wpt: jsrt
+wpt: jsrt wpt-download
 	@echo "Running Web Platform Tests for WinterCG Minimum Common API..."
 	python3 scripts/run-wpt.py --jsrt $(CURDIR)/target/release/jsrt --wpt-dir $(CURDIR)/wpt
 
 .PHONY: wpt_g
-wpt_g: jsrt_g
+wpt_g: jsrt_g wpt-download
 	@echo "Running Web Platform Tests with debug build..."
 	python3 scripts/run-wpt.py --jsrt $(CURDIR)/target/debug/jsrt --wpt-dir $(CURDIR)/wpt --verbose
 

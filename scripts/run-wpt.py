@@ -149,6 +149,38 @@ class JSRTTestRunner:
         except Exception as e:
             return False, f"Error reading file: {e}"
     
+    def parse_meta_directives(self, test_content: str) -> Dict[str, List[str]]:
+        """Parse META directives from test content."""
+        meta_directives = {'script': [], 'title': [], 'timeout': []}
+        
+        for line in test_content.split('\n')[:20]:  # Only check first 20 lines
+            line = line.strip()
+            if line.startswith('// META:'):
+                meta = line[8:].strip()
+                if '=' in meta:
+                    key, value = meta.split('=', 1)
+                    key = key.strip()
+                    value = value.strip()
+                    if key in meta_directives:
+                        meta_directives[key].append(value)
+        
+        return meta_directives
+    
+    def load_resource_file(self, resource_path: str, base_dir: Path) -> str:
+        """Load a WPT resource file."""
+        # Resource paths in META directives are relative to the test directory
+        full_path = base_dir / resource_path
+        if full_path.exists():
+            try:
+                with open(full_path, 'r', encoding='utf-8') as f:
+                    return f.read()
+            except Exception as e:
+                self.log(f"Warning: Could not read resource file {resource_path}: {e}")
+                return f"// Error loading resource: {resource_path}\n"
+        else:
+            self.log(f"Warning: Resource file not found: {full_path}")
+            return f"// Resource file not found: {resource_path}\n"
+    
     def create_test_wrapper(self, test_path: Path) -> Path:
         """Create a wrapper script that includes the WPT test harness and the test."""
         wrapper_dir = Path('/tmp/jsrt-wpt-tests')
@@ -162,12 +194,22 @@ class JSRTTestRunner:
         with open(test_path, 'r', encoding='utf-8') as f:
             test_content = f.read()
         
+        # Parse META directives
+        meta_directives = self.parse_meta_directives(test_content)
+        
+        # Load required resource scripts
+        resource_scripts = []
+        for script_path in meta_directives['script']:
+            resource_content = self.load_resource_file(script_path, test_path.parent)
+            resource_scripts.append(f"// === Resource: {script_path} ===\n{resource_content}\n")
+        
         # Create wrapper script
         harness_path = Path(__file__).parent / 'wpt-testharness.js'
         wrapper_content = f'''
 // WPT Test Harness for jsrt
 {harness_path.read_text()}
 
+{''.join(resource_scripts)}
 // Original test content:
 {test_content}
 '''

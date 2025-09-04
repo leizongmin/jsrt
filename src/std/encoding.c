@@ -1,5 +1,6 @@
 #include "encoding.h"
 
+#include <ctype.h>
 #include <quickjs.h>
 #include <stdbool.h>
 #include <stdint.h>
@@ -8,6 +9,136 @@
 
 #include "../util/dbuf.h"
 #include "../util/debug.h"
+
+// Encoding labels table for WPT compatibility
+static const struct {
+  const char* name;
+  const char* canonical;
+} encodings_table[] = {
+    {"utf-8", "utf-8"},
+    {"utf8", "utf-8"},
+    {"unicode-1-1-utf-8", "utf-8"},
+    {"unicode11utf8", "utf-8"},
+    {"unicode20utf8", "utf-8"},
+    {"x-unicode20utf8", "utf-8"},
+    // Add more encodings as needed for WPT compatibility
+    {NULL, NULL}  // Sentinel
+};
+
+// Helper function to normalize encoding labels
+static char* normalize_encoding_label(const char* label) {
+  if (!label)
+    return NULL;
+
+  size_t len = strlen(label);
+  char* normalized = malloc(len + 1);
+  if (!normalized)
+    return NULL;
+
+  // Remove leading/trailing whitespace and convert to lowercase
+  const char* start = label;
+  const char* end = label + len - 1;
+
+  // Skip leading whitespace
+  while (*start && (*start == ' ' || *start == '\t' || *start == '\n' || *start == '\f' || *start == '\r')) {
+    start++;
+  }
+
+  // Skip trailing whitespace
+  while (end > start && (*end == ' ' || *end == '\t' || *end == '\n' || *end == '\f' || *end == '\r')) {
+    end--;
+  }
+
+  // Copy and convert to lowercase
+  size_t normalized_len = end - start + 1;
+  for (size_t i = 0; i < normalized_len; i++) {
+    normalized[i] = tolower(start[i]);
+  }
+  normalized[normalized_len] = '\0';
+
+  return normalized;
+}
+
+// Get canonical encoding name from label
+static const char* get_canonical_encoding(const char* label) {
+  if (!label)
+    return "utf-8";
+
+  char* normalized = normalize_encoding_label(label);
+  if (!normalized)
+    return "utf-8";
+
+  for (size_t i = 0; encodings_table[i].name; i++) {
+    if (strcmp(normalized, encodings_table[i].name) == 0) {
+      free(normalized);
+      return encodings_table[i].canonical;
+    }
+  }
+
+  free(normalized);
+  return "utf-8";  // Default to UTF-8 if not found
+}
+
+// UTF-8 validation function
+static int validate_utf8_sequence(const uint8_t* data, size_t len, const uint8_t** next) {
+  if (len == 0) {
+    *next = data;
+    return -1;
+  }
+
+  uint8_t c = data[0];
+
+  if (c < 0x80) {
+    // ASCII character
+    *next = data + 1;
+    return c;
+  }
+
+  if ((c & 0xE0) == 0xC0) {
+    // 2-byte sequence
+    if (len < 2) {
+      *next = data;
+      return -1;
+    }
+    if ((data[1] & 0xC0) != 0x80) {
+      *next = data;
+      return -1;
+    }
+    *next = data + 2;
+    return ((c & 0x1F) << 6) | (data[1] & 0x3F);
+  }
+
+  if ((c & 0xF0) == 0xE0) {
+    // 3-byte sequence
+    if (len < 3) {
+      *next = data;
+      return -1;
+    }
+    if ((data[1] & 0xC0) != 0x80 || (data[2] & 0xC0) != 0x80) {
+      *next = data;
+      return -1;
+    }
+    *next = data + 3;
+    return ((c & 0x0F) << 12) | ((data[1] & 0x3F) << 6) | (data[2] & 0x3F);
+  }
+
+  if ((c & 0xF8) == 0xF0) {
+    // 4-byte sequence
+    if (len < 4) {
+      *next = data;
+      return -1;
+    }
+    if ((data[1] & 0xC0) != 0x80 || (data[2] & 0xC0) != 0x80 || (data[3] & 0xC0) != 0x80) {
+      *next = data;
+      return -1;
+    }
+    *next = data + 4;
+    return ((c & 0x07) << 18) | ((data[1] & 0x3F) << 12) | ((data[2] & 0x3F) << 6) | (data[3] & 0x3F);
+  }
+
+  *next = data;
+  return -1;
+}
 
 // Forward declare class IDs so they can be used in finalizers
 static JSClassID JSRT_TextEncoderClassID;
@@ -168,9 +299,25 @@ static JSValue JSRT_TextDecoderConstructor(JSContext* ctx, JSValueConst new_targ
     return JS_EXCEPTION;
   }
 
-  decoder->encoding = "utf-8";  // Only UTF-8 supported for now
+  // Parse encoding label if provided
+  const char* encoding_label = "utf-8";
+  if (argc > 0 && !JS_IsUndefined(argv[0])) {
+    encoding_label = JS_ToCString(ctx, argv[0]);
+    if (!encoding_label) {
+      free(decoder);
+      return JS_EXCEPTION;
+    }
+  }
+
+  // Get canonical encoding name
+  const char* canonical = get_canonical_encoding(encoding_label);
+  decoder->encoding = canonical;
   decoder->fatal = false;
   decoder->ignore_bom = false;
+
+  if (argc > 0 && !JS_IsUndefined(argv[0])) {
+    JS_FreeCString(ctx, encoding_label);
+  }
 
   // Parse options if provided
   if (argc > 1 && JS_IsObject(argv[1])) {
@@ -196,7 +343,7 @@ static JSValue JSRT_TextDecoderConstructor(JSContext* ctx, JSValueConst new_targ
   JS_SetOpaque(obj, decoder);
 
   // Set properties
-  JS_DefinePropertyValueStr(ctx, obj, "encoding", JS_NewString(ctx, "utf-8"), JS_PROP_C_W_E);
+  JS_DefinePropertyValueStr(ctx, obj, "encoding", JS_NewString(ctx, decoder->encoding), JS_PROP_C_W_E);
   JS_DefinePropertyValueStr(ctx, obj, "fatal", JS_NewBool(ctx, decoder->fatal), JS_PROP_C_W_E);
   JS_DefinePropertyValueStr(ctx, obj, "ignoreBOM", JS_NewBool(ctx, decoder->ignore_bom), JS_PROP_C_W_E);
 
@@ -240,7 +387,7 @@ static JSValue JSRT_TextDecoderDecode(JSContext* ctx, JSValueConst this_val, int
       const uint8_t* end = input_data + input_len;
       while (p < end) {
         const uint8_t* p_next;
-        int c = unicode_from_utf8(p, end - p, &p_next);
+        int c = validate_utf8_sequence(p, end - p, &p_next);
         if (c < 0) {
           return JS_ThrowTypeError(ctx, "Invalid UTF-8 sequence");
         }
@@ -287,7 +434,7 @@ static JSValue JSRT_TextDecoderDecode(JSContext* ctx, JSValueConst this_val, int
     const uint8_t* end = input_data + input_len;
     while (p < end) {
       const uint8_t* p_next;
-      int c = unicode_from_utf8(p, end - p, &p_next);
+      int c = validate_utf8_sequence(p, end - p, &p_next);
       if (c < 0) {
         JS_FreeValue(ctx, array_buffer);
         return JS_ThrowTypeError(ctx, "Invalid UTF-8 sequence");

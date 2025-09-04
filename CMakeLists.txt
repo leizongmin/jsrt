@@ -109,21 +109,39 @@ if(NOT EXISTS "${CMAKE_SOURCE_DIR}/deps/llhttp/build/c/llhttp.c")
         find_program(NPM_EXECUTABLE npm HINTS "C:/Program Files/nodejs" "C:/Program Files (x86)/nodejs")
         find_program(NODE_EXECUTABLE node HINTS "C:/Program Files/nodejs" "C:/Program Files (x86)/nodejs")
         find_program(CMD_EXECUTABLE cmd)
+        find_program(SH_EXECUTABLE sh)
         
-        if(NPM_EXECUTABLE AND CMD_EXECUTABLE)
-            # Try using cmd.exe to run npm (works better with shell scripts on Windows)
-            # Use list format with proper quoting for paths with spaces
-            set(NPM_INSTALL_COMMAND ${CMD_EXECUTABLE} "/c" "\"${NPM_EXECUTABLE}\"" "install")
-            set(NPM_BUILD_COMMAND ${CMD_EXECUTABLE} "/c" "\"${NPM_EXECUTABLE}\"" "run" "build")
-            message(STATUS "Found npm at: ${NPM_EXECUTABLE} (using cmd.exe wrapper)")
-        elseif(NODE_EXECUTABLE)
-            # Fallback: use node directly with npm scripts
-            find_file(NPM_CLI_JS npm-cli.js HINTS "C:/Program Files/nodejs/node_modules/npm/bin" "C:/Program Files (x86)/nodejs/node_modules/npm/bin")
-            if(NPM_CLI_JS)
-                set(NPM_INSTALL_COMMAND ${NODE_EXECUTABLE} "${NPM_CLI_JS}" "install")
-                set(NPM_BUILD_COMMAND ${NODE_EXECUTABLE} "${NPM_CLI_JS}" "run" "build")
-                message(STATUS "Found node at: ${NODE_EXECUTABLE} (using npm-cli.js)")
+        # Check if npm is a shell script (common in MSYS2/MinGW environments)
+        set(NPM_IS_SHELL_SCRIPT FALSE)
+        if(NPM_EXECUTABLE)
+            file(READ "${NPM_EXECUTABLE}" NPM_FILE_CONTENT LIMIT 100)
+            if(NPM_FILE_CONTENT MATCHES "^#!/")
+                set(NPM_IS_SHELL_SCRIPT TRUE)
+                message(STATUS "Detected npm as shell script: ${NPM_EXECUTABLE}")
             endif()
+        endif()
+        
+        # Strategy 1: Use node.exe directly with npm-cli.js (most reliable)
+        find_file(NPM_CLI_JS npm-cli.js HINTS 
+            "C:/Program Files/nodejs/node_modules/npm/bin" 
+            "C:/Program Files (x86)/nodejs/node_modules/npm/bin"
+            "${NPM_EXECUTABLE}/../lib/node_modules/npm/bin"
+            "${NPM_EXECUTABLE}/../../lib/node_modules/npm/bin")
+        
+        if(NODE_EXECUTABLE AND NPM_CLI_JS)
+            set(NPM_INSTALL_COMMAND "${NODE_EXECUTABLE}" "${NPM_CLI_JS}" "install")
+            set(NPM_BUILD_COMMAND "${NODE_EXECUTABLE}" "${NPM_CLI_JS}" "run" "build")
+            message(STATUS "Found node at: ${NODE_EXECUTABLE} with npm-cli.js: ${NPM_CLI_JS}")
+        elseif(NPM_EXECUTABLE AND NOT NPM_IS_SHELL_SCRIPT AND CMD_EXECUTABLE)
+            # Strategy 2: Use cmd.exe with npm.exe (native Windows npm)
+            set(NPM_INSTALL_COMMAND "${CMD_EXECUTABLE}" "/c" "${NPM_EXECUTABLE}" "install")
+            set(NPM_BUILD_COMMAND "${CMD_EXECUTABLE}" "/c" "${NPM_EXECUTABLE}" "run" "build")
+            message(STATUS "Found npm executable at: ${NPM_EXECUTABLE} (using cmd.exe)")
+        elseif(NPM_EXECUTABLE AND NPM_IS_SHELL_SCRIPT AND SH_EXECUTABLE)
+            # Strategy 3: Use sh.exe for shell script npm (MSYS2/MinGW)
+            set(NPM_INSTALL_COMMAND "${SH_EXECUTABLE}" "-c" "${NPM_EXECUTABLE} install")
+            set(NPM_BUILD_COMMAND "${SH_EXECUTABLE}" "-c" "${NPM_EXECUTABLE} run build")
+            message(STATUS "Found npm shell script at: ${NPM_EXECUTABLE} (using sh.exe)")
         endif()
     else()
         # On Unix-like systems, npm should work normally
@@ -165,6 +183,10 @@ if(NOT EXISTS "${CMAKE_SOURCE_DIR}/deps/llhttp/build/c/llhttp.c")
                     "  4. Install Node.js from nodejs.org (not via package managers like chocolatey)\n"
                     "\n"
                     "Debug info:\n"
+                    "  npm executable: ${NPM_EXECUTABLE}\n"
+                    "  node executable: ${NODE_EXECUTABLE}\n"
+                    "  npm-cli.js: ${NPM_CLI_JS}\n"
+                    "  npm is shell script: ${NPM_IS_SHELL_SCRIPT}\n"
                     "  npm install command: ${NPM_INSTALL_COMMAND}\n"
                     "  exit code: ${NPM_INSTALL_RESULT}\n"
                     "  output: ${NPM_INSTALL_OUTPUT}\n"

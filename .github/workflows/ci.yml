@@ -15,8 +15,21 @@ jobs:
       with:
         submodules: recursive
 
+    - name: Install clang-format v20
+      run: |
+        # Add LLVM repository for clang-format v20
+        wget -qO- https://apt.llvm.org/llvm-snapshot.gpg.key | sudo tee /etc/apt/trusted.gpg.d/apt.llvm.org.asc
+        echo "deb http://apt.llvm.org/jammy/ llvm-toolchain-jammy-20 main" | sudo tee /etc/apt/sources.list.d/llvm-toolchain-jammy-20.list
+        sudo apt-get update
+        sudo apt-get install -y clang-format-20
+        # Verify version
+        clang-format-20 --version
+
     - name: Check code formatting
       run: |
+        # Create the target directory and symlink to ensure make clang-format uses v20
+        mkdir -p target/tools
+        ln -sf /usr/bin/clang-format-20 target/tools/clang-format-20
         make clang-format
         if ! git diff --exit-code; then
           echo "Code formatting issues found. Please run 'make clang-format' and commit the changes."

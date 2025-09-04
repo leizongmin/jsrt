@@ -107,12 +107,21 @@ clang-format: ensure-clang-format
 	@find test -type f -name "*.c" -o -name "*.h" | xargs -r $(CLANG_FORMAT_BIN) -i
 	@echo "✓ Code formatting completed"
 
+.PHONY: npm-install
+npm-install:
+	@if [ ! -d "node_modules" ] || [ ! -f "node_modules/.package-lock.json" ]; then \
+		echo "Installing npm dependencies..."; \
+		npm install; \
+	else \
+		echo "✓ npm dependencies already installed"; \
+	fi
+
 .PHONY: prettier
-prettier:
+prettier: npm-install
 	npx prettier --write 'examples/**/*.{js,mjs}' 'test/**/*.{js,mjs}'
 
 .PHONY: test
-test: jsrt
+test: jsrt npm-install
 	cd target/release && ctest --verbose
 
 # Fast parallel test execution (4 jobs)

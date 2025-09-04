@@ -27,10 +27,23 @@ jobs:
       env:
         CC: gcc
         CXX: g++
-      run: make coverage
+      run: make jsrt_cov
     
     - name: Install npm dependencies
       run: npm install
+    
+    - name: Run tests with coverage
+      run: |
+        cd target/coverage && ctest --verbose
+    
+    - name: Generate coverage report
+      run: |
+        lcov --capture --directory target/coverage --output-file target/coverage/coverage.info
+        lcov --remove target/coverage/coverage.info 'deps/*' 'target/*' 'test/*' --output-file target/coverage/coverage_filtered.info --ignore-errors unused
+        genhtml target/coverage/coverage_filtered.info --output-directory target/coverage/html
+        echo "Coverage report generated in target/coverage/html/"
+        echo "Overall coverage:"
+        lcov --summary target/coverage/coverage_filtered.info
     
     - name: Generate coverage comment
       id: coverage

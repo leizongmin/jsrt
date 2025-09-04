@@ -263,6 +263,52 @@ static JSValue jsrt_process_get_versions(JSContext* ctx, JSValueConst this_val, 
   return versions_obj;
 }
 
+// process.env getter
+static JSValue jsrt_process_get_env(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
+  JSValue env_obj = JS_NewObject(ctx);
+
+#ifdef _WIN32
+  // Windows: Use GetEnvironmentStrings()
+  LPCH env_strings = GetEnvironmentStrings();
+  if (env_strings != NULL) {
+    LPCH current = env_strings;
+    while (*current) {
+      char* env_var = current;
+      char* equals = strchr(env_var, '=');
+      if (equals != NULL) {
+        *equals = '\0';  // Split key and value
+        char* key = env_var;
+        char* value = equals + 1;
+        JS_SetPropertyStr(ctx, env_obj, key, JS_NewString(ctx, value));
+        *equals = '=';  // Restore original string
+      }
+      current += strlen(current) + 1;
+    }
+    FreeEnvironmentStrings(env_strings);
+  }
+#else
+  // Unix/Linux: Use extern char **environ
+  extern char** environ;
+  if (environ != NULL) {
+    for (char** env = environ; *env != NULL; env++) {
+      char* env_var = strdup(*env);
+      if (env_var != NULL) {
+        char* equals = strchr(env_var, '=');
+        if (equals != NULL) {
+          *equals = '\0';  // Split key and value
+          char* key = env_var;
+          char* value = equals + 1;
+          JS_SetPropertyStr(ctx, env_obj, key, JS_NewString(ctx, value));
+        }
+        free(env_var);
+      }
+    }
+  }
+#endif
+
+  return env_obj;
+}
+
 // Create process module for jsrt:process
 JSValue JSRT_CreateProcessModule(JSContext* ctx) {
   JSValue process_obj = JS_NewObject(ctx);
@@ -301,6 +347,10 @@ JSValue JSRT_CreateProcessModule(JSContext* ctx) {
   JSValue versions_prop = JS_NewCFunction(ctx, jsrt_process_get_versions, "get versions", 0);
   JS_DefinePropertyGetSet(ctx, process_obj, JS_NewAtom(ctx, "versions"), versions_prop, JS_UNDEFINED,
                           JS_PROP_CONFIGURABLE);
+
+  // process.env - define as a getter property
+  JSValue env_prop = JS_NewCFunction(ctx, jsrt_process_get_env, "get env", 0);
+  JS_DefinePropertyGetSet(ctx, process_obj, JS_NewAtom(ctx, "env"), env_prop, JS_UNDEFINED, JS_PROP_CONFIGURABLE);
 
   // process.uptime()
   JS_SetPropertyStr(ctx, process_obj, "uptime", JS_NewCFunction(ctx, jsrt_process_uptime, "uptime", 0));

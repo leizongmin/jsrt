@@ -31,8 +31,134 @@ typedef struct JSRT_URL {
   JSContext* ctx;         // Context for managing search_params
 } JSRT_URL;
 
+// Forward declarations
+static JSRT_URL* JSRT_ParseURL(const char* url, const char* base);
+static void JSRT_FreeURL(JSRT_URL* url);
+
 // Simple URL parser (basic implementation)
+static int is_valid_scheme(const char* scheme) {
+  if (!scheme || strlen(scheme) == 0)
+    return 0;
+
+  // First character must be a letter
+  if (!((scheme[0] >= 'a' && scheme[0] <= 'z') || (scheme[0] >= 'A' && scheme[0] <= 'Z'))) {
+    return 0;
+  }
+
+  // Rest can be letters, digits, +, -, .
+  for (size_t i = 1; i < strlen(scheme); i++) {
+    char c = scheme[i];
+    if (!((c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9') || c == '+' || c == '-' ||
+          c == '.')) {
+      return 0;
+    }
+  }
+  return 1;
+}
+
+static int is_default_port(const char* scheme, const char* port) {
+  if (!port || strlen(port) == 0)
+    return 1;  // No port specified, so it's implicit default
+
+  if (strcmp(scheme, "https") == 0 && strcmp(port, "443") == 0)
+    return 1;
+  if (strcmp(scheme, "http") == 0 && strcmp(port, "80") == 0)
+    return 1;
+  if (strcmp(scheme, "ws") == 0 && strcmp(port, "80") == 0)
+    return 1;
+  if (strcmp(scheme, "wss") == 0 && strcmp(port, "443") == 0)
+    return 1;
+  if (strcmp(scheme, "ftp") == 0 && strcmp(port, "21") == 0)
+    return 1;
+
+  return 0;
+}
+
+static char* compute_origin(const char* protocol, const char* hostname, const char* port) {
+  if (!protocol || !hostname || strlen(protocol) == 0 || strlen(hostname) == 0) {
+    return strdup("null");
+  }
+
+  // Extract scheme without colon
+  char* scheme = strdup(protocol);
+  if (strlen(scheme) > 0 && scheme[strlen(scheme) - 1] == ':') {
+    scheme[strlen(scheme) - 1] = '\0';
+  }
+
+  // Some schemes always have null origin
+  if (strcmp(scheme, "file") == 0 || strcmp(scheme, "data") == 0 || strcmp(scheme, "javascript") == 0 ||
+      strcmp(scheme, "blob") == 0) {
+    free(scheme);
+    return strdup("null");
+  }
+
+  char* origin;
+  if (is_default_port(scheme, port) || !port || strlen(port) == 0) {
+    // Omit default port
+    origin = malloc(strlen(protocol) + strlen(hostname) + 4);
+    sprintf(origin, "%s//%s", protocol, hostname);
+  } else {
+    // Include custom port
+    origin = malloc(strlen(protocol) + strlen(hostname) + strlen(port) + 5);
+    sprintf(origin, "%s//%s:%s", protocol, hostname, port);
+  }
+
+  free(scheme);
+  return origin;
+}
+
+static JSRT_URL* resolve_relative_url(const char* url, const char* base) {
+  // Parse base URL first
+  JSRT_URL* base_url = JSRT_ParseURL(base, NULL);
+  if (!base_url || strlen(base_url->protocol) == 0 || strlen(base_url->host) == 0) {
+    if (base_url)
+      JSRT_FreeURL(base_url);
+    return NULL;  // Invalid base URL
+  }
+
+  JSRT_URL* result = malloc(sizeof(JSRT_URL));
+  memset(result, 0, sizeof(JSRT_URL));
+
+  // Initialize result with base URL components
+  result->protocol = strdup(base_url->protocol);
+  result->host = strdup(base_url->host);
+  result->hostname = strdup(base_url->hostname);
+  result->port = strdup(base_url->port);
+  result->search_params = JS_UNDEFINED;
+  result->ctx = NULL;
+
+  if (url[0] == '/') {
+    // Absolute path
+    result->pathname = strdup(url);
+    result->search = strdup("");
+    result->hash = strdup("");
+  } else {
+    // Relative path - for now, just use the relative path as pathname
+    // A full implementation would resolve . and .. components
+    result->pathname = malloc(strlen(base_url->pathname) + strlen(url) + 2);
+    sprintf(result->pathname, "%s/%s", base_url->pathname, url);
+    result->search = strdup("");
+    result->hash = strdup("");
+  }
+
+  // Build origin and href
+  result->origin = malloc(strlen(result->protocol) + strlen(result->host) + 4);
+  sprintf(result->origin, "%s//%s", result->protocol, result->host);
+
+  result->href =
+      malloc(strlen(result->origin) + strlen(result->pathname) + strlen(result->search) + strlen(result->hash) + 1);
+  sprintf(result->href, "%s%s%s%s", result->origin, result->pathname, result->search, result->hash);
+
+  JSRT_FreeURL(base_url);
+  return result;
+}
+
 static JSRT_URL* JSRT_ParseURL(const char* url, const char* base) {
+  // Handle relative URLs with base
+  if (base && (url[0] == '/' || (url[0] != '\0' && strstr(url, "://") == NULL))) {
+    return resolve_relative_url(url, base);
+  }
+
   JSRT_URL* parsed = malloc(sizeof(JSRT_URL));
   memset(parsed, 0, sizeof(JSRT_URL));
 
@@ -55,7 +181,20 @@ static JSRT_URL* JSRT_ParseURL(const char* url, const char* base) {
   char* url_copy = strdup(url);
   char* ptr = url_copy;
 
-  // Extract protocol
+  // Handle special schemes first
+  if (strncmp(ptr, "data:", 5) == 0) {
+    free(parsed->protocol);
+    parsed->protocol = strdup("data:");
+    free(parsed->pathname);
+    parsed->pathname = strdup(ptr + 5);  // Everything after "data:"
+    free(url_copy);
+    // Build origin
+    free(parsed->origin);
+    parsed->origin = compute_origin(parsed->protocol, parsed->hostname, parsed->port);
+    return parsed;
+  }
+
+  // Extract protocol for regular URLs
   char* protocol_end = strstr(ptr, "://");
   if (protocol_end) {
     *protocol_end = '\0';
@@ -63,6 +202,21 @@ static JSRT_URL* JSRT_ParseURL(const char* url, const char* base) {
     parsed->protocol = malloc(strlen(ptr) + 2);
     sprintf(parsed->protocol, "%s:", ptr);
     ptr = protocol_end + 3;
+  } else if (strncmp(ptr, "file:", 5) == 0) {
+    free(parsed->protocol);
+    parsed->protocol = strdup("file:");
+    ptr += 5;
+    // Handle file:///path format - skip extra slashes
+    while (*ptr == '/')
+      ptr++;
+    free(parsed->pathname);
+    parsed->pathname = malloc(strlen(ptr) + 2);
+    sprintf(parsed->pathname, "/%s", ptr);
+    free(url_copy);
+    // Build origin
+    free(parsed->origin);
+    parsed->origin = compute_origin(parsed->protocol, parsed->hostname, parsed->port);
+    return parsed;
   }
 
   // Extract hash first (fragment)
@@ -112,14 +266,44 @@ static JSRT_URL* JSRT_ParseURL(const char* url, const char* base) {
     }
   }
 
-  // Build origin
-  if (strlen(parsed->protocol) > 0 && strlen(parsed->host) > 0) {
-    free(parsed->origin);
-    parsed->origin = malloc(strlen(parsed->protocol) + strlen(parsed->host) + 4);
-    sprintf(parsed->origin, "%s//%s", parsed->protocol, parsed->host);
-  }
+  // Build origin using the improved function
+  free(parsed->origin);
+  parsed->origin = compute_origin(parsed->protocol, parsed->hostname, parsed->port);
 
   free(url_copy);
+
+  // Validate the parsed URL
+  if (strlen(parsed->protocol) > 0) {
+    // Extract scheme without the colon
+    char* scheme = strdup(parsed->protocol);
+    if (strlen(scheme) > 0 && scheme[strlen(scheme) - 1] == ':') {
+      scheme[strlen(scheme) - 1] = '\0';
+    }
+
+    if (!is_valid_scheme(scheme)) {
+      free(scheme);
+      JSRT_FreeURL(parsed);
+      return NULL;  // Invalid scheme
+    }
+
+    // Some schemes don't require hosts (file:, data:, etc.)
+    if (strcmp(scheme, "file") != 0 && strcmp(scheme, "data") != 0 && strcmp(scheme, "javascript") != 0 &&
+        strcmp(scheme, "blob") != 0) {
+      // These schemes require a host
+      if (strlen(parsed->host) == 0) {
+        free(scheme);
+        JSRT_FreeURL(parsed);
+        return NULL;  // Missing required host
+      }
+    }
+
+    free(scheme);
+  } else {
+    // No protocol found - this is not a valid absolute URL
+    JSRT_FreeURL(parsed);
+    return NULL;
+  }
+
   return parsed;
 }
 
@@ -173,6 +357,14 @@ static JSValue JSRT_URLConstructor(JSContext* ctx, JSValueConst new_target, int 
   }
 
   JSRT_URL* url = JSRT_ParseURL(url_str, base_str);
+  if (!url) {
+    JS_FreeCString(ctx, url_str);
+    if (base_str) {
+      JS_FreeCString(ctx, base_str);
+    }
+    return JS_ThrowTypeError(ctx, "Invalid URL");
+  }
+
   url->ctx = ctx;  // Set context for managing search_params
 
   JSValue obj = JS_NewObjectClass(ctx, JSRT_URLClassID);
@@ -313,6 +505,42 @@ static JSClassDef JSRT_URLSearchParamsClass = {
     .finalizer = JSRT_URLSearchParamsFinalize,
 };
 
+static int hex_to_int(char c) {
+  if (c >= '0' && c <= '9')
+    return c - '0';
+  if (c >= 'A' && c <= 'F')
+    return c - 'A' + 10;
+  if (c >= 'a' && c <= 'f')
+    return c - 'a' + 10;
+  return -1;
+}
+
+static char* url_decode(const char* str) {
+  size_t len = strlen(str);
+  char* decoded = malloc(len + 1);
+  size_t i = 0, j = 0;
+
+  while (i < len) {
+    if (str[i] == '%' && i + 2 < len) {
+      int h1 = hex_to_int(str[i + 1]);
+      int h2 = hex_to_int(str[i + 2]);
+      if (h1 >= 0 && h2 >= 0) {
+        decoded[j++] = (char)((h1 << 4) | h2);
+        i += 3;
+        continue;
+      }
+    } else if (str[i] == '+') {
+      // + should decode to space in query parameters
+      decoded[j++] = ' ';
+      i++;
+      continue;
+    }
+    decoded[j++] = str[i++];
+  }
+  decoded[j] = '\0';
+  return decoded;
+}
+
 static JSRT_URLSearchParams* JSRT_ParseSearchParams(const char* search_string) {
   JSRT_URLSearchParams* search_params = malloc(sizeof(JSRT_URLSearchParams));
   search_params->params = NULL;
@@ -338,10 +566,10 @@ static JSRT_URLSearchParams* JSRT_ParseSearchParams(const char* search_string) {
 
     if (eq_pos) {
       *eq_pos = '\0';
-      param->name = strdup(param_str);
-      param->value = strdup(eq_pos + 1);
+      param->name = url_decode(param_str);
+      param->value = url_decode(eq_pos + 1);
     } else {
-      param->name = strdup(param_str);
+      param->name = url_decode(param_str);
       param->value = strdup("");
     }
 
@@ -355,19 +583,178 @@ static JSRT_URLSearchParams* JSRT_ParseSearchParams(const char* search_string) {
   return search_params;
 }
 
+static JSRT_URLSearchParams* JSRT_CreateEmptySearchParams() {
+  JSRT_URLSearchParams* search_params = malloc(sizeof(JSRT_URLSearchParams));
+  search_params->params = NULL;
+  return search_params;
+}
+
+static void JSRT_AddSearchParam(JSRT_URLSearchParams* search_params, const char* name, const char* value) {
+  JSRT_URLSearchParam* param = malloc(sizeof(JSRT_URLSearchParam));
+  param->name = strdup(name);
+  param->value = strdup(value);
+  param->next = NULL;
+
+  // Add at end to maintain insertion order
+  if (!search_params->params) {
+    search_params->params = param;
+  } else {
+    JSRT_URLSearchParam* tail = search_params->params;
+    while (tail->next) {
+      tail = tail->next;
+    }
+    tail->next = param;
+  }
+}
+
+static JSRT_URLSearchParams* JSRT_ParseSearchParamsFromSequence(JSContext* ctx, JSValue seq) {
+  JSRT_URLSearchParams* search_params = JSRT_CreateEmptySearchParams();
+
+  JSValue length_val = JS_GetPropertyStr(ctx, seq, "length");
+  if (JS_IsException(length_val)) {
+    JSRT_FreeSearchParams(search_params);
+    return NULL;
+  }
+
+  int32_t length;
+  if (JS_ToInt32(ctx, &length, length_val)) {
+    JS_FreeValue(ctx, length_val);
+    JSRT_FreeSearchParams(search_params);
+    return NULL;
+  }
+  JS_FreeValue(ctx, length_val);
+
+  for (int32_t i = 0; i < length; i++) {
+    JSValue item = JS_GetPropertyUint32(ctx, seq, i);
+    if (JS_IsException(item)) {
+      JSRT_FreeSearchParams(search_params);
+      return NULL;
+    }
+
+    // Each item should be a sequence with exactly 2 elements
+    JSValue item_length_val = JS_GetPropertyStr(ctx, item, "length");
+    int32_t item_length;
+    if (JS_IsException(item_length_val) || JS_ToInt32(ctx, &item_length, item_length_val) || item_length != 2) {
+      JS_FreeValue(ctx, item);
+      JS_FreeValue(ctx, item_length_val);
+      JSRT_FreeSearchParams(search_params);
+      return NULL;
+    }
+    JS_FreeValue(ctx, item_length_val);
+
+    JSValue name_val = JS_GetPropertyUint32(ctx, item, 0);
+    JSValue value_val = JS_GetPropertyUint32(ctx, item, 1);
+
+    const char* name_str = JS_ToCString(ctx, name_val);
+    const char* value_str = JS_ToCString(ctx, value_val);
+
+    if (name_str && value_str) {
+      JSRT_AddSearchParam(search_params, name_str, value_str);
+    }
+
+    if (name_str)
+      JS_FreeCString(ctx, name_str);
+    if (value_str)
+      JS_FreeCString(ctx, value_str);
+    JS_FreeValue(ctx, name_val);
+    JS_FreeValue(ctx, value_val);
+    JS_FreeValue(ctx, item);
+  }
+
+  return search_params;
+}
+
+static JSRT_URLSearchParams* JSRT_ParseSearchParamsFromRecord(JSContext* ctx, JSValue record) {
+  JSRT_URLSearchParams* search_params = JSRT_CreateEmptySearchParams();
+
+  JSPropertyEnum* properties;
+  uint32_t count;
+
+  if (JS_GetOwnPropertyNames(ctx, &properties, &count, record, JS_GPN_STRING_MASK | JS_GPN_ENUM_ONLY)) {
+    JSRT_FreeSearchParams(search_params);
+    return NULL;
+  }
+
+  for (uint32_t i = 0; i < count; i++) {
+    JSValue value = JS_GetProperty(ctx, record, properties[i].atom);
+    if (JS_IsException(value)) {
+      continue;
+    }
+
+    const char* name_str = JS_AtomToCString(ctx, properties[i].atom);
+    const char* value_str = JS_ToCString(ctx, value);
+
+    if (name_str && value_str) {
+      JSRT_AddSearchParam(search_params, name_str, value_str);
+    }
+
+    if (name_str)
+      JS_FreeCString(ctx, name_str);
+    if (value_str)
+      JS_FreeCString(ctx, value_str);
+    JS_FreeValue(ctx, value);
+  }
+
+  JS_FreePropertyEnum(ctx, properties, count);
+  return search_params;
+}
+
 static JSValue JSRT_URLSearchParamsConstructor(JSContext* ctx, JSValueConst new_target, int argc, JSValueConst* argv) {
   JSRT_URLSearchParams* search_params;
 
   if (argc >= 1 && !JS_IsUndefined(argv[0])) {
-    const char* init_str = JS_ToCString(ctx, argv[0]);
-    if (!init_str) {
-      return JS_EXCEPTION;
+    JSValue init = argv[0];
+
+    // Check if it's already a URLSearchParams object
+    if (JS_GetOpaque2(ctx, init, JSRT_URLSearchParamsClassID)) {
+      JSRT_URLSearchParams* src = JS_GetOpaque2(ctx, init, JSRT_URLSearchParamsClassID);
+      search_params = JSRT_CreateEmptySearchParams();
+
+      // Copy all parameters
+      JSRT_URLSearchParam* param = src->params;
+      while (param) {
+        JSRT_AddSearchParam(search_params, param->name, param->value);
+        param = param->next;
+      }
     }
-    search_params = JSRT_ParseSearchParams(init_str);
-    JS_FreeCString(ctx, init_str);
+    // Check if it's an array-like sequence (has length property and is not a string)
+    else if (!JS_IsString(init)) {
+      JSAtom length_atom = JS_NewAtom(ctx, "length");
+      int has_length = JS_HasProperty(ctx, init, length_atom);
+      JS_FreeAtom(ctx, length_atom);
+
+      if (has_length) {
+        search_params = JSRT_ParseSearchParamsFromSequence(ctx, init);
+        if (!search_params) {
+          return JS_ThrowTypeError(ctx, "Invalid sequence argument to URLSearchParams constructor");
+        }
+      } else if (JS_IsObject(init)) {
+        // Check if it's a record/object (not null, not array, not string)
+        search_params = JSRT_ParseSearchParamsFromRecord(ctx, init);
+        if (!search_params) {
+          return JS_ThrowTypeError(ctx, "Invalid record argument to URLSearchParams constructor");
+        }
+      } else {
+        // Otherwise, treat as string
+        const char* init_str = JS_ToCString(ctx, init);
+        if (!init_str) {
+          return JS_EXCEPTION;
+        }
+        search_params = JSRT_ParseSearchParams(init_str);
+        JS_FreeCString(ctx, init_str);
+      }
+    }
+    // Otherwise, treat as string
+    else {
+      const char* init_str = JS_ToCString(ctx, init);
+      if (!init_str) {
+        return JS_EXCEPTION;
+      }
+      search_params = JSRT_ParseSearchParams(init_str);
+      JS_FreeCString(ctx, init_str);
+    }
   } else {
-    search_params = malloc(sizeof(JSRT_URLSearchParams));
-    search_params->params = NULL;
+    search_params = JSRT_CreateEmptySearchParams();
   }
 
   JSValue obj = JS_NewObjectClass(ctx, JSRT_URLSearchParamsClassID);
@@ -433,12 +820,21 @@ static JSValue JSRT_URLSearchParamsSet(JSContext* ctx, JSValueConst this_val, in
     }
   }
 
-  // Add new param
+  // Add new param at the end to maintain insertion order
   JSRT_URLSearchParam* new_param = malloc(sizeof(JSRT_URLSearchParam));
   new_param->name = strdup(name);
   new_param->value = strdup(value);
-  new_param->next = search_params->params;
-  search_params->params = new_param;
+  new_param->next = NULL;
+
+  if (!search_params->params) {
+    search_params->params = new_param;
+  } else {
+    JSRT_URLSearchParam* tail = search_params->params;
+    while (tail->next) {
+      tail = tail->next;
+    }
+    tail->next = new_param;
+  }
 
   JS_FreeCString(ctx, name);
   JS_FreeCString(ctx, value);
@@ -464,8 +860,18 @@ static JSValue JSRT_URLSearchParamsAppend(JSContext* ctx, JSValueConst this_val,
   JSRT_URLSearchParam* new_param = malloc(sizeof(JSRT_URLSearchParam));
   new_param->name = strdup(name);
   new_param->value = strdup(value);
-  new_param->next = search_params->params;
-  search_params->params = new_param;
+  new_param->next = NULL;
+
+  // Add at end to maintain insertion order
+  if (!search_params->params) {
+    search_params->params = new_param;
+  } else {
+    JSRT_URLSearchParam* tail = search_params->params;
+    while (tail->next) {
+      tail = tail->next;
+    }
+    tail->next = new_param;
+  }
 
   JS_FreeCString(ctx, name);
   JS_FreeCString(ctx, value);
@@ -578,6 +984,44 @@ static JSValue JSRT_URLSearchParamsGetSize(JSContext* ctx, JSValueConst this_val
   return JS_NewInt32(ctx, count);
 }
 
+static char* url_encode(const char* str) {
+  static const char hex_chars[] = "0123456789ABCDEF";
+  size_t len = strlen(str);
+  size_t encoded_len = 0;
+
+  // Calculate encoded length
+  for (size_t i = 0; i < len; i++) {
+    unsigned char c = (unsigned char)str[i];
+    if ((c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z') || (c >= '0' && c <= '9') || c == '-' || c == '_' ||
+        c == '.' || c == '~') {
+      encoded_len++;
+    } else if (c == ' ') {
+      encoded_len++;  // space becomes +
+    } else {
+      encoded_len += 3;  // %XX
+    }
+  }
+
+  char* encoded = malloc(encoded_len + 1);
+  size_t j = 0;
+
+  for (size_t i = 0; i < len; i++) {
+    unsigned char c = (unsigned char)str[i];
+    if ((c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z') || (c >= '0' && c <= '9') || c == '-' || c == '_' ||
+        c == '.' || c == '~') {
+      encoded[j++] = c;
+    } else if (c == ' ') {
+      encoded[j++] = '+';
+    } else {
+      encoded[j++] = '%';
+      encoded[j++] = hex_chars[c >> 4];
+      encoded[j++] = hex_chars[c & 15];
+    }
+  }
+  encoded[j] = '\0';
+  return encoded;
+}
+
 static JSValue JSRT_URLSearchParamsToString(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
   JSRT_URLSearchParams* search_params = JS_GetOpaque2(ctx, this_val, JSRT_URLSearchParamsClassID);
   if (!search_params) {
@@ -588,33 +1032,35 @@ static JSValue JSRT_URLSearchParamsToString(JSContext* ctx, JSValueConst this_va
     return JS_NewString(ctx, "");
   }
 
-  // Calculate total length needed
-  size_t total_len = 0;
-  JSRT_URLSearchParam* param = search_params->params;
-  int count = 0;
-  while (param) {
-    total_len += strlen(param->name) + strlen(param->value) + 2;  // name=value&
-    param = param->next;
-    count++;
-  }
-
-  if (count == 0) {
-    return JS_NewString(ctx, "");
-  }
-
-  char* result = malloc(total_len + 1);
+  // Build result string using a dynamic approach
+  char* result = malloc(1);
   result[0] = '\0';
+  size_t result_len = 0;
 
-  param = search_params->params;
+  JSRT_URLSearchParam* param = search_params->params;
   bool first = true;
   while (param) {
+    char* encoded_name = url_encode(param->name);
+    char* encoded_value = url_encode(param->value);
+
+    size_t pair_len = strlen(encoded_name) + strlen(encoded_value) + 1;  // name=value
+    if (!first)
+      pair_len += 1;  // &
+
+    result = realloc(result, result_len + pair_len + 1);
+
     if (!first) {
       strcat(result, "&");
     }
-    strcat(result, param->name);
+    strcat(result, encoded_name);
     strcat(result, "=");
-    strcat(result, param->value);
+    strcat(result, encoded_value);
+
+    result_len += pair_len;
     first = false;
+
+    free(encoded_name);
+    free(encoded_value);
     param = param->next;
   }
 

@@ -121,7 +121,7 @@ class JSRTTestRunner:
             unsupported_features = [
                 'document.',
                 'window.',  # Only block window.something, not just "window" string
-                'DOMException',
+                # 'DOMException',  # Now supported!
                 'WorkerGlobalScope', 
                 'SharedWorker',
                 'Worker(',

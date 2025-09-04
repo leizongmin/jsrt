@@ -16,6 +16,7 @@
 #include "std/clone.h"
 #include "std/console.h"
 #include "std/crypto.h"
+#include "std/dom.h"
 #include "std/encoding.h"
 #include "std/event.h"
 #include "std/fetch.h"
@@ -66,6 +67,7 @@ JSRT_Runtime* JSRT_RuntimeNew() {
   JSRT_RuntimeSetupStdEvent(rt);
   JSRT_RuntimeSetupStdAbort(rt);
   JSRT_RuntimeSetupStdURL(rt);
+  JSRT_RuntimeSetupStdDOM(rt);
   JSRT_RuntimeSetupStdClone(rt);
   JSRT_RuntimeSetupStdStreams(rt);
   JSRT_RuntimeSetupStdBlob(rt);

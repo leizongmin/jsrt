@@ -14,6 +14,9 @@ endif()
 if(NOT EXISTS "${CMAKE_SOURCE_DIR}/deps/llhttp/package.json")
     message(FATAL_ERROR "Git submodules are not initialized. Please run: git submodule update --init --recursive")
 endif()
+if(NOT EXISTS "${CMAKE_SOURCE_DIR}/deps/wamr/CMakeLists.txt")
+    message(FATAL_ERROR "Git submodules are not initialized. Please run: git submodule update --init --recursive")
+endif()
 
 # optimization flags
 if(CMAKE_BUILD_TYPE STREQUAL "Release")
@@ -56,7 +59,7 @@ else()
     set(FFI_LIBRARIES "")
 endif()
 
-include_directories(src deps/quickjs deps/libuv/include deps/libuv/src deps/readline deps/llhttp/build)
+include_directories(src deps/quickjs deps/libuv/include deps/libuv/src deps/readline deps/llhttp/build deps/wamr/core/iwasm/include)
 
 # Read jsrt version from VERSION file
 file(STRINGS VERSION JSRT_VERSION)
@@ -93,6 +96,22 @@ endif()
 
 # build libuv
 add_subdirectory(deps/libuv)
+
+# build WAMR
+# Configure WAMR for minimal interpreter-only build
+set(WAMR_BUILD_PLATFORM "linux")
+set(WAMR_BUILD_INTERP 1)           # Enable interpreter
+set(WAMR_BUILD_AOT 0)              # Disable AOT for minimal build
+set(WAMR_BUILD_JIT 0)              # Disable JIT for minimal build
+set(WAMR_BUILD_FAST_JIT 0)         # Disable Fast JIT
+set(WAMR_BUILD_LIBC_BUILTIN 1)    # Use built-in libc subset
+set(WAMR_BUILD_LIBC_WASI 0)       # Disable WASI initially
+set(WAMR_BUILD_MINI_LOADER 1)     # Enable mini loader for smaller size
+set(WAMR_BUILD_BULK_MEMORY 1)     # Enable bulk memory operations
+set(WAMR_BUILD_MEMORY64 0)        # Disable 64-bit memory for simplicity
+set(WAMR_BUILD_MULTI_MODULE 0)    # Disable multi-module for simplicity
+set(WAMR_BUILD_SHARED_MEMORY 0)   # Disable shared memory for now
+add_subdirectory(deps/wamr)
 
 # build llhttp (minimal implementation)
 # Check if llhttp generated files exist, if not, build them
@@ -370,10 +389,12 @@ endif()
 file(GLOB_RECURSE JSRT_STD_FILES "src/std/*.c")
 file(GLOB_RECURSE JSRT_UTIL_FILES "src/util/*.c")
 file(GLOB_RECURSE JSRT_HTTP_FILES "src/http/*.c")
+file(GLOB_RECURSE JSRT_WASM_FILES "src/wasm/*.c")
 set(JSRT_LIB_FILES
     ${JSRT_STD_FILES}
     ${JSRT_UTIL_FILES}
     ${JSRT_HTTP_FILES}
+    ${JSRT_WASM_FILES}
     src/jsrt.c
     src/repl.c
     src/runtime.c)
@@ -383,6 +404,7 @@ set(JSRT_LINK_LIBS
     uv_a
     llhttp
     readline
+    vmlib
     ${JSRT_PLATFORM_LIBS}
     ${FFI_LIBRARIES})
 add_library(jsrtcore STATIC ${JSRT_LIB_FILES})

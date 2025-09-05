@@ -28,6 +28,7 @@
 #include "std/streams.h"
 #include "std/timer.h"
 #include "std/url.h"
+#include "std/webassembly.h"
 #include "util/debug.h"
 #include "util/file.h"
 #include "util/jsutils.h"
@@ -77,6 +78,7 @@ JSRT_Runtime* JSRT_RuntimeNew() {
   JSRT_RuntimeSetupStdCrypto(rt);
   JSRT_RuntimeSetupStdFFI(rt);
   JSRT_RuntimeSetupStdProcess(rt);
+  JSRT_RuntimeSetupStdWebAssembly(rt);
   JSRT_StdModuleInit(rt);
   JSRT_StdCommonJSInit(rt);
 

@@ -8,3 +8,6 @@
 	path = deps/llhttp
 	url = https://github.com/nodejs/llhttp.git
 
+[submodule "deps/wamr"]
+	path = deps/wamr
+	url = https://github.com/bytecodealliance/wasm-micro-runtime.git

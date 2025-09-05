@@ -156,6 +156,31 @@ coverage: test_cov
 	@echo "Overall coverage:"
 	lcov --summary target/coverage/coverage_filtered.info
 
+.PHONY: coverage-merged
+coverage-merged: test_cov wpt_cov
+	@echo "Generating merged coverage report (regular tests + WPT)..."
+	# Reset coverage counters first
+	lcov --zerocounters --directory target/coverage
+	# Run regular tests with coverage
+	cd target/coverage && ctest --verbose || true
+	# Capture coverage from regular tests
+	lcov --capture --directory target/coverage --output-file target/coverage/coverage_tests.info
+	# Reset coverage counters for WPT
+	lcov --zerocounters --directory target/coverage
+	# Run WPT tests with coverage
+	python3 scripts/run-wpt.py --jsrt $(CURDIR)/target/coverage/jsrt --wpt-dir $(CURDIR)/wpt || true
+	# Capture coverage from WPT tests
+	lcov --capture --directory target/coverage --output-file target/coverage/coverage_wpt.info
+	# Merge both coverage files
+	lcov --add-tracefile target/coverage/coverage_tests.info --add-tracefile target/coverage/coverage_wpt.info --output-file target/coverage/coverage_merged.info
+	# Filter out unwanted files from merged coverage
+	lcov --remove target/coverage/coverage_merged.info 'deps/*' 'target/*' 'test/*' --output-file target/coverage/coverage_filtered.info --ignore-errors unused
+	# Generate HTML report
+	genhtml target/coverage/coverage_filtered.info --output-directory target/coverage/html
+	@echo "Merged coverage report generated in target/coverage/html/"
+	@echo "Overall merged coverage:"
+	lcov --summary target/coverage/coverage_filtered.info
+
 .PHONY: wpt-download
 wpt-download:
 	@echo "Downloading Web Platform Tests..."
@@ -191,6 +216,11 @@ wpt: jsrt wpt-download
 wpt_g: jsrt_g wpt-download
 	@echo "Running Web Platform Tests with debug build..."
 	python3 scripts/run-wpt.py --jsrt $(CURDIR)/target/debug/jsrt --wpt-dir $(CURDIR)/wpt --verbose
+
+.PHONY: wpt_cov
+wpt_cov: jsrt_cov wpt-download
+	@echo "Running Web Platform Tests with coverage..."
+	python3 scripts/run-wpt.py --jsrt $(CURDIR)/target/coverage/jsrt --wpt-dir $(CURDIR)/wpt
 
 .PHONY: wpt-list
 wpt-list:

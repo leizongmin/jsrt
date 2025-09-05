@@ -8,10 +8,14 @@
 #include <string.h>
 
 #include "../util/debug.h"
+#include "formdata.h"
 
 // Forward declare class IDs
 static JSClassID JSRT_URLClassID;
 static JSClassID JSRT_URLSearchParamsClassID;
+
+// External class ID from formdata.c
+extern JSClassID JSRT_FormDataClassID;
 
 // Forward declare structures
 struct JSRT_URL;
@@ -53,6 +57,7 @@ static void JSRT_FreeURL(JSRT_URL* url);
 static JSValue JSRT_URLSearchParamsToString(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv);
 static char* url_encode_with_len(const char* str, size_t len);
 static JSRT_URLSearchParams* JSRT_ParseSearchParams(const char* search_string);
+static JSRT_URLSearchParams* JSRT_ParseSearchParamsFromFormData(JSContext* ctx, JSValueConst formdata_val);
 static void JSRT_FreeSearchParams(JSRT_URLSearchParams* search_params);
 
 // Simple URL parser (basic implementation)
@@ -906,6 +911,56 @@ static JSRT_URLSearchParams* JSRT_ParseSearchParamsFromRecord(JSContext* ctx, JS
   return search_params;
 }
 
+static JSRT_URLSearchParams* JSRT_ParseSearchParamsFromFormData(JSContext* ctx, JSValueConst formdata_val) {
+  JSRT_URLSearchParams* search_params = JSRT_CreateEmptySearchParams();
+
+  // Get the FormData opaque data
+  void* formdata_opaque = JS_GetOpaque(formdata_val, JSRT_FormDataClassID);
+  if (!formdata_opaque) {
+    JSRT_FreeSearchParams(search_params);
+    return NULL;
+  }
+
+  // Access FormData entries through forEach method
+  // Call formData.forEach((value, name) => { add to search_params })
+  JSValue forEach_fn = JS_GetPropertyStr(ctx, formdata_val, "forEach");
+  if (JS_IsUndefined(forEach_fn)) {
+    JSRT_FreeSearchParams(search_params);
+    return NULL;
+  }
+
+  // Create a callback function to collect the entries
+  // We'll use a simpler approach: iterate through the FormData structure directly
+  // Since we have access to the FormData structure, we can access it directly
+  typedef struct JSRT_FormDataEntry {
+    char* name;
+    JSValue value;
+    char* filename;
+    struct JSRT_FormDataEntry* next;
+  } JSRT_FormDataEntry;
+
+  typedef struct {
+    JSRT_FormDataEntry* entries;
+  } JSRT_FormData;
+
+  JSRT_FormData* formdata = (JSRT_FormData*)formdata_opaque;
+  JSRT_FormDataEntry* entry = formdata->entries;
+
+  while (entry) {
+    if (entry->name) {
+      const char* value_str = JS_ToCString(ctx, entry->value);
+      if (value_str) {
+        JSRT_AddSearchParam(search_params, entry->name, value_str);
+        JS_FreeCString(ctx, value_str);
+      }
+    }
+    entry = entry->next;
+  }
+
+  JS_FreeValue(ctx, forEach_fn);
+  return search_params;
+}
+
 static JSValue JSRT_URLSearchParamsConstructor(JSContext* ctx, JSValueConst new_target, int argc, JSValueConst* argv) {
   JSRT_URLSearchParams* search_params;
 
@@ -922,6 +977,13 @@ static JSValue JSRT_URLSearchParamsConstructor(JSContext* ctx, JSValueConst new_
       while (param) {
         JSRT_AddSearchParam(search_params, param->name, param->value);
         param = param->next;
+      }
+    }
+    // Check if it's a FormData object
+    else if (JS_GetOpaque2(ctx, init, JSRT_FormDataClassID)) {
+      search_params = JSRT_ParseSearchParamsFromFormData(ctx, init);
+      if (!search_params) {
+        return JS_ThrowTypeError(ctx, "Invalid FormData argument to URLSearchParams constructor");
       }
     }
     // Check if it's an array-like sequence (has length property and is not a string)

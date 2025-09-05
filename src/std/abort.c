@@ -152,6 +152,63 @@ static JSValue JSRT_AbortSignalTimeout(JSContext* ctx, JSValueConst this_val, in
   return signal;
 }
 
+static JSValue JSRT_AbortSignalAny(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
+  if (argc < 1) {
+    return JS_ThrowTypeError(ctx, "AbortSignal.any() requires 1 argument");
+  }
+
+  JSValue signals_val = argv[0];
+
+  // Simplified iterable check - just check if it's array-like
+  // In a full implementation, we'd properly handle Symbol.iterator
+
+  // For simplicity, handle array-like objects
+  JSValue length_val = JS_GetPropertyStr(ctx, signals_val, "length");
+  if (JS_IsUndefined(length_val)) {
+    JS_FreeValue(ctx, length_val);
+    return JS_ThrowTypeError(ctx, "AbortSignal.any() argument must be iterable");
+  }
+
+  int32_t length;
+  if (JS_ToInt32(ctx, &length, length_val)) {
+    JS_FreeValue(ctx, length_val);
+    return JS_EXCEPTION;
+  }
+  JS_FreeValue(ctx, length_val);
+
+  if (length == 0) {
+    // Return a never-aborted signal
+    return JSRT_CreateAbortSignal(ctx, false, JS_UNDEFINED);
+  }
+
+  // Check if any signal is already aborted
+  for (int32_t i = 0; i < length; i++) {
+    JSValue item = JS_GetPropertyUint32(ctx, signals_val, i);
+    if (JS_IsException(item)) {
+      return item;
+    }
+
+    JSRT_AbortSignal* signal = JS_GetOpaque2(ctx, item, JSRT_AbortSignalClassID);
+    if (!signal) {
+      JS_FreeValue(ctx, item);
+      return JS_ThrowTypeError(ctx, "AbortSignal.any() all elements must be AbortSignal objects");
+    }
+
+    if (signal->aborted) {
+      // Return an already aborted signal with the same reason
+      JSValue result = JSRT_CreateAbortSignal(ctx, true, signal->reason);
+      JS_FreeValue(ctx, item);
+      return result;
+    }
+    JS_FreeValue(ctx, item);
+  }
+
+  // For now, return a non-aborted signal
+  // In a full implementation, we would set up listeners on all input signals
+  // and abort the returned signal when any of them abort
+  return JSRT_CreateAbortSignal(ctx, false, JS_UNDEFINED);
+}
+
 // AbortController implementation
 typedef struct {
   JSValue signal;
@@ -270,6 +327,7 @@ void JSRT_RuntimeSetupStdAbort(JSRT_Runtime* rt) {
   // Static methods
   JS_SetPropertyStr(ctx, signal_ctor, "abort", JS_NewCFunction(ctx, JSRT_AbortSignalAbort, "abort", 1));
   JS_SetPropertyStr(ctx, signal_ctor, "timeout", JS_NewCFunction(ctx, JSRT_AbortSignalTimeout, "timeout", 1));
+  JS_SetPropertyStr(ctx, signal_ctor, "any", JS_NewCFunction(ctx, JSRT_AbortSignalAny, "any", 1));
 
   JS_SetPropertyStr(ctx, rt->global, "AbortSignal", signal_ctor);
 

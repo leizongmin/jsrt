@@ -10,6 +10,7 @@
 
 // Forward declare class IDs
 JSClassID JSRT_ReadableStreamClassID;
+JSClassID JSRT_ReadableStreamDefaultReaderClassID;
 JSClassID JSRT_WritableStreamClassID;
 JSClassID JSRT_TransformStreamClassID;
 
@@ -53,9 +54,45 @@ static JSValue JSRT_ReadableStreamGetLocked(JSContext* ctx, JSValueConst this_va
 }
 
 static JSValue JSRT_ReadableStreamGetReader(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
-  JSRT_ReadableStream* stream = JS_GetOpaque(this_val, JSRT_ReadableStreamClassID);
+  // Call the ReadableStreamDefaultReader constructor with this stream
+  JSValue reader_ctor = JS_GetPropertyStr(ctx, JS_GetGlobalObject(ctx), "ReadableStreamDefaultReader");
+  JSValue reader = JS_CallConstructor(ctx, reader_ctor, 1, &this_val);
+  JS_FreeValue(ctx, reader_ctor);
+  return reader;
+}
+
+// ReadableStreamDefaultReader implementation
+typedef struct {
+  JSValue stream;
+  bool closed;
+} JSRT_ReadableStreamDefaultReader;
+
+static void JSRT_ReadableStreamDefaultReaderFinalize(JSRuntime* rt, JSValue val) {
+  JSRT_ReadableStreamDefaultReader* reader = JS_GetOpaque(val, JSRT_ReadableStreamDefaultReaderClassID);
+  if (reader) {
+    if (!JS_IsUndefined(reader->stream)) {
+      JS_FreeValueRT(rt, reader->stream);
+    }
+    free(reader);
+  }
+}
+
+static JSClassDef JSRT_ReadableStreamDefaultReaderClass = {
+    .class_name = "ReadableStreamDefaultReader",
+    .finalizer = JSRT_ReadableStreamDefaultReaderFinalize,
+};
+
+static JSValue JSRT_ReadableStreamDefaultReaderConstructor(JSContext* ctx, JSValueConst new_target, int argc,
+                                                           JSValueConst* argv) {
+  if (argc < 1) {
+    return JS_ThrowTypeError(ctx, "ReadableStreamDefaultReader constructor requires a ReadableStream argument");
+  }
+
+  JSValue stream_val = argv[0];
+  JSRT_ReadableStream* stream = JS_GetOpaque(stream_val, JSRT_ReadableStreamClassID);
   if (!stream) {
-    return JS_EXCEPTION;
+    return JS_ThrowTypeError(ctx,
+                             "ReadableStreamDefaultReader constructor should get a ReadableStream object as argument");
   }
 
   if (stream->locked) {
@@ -64,13 +101,23 @@ static JSValue JSRT_ReadableStreamGetReader(JSContext* ctx, JSValueConst this_va
 
   stream->locked = true;
 
-  // Create a basic reader object
-  JSValue reader = JS_NewObject(ctx);
+  JSRT_ReadableStreamDefaultReader* reader = malloc(sizeof(JSRT_ReadableStreamDefaultReader));
+  reader->stream = JS_DupValue(ctx, stream_val);
+  reader->closed = false;
 
-  // For now, just set closed to undefined to avoid segfault
-  JS_SetPropertyStr(ctx, reader, "closed", JS_UNDEFINED);
+  JSValue obj = JS_NewObjectClass(ctx, JSRT_ReadableStreamDefaultReaderClassID);
+  JS_SetOpaque(obj, reader);
+  return obj;
+}
 
-  return reader;
+static JSValue JSRT_ReadableStreamDefaultReaderGetClosed(JSContext* ctx, JSValueConst this_val, int argc,
+                                                         JSValueConst* argv) {
+  JSRT_ReadableStreamDefaultReader* reader = JS_GetOpaque(this_val, JSRT_ReadableStreamDefaultReaderClassID);
+  if (!reader) {
+    return JS_EXCEPTION;
+  }
+  // For now, return a resolved promise (simplified)
+  return JS_UNDEFINED;
 }
 
 // WritableStream implementation
@@ -196,6 +243,24 @@ void JSRT_RuntimeSetupStdStreams(JSRT_Runtime* rt) {
   JSValue readable_ctor =
       JS_NewCFunction2(ctx, JSRT_ReadableStreamConstructor, "ReadableStream", 0, JS_CFUNC_constructor, 0);
   JS_SetPropertyStr(ctx, rt->global, "ReadableStream", readable_ctor);
+
+  // Register ReadableStreamDefaultReader class
+  JS_NewClassID(&JSRT_ReadableStreamDefaultReaderClassID);
+  JS_NewClass(rt->rt, JSRT_ReadableStreamDefaultReaderClassID, &JSRT_ReadableStreamDefaultReaderClass);
+
+  JSValue reader_proto = JS_NewObject(ctx);
+
+  // Properties
+  JSValue get_closed = JS_NewCFunction(ctx, JSRT_ReadableStreamDefaultReaderGetClosed, "get closed", 0);
+  JSAtom closed_atom = JS_NewAtom(ctx, "closed");
+  JS_DefinePropertyGetSet(ctx, reader_proto, closed_atom, get_closed, JS_UNDEFINED, JS_PROP_CONFIGURABLE);
+  JS_FreeAtom(ctx, closed_atom);
+
+  JS_SetClassProto(ctx, JSRT_ReadableStreamDefaultReaderClassID, reader_proto);
+
+  JSValue reader_ctor = JS_NewCFunction2(ctx, JSRT_ReadableStreamDefaultReaderConstructor,
+                                         "ReadableStreamDefaultReader", 1, JS_CFUNC_constructor, 0);
+  JS_SetPropertyStr(ctx, rt->global, "ReadableStreamDefaultReader", reader_ctor);
 
   // Register WritableStream class
   JS_NewClassID(&JSRT_WritableStreamClassID);

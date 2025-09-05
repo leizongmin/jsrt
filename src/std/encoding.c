@@ -101,6 +101,106 @@ static const struct {
     {"iso_8859-5", "iso-8859-5"},
     {"iso_8859-5:1988", "iso-8859-5"},
 
+    // ISO-8859-6 (Arabic)
+    {"arabic", "iso-8859-6"},
+    {"asmo-708", "iso-8859-6"},
+    {"csiso88596e", "iso-8859-6"},
+    {"csiso88596i", "iso-8859-6"},
+    {"csisolatinarabic", "iso-8859-6"},
+    {"ecma-114", "iso-8859-6"},
+    {"iso-8859-6", "iso-8859-6"},
+    {"iso-8859-6-e", "iso-8859-6"},
+    {"iso-8859-6-i", "iso-8859-6"},
+    {"iso-ir-127", "iso-8859-6"},
+    {"iso8859-6", "iso-8859-6"},
+    {"iso88596", "iso-8859-6"},
+    {"iso_8859-6", "iso-8859-6"},
+    {"iso_8859-6:1987", "iso-8859-6"},
+
+    // ISO-8859-7 (Greek)
+    {"csisolatingreek", "iso-8859-7"},
+    {"ecma-118", "iso-8859-7"},
+    {"elot_928", "iso-8859-7"},
+    {"greek", "iso-8859-7"},
+    {"greek8", "iso-8859-7"},
+    {"iso-8859-7", "iso-8859-7"},
+    {"iso-ir-126", "iso-8859-7"},
+    {"iso8859-7", "iso-8859-7"},
+    {"iso88597", "iso-8859-7"},
+    {"iso_8859-7", "iso-8859-7"},
+    {"iso_8859-7:1987", "iso-8859-7"},
+    {"sun_eu_greek", "iso-8859-7"},
+
+    // ISO-8859-8 (Hebrew)
+    {"csiso88598e", "iso-8859-8"},
+    {"csiso88598i", "iso-8859-8-i"},
+    {"csisolatinhebrew", "iso-8859-8"},
+    {"hebrew", "iso-8859-8"},
+    {"iso-8859-8", "iso-8859-8"},
+    {"iso-8859-8-e", "iso-8859-8"},
+    {"iso-8859-8-i", "iso-8859-8-i"},
+    {"iso-ir-138", "iso-8859-8"},
+    {"iso8859-8", "iso-8859-8"},
+    {"iso88598", "iso-8859-8"},
+    {"iso_8859-8", "iso-8859-8"},
+    {"iso_8859-8:1988", "iso-8859-8"},
+    {"logical", "iso-8859-8-i"},
+    {"visual", "iso-8859-8"},
+
+    // ISO-8859-10 (Latin-6)
+    {"csisolatin6", "iso-8859-10"},
+    {"iso-8859-10", "iso-8859-10"},
+    {"iso-ir-157", "iso-8859-10"},
+    {"iso8859-10", "iso-8859-10"},
+    {"iso885910", "iso-8859-10"},
+    {"l6", "iso-8859-10"},
+    {"latin6", "iso-8859-10"},
+
+    // ISO-8859-13 (Latin-7)
+    {"iso-8859-13", "iso-8859-13"},
+    {"iso-ir-179", "iso-8859-13"},
+    {"iso8859-13", "iso-8859-13"},
+    {"iso885913", "iso-8859-13"},
+    {"l7", "iso-8859-13"},
+    {"latin7", "iso-8859-13"},
+
+    // ISO-8859-14 (Latin-8)
+    {"iso-8859-14", "iso-8859-14"},
+    {"iso-ir-199", "iso-8859-14"},
+    {"iso8859-14", "iso-8859-14"},
+    {"iso885914", "iso-8859-14"},
+    {"l8", "iso-8859-14"},
+    {"latin8", "iso-8859-14"},
+
+    // ISO-8859-15 (Latin-9)
+    {"csisolatin9", "iso-8859-15"},
+    {"iso-8859-15", "iso-8859-15"},
+    {"iso-ir-203", "iso-8859-15"},
+    {"iso8859-15", "iso-8859-15"},
+    {"iso885915", "iso-8859-15"},
+    {"iso_8859-15", "iso-8859-15"},
+    {"l9", "iso-8859-15"},
+    {"latin9", "iso-8859-15"},
+
+    // ISO-8859-16 (Latin-10)
+    {"iso-8859-16", "iso-8859-16"},
+    {"iso-ir-226", "iso-8859-16"},
+    {"iso8859-16", "iso-8859-16"},
+    {"iso885916", "iso-8859-16"},
+    {"l10", "iso-8859-16"},
+    {"latin10", "iso-8859-16"},
+
+    // KOI8-R (Russian)
+    {"cskoi8r", "koi8-r"},
+    {"koi", "koi8-r"},
+    {"koi8", "koi8-r"},
+    {"koi8-r", "koi8-r"},
+    {"koi8_r", "koi8-r"},
+
+    // KOI8-U (Ukrainian)
+    {"koi8-ru", "koi8-u"},
+    {"koi8-u", "koi8-u"},
+
     // Note: For server runtimes like jsrt, we only actually support UTF-8 decoding
     // but we accept the labels and normalize them to their canonical names
     // The actual decoding will fall back to UTF-8 replacement behavior for non-UTF-8 encodings

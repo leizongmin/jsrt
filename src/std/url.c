@@ -1843,9 +1843,18 @@ void JSRT_RuntimeSetupStdURL(JSRT_Runtime* rt) {
   JS_SetPropertyStr(ctx, search_params_proto, "keys", JS_NewCFunction(ctx, JSRT_URLSearchParamsKeys, "keys", 0));
   JS_SetPropertyStr(ctx, search_params_proto, "values", JS_NewCFunction(ctx, JSRT_URLSearchParamsValues, "values", 0));
 
-  // Add Symbol.iterator as entries method
-  // For now, we'll skip Symbol.iterator registration and focus on explicit iterator methods
-  // TODO: Implement proper Symbol.iterator registration when QuickJS symbol support is confirmed
+  // Add Symbol.iterator as entries method (per WHATWG spec)
+  JSValue symbol_iterator = JS_GetPropertyStr(ctx, JS_GetGlobalObject(ctx), "Symbol");
+  if (!JS_IsException(symbol_iterator)) {
+    JSValue iterator_symbol = JS_GetPropertyStr(ctx, symbol_iterator, "iterator");
+    if (!JS_IsException(iterator_symbol) && !JS_IsUndefined(iterator_symbol)) {
+      JS_DefinePropertyValue(ctx, search_params_proto, JS_ValueToAtom(ctx, iterator_symbol),
+                             JS_NewCFunction(ctx, JSRT_URLSearchParamsSymbolIterator, "[Symbol.iterator]", 0),
+                             JS_PROP_CONFIGURABLE | JS_PROP_WRITABLE);
+      JS_FreeValue(ctx, iterator_symbol);
+    }
+    JS_FreeValue(ctx, symbol_iterator);
+  }
 
   // Register iterator class
   JS_NewClassID(&JSRT_URLSearchParamsIteratorClassID);

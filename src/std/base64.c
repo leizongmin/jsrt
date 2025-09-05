@@ -103,6 +103,27 @@ static JSValue JSRT_atob(JSContext* ctx, JSValueConst this_val, int argc, JSValu
     return JS_ThrowTypeError(ctx, "The string to be decoded is not correctly encoded.");
   }
 
+  // Validate padding - padding ('=') can only appear at the end
+  // and only in the last group of 4 characters
+  for (size_t i = 0; i < input_len; i++) {
+    if (input_str[i] == '=') {
+      // Padding found - check if it's in a valid position
+      if (i < input_len - 2) {
+        // Padding not in the last 2 positions
+        JS_FreeCString(ctx, input_str);
+        return JS_ThrowTypeError(ctx, "The string to be decoded is not correctly encoded.");
+      }
+      // Check that all remaining characters after first padding are also padding
+      for (size_t j = i + 1; j < input_len; j++) {
+        if (input_str[j] != '=') {
+          JS_FreeCString(ctx, input_str);
+          return JS_ThrowTypeError(ctx, "The string to be decoded is not correctly encoded.");
+        }
+      }
+      break;
+    }
+  }
+
   // Calculate output length
   size_t output_len = input_len / 4 * 3;
   if (input_len >= 1 && input_str[input_len - 1] == '=')

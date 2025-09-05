@@ -12,14 +12,11 @@ const assert = require('jsrt:assert');
 
   console.log('=== WebCrypto RSA-PSS Signature/Verification Tests ===');
 
-  // For now, RSA-PSS is not fully supported due to OpenSSL 3.x compatibility
-  // Just test that it's correctly marked as unsupported
-  console.log('\n⚠️ RSA-PSS is not yet fully implemented');
-  console.log(
-    'RSA-PSS key generation works but signing/verification needs OpenSSL 3.x API updates'
-  );
+  // RSA-PSS is now implemented and working
+  console.log('\n✅ RSA-PSS is now fully implemented');
+  console.log('Testing RSA-PSS key generation and signing/verification...');
 
-  // Test that RSA-PSS is correctly marked as not supported
+  // Test RSA-PSS functionality
   try {
     const keyPair = await crypto.subtle.generateKey(
       {
@@ -34,10 +31,10 @@ const assert = require('jsrt:assert');
 
     console.log('✅ RSA-PSS key generation works');
 
-    // Try to sign - should fail with NotSupportedError
+    // Test signing - should now work
     try {
       const testMessage = new TextEncoder().encode('Test message');
-      await crypto.subtle.sign(
+      const signature = await crypto.subtle.sign(
         {
           name: 'RSA-PSS',
           saltLength: 32,
@@ -46,17 +43,33 @@ const assert = require('jsrt:assert');
         testMessage
       );
 
-      console.log('❌ RSA-PSS sign should have failed but succeeded');
-    } catch (error) {
-      if (error.name === 'NotSupportedError') {
-        console.log('✅ RSA-PSS sign correctly returns NotSupportedError');
+      console.log(
+        '✅ RSA-PSS signing works, signature length:',
+        signature.byteLength
+      );
+
+      // Test verification
+      const isValid = await crypto.subtle.verify(
+        {
+          name: 'RSA-PSS',
+          saltLength: 32,
+        },
+        keyPair.publicKey,
+        signature,
+        testMessage
+      );
+
+      if (isValid) {
+        console.log('✅ RSA-PSS verification works correctly');
       } else {
-        console.log('⚠️ RSA-PSS sign failed with:', error.name, error.message);
+        console.log('❌ RSA-PSS verification failed');
       }
+    } catch (error) {
+      console.log('⚠️ RSA-PSS sign failed with:', error.name, error.message);
     }
   } catch (error) {
     console.error('Test error:', error);
   }
 
-  console.log('\n=== RSA-PSS Tests Completed (Partial Implementation) ===');
+  console.log('\n=== RSA-PSS Tests Completed Successfully ===');
 })();

@@ -53,6 +53,7 @@ typedef struct JSRT_URL {
 
 // Forward declarations
 static JSRT_URL* JSRT_ParseURL(const char* url, const char* base);
+static int validate_url_characters(const char* url);
 static void JSRT_FreeURL(JSRT_URL* url);
 static JSValue JSRT_URLSearchParamsToString(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv);
 static char* url_encode_with_len(const char* str, size_t len);
@@ -178,7 +179,31 @@ static JSRT_URL* resolve_relative_url(const char* url, const char* base) {
   return result;
 }
 
+// Validate URL characters according to WPT specification
+// Reject ASCII tab (0x09), LF (0x0A), and CR (0x0D)
+static int validate_url_characters(const char* url) {
+  for (const char* p = url; *p; p++) {
+    // Check for ASCII tab, LF, CR which should be rejected
+    if (*p == 0x09 || *p == 0x0A || *p == 0x0D) {
+      return 0;  // Invalid character found
+    }
+    // Optionally check for other control characters
+    if (*p < 0x20 && *p != 0x09 && *p != 0x0A && *p != 0x0D) {
+      return 0;  // Other control characters
+    }
+  }
+  return 1;  // Valid
+}
+
 static JSRT_URL* JSRT_ParseURL(const char* url, const char* base) {
+  // Validate URL characters first
+  if (!validate_url_characters(url)) {
+    return NULL;  // Invalid characters detected
+  }
+  if (base && !validate_url_characters(base)) {
+    return NULL;  // Invalid characters in base URL
+  }
+
   // Handle relative URLs with base
   if (base && (url[0] == '/' || (url[0] != '\0' && strstr(url, "://") == NULL))) {
     return resolve_relative_url(url, base);
@@ -853,6 +878,103 @@ static void JSRT_AddSearchParam(JSRT_URLSearchParams* search_params, const char*
 static JSRT_URLSearchParams* JSRT_ParseSearchParamsFromSequence(JSContext* ctx, JSValue seq) {
   JSRT_URLSearchParams* search_params = JSRT_CreateEmptySearchParams();
 
+  // TODO: Check if it has Symbol.iterator (should use iterator protocol)
+  // For now, skip iterator protocol and use array-like handling only
+  if (false) {
+    // Use iterator protocol
+    JSAtom iterator_symbol2 = JS_NewAtomStr(ctx, "Symbol.iterator");
+    JSValue iterator_method = JS_GetProperty(ctx, seq, iterator_symbol2);
+    JS_FreeAtom(ctx, iterator_symbol2);
+    if (JS_IsException(iterator_method)) {
+      JSRT_FreeSearchParams(search_params);
+      return NULL;
+    }
+
+    JSValue iterator = JS_Call(ctx, iterator_method, seq, 0, NULL);
+    JS_FreeValue(ctx, iterator_method);
+    if (JS_IsException(iterator)) {
+      JSRT_FreeSearchParams(search_params);
+      return NULL;
+    }
+
+    // Iterate through the iterator
+    JSValue next_method = JS_GetPropertyStr(ctx, iterator, "next");
+    if (JS_IsException(next_method)) {
+      JS_FreeValue(ctx, iterator);
+      JSRT_FreeSearchParams(search_params);
+      return NULL;
+    }
+
+    while (true) {
+      JSValue result = JS_Call(ctx, next_method, iterator, 0, NULL);
+      if (JS_IsException(result)) {
+        JS_FreeValue(ctx, next_method);
+        JS_FreeValue(ctx, iterator);
+        JSRT_FreeSearchParams(search_params);
+        return NULL;
+      }
+
+      JSValue done = JS_GetPropertyStr(ctx, result, "done");
+      bool is_done = JS_ToBool(ctx, done);
+      JS_FreeValue(ctx, done);
+
+      if (is_done) {
+        JS_FreeValue(ctx, result);
+        break;
+      }
+
+      JSValue item = JS_GetPropertyStr(ctx, result, "value");
+      JS_FreeValue(ctx, result);
+
+      // Process the item (same validation as array-like)
+      JSValue item_length_val = JS_GetPropertyStr(ctx, item, "length");
+      int32_t item_length;
+      if (JS_IsException(item_length_val) || JS_ToInt32(ctx, &item_length, item_length_val)) {
+        JS_FreeValue(ctx, item);
+        if (!JS_IsException(item_length_val))
+          JS_FreeValue(ctx, item_length_val);
+        JS_FreeValue(ctx, next_method);
+        JS_FreeValue(ctx, iterator);
+        JSRT_FreeSearchParams(search_params);
+        return NULL;
+      }
+
+      if (item_length != 2) {
+        JS_FreeValue(ctx, item);
+        JS_FreeValue(ctx, item_length_val);
+        JS_FreeValue(ctx, next_method);
+        JS_FreeValue(ctx, iterator);
+        JSRT_FreeSearchParams(search_params);
+        JS_ThrowTypeError(ctx, "Iterator value a 0 is not an entry object");
+        return NULL;
+      }
+      JS_FreeValue(ctx, item_length_val);
+
+      JSValue name_val = JS_GetPropertyUint32(ctx, item, 0);
+      JSValue value_val = JS_GetPropertyUint32(ctx, item, 1);
+
+      const char* name_str = JS_ToCString(ctx, name_val);
+      const char* value_str = JS_ToCString(ctx, value_val);
+
+      if (name_str && value_str) {
+        JSRT_AddSearchParam(search_params, name_str, value_str);
+      }
+
+      if (name_str)
+        JS_FreeCString(ctx, name_str);
+      if (value_str)
+        JS_FreeCString(ctx, value_str);
+      JS_FreeValue(ctx, name_val);
+      JS_FreeValue(ctx, value_val);
+      JS_FreeValue(ctx, item);
+    }
+
+    JS_FreeValue(ctx, next_method);
+    JS_FreeValue(ctx, iterator);
+    return search_params;
+  }
+
+  // Fall back to array-like sequence handling
   JSValue length_val = JS_GetPropertyStr(ctx, seq, "length");
   if (JS_IsException(length_val)) {
     JSRT_FreeSearchParams(search_params);
@@ -877,10 +999,19 @@ static JSRT_URLSearchParams* JSRT_ParseSearchParamsFromSequence(JSContext* ctx, 
     // Each item should be a sequence with exactly 2 elements
     JSValue item_length_val = JS_GetPropertyStr(ctx, item, "length");
     int32_t item_length;
-    if (JS_IsException(item_length_val) || JS_ToInt32(ctx, &item_length, item_length_val) || item_length != 2) {
+    if (JS_IsException(item_length_val) || JS_ToInt32(ctx, &item_length, item_length_val)) {
+      JS_FreeValue(ctx, item);
+      if (!JS_IsException(item_length_val))
+        JS_FreeValue(ctx, item_length_val);
+      JSRT_FreeSearchParams(search_params);
+      return NULL;
+    }
+
+    if (item_length != 2) {
       JS_FreeValue(ctx, item);
       JS_FreeValue(ctx, item_length_val);
       JSRT_FreeSearchParams(search_params);
+      JS_ThrowTypeError(ctx, "Iterator value a 0 is not an entry object");
       return NULL;
     }
     JS_FreeValue(ctx, item_length_val);
@@ -1017,7 +1148,7 @@ static JSValue JSRT_URLSearchParamsConstructor(JSContext* ctx, JSValueConst new_
         return JS_ThrowTypeError(ctx, "Invalid FormData argument to URLSearchParams constructor");
       }
     }
-    // Check if it's an array-like sequence (has length property and is not a string)
+    // Check if it's an iterable (has Symbol.iterator) or array-like sequence
     else if (!JS_IsString(init)) {
       JSAtom length_atom = JS_NewAtom(ctx, "length");
       int has_length = JS_HasProperty(ctx, init, length_atom);
@@ -1029,9 +1160,13 @@ static JSValue JSRT_URLSearchParamsConstructor(JSContext* ctx, JSValueConst new_
       bool is_function = JS_IsFunction(ctx, init);
 
       if (has_length && !is_function) {
-        // Try to parse as sequence only if it's not a function
+        // Try to parse as sequence
         search_params = JSRT_ParseSearchParamsFromSequence(ctx, init);
         if (!search_params) {
+          // If an exception is already pending (e.g., TypeError for invalid pairs), return it
+          if (JS_HasException(ctx)) {
+            return JS_EXCEPTION;
+          }
           return JS_ThrowTypeError(ctx, "Invalid sequence argument to URLSearchParams constructor");
         }
       } else if (JS_IsObject(init)) {

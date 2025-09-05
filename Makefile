@@ -8,24 +8,28 @@ jsrt:
 	mkdir -p target/release
 	cd target/release && cmake -G "Unix Makefiles" -DCMAKE_BUILD_TYPE=Release $(CURDIR) && make -j$(cpu_count)
 	ls -alh target/release/jsrt
+	@cd deps/wamr && git restore core/version.h 2>/dev/null || true
 
 .PHONY: jsrt_g
 jsrt_g:
 	mkdir -p target/debug
 	cd target/debug && cmake -G "Unix Makefiles" -DCMAKE_BUILD_TYPE=Debug $(CURDIR) && make -j$(cpu_count)
 	ls -alh target/debug/jsrt
+	@cd deps/wamr && git restore core/version.h 2>/dev/null || true
 
 .PHONY: jsrt_m
 jsrt_m:
 	mkdir -p target/asan
 	cd target/asan && cmake -G "Unix Makefiles" -DENABLE_ASAN=ON -DCMAKE_BUILD_TYPE=Debug $(CURDIR) && make -j$(cpu_count)
 	ls -alh target/asan/jsrt
+	@cd deps/wamr && git restore core/version.h 2>/dev/null || true
 
 .PHONY: jsrt_cov
 jsrt_cov:
 	mkdir -p target/coverage
 	cd target/coverage && cmake -G "Unix Makefiles" -DENABLE_COVERAGE=ON -DCMAKE_BUILD_TYPE=Release $(CURDIR) && make -j$(cpu_count)
 	ls -alh target/coverage/jsrt
+	@cd deps/wamr && git restore core/version.h 2>/dev/null || true
 
 .PHONY: jsrt_s
 jsrt_s: jsrt

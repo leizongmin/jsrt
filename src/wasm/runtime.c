@@ -1,9 +1,9 @@
 #include "runtime.h"
 #include "../util/debug.h"
 
+#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <stdio.h>
 #include <wasm_export.h>
 
 // Default configuration values
@@ -42,7 +42,7 @@ int jsrt_wasm_init(void) {
   // Initialize WAMR runtime with system allocator (simplest)
   RuntimeInitArgs init_args;
   memset(&init_args, 0, sizeof(RuntimeInitArgs));
-  
+
   // Use system allocator instead of pool allocator to avoid heap buffer issues
   init_args.mem_alloc_type = Alloc_With_System_Allocator;
 

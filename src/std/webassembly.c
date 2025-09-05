@@ -3,9 +3,9 @@
 #include "../wasm/runtime.h"
 
 #include <quickjs.h>
-#include <wasm_export.h>
 #include <stdlib.h>
 #include <string.h>
+#include <wasm_export.h>
 
 // Forward declarations for internal module/instance structure
 typedef struct {
@@ -194,11 +194,12 @@ void JSRT_RuntimeSetupStdWebAssembly(JSRT_Runtime* rt) {
 
   // Add Module constructor
   JS_SetPropertyStr(rt->ctx, webassembly, "Module",
-                    JS_NewCFunction(rt->ctx, js_webassembly_module_constructor, "Module", 1));
+                    JS_NewCFunction2(rt->ctx, js_webassembly_module_constructor, "Module", 1, JS_CFUNC_constructor, 0));
 
   // Add Instance constructor
-  JS_SetPropertyStr(rt->ctx, webassembly, "Instance",
-                    JS_NewCFunction(rt->ctx, js_webassembly_instance_constructor, "Instance", 2));
+  JS_SetPropertyStr(
+      rt->ctx, webassembly, "Instance",
+      JS_NewCFunction2(rt->ctx, js_webassembly_instance_constructor, "Instance", 2, JS_CFUNC_constructor, 0));
 
   // Set WebAssembly global
   JS_SetPropertyStr(rt->ctx, rt->global, "WebAssembly", webassembly);

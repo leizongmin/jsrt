@@ -161,14 +161,14 @@ coverage-merged: test_cov wpt_cov
 	@echo "Generating merged coverage report (regular tests + WPT)..."
 	# Reset coverage counters first
 	lcov --zerocounters --directory target/coverage
-	# Run regular tests with coverage
-	cd target/coverage && ctest --verbose || true
+	# Run regular tests with coverage (ignore test failures)
+	cd target/coverage && ctest --verbose || echo "Some tests failed, but continuing with coverage generation..."
 	# Capture coverage from regular tests
 	lcov --capture --directory target/coverage --output-file target/coverage/coverage_tests.info
 	# Reset coverage counters for WPT
 	lcov --zerocounters --directory target/coverage
-	# Run WPT tests with coverage
-	python3 scripts/run-wpt.py --jsrt $(CURDIR)/target/coverage/jsrt --wpt-dir $(CURDIR)/wpt || true
+	# Run WPT tests with coverage (ignore test failures)
+	python3 scripts/run-wpt.py --jsrt $(CURDIR)/target/coverage/jsrt --wpt-dir $(CURDIR)/wpt || echo "Some WPT tests failed, but continuing with coverage generation..."
 	# Capture coverage from WPT tests
 	lcov --capture --directory target/coverage --output-file target/coverage/coverage_wpt.info
 	# Merge both coverage files

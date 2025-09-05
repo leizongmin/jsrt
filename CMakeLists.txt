@@ -95,6 +95,39 @@ if(BUILD_QJS)
 endif()
 
 # build libuv
+# Force libuv to use Windows build on MinGW to avoid Cygwin path conflicts
+if(WIN32 AND MINGW)
+    # Override system detection variables before libuv processes them
+    set(CMAKE_SYSTEM_NAME "Windows" CACHE STRING "Force Windows system name for libuv" FORCE)
+    set(WIN32 TRUE CACHE BOOL "Force WIN32 for libuv" FORCE)
+    set(MSYS FALSE CACHE BOOL "Force MSYS to FALSE for libuv" FORCE)
+    set(CYGWIN FALSE CACHE BOOL "Force CYGWIN to FALSE for libuv" FORCE)
+    
+    # Also unset any MSYS detection that might have happened
+    unset(MSYS CACHE)
+    unset(CYGWIN CACHE)
+    
+    # Force libuv to treat this as pure Windows build
+    set(CMAKE_HOST_SYSTEM_NAME "Windows" CACHE STRING "Override host system for libuv" FORCE)
+    
+    message(STATUS "MinGW detected: Forcing libuv to use Windows build path instead of Cygwin/MSYS")
+endif()
+
+# Override libuv's platform detection by setting the variables it checks
+if(WIN32)
+    # These variables are used by libuv's CMakeLists.txt
+    set(CMAKE_SYSTEM_NAME "Windows")
+    set(WIN32 TRUE)
+    unset(MSYS)
+    unset(CYGWIN)
+    
+    # Additional forced variables for libuv platform detection
+    set(__MSYS__ FALSE CACHE BOOL "Force MSYS detection off" FORCE)
+    set(__CYGWIN__ FALSE CACHE BOOL "Force CYGWIN detection off" FORCE)
+    set(__MINGW32__ TRUE CACHE BOOL "Force MinGW32 detection on" FORCE)
+    set(__MINGW64__ TRUE CACHE BOOL "Force MinGW64 detection on" FORCE)
+endif()
+
 add_subdirectory(deps/libuv)
 
 # build WAMR
@@ -112,6 +145,7 @@ set(WAMR_BUILD_MEMORY64 0)        # Disable 64-bit memory for simplicity
 set(WAMR_BUILD_MULTI_MODULE 0)    # Disable multi-module for simplicity
 set(WAMR_BUILD_SHARED_MEMORY 0)   # Disable shared memory for now
 set(WAMR_BUILD_SIMD 0)            # Disable SIMD to ensure correct assembly file selection
+set(WAMR_BUILD_INVOKE_NATIVE_GENERAL 1)  # Use C implementation instead of assembly for MinGW compatibility
 
 # Windows specific configuration for WAMR
 if(WIN32)
@@ -119,6 +153,15 @@ if(WIN32)
     # Use CACHE FORCE to ensure this variable is available in subdirectories
     set(WAMR_BUILD_PLATFORM "windows" CACHE STRING "WAMR build platform" FORCE)
     message(STATUS "Windows detected: Setting WAMR_BUILD_PLATFORM to 'windows'")
+    
+    # Explicitly set WAMR target architecture for correct invokeNative selection
+    if(CMAKE_SIZEOF_VOID_P EQUAL 8)
+        set(WAMR_BUILD_TARGET "X86_64" CACHE STRING "WAMR build target" FORCE)
+        message(STATUS "64-bit Windows: Setting WAMR_BUILD_TARGET to 'X86_64'")
+    elseif(CMAKE_SIZEOF_VOID_P EQUAL 4)
+        set(WAMR_BUILD_TARGET "X86_32" CACHE STRING "WAMR build target" FORCE)
+        message(STATUS "32-bit Windows: Setting WAMR_BUILD_TARGET to 'X86_32'")
+    endif()
     
     # Ensure MINGW variable is set for MinGW builds
     # WAMR relies on this variable to select the correct assembly files

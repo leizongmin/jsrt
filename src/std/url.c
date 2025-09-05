@@ -806,34 +806,48 @@ static JSValue JSRT_URLSearchParamsSet(JSContext* ctx, JSValueConst this_val, in
     return JS_EXCEPTION;
   }
 
-  // Remove all existing params with this name
+  // Find first parameter with this name and update its value
+  // Remove any subsequent parameters with the same name
+  JSRT_URLSearchParam* first_match = NULL;
   JSRT_URLSearchParam** current = &search_params->params;
+
   while (*current) {
     if (strcmp((*current)->name, name) == 0) {
-      JSRT_URLSearchParam* to_remove = *current;
-      *current = (*current)->next;
-      free(to_remove->name);
-      free(to_remove->value);
-      free(to_remove);
+      if (!first_match) {
+        // This is the first match - update its value
+        first_match = *current;
+        free(first_match->value);
+        first_match->value = strdup(value);
+        current = &(*current)->next;
+      } else {
+        // This is a subsequent match - remove it
+        JSRT_URLSearchParam* to_remove = *current;
+        *current = (*current)->next;
+        free(to_remove->name);
+        free(to_remove->value);
+        free(to_remove);
+      }
     } else {
       current = &(*current)->next;
     }
   }
 
-  // Add new param at the end to maintain insertion order
-  JSRT_URLSearchParam* new_param = malloc(sizeof(JSRT_URLSearchParam));
-  new_param->name = strdup(name);
-  new_param->value = strdup(value);
-  new_param->next = NULL;
+  // If no parameter with this name existed, add new one at the end
+  if (!first_match) {
+    JSRT_URLSearchParam* new_param = malloc(sizeof(JSRT_URLSearchParam));
+    new_param->name = strdup(name);
+    new_param->value = strdup(value);
+    new_param->next = NULL;
 
-  if (!search_params->params) {
-    search_params->params = new_param;
-  } else {
-    JSRT_URLSearchParam* tail = search_params->params;
-    while (tail->next) {
-      tail = tail->next;
+    if (!search_params->params) {
+      search_params->params = new_param;
+    } else {
+      JSRT_URLSearchParam* tail = search_params->params;
+      while (tail->next) {
+        tail = tail->next;
+      }
+      tail->next = new_param;
     }
-    tail->next = new_param;
   }
 
   JS_FreeCString(ctx, name);
@@ -880,7 +894,7 @@ static JSValue JSRT_URLSearchParamsAppend(JSContext* ctx, JSValueConst this_val,
 
 static JSValue JSRT_URLSearchParamsHas(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
   if (argc < 1) {
-    return JS_ThrowTypeError(ctx, "has() requires 1 argument");
+    return JS_ThrowTypeError(ctx, "has() requires at least 1 argument");
   }
 
   JSRT_URLSearchParams* search_params = JS_GetOpaque2(ctx, this_val, JSRT_URLSearchParamsClassID);
@@ -891,24 +905,46 @@ static JSValue JSRT_URLSearchParamsHas(JSContext* ctx, JSValueConst this_val, in
   const char* name = JS_ToCString(ctx, argv[0]);
   if (!name) {
     return JS_EXCEPTION;
+  }
+
+  const char* value = NULL;
+  if (argc >= 2 && !JS_IsUndefined(argv[1])) {
+    value = JS_ToCString(ctx, argv[1]);
+    if (!value) {
+      JS_FreeCString(ctx, name);
+      return JS_EXCEPTION;
+    }
   }
 
   JSRT_URLSearchParam* param = search_params->params;
   while (param) {
     if (strcmp(param->name, name) == 0) {
-      JS_FreeCString(ctx, name);
-      return JS_NewBool(ctx, true);
+      if (value) {
+        // Two-argument form: check both name and value
+        if (strcmp(param->value, value) == 0) {
+          JS_FreeCString(ctx, name);
+          JS_FreeCString(ctx, value);
+          return JS_NewBool(ctx, true);
+        }
+      } else {
+        // One-argument form (or undefined second arg): just check name
+        JS_FreeCString(ctx, name);
+        return JS_NewBool(ctx, true);
+      }
     }
     param = param->next;
   }
 
   JS_FreeCString(ctx, name);
+  if (value) {
+    JS_FreeCString(ctx, value);
+  }
   return JS_NewBool(ctx, false);
 }
 
 static JSValue JSRT_URLSearchParamsDelete(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
   if (argc < 1) {
-    return JS_ThrowTypeError(ctx, "delete() requires 1 argument");
+    return JS_ThrowTypeError(ctx, "delete() requires at least 1 argument");
   }
 
   JSRT_URLSearchParams* search_params = JS_GetOpaque2(ctx, this_val, JSRT_URLSearchParamsClassID);
@@ -921,20 +957,46 @@ static JSValue JSRT_URLSearchParamsDelete(JSContext* ctx, JSValueConst this_val,
     return JS_EXCEPTION;
   }
 
+  const char* value = NULL;
+  if (argc >= 2 && !JS_IsUndefined(argv[1])) {
+    value = JS_ToCString(ctx, argv[1]);
+    if (!value) {
+      JS_FreeCString(ctx, name);
+      return JS_EXCEPTION;
+    }
+  }
+
   JSRT_URLSearchParam** current = &search_params->params;
   while (*current) {
     if (strcmp((*current)->name, name) == 0) {
-      JSRT_URLSearchParam* to_remove = *current;
-      *current = (*current)->next;
-      free(to_remove->name);
-      free(to_remove->value);
-      free(to_remove);
+      if (value) {
+        // Two-argument form: only delete if both name and value match
+        if (strcmp((*current)->value, value) == 0) {
+          JSRT_URLSearchParam* to_remove = *current;
+          *current = (*current)->next;
+          free(to_remove->name);
+          free(to_remove->value);
+          free(to_remove);
+        } else {
+          current = &(*current)->next;
+        }
+      } else {
+        // One-argument form: delete all parameters with this name
+        JSRT_URLSearchParam* to_remove = *current;
+        *current = (*current)->next;
+        free(to_remove->name);
+        free(to_remove->value);
+        free(to_remove);
+      }
     } else {
       current = &(*current)->next;
     }
   }
 
   JS_FreeCString(ctx, name);
+  if (value) {
+    JS_FreeCString(ctx, value);
+  }
   return JS_UNDEFINED;
 }
 
@@ -993,7 +1055,7 @@ static char* url_encode(const char* str) {
   for (size_t i = 0; i < len; i++) {
     unsigned char c = (unsigned char)str[i];
     if ((c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z') || (c >= '0' && c <= '9') || c == '-' || c == '_' ||
-        c == '.' || c == '~') {
+        c == '.' || c == '~' || c == '*') {
       encoded_len++;
     } else if (c == ' ') {
       encoded_len++;  // space becomes +
@@ -1008,7 +1070,7 @@ static char* url_encode(const char* str) {
   for (size_t i = 0; i < len; i++) {
     unsigned char c = (unsigned char)str[i];
     if ((c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z') || (c >= '0' && c <= '9') || c == '-' || c == '_' ||
-        c == '.' || c == '~') {
+        c == '.' || c == '~' || c == '*') {
       encoded[j++] = c;
     } else if (c == ' ') {
       encoded[j++] = '+';
@@ -1144,8 +1206,8 @@ void JSRT_RuntimeSetupStdURL(JSRT_Runtime* rt) {
   JS_SetPropertyStr(ctx, search_params_proto, "getAll", JS_NewCFunction(ctx, JSRT_URLSearchParamsGetAll, "getAll", 1));
   JS_SetPropertyStr(ctx, search_params_proto, "set", JS_NewCFunction(ctx, JSRT_URLSearchParamsSet, "set", 2));
   JS_SetPropertyStr(ctx, search_params_proto, "append", JS_NewCFunction(ctx, JSRT_URLSearchParamsAppend, "append", 2));
-  JS_SetPropertyStr(ctx, search_params_proto, "has", JS_NewCFunction(ctx, JSRT_URLSearchParamsHas, "has", 1));
-  JS_SetPropertyStr(ctx, search_params_proto, "delete", JS_NewCFunction(ctx, JSRT_URLSearchParamsDelete, "delete", 1));
+  JS_SetPropertyStr(ctx, search_params_proto, "has", JS_NewCFunction(ctx, JSRT_URLSearchParamsHas, "has", 2));
+  JS_SetPropertyStr(ctx, search_params_proto, "delete", JS_NewCFunction(ctx, JSRT_URLSearchParamsDelete, "delete", 2));
   JS_SetPropertyStr(ctx, search_params_proto, "toString",
                     JS_NewCFunction(ctx, JSRT_URLSearchParamsToString, "toString", 0));
 

@@ -178,11 +178,29 @@ static JSValue JSRT_atob(JSContext* ctx, JSValueConst this_val, int argc, JSValu
   memcpy(trimmed_input, start, input_len);
   trimmed_input[input_len] = '\0';
 
-  // Add implicit padding if needed (HTML5 spec allows this)
+  // Base64 requires input length to be multiple of 4
+  // We only add implicit padding if there's NO explicit padding
+  // If there's explicit padding, it must be correct
+  bool has_explicit_padding = false;
+  for (size_t i = 0; i < input_len; i++) {
+    if (trimmed_input[i] == '=') {
+      has_explicit_padding = true;
+      break;
+    }
+  }
+
   size_t padded_len = input_len;
   char* padded_input = trimmed_input;
 
   if (input_len % 4 != 0) {
+    if (has_explicit_padding) {
+      // Explicit padding but wrong length - this should be an error
+      JS_FreeCString(ctx, input_str);
+      free(trimmed_input);
+      return JS_ThrowTypeError(ctx, "The string to be decoded is not correctly encoded.");
+    }
+
+    // Only add implicit padding if no explicit padding
     padded_len = ((input_len + 3) / 4) * 4;  // Round up to next multiple of 4
     padded_input = malloc(padded_len + 1);
     if (!padded_input) {

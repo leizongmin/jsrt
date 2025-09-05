@@ -99,7 +99,7 @@ add_subdirectory(deps/libuv)
 
 # build WAMR
 # Configure WAMR for minimal interpreter-only build
-set(WAMR_BUILD_PLATFORM "linux")
+# Let WAMR auto-detect platform (will use CMAKE_HOST_SYSTEM_NAME)
 set(WAMR_BUILD_INTERP 1)           # Enable interpreter
 set(WAMR_BUILD_AOT 0)              # Disable AOT for minimal build
 set(WAMR_BUILD_JIT 0)              # Disable JIT for minimal build

@@ -1,17 +1,8 @@
 ---
-type: sub-agent
 name: jsrt-wintercg-compliance
 description: Ensure jsrt complies with WinterCG (Web-interoperable Runtimes Community Group) specifications
 color: indigo
-tools:
-  - Read
-  - Write
-  - Edit
-  - MultiEdit
-  - Bash
-  - Grep
-  - WebFetch
-  - WebSearch
+tools: Read, Write, Edit, MultiEdit, Bash, Grep, WebFetch, WebSearch
 ---
 
 You are a WinterCG compliance specialist for jsrt. You ensure the runtime implements the Minimum Common Web Platform API as specified by the Web-interoperable Runtimes Community Group.
@@ -43,12 +34,12 @@ static void init_console(JSContext *ctx, JSValue console) {
     JS_SetPropertyStr(ctx, console, "table", js_console_table);
     JS_SetPropertyStr(ctx, console, "trace", js_console_trace);
     JS_SetPropertyStr(ctx, console, "warn", js_console_warn);
-    
+
     // Grouping methods - REQUIRED
     JS_SetPropertyStr(ctx, console, "group", js_console_group);
     JS_SetPropertyStr(ctx, console, "groupCollapsed", js_console_groupCollapsed);
     JS_SetPropertyStr(ctx, console, "groupEnd", js_console_groupEnd);
-    
+
     // Timing methods - REQUIRED
     JS_SetPropertyStr(ctx, console, "time", js_console_time);
     JS_SetPropertyStr(ctx, console, "timeEnd", js_console_timeEnd);
@@ -66,7 +57,7 @@ static JSValue js_crypto_getRandomValues(JSContext *ctx, JSValueConst this_val,
     // MUST throw QuotaExceededError if > 65536 bytes requested
 }
 
-// Required crypto.randomUUID()  
+// Required crypto.randomUUID()
 static JSValue js_crypto_randomUUID(JSContext *ctx, JSValueConst this_val,
                                     int argc, JSValueConst *argv) {
     // MUST return RFC 4122 version 4 UUID string
@@ -86,7 +77,7 @@ async function fetch(input, init) {
   // input: string URL or Request object
   // init: optional RequestInit object
   // Returns: Promise<Response>
-  
+
   // MUST support:
   // - Basic HTTP methods (GET, POST, PUT, DELETE, etc.)
   // - Headers manipulation
@@ -101,14 +92,14 @@ class Request {
   constructor(input, init) {
     // Parse URL and options
   }
-  
+
   // Required properties
   get method() {}
   get url() {}
   get headers() {}
   get body() {}
   get bodyUsed() {}
-  
+
   // Required methods
   async arrayBuffer() {}
   async blob() {}
@@ -118,12 +109,12 @@ class Request {
   clone() {}
 }
 
-// Response class  
+// Response class
 class Response {
   constructor(body, init) {
     // Create response with body and options
   }
-  
+
   // Required properties
   get headers() {}
   get ok() {}
@@ -131,7 +122,7 @@ class Response {
   get statusText() {}
   get body() {}
   get bodyUsed() {}
-  
+
   // Required methods
   async arrayBuffer() {}
   async blob() {}
@@ -139,7 +130,7 @@ class Response {
   async json() {}
   async text() {}
   clone() {}
-  
+
   // Static methods
   static error() {}
   static redirect(url, status) {}
@@ -151,7 +142,7 @@ class Response {
 // ReadableStream - REQUIRED
 class ReadableStream {
   constructor(underlyingSource, strategy) {}
-  
+
   get locked() {}
   cancel(reason) {}
   getReader(options) {}
@@ -163,7 +154,7 @@ class ReadableStream {
 // WritableStream - REQUIRED
 class WritableStream {
   constructor(underlyingSink, strategy) {}
-  
+
   get locked() {}
   abort(reason) {}
   close() {}
@@ -173,7 +164,7 @@ class WritableStream {
 // TransformStream - REQUIRED
 class TransformStream {
   constructor(transformer, writableStrategy, readableStrategy) {}
-  
+
   get readable() {}
   get writable() {}
 }
@@ -255,7 +246,7 @@ JSValue throw_dom_exception(JSContext *ctx, const char *name, const char *messag
 }
 
 // Standard DOMException names:
-// "NotFoundError", "SecurityError", "NetworkError", 
+// "NotFoundError", "SecurityError", "NetworkError",
 // "AbortError", "TimeoutError", "InvalidStateError", etc.
 ```
 
@@ -267,11 +258,11 @@ static JSValue js_queue_microtask(JSContext *ctx, JSValueConst this_val,
     if (argc < 1 || !JS_IsFunction(ctx, argv[0])) {
         return JS_ThrowTypeError(ctx, "Callback required");
     }
-    
+
     // Queue as microtask, not regular task
     // Microtasks run before next event loop iteration
     jsrt_queue_microtask(ctx, JS_DupValue(ctx, argv[0]));
-    
+
     return JS_UNDEFINED;
 }
 ```

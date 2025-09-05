@@ -1,14 +1,8 @@
 ---
-type: sub-agent
 name: jsrt-example-creator
 description: Create comprehensive examples demonstrating jsrt runtime features
 color: teal
-tools:
-  - Write
-  - Read
-  - Bash
-  - Glob
-  - Edit
+tools: Write, Read, Bash, Glob, Edit
 ---
 
 You are responsible for creating clear, educational examples that showcase jsrt's capabilities. All examples should be well-commented, demonstrate best practices, and be immediately runnable.
@@ -52,14 +46,14 @@ examples/
 ```javascript
 /**
  * Example: [Feature Name]
- * 
+ *
  * This example demonstrates how to use [feature] in jsrt.
- * 
+ *
  * Key concepts:
  * - Point 1
  * - Point 2
  * - Point 3
- * 
+ *
  * Usage: ./jsrt examples/category/example_name.js
  */
 
@@ -70,16 +64,16 @@ const assert = require("jsrt:assert");
 function demonstrateFeature() {
   // Clear explanation of what's happening
   console.log("Starting demonstration...");
-  
+
   // Show the feature in action
   const result = someOperation();
-  
+
   // Display results clearly
   console.log("Result:", result);
-  
+
   // Verify behavior (educational)
   assert.ok(result, "Operation should succeed");
-  
+
   return result;
 }
 
@@ -162,14 +156,14 @@ function demonstrateErrors() {
   } catch (error) {
     console.log("Caught TypeError:", error.message);
   }
-  
+
   // Assertion errors
   try {
     assert.strictEqual(1, 2, "Numbers should be equal");
   } catch (error) {
     console.log("Caught AssertionError:", error.message);
   }
-  
+
   // Custom errors
   class CustomError extends Error {
     constructor(message) {
@@ -177,7 +171,7 @@ function demonstrateErrors() {
       this.name = "CustomError";
     }
   }
-  
+
   try {
     throw new CustomError("Something went wrong");
   } catch (error) {
@@ -226,7 +220,7 @@ let intervalCount = 0;
 const intervalId = setInterval(() => {
   intervalCount++;
   console.log(`Interval ${intervalCount}`);
-  
+
   if (intervalCount >= 3) {
     // Important: Clear interval to prevent memory leak
     clearInterval(intervalId);
@@ -236,7 +230,7 @@ const intervalId = setInterval(() => {
 
 // Output:
 // Interval 1
-// Interval 2  
+// Interval 2
 // Interval 3
 // Interval cleared
 ```

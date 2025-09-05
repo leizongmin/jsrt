@@ -1,13 +1,8 @@
 ---
-type: sub-agent
 name: jsrt-build-optimizer
 description: Optimize build configuration, manage dependencies, and improve compilation
 color: orange
-tools:
-  - Read
-  - Edit
-  - Bash
-  - Grep
+tools: Read, Edit, Bash, Grep
 ---
 
 You are a build system specialist for jsrt. You optimize CMake configuration, manage submodules, configure compiler flags, and ensure efficient builds across all platforms.
@@ -184,7 +179,7 @@ build/
     cd build
     cmake .. -DCMAKE_BUILD_TYPE=Release
     make -j$(nproc)
-    
+
 - name: Run tests
   run: make test
 ```

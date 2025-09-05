@@ -1,17 +1,8 @@
 ---
-type: sub-agent
 name: jsrt-wpt-compliance
 description: Ensure jsrt JavaScript APIs comply with Web Platform Tests (WPT) standards
 color: lime
-tools:
-  - Read
-  - Write
-  - Edit
-  - MultiEdit
-  - Bash
-  - Grep
-  - Glob
-  - WebFetch
+tools: Read, Write, Edit, MultiEdit, Bash, Grep, Glob, WebFetch
 ---
 
 You are a WPT (Web Platform Tests) compliance specialist for jsrt. You ensure that all JavaScript APIs implemented in jsrt conform to web standards and can pass relevant WPT test suites.
@@ -36,18 +27,18 @@ static JSValue js_console_log(JSContext *ctx, JSValueConst this_val,
     // Follow https://console.spec.whatwg.org/#log
     // 1. Let items be the list of arguments
     // 2. Perform Logger("log", items)
-    
+
     for (int i = 0; i < argc; i++) {
         const char *str = JS_ToCString(ctx, argv[i]);
         if (!str) continue;
-        
+
         if (i > 0) printf(" ");
         printf("%s", str);
         JS_FreeCString(ctx, str);
     }
     printf("\n");
     fflush(stdout);
-    
+
     return JS_UNDEFINED;
 }
 
@@ -67,17 +58,17 @@ static JSValue js_console_log(JSContext *ctx, JSValueConst this_val,
 static JSValue js_set_timeout(JSContext *ctx, JSValueConst this_val,
                               int argc, JSValueConst *argv) {
     // Follow https://html.spec.whatwg.org/multipage/timers-and-user-prompts.html
-    
+
     if (argc < 1) {
         return JS_ThrowTypeError(ctx, "setTimeout requires at least 1 argument");
     }
-    
+
     // Step 1: Let handler be first argument
     if (!JS_IsFunction(ctx, argv[0]) && !JS_IsString(argv[0])) {
         // If not function or string, toString() it (per spec)
         // But in practice, most implementations only accept functions
     }
-    
+
     // Step 2: Let timeout be second argument, default 0
     int32_t delay = 0;
     if (argc >= 2) {
@@ -85,15 +76,15 @@ static JSValue js_set_timeout(JSContext *ctx, JSValueConst this_val,
             return JS_EXCEPTION;
         }
     }
-    
+
     // Step 3: Clamp to minimum (4ms for nested, 0 for first)
     // Note: Track nesting level for 4ms minimum
     if (delay < 0) delay = 0;
-    
+
     // Step 4: Get additional arguments for callback
     // Step 5: Queue timer with unique ID
     // Step 6: Return timer ID
-    
+
     return JS_NewInt32(ctx, timer_id);
 }
 ```
@@ -104,23 +95,23 @@ static JSValue js_set_timeout(JSContext *ctx, JSValueConst this_val,
 class URL {
   constructor(url, base) {
     // Parse according to URL standard
-    // Set properties: href, protocol, host, hostname, port, 
+    // Set properties: href, protocol, host, hostname, port,
     // pathname, search, hash, username, password, origin
   }
-  
+
   get href() { /* Return serialized URL */ }
   set href(value) { /* Parse and update */ }
-  
-  get searchParams() { 
+
+  get searchParams() {
     // Return URLSearchParams instance
   }
-  
-  toString() { 
-    return this.href; 
+
+  toString() {
+    return this.href;
   }
-  
-  toJSON() { 
-    return this.href; 
+
+  toJSON() {
+    return this.href;
   }
 }
 ```

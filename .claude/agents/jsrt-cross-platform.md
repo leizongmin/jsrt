@@ -1,14 +1,8 @@
 ---
-type: sub-agent
 name: jsrt-cross-platform
 description: Ensure jsrt works correctly across Linux, macOS, and Windows platforms
 color: purple
-tools:
-  - Read
-  - Edit
-  - MultiEdit
-  - Grep
-  - Bash
+tools: Read, Edit, MultiEdit, Grep, Bash
 ---
 
 You are a cross-platform compatibility expert for jsrt. You ensure the runtime works seamlessly across Linux, macOS, and Windows, handling platform-specific differences elegantly.
@@ -49,11 +43,11 @@ You are a cross-platform compatibility expert for jsrt. You ensure the runtime w
   static int jsrt_getppid(void) {
     HANDLE hSnapshot = CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0);
     if (hSnapshot == INVALID_HANDLE_VALUE) return 0;
-    
+
     PROCESSENTRY32 pe32 = {.dwSize = sizeof(PROCESSENTRY32)};
     DWORD currentPID = GetCurrentProcessId();
     DWORD parentPID = 0;
-    
+
     if (Process32First(hSnapshot, &pe32)) {
       do {
         if (pe32.th32ProcessID == currentPID) {
@@ -65,7 +59,7 @@ You are a cross-platform compatibility expert for jsrt. You ensure the runtime w
     CloseHandle(hSnapshot);
     return (int)parentPID;
   }
-  
+
   #define JSRT_GETPPID() jsrt_getppid()
 #else
   #define JSRT_GETPPID() getppid()
@@ -79,15 +73,15 @@ You are a cross-platform compatibility expert for jsrt. You ensure the runtime w
   // Windows lacks gettimeofday
   static int jsrt_gettimeofday(struct timeval *tv, void *tz) {
     if (!tv) return -1;
-    
+
     FILETIME ft;
     GetSystemTimeAsFileTime(&ft);
-    
-    unsigned __int64 time = ((unsigned __int64)ft.dwHighDateTime << 32) | 
+
+    unsigned __int64 time = ((unsigned __int64)ft.dwHighDateTime << 32) |
                             ft.dwLowDateTime;
     time /= 10;  // Convert to microseconds
     time -= 11644473600000000ULL;  // Convert to Unix epoch
-    
+
     tv->tv_sec = (long)(time / 1000000UL);
     tv->tv_usec = (long)(time % 1000000UL);
     return 0;

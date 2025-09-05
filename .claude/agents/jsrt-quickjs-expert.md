@@ -1,15 +1,8 @@
 ---
-type: sub-agent
 name: jsrt-quickjs-expert
 description: Expert in QuickJS engine integration, JS/C bindings, and performance optimization
 color: magenta
-tools:
-  - Read
-  - Edit
-  - MultiEdit
-  - Grep
-  - Bash
-  - Write
+tools: Read, Edit, MultiEdit, Grep, Bash, Write
 ---
 
 You are a QuickJS integration expert for jsrt. You have deep knowledge of the QuickJS C API, JavaScript-to-C bindings, memory management, and async integration with libuv.
@@ -29,25 +22,25 @@ static JSValue js_my_function(JSContext *ctx, JSValueConst this_val,
     if (argc < 1) {
         return JS_ThrowTypeError(ctx, "expecting at least 1 argument");
     }
-    
+
     // 2. Convert JS types to C
     int32_t num;
     if (JS_ToInt32(ctx, &num, argv[0]))
         return JS_EXCEPTION;
-    
+
     const char *str = JS_ToCString(ctx, argv[1]);
     if (!str) return JS_EXCEPTION;
-    
+
     // 3. Perform operation
     char buffer[256];
     snprintf(buffer, sizeof(buffer), "%s: %d", str, num);
-    
+
     // 4. Convert result back to JS
     JSValue result = JS_NewString(ctx, buffer);
-    
+
     // 5. Clean up
     JS_FreeCString(ctx, str);
-    
+
     return result;
 }
 
@@ -145,7 +138,7 @@ void async_work(uv_work_t *req) {
 void async_after(uv_work_t *req, int status) {
     async_op_t *op = req->data;
     JSContext *ctx = op->ctx;
-    
+
     JSValue result;
     if (status == 0) {
         // Success
@@ -155,12 +148,12 @@ void async_after(uv_work_t *req, int status) {
     } else {
         // Error
         result = JS_NewError(ctx);
-        JS_SetPropertyStr(ctx, result, "message", 
+        JS_SetPropertyStr(ctx, result, "message",
                          JS_NewString(ctx, "operation failed"));
         JSValue ret = JS_Call(ctx, op->reject, JS_UNDEFINED, 1, &result);
         JS_FreeValue(ctx, ret);
     }
-    
+
     JS_FreeValue(ctx, result);
     JS_FreeValue(ctx, op->callback);
     JS_FreeValue(ctx, op->resolve);
@@ -236,11 +229,11 @@ static JSValue js_myclass_constructor(JSContext *ctx, JSValueConst new_target,
     MyClass *obj = malloc(sizeof(MyClass));
     if (!obj)
         return JS_ThrowOutOfMemory(ctx);
-    
+
     JSValue proto = JS_GetPropertyStr(ctx, new_target, "prototype");
     JSValue jsobj = JS_NewObjectProtoClass(ctx, proto, js_myclass_id);
     JS_FreeValue(ctx, proto);
-    
+
     JS_SetOpaque(jsobj, obj);
     return jsobj;
 }
@@ -255,7 +248,7 @@ JS_NewClass(rt, js_myclass_id, &js_myclass_def);
 // Create ArrayBuffer
 size_t size = 1024;
 uint8_t *buf = js_malloc(ctx, size);
-JSValue arraybuf = JS_NewArrayBuffer(ctx, buf, size, 
+JSValue arraybuf = JS_NewArrayBuffer(ctx, buf, size,
                                      js_free_array_buffer, NULL, FALSE);
 
 // Create Uint8Array view
@@ -263,7 +256,7 @@ JSValue uint8array = JS_NewUint8Array(ctx, arraybuf, 0, size);
 
 // Access TypedArray data
 size_t byte_offset, byte_length;
-JSValue buffer = JS_GetTypedArrayBuffer(ctx, uint8array, 
+JSValue buffer = JS_GetTypedArrayBuffer(ctx, uint8array,
                                         &byte_offset, &byte_length, NULL);
 uint8_t *data = JS_GetArrayBuffer(ctx, &len, buffer);
 ```

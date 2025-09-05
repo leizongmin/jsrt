@@ -1,10 +1,8 @@
 ---
-type: sub-agent
 name: jsrt-parallel-coordinator
 description: Coordinate parallel execution with caching and optimization
 color: gold
-tools:
-  - Task
+tools: Task
 ---
 
 Intelligent parallel coordinator for jsrt. Manages concurrent agent execution with caching, predictive scheduling, and dynamic optimization.
@@ -20,7 +18,7 @@ Intelligent parallel coordinator for jsrt. Manages concurrent agent execution wi
 ## Parallel Patterns
 
 **Development**: Research + Implementation + Validation in parallel
-**Testing**: Run test-runner + memory-debugger simultaneously  
+**Testing**: Run test-runner + memory-debugger simultaneously
 **Debugging**: Launch memory + platform + quickjs experts together
 **Release**: Parallel validation → Sequential build
 
@@ -59,14 +57,14 @@ class TaskScheduler {
       variance: history.stdDev
     };
   }
-  
+
   // Dynamic priority adjustment
   adjustPriority(task) {
     if (task.blocking > 2) task.priority++;
     if (task.waitTime > threshold) task.priority++;
     if (task.critical) task.priority = 'highest';
   }
-  
+
   // Smart agent selection
   selectBestAgent(task) {
     const candidates = this.getCapableAgents(task);
@@ -86,7 +84,7 @@ const cache = {
   generateKey(agent, task, inputs) {
     return crypto.hash(`${agent}:${task}:${JSON.stringify(inputs)}`);
   },
-  
+
   // Check cache before execution
   checkCache(key) {
     const cached = this.store.get(key);
@@ -95,7 +93,7 @@ const cache = {
     }
     return { hit: false };
   },
-  
+
   // Staleness detection
   isStale(cached) {
     // Check if dependencies changed
@@ -113,18 +111,18 @@ class DynamicOptimizer {
   // Real-time parallelism adjustment
   adjustParallelism() {
     const metrics = this.getSystemMetrics();
-    
+
     if (metrics.cpu > 90) this.reduceParallelism();
     if (metrics.memory > 85) this.reduceMemotyIntensive();
     if (metrics.io > 80) this.batchIOOperations();
     if (metrics.allLow()) this.increaseParallelism();
   }
-  
+
   // Bottleneck detection
   detectBottlenecks() {
     const tasks = this.getRunningTasks();
     const bottlenecks = [];
-    
+
     // Find tasks blocking others
     tasks.forEach(task => {
       if (task.blockingCount > 2) {
@@ -135,10 +133,10 @@ class DynamicOptimizer {
         });
       }
     });
-    
+
     return bottlenecks;
   }
-  
+
   // Predictive resource allocation
   allocateResources(upcomingTasks) {
     const predictions = upcomingTasks.map(t => this.predictResources(t));
@@ -154,7 +152,7 @@ class DependencyGraph {
     this.nodes = new Map();  // Tasks
     this.edges = new Map();  // Dependencies
   }
-  
+
   // Build execution graph
   buildGraph(tasks) {
     // Create DAG from task dependencies
@@ -164,29 +162,29 @@ class DependencyGraph {
         this.addEdge(dep, task.id);
       });
     });
-    
+
     // Detect cycles
     if (this.hasCycle()) {
       throw new Error('Circular dependency detected');
     }
-    
+
     return this;
   }
-  
+
   // Find critical path
   findCriticalPath() {
     // Longest path through the graph
     return this.topologicalSort()
       .map(node => this.calculatePath(node))
-      .reduce((max, path) => 
+      .reduce((max, path) =>
         path.duration > max.duration ? path : max
       );
   }
-  
+
   // Optimize execution order
   optimizeOrder() {
     const levels = this.calculateLevels();
-    return levels.map(level => 
+    return levels.map(level =>
       level.sort((a, b) => b.priority - a.priority)
     );
   }
@@ -205,7 +203,7 @@ class ExecutionMonitor {
     efficiency: 0,
     cacheHitRate: 0
   };
-  
+
   // Performance tracking
   trackPerformance(agent, task, duration) {
     this.history.add({
@@ -215,11 +213,11 @@ class ExecutionMonitor {
       timestamp: Date.now(),
       resources: this.captureResources()
     });
-    
+
     // Update predictions
     this.updatePredictionModel(agent, task, duration);
   }
-  
+
   // Anomaly detection
   detectAnomalies() {
     const recent = this.history.recent(100);
@@ -229,7 +227,7 @@ class ExecutionMonitor {
       return deviation > 0.5;  // 50% deviation
     });
   }
-  
+
   // Generate optimization report
   generateReport() {
     return {

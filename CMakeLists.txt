@@ -111,13 +111,20 @@ set(WAMR_BUILD_BULK_MEMORY 1)     # Enable bulk memory operations
 set(WAMR_BUILD_MEMORY64 0)        # Disable 64-bit memory for simplicity
 set(WAMR_BUILD_MULTI_MODULE 0)    # Disable multi-module for simplicity
 set(WAMR_BUILD_SHARED_MEMORY 0)   # Disable shared memory for now
+set(WAMR_BUILD_SIMD 0)            # Disable SIMD to ensure correct assembly file selection
 
-# Windows MinGW specific configuration for WAMR
-if(WIN32 AND NOT MSVC)
-    # For MinGW builds, disable hardware bound checking to avoid MSVC-specific __try/__except
-    # MinGW doesn't support structured exception handling, only MSVC does
-    set(WAMR_DISABLE_HW_BOUND_CHECK 1)
-    message(STATUS "MinGW detected: Disabling WAMR hardware bound checking to avoid MSVC-specific SEH")
+# Windows specific configuration for WAMR
+if(WIN32)
+    # Explicitly set WAMR platform for Windows to ensure correct assembly file selection
+    set(WAMR_BUILD_PLATFORM "windows")
+    message(STATUS "Windows detected: Setting WAMR_BUILD_PLATFORM to 'windows'")
+    
+    if(NOT MSVC)
+        # For MinGW builds, disable hardware bound checking to avoid MSVC-specific __try/__except
+        # MinGW doesn't support structured exception handling, only MSVC does
+        set(WAMR_DISABLE_HW_BOUND_CHECK 1)
+        message(STATUS "MinGW detected: Disabling WAMR hardware bound checking to avoid MSVC-specific SEH")
+    endif()
 endif()
 
 add_subdirectory(deps/wamr)

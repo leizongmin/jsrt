@@ -116,13 +116,15 @@ set(WAMR_BUILD_SIMD 0)            # Disable SIMD to ensure correct assembly file
 # Windows specific configuration for WAMR
 if(WIN32)
     # Explicitly set WAMR platform for Windows to ensure correct assembly file selection
-    set(WAMR_BUILD_PLATFORM "windows")
+    # Use CACHE FORCE to ensure this variable is available in subdirectories
+    set(WAMR_BUILD_PLATFORM "windows" CACHE STRING "WAMR build platform" FORCE)
     message(STATUS "Windows detected: Setting WAMR_BUILD_PLATFORM to 'windows'")
     
     # Ensure MINGW variable is set for MinGW builds
     # WAMR relies on this variable to select the correct assembly files
-    if(NOT MSVC AND CMAKE_C_COMPILER_ID STREQUAL "GNU")
-        set(MINGW TRUE)
+    # Use CACHE FORCE to ensure this propagates to subdirectories
+    if(NOT MSVC AND (CMAKE_C_COMPILER_ID STREQUAL "GNU" OR CMAKE_C_COMPILER_ID MATCHES ".*[Mm]ingw.*"))
+        set(MINGW TRUE CACHE BOOL "MinGW build detected" FORCE)
         message(STATUS "MinGW detected: Setting MINGW variable for WAMR assembly file selection")
     endif()
     
@@ -132,9 +134,14 @@ if(WIN32)
         set(WAMR_DISABLE_HW_BOUND_CHECK 1)
         message(STATUS "MinGW detected: Disabling WAMR hardware bound checking to avoid MSVC-specific SEH")
     endif()
+
+    add_subdirectory(deps/wamr)
 endif()
 
-add_subdirectory(deps/wamr)
+# For non-Windows platforms, add WAMR with default settings
+if(NOT WIN32)
+    add_subdirectory(deps/wamr)
+endif()
 
 # Fix WAMR link libraries for Windows
 # WAMR unconditionally links -ldl which doesn't exist on Windows

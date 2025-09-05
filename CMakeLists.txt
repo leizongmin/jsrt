@@ -119,6 +119,13 @@ if(WIN32)
     set(WAMR_BUILD_PLATFORM "windows")
     message(STATUS "Windows detected: Setting WAMR_BUILD_PLATFORM to 'windows'")
     
+    # Ensure MINGW variable is set for MinGW builds
+    # WAMR relies on this variable to select the correct assembly files
+    if(NOT MSVC AND CMAKE_C_COMPILER_ID STREQUAL "GNU")
+        set(MINGW TRUE)
+        message(STATUS "MinGW detected: Setting MINGW variable for WAMR assembly file selection")
+    endif()
+    
     if(NOT MSVC)
         # For MinGW builds, disable hardware bound checking to avoid MSVC-specific __try/__except
         # MinGW doesn't support structured exception handling, only MSVC does

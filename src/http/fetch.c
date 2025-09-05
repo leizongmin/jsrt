@@ -4,9 +4,38 @@
 #include <stdlib.h>
 #include <string.h>
 #include <uv.h>
+#include "../std/crypto.h"
 #include "../util/debug.h"
 #include "../util/jsutils.h"
 #include "parser.h"
+
+// Platform-specific includes for OpenSSL
+#ifdef _WIN32
+#include <windows.h>
+#else
+#include <dlfcn.h>
+#endif
+
+// OpenSSL function pointers for SSL/TLS support
+typedef struct {
+  void* (*SSL_library_init)(void);
+  void (*SSL_load_error_strings)(void);
+  void* (*TLS_client_method)(void);
+  void* (*SSL_CTX_new)(const void* method);
+  void (*SSL_CTX_free)(void* ctx);
+  void* (*SSL_new)(void* ctx);
+  void (*SSL_free)(void* ssl);
+  int (*SSL_set_fd)(void* ssl, int fd);
+  int (*SSL_connect)(void* ssl);
+  int (*SSL_read)(void* ssl, void* buf, int num);
+  int (*SSL_write)(void* ssl, const void* buf, int num);
+  int (*SSL_shutdown)(void* ssl);
+  int (*SSL_get_error)(const void* ssl, int ret);
+  void (*SSL_CTX_set_verify)(void* ctx, int mode, void* verify_callback);
+} ssl_functions_t;
+
+static ssl_functions_t ssl_funcs;
+static int ssl_initialized = 0;
 
 typedef struct jsrt_header_entry {
   char* name;
@@ -27,6 +56,7 @@ typedef struct {
   char* method;
   char* body;
   size_t body_len;
+  int is_https;
 
   jsrt_header_entry_t* headers;
 
@@ -43,16 +73,33 @@ typedef struct {
   JSValue reject_func;
 
   int connection_closed;
+
+  // SSL/TLS support
+  void* ssl;
+  void* ssl_ctx;
 } jsrt_fetch_context_t;
 
-static int parse_url(const char* url, char** host, int* port, char** path) {
-  if (!url || strncmp(url, "http://", 7) != 0) {
+static int parse_url(const char* url, char** host, int* port, char** path, int* is_https) {
+  if (!url) {
     return -1;
   }
 
-  const char* start = url + 7;
-  const char* host_end = start;
+  bool https = false;
+  const char* start = NULL;
 
+  if (strncmp(url, "https://", 8) == 0) {
+    https = true;
+    start = url + 8;
+  } else if (strncmp(url, "http://", 7) == 0) {
+    https = false;
+    start = url + 7;
+  } else {
+    return -1;  // Only support HTTP/HTTPS
+  }
+
+  *is_https = https ? 1 : 0;
+
+  const char* host_end = start;
   while (*host_end && *host_end != ':' && *host_end != '/') {
     host_end++;
   }
@@ -65,7 +112,8 @@ static int parse_url(const char* url, char** host, int* port, char** path) {
   memcpy(*host, start, host_len);
   (*host)[host_len] = '\0';
 
-  *port = 80;
+  // Set default port based on protocol
+  *port = https ? 443 : 80;
 
   if (*host_end == ':') {
     *port = atoi(host_end + 1);
@@ -86,6 +134,63 @@ static int parse_url(const char* url, char** host, int* port, char** path) {
   }
 
   return 0;
+}
+
+// Load SSL functions from OpenSSL
+static int load_ssl_functions(void) {
+  if (ssl_initialized) {
+    return ssl_funcs.SSL_library_init != NULL;
+  }
+
+  if (!openssl_handle) {
+    JSRT_Debug("JSRT_Fetch: OpenSSL handle not available");
+    return 0;
+  }
+
+  // Load SSL functions using the same pattern as crypto modules
+#ifdef _WIN32
+  ssl_funcs.SSL_library_init = (void* (*)(void))GetProcAddress(openssl_handle, "SSL_library_init");
+  ssl_funcs.SSL_load_error_strings = (void (*)(void))GetProcAddress(openssl_handle, "SSL_load_error_strings");
+  ssl_funcs.TLS_client_method = (void* (*)(void))GetProcAddress(openssl_handle, "TLS_client_method");
+  ssl_funcs.SSL_CTX_new = (void* (*)(const void*))GetProcAddress(openssl_handle, "SSL_CTX_new");
+  ssl_funcs.SSL_CTX_free = (void (*)(void*))GetProcAddress(openssl_handle, "SSL_CTX_free");
+  ssl_funcs.SSL_new = (void* (*)(void*))GetProcAddress(openssl_handle, "SSL_new");
+  ssl_funcs.SSL_free = (void (*)(void*))GetProcAddress(openssl_handle, "SSL_free");
+  ssl_funcs.SSL_set_fd = (int (*)(void*, int))GetProcAddress(openssl_handle, "SSL_set_fd");
+  ssl_funcs.SSL_connect = (int (*)(void*))GetProcAddress(openssl_handle, "SSL_connect");
+  ssl_funcs.SSL_read = (int (*)(void*, void*, int))GetProcAddress(openssl_handle, "SSL_read");
+  ssl_funcs.SSL_write = (int (*)(void*, const void*, int))GetProcAddress(openssl_handle, "SSL_write");
+  ssl_funcs.SSL_shutdown = (int (*)(void*))GetProcAddress(openssl_handle, "SSL_shutdown");
+  ssl_funcs.SSL_get_error = (int (*)(const void*, int))GetProcAddress(openssl_handle, "SSL_get_error");
+  ssl_funcs.SSL_CTX_set_verify = (void (*)(void*, int, void*))GetProcAddress(openssl_handle, "SSL_CTX_set_verify");
+#else
+  ssl_funcs.SSL_library_init = (void* (*)(void))dlsym(openssl_handle, "SSL_library_init");
+  ssl_funcs.SSL_load_error_strings = (void (*)(void))dlsym(openssl_handle, "SSL_load_error_strings");
+  ssl_funcs.TLS_client_method = (void* (*)(void))dlsym(openssl_handle, "TLS_client_method");
+  ssl_funcs.SSL_CTX_new = (void* (*)(const void*))dlsym(openssl_handle, "SSL_CTX_new");
+  ssl_funcs.SSL_CTX_free = (void (*)(void*))dlsym(openssl_handle, "SSL_CTX_free");
+  ssl_funcs.SSL_new = (void* (*)(void*))dlsym(openssl_handle, "SSL_new");
+  ssl_funcs.SSL_free = (void (*)(void*))dlsym(openssl_handle, "SSL_free");
+  ssl_funcs.SSL_set_fd = (int (*)(void*, int))dlsym(openssl_handle, "SSL_set_fd");
+  ssl_funcs.SSL_connect = (int (*)(void*))dlsym(openssl_handle, "SSL_connect");
+  ssl_funcs.SSL_read = (int (*)(void*, void*, int))dlsym(openssl_handle, "SSL_read");
+  ssl_funcs.SSL_write = (int (*)(void*, const void*, int))dlsym(openssl_handle, "SSL_write");
+  ssl_funcs.SSL_shutdown = (int (*)(void*))dlsym(openssl_handle, "SSL_shutdown");
+  ssl_funcs.SSL_get_error = (int (*)(const void*, int))dlsym(openssl_handle, "SSL_get_error");
+  ssl_funcs.SSL_CTX_set_verify = (void (*)(void*, int, void*))dlsym(openssl_handle, "SSL_CTX_set_verify");
+#endif
+
+  ssl_initialized = 1;
+
+  // Check if we have the essential functions
+  if (!ssl_funcs.TLS_client_method || !ssl_funcs.SSL_CTX_new || !ssl_funcs.SSL_new || !ssl_funcs.SSL_connect ||
+      !ssl_funcs.SSL_read || !ssl_funcs.SSL_write) {
+    JSRT_Debug("JSRT_Fetch: Failed to load essential SSL functions");
+    return 0;
+  }
+
+  JSRT_Debug("JSRT_Fetch: SSL functions loaded successfully");
+  return 1;
 }
 
 static char* build_http_request(const char* method, const char* path, const char* host, int port, const char* body,
@@ -160,6 +265,14 @@ static void free_header_list(jsrt_header_entry_t* headers) {
 static void fetch_context_free(jsrt_fetch_context_t* ctx) {
   if (!ctx)
     return;
+
+  // Clean up SSL resources
+  if (ctx->ssl && ssl_funcs.SSL_free) {
+    ssl_funcs.SSL_free(ctx->ssl);
+  }
+  if (ctx->ssl_ctx && ssl_funcs.SSL_CTX_free) {
+    ssl_funcs.SSL_CTX_free(ctx->ssl_ctx);
+  }
 
   free(ctx->host);
   free(ctx->path);
@@ -305,6 +418,96 @@ static void on_connect(uv_connect_t* req, int status) {
     JS_FreeValue(ctx->rt->ctx, error);
     fetch_context_free(ctx);
     return;
+  }
+
+  // Handle SSL/TLS for HTTPS connections
+  if (ctx->is_https) {
+    if (!load_ssl_functions()) {
+      JSValue error = JS_NewError(ctx->rt->ctx);
+      JS_SetPropertyStr(ctx->rt->ctx, error, "message", JS_NewString(ctx->rt->ctx, "SSL/TLS functions not available"));
+      JS_Call(ctx->rt->ctx, ctx->reject_func, JS_UNDEFINED, 1, &error);
+      JS_FreeValue(ctx->rt->ctx, error);
+      fetch_context_free(ctx);
+      return;
+    }
+
+    // Initialize SSL context
+    const void* method = ssl_funcs.TLS_client_method();
+    if (!method) {
+      JSValue error = JS_NewError(ctx->rt->ctx);
+      JS_SetPropertyStr(ctx->rt->ctx, error, "message", JS_NewString(ctx->rt->ctx, "Failed to get TLS method"));
+      JS_Call(ctx->rt->ctx, ctx->reject_func, JS_UNDEFINED, 1, &error);
+      JS_FreeValue(ctx->rt->ctx, error);
+      fetch_context_free(ctx);
+      return;
+    }
+
+    ctx->ssl_ctx = ssl_funcs.SSL_CTX_new(method);
+    if (!ctx->ssl_ctx) {
+      JSValue error = JS_NewError(ctx->rt->ctx);
+      JS_SetPropertyStr(ctx->rt->ctx, error, "message", JS_NewString(ctx->rt->ctx, "Failed to create SSL context"));
+      JS_Call(ctx->rt->ctx, ctx->reject_func, JS_UNDEFINED, 1, &error);
+      JS_FreeValue(ctx->rt->ctx, error);
+      fetch_context_free(ctx);
+      return;
+    }
+
+    // Set SSL context to not verify certificates (for simplicity)
+    if (ssl_funcs.SSL_CTX_set_verify) {
+      ssl_funcs.SSL_CTX_set_verify(ctx->ssl_ctx, 0, NULL);  // SSL_VERIFY_NONE = 0
+    }
+
+    // Create SSL object
+    ctx->ssl = ssl_funcs.SSL_new(ctx->ssl_ctx);
+    if (!ctx->ssl) {
+      JSValue error = JS_NewError(ctx->rt->ctx);
+      JS_SetPropertyStr(ctx->rt->ctx, error, "message", JS_NewString(ctx->rt->ctx, "Failed to create SSL object"));
+      JS_Call(ctx->rt->ctx, ctx->reject_func, JS_UNDEFINED, 1, &error);
+      JS_FreeValue(ctx->rt->ctx, error);
+      fetch_context_free(ctx);
+      return;
+    }
+
+    // Get the file descriptor from the TCP handle
+    int fd;
+    int ret = uv_fileno((uv_handle_t*)&ctx->tcp_handle, (uv_os_fd_t*)&fd);
+    if (ret != 0) {
+      JSValue error = JS_NewError(ctx->rt->ctx);
+      char error_msg[256];
+      snprintf(error_msg, sizeof(error_msg), "Failed to get socket descriptor: %s", uv_strerror(ret));
+      JS_SetPropertyStr(ctx->rt->ctx, error, "message", JS_NewString(ctx->rt->ctx, error_msg));
+      JS_Call(ctx->rt->ctx, ctx->reject_func, JS_UNDEFINED, 1, &error);
+      JS_FreeValue(ctx->rt->ctx, error);
+      fetch_context_free(ctx);
+      return;
+    }
+
+    // Set the socket file descriptor for SSL
+    if (ssl_funcs.SSL_set_fd(ctx->ssl, fd) != 1) {
+      JSValue error = JS_NewError(ctx->rt->ctx);
+      JS_SetPropertyStr(ctx->rt->ctx, error, "message",
+                        JS_NewString(ctx->rt->ctx, "Failed to set SSL file descriptor"));
+      JS_Call(ctx->rt->ctx, ctx->reject_func, JS_UNDEFINED, 1, &error);
+      JS_FreeValue(ctx->rt->ctx, error);
+      fetch_context_free(ctx);
+      return;
+    }
+
+    // Perform SSL handshake
+    int ssl_ret = ssl_funcs.SSL_connect(ctx->ssl);
+    if (ssl_ret <= 0) {
+      JSValue error = JS_NewError(ctx->rt->ctx);
+      char error_msg[256];
+      int ssl_error = ssl_funcs.SSL_get_error ? ssl_funcs.SSL_get_error(ctx->ssl, ssl_ret) : -1;
+      snprintf(error_msg, sizeof(error_msg), "SSL handshake failed (error: %d)", ssl_error);
+      JS_SetPropertyStr(ctx->rt->ctx, error, "message", JS_NewString(ctx->rt->ctx, error_msg));
+      JS_Call(ctx->rt->ctx, ctx->reject_func, JS_UNDEFINED, 1, &error);
+      JS_FreeValue(ctx->rt->ctx, error);
+      fetch_context_free(ctx);
+      return;
+    }
+
+    JSRT_Debug("JSRT_Fetch: SSL handshake successful for %s:%d", ctx->host, ctx->port);
   }
 
   int ret = uv_read_start((uv_stream_t*)&ctx->tcp_handle, alloc_buffer, on_read);
@@ -701,9 +904,23 @@ JSValue jsrt_fetch(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst
   fetch_ctx->reject_func = JS_DupValue(ctx, resolving_funcs[1]);
   fetch_ctx->method = strdup("GET");
 
-  if (parse_url(url, &fetch_ctx->host, &fetch_ctx->port, &fetch_ctx->path) != 0) {
+  if (parse_url(url, &fetch_ctx->host, &fetch_ctx->port, &fetch_ctx->path, &fetch_ctx->is_https) != 0) {
     JSValue error = JS_NewError(ctx);
     JS_SetPropertyStr(ctx, error, "message", JS_NewString(ctx, "Invalid URL"));
+    JS_Call(ctx, fetch_ctx->reject_func, JS_UNDEFINED, 1, &error);
+    JS_FreeValue(ctx, error);
+    fetch_context_free(fetch_ctx);
+    goto cleanup;
+  }
+
+  // Check for HTTPS support if needed
+  if (fetch_ctx->is_https && !openssl_handle) {
+    JSValue error = JS_NewError(ctx);
+    JS_SetPropertyStr(ctx, error, "message",
+                      JS_NewString(ctx,
+                                   "HTTPS not supported: OpenSSL library not found. "
+                                   "Please install OpenSSL to use HTTPS URLs. "
+                                   "当前不支持 HTTPS：未找到 OpenSSL 库。请安装 OpenSSL 以使用 HTTPS URL。"));
     JS_Call(ctx, fetch_ctx->reject_func, JS_UNDEFINED, 1, &error);
     JS_FreeValue(ctx, error);
     fetch_context_free(fetch_ctx);

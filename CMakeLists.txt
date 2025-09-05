@@ -14,6 +14,9 @@ endif()
 if(NOT EXISTS "${CMAKE_SOURCE_DIR}/deps/llhttp/package.json")
     message(FATAL_ERROR "Git submodules are not initialized. Please run: git submodule update --init --recursive")
 endif()
+if(NOT EXISTS "${CMAKE_SOURCE_DIR}/deps/wamr/CMakeLists.txt")
+    message(FATAL_ERROR "Git submodules are not initialized. Please run: git submodule update --init --recursive")
+endif()
 
 # optimization flags
 if(CMAKE_BUILD_TYPE STREQUAL "Release")
@@ -56,7 +59,7 @@ else()
     set(FFI_LIBRARIES "")
 endif()
 
-include_directories(src deps/quickjs deps/libuv/include deps/libuv/src deps/readline deps/llhttp/build)
+include_directories(src deps/quickjs deps/libuv/include deps/libuv/src deps/readline deps/llhttp/build deps/wamr/core/iwasm/include)
 
 # Read jsrt version from VERSION file
 file(STRINGS VERSION JSRT_VERSION)
@@ -92,7 +95,110 @@ if(BUILD_QJS)
 endif()
 
 # build libuv
+# Force libuv to use Windows build on MinGW to avoid Cygwin path conflicts
+if(WIN32 AND MINGW)
+    # Override system detection variables before libuv processes them
+    set(CMAKE_SYSTEM_NAME "Windows" CACHE STRING "Force Windows system name for libuv" FORCE)
+    set(WIN32 TRUE CACHE BOOL "Force WIN32 for libuv" FORCE)
+    set(MSYS FALSE CACHE BOOL "Force MSYS to FALSE for libuv" FORCE)
+    set(CYGWIN FALSE CACHE BOOL "Force CYGWIN to FALSE for libuv" FORCE)
+    
+    # Also unset any MSYS detection that might have happened
+    unset(MSYS CACHE)
+    unset(CYGWIN CACHE)
+    
+    # Force libuv to treat this as pure Windows build
+    set(CMAKE_HOST_SYSTEM_NAME "Windows" CACHE STRING "Override host system for libuv" FORCE)
+    
+    message(STATUS "MinGW detected: Forcing libuv to use Windows build path instead of Cygwin/MSYS")
+endif()
+
+# Override libuv's platform detection by setting the variables it checks
+if(WIN32)
+    # These variables are used by libuv's CMakeLists.txt
+    set(CMAKE_SYSTEM_NAME "Windows")
+    set(WIN32 TRUE)
+    unset(MSYS)
+    unset(CYGWIN)
+    
+    # Additional forced variables for libuv platform detection
+    set(__MSYS__ FALSE CACHE BOOL "Force MSYS detection off" FORCE)
+    set(__CYGWIN__ FALSE CACHE BOOL "Force CYGWIN detection off" FORCE)
+    set(__MINGW32__ TRUE CACHE BOOL "Force MinGW32 detection on" FORCE)
+    set(__MINGW64__ TRUE CACHE BOOL "Force MinGW64 detection on" FORCE)
+endif()
+
 add_subdirectory(deps/libuv)
+
+# build WAMR
+# Configure WAMR for minimal interpreter-only build
+# Let WAMR auto-detect platform (will use CMAKE_HOST_SYSTEM_NAME)
+set(WAMR_BUILD_INTERP 1)           # Enable interpreter
+set(WAMR_BUILD_AOT 0)              # Disable AOT for minimal build
+set(WAMR_BUILD_JIT 0)              # Disable JIT for minimal build
+set(WAMR_BUILD_FAST_JIT 0)         # Disable Fast JIT
+set(WAMR_BUILD_LIBC_BUILTIN 1)    # Use built-in libc subset
+set(WAMR_BUILD_LIBC_WASI 0)       # Disable WASI initially
+set(WAMR_BUILD_MINI_LOADER 1)     # Enable mini loader for smaller size
+set(WAMR_BUILD_BULK_MEMORY 1)     # Enable bulk memory operations
+set(WAMR_BUILD_MEMORY64 0)        # Disable 64-bit memory for simplicity
+set(WAMR_BUILD_MULTI_MODULE 0)    # Disable multi-module for simplicity
+set(WAMR_BUILD_SHARED_MEMORY 0)   # Disable shared memory for now
+set(WAMR_BUILD_SIMD 0)            # Disable SIMD to ensure correct assembly file selection
+set(WAMR_BUILD_INVOKE_NATIVE_GENERAL 1)  # Use C implementation instead of assembly for MinGW compatibility
+
+# Windows specific configuration for WAMR
+if(WIN32)
+    # Explicitly set WAMR platform for Windows to ensure correct assembly file selection
+    # Use CACHE FORCE to ensure this variable is available in subdirectories
+    set(WAMR_BUILD_PLATFORM "windows" CACHE STRING "WAMR build platform" FORCE)
+    message(STATUS "Windows detected: Setting WAMR_BUILD_PLATFORM to 'windows'")
+    
+    # Explicitly set WAMR target architecture for correct invokeNative selection
+    if(CMAKE_SIZEOF_VOID_P EQUAL 8)
+        set(WAMR_BUILD_TARGET "X86_64" CACHE STRING "WAMR build target" FORCE)
+        message(STATUS "64-bit Windows: Setting WAMR_BUILD_TARGET to 'X86_64'")
+    elseif(CMAKE_SIZEOF_VOID_P EQUAL 4)
+        set(WAMR_BUILD_TARGET "X86_32" CACHE STRING "WAMR build target" FORCE)
+        message(STATUS "32-bit Windows: Setting WAMR_BUILD_TARGET to 'X86_32'")
+    endif()
+    
+    # Ensure MINGW variable is set for MinGW builds
+    # WAMR relies on this variable to select the correct assembly files
+    # Use CACHE FORCE to ensure this propagates to subdirectories
+    if(NOT MSVC AND (CMAKE_C_COMPILER_ID STREQUAL "GNU" OR CMAKE_C_COMPILER_ID MATCHES ".*[Mm]ingw.*"))
+        set(MINGW TRUE CACHE BOOL "MinGW build detected" FORCE)
+        message(STATUS "MinGW detected: Setting MINGW variable for WAMR assembly file selection")
+    endif()
+    
+    if(NOT MSVC)
+        # For MinGW builds, disable hardware bound checking to avoid MSVC-specific __try/__except
+        # MinGW doesn't support structured exception handling, only MSVC does
+        set(WAMR_DISABLE_HW_BOUND_CHECK 1)
+        message(STATUS "MinGW detected: Disabling WAMR hardware bound checking to avoid MSVC-specific SEH")
+    endif()
+
+    add_subdirectory(deps/wamr)
+endif()
+
+# For non-Windows platforms, add WAMR with default settings
+if(NOT WIN32)
+    add_subdirectory(deps/wamr)
+endif()
+
+# Fix WAMR link libraries for Windows
+# WAMR unconditionally links -ldl which doesn't exist on Windows
+if(WIN32)
+    # Get current link libraries from vmlib target
+    get_target_property(WAMR_LINK_LIBS vmlib INTERFACE_LINK_LIBRARIES)
+    if(WAMR_LINK_LIBS)
+        # Remove -ldl from the list
+        list(REMOVE_ITEM WAMR_LINK_LIBS "-ldl")
+        # Set the cleaned link libraries back
+        set_target_properties(vmlib PROPERTIES INTERFACE_LINK_LIBRARIES "${WAMR_LINK_LIBS}")
+    endif()
+    message(STATUS "Windows detected: Removed -ldl from WAMR link libraries")
+endif()
 
 # build llhttp (minimal implementation)
 # Check if llhttp generated files exist, if not, build them
@@ -370,10 +476,12 @@ endif()
 file(GLOB_RECURSE JSRT_STD_FILES "src/std/*.c")
 file(GLOB_RECURSE JSRT_UTIL_FILES "src/util/*.c")
 file(GLOB_RECURSE JSRT_HTTP_FILES "src/http/*.c")
+file(GLOB_RECURSE JSRT_WASM_FILES "src/wasm/*.c")
 set(JSRT_LIB_FILES
     ${JSRT_STD_FILES}
     ${JSRT_UTIL_FILES}
     ${JSRT_HTTP_FILES}
+    ${JSRT_WASM_FILES}
     src/jsrt.c
     src/repl.c
     src/runtime.c)
@@ -383,6 +491,7 @@ set(JSRT_LINK_LIBS
     uv_a
     llhttp
     readline
+    vmlib
     ${JSRT_PLATFORM_LIBS}
     ${FFI_LIBRARIES})
 add_library(jsrtcore STATIC ${JSRT_LIB_FILES})

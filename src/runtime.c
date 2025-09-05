@@ -98,24 +98,62 @@ void JSRT_RuntimeFree(JSRT_Runtime* rt) {
   }
   free(rt->uv_loop);
 
+  // Set the runtime to allow blocking for synchronous cleanup
+  JS_SetCanBlock(rt->rt, true);
+
+  // Free the global object first, before any module cleanups
+  JSRT_RuntimeFreeValue(rt, rt->global);
+  rt->global = JS_UNDEFINED;
+
+  // Run initial GC after freeing global
+  JS_RunGC(rt->rt);
+
   JSRT_RuntimeFreeDisposeValues(rt);
   JSRT_RuntimeFreeExceptionValues(rt);
+
+  // Cleanup FFI module first to free the static ffi_functions_map
+  JSRT_RuntimeCleanupStdFFI(rt->ctx);
+
+  // Cleanup WebAssembly module to cleanup WAMR runtime
+  JSRT_RuntimeCleanupStdWebAssembly(rt->ctx);
 
   // Cleanup module system
   JSRT_StdModuleCleanup(rt->ctx);
 
-  // Cleanup FFI module
-  JSRT_RuntimeCleanupStdFFI(rt->ctx);
+  // Execute pending jobs and run GC thoroughly
+  JSContext* ctx1;
+  for (int cleanup_round = 0; cleanup_round < 10; cleanup_round++) {
+    // Execute all pending jobs
+    int job_count = 0;
+    while (JS_ExecutePendingJob(rt->rt, &ctx1) > 0) {
+      job_count++;
+      if (job_count > 100) break; // Prevent infinite loop
+    }
+    
+    // Run garbage collection multiple times
+    for (int gc_pass = 0; gc_pass < 3; gc_pass++) {
+      JS_RunGC(rt->rt);
+    }
+    
+    // If no jobs were executed in this round, we're likely done
+    if (job_count == 0) {
+      break;
+    }
+  }
 
-  JSRT_RuntimeFreeValue(rt, rt->global);
-  rt->global = JS_UNDEFINED;
+  // Final aggressive GC passes
+  for (int final_gc = 0; final_gc < 5; final_gc++) {
+    JS_RunGC(rt->rt);
+  }
 
-  JS_RunGC(rt->rt);
-
+  // Free the context
   JS_FreeContext(rt->ctx);
   rt->ctx = NULL;
+  
+  // Free the runtime
   JS_FreeRuntime(rt->rt);
   rt->rt = NULL;
+  
   free(rt);
 }
 

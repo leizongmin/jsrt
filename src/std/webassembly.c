@@ -206,3 +206,9 @@ void JSRT_RuntimeSetupStdWebAssembly(JSRT_Runtime* rt) {
 
   JSRT_Debug("WebAssembly global object setup completed");
 }
+
+void JSRT_RuntimeCleanupStdWebAssembly(JSContext* ctx) {
+  JSRT_Debug("Cleaning up WebAssembly module");
+  jsrt_wasm_cleanup();
+  JSRT_Debug("WebAssembly module cleanup completed");
+}

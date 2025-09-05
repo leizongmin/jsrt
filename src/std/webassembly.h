@@ -4,5 +4,6 @@
 #include "../runtime.h"
 
 void JSRT_RuntimeSetupStdWebAssembly(JSRT_Runtime* rt);
+void JSRT_RuntimeCleanupStdWebAssembly(JSContext* ctx);
 
 #endif

@@ -168,13 +168,21 @@ class JSRTTestRunner:
     
     def load_resource_file(self, resource_path: str, test_dir: Path) -> str:
         """Load a WPT resource file."""
-        # Resource paths in META directives are relative to the test directory
-        # First try relative to test directory
-        full_path = test_dir / resource_path
+        # Handle absolute paths from WPT root (starting with /)
+        if resource_path.startswith('/'):
+            full_path = self.wpt_path / resource_path[1:]  # Remove leading /
+        else:
+            # Resource paths in META directives are relative to the test directory
+            full_path = test_dir / resource_path
         
-        # If not found, try relative to WPT root (some tests may use absolute paths from WPT root)
+        # If not found, try the other interpretation
         if not full_path.exists():
-            full_path = self.wpt_path / resource_path
+            if resource_path.startswith('/'):
+                # Try relative to test directory  
+                full_path = test_dir / resource_path[1:]
+            else:
+                # Try relative to WPT root
+                full_path = self.wpt_path / resource_path
             
         if full_path.exists():
             try:
@@ -211,12 +219,54 @@ class JSRTTestRunner:
             resource_content = self.load_resource_file(script_path, test_path.parent)
             resource_scripts.append(f"// === Resource: {script_path} ===\n{resource_content}\n")
         
+        # Handle special cases like URL tests that use fetch() for data
+        special_setup = ""
+        if test_path.name in ['url-constructor.any.js', 'url-origin.any.js']:
+            # Load URL test data files
+            try:
+                urltestdata_path = test_path.parent / 'resources' / 'urltestdata.json'
+                urljs_data_path = test_path.parent / 'resources' / 'urltestdata-javascript-only.json'
+                
+                if urltestdata_path.exists() and urljs_data_path.exists():
+                    # Read as binary first to handle encoding issues
+                    with open(urltestdata_path, 'rb') as f:
+                        urltestdata_bytes = f.read()
+                        urltestdata = urltestdata_bytes.decode('utf-8', errors='replace')
+                    with open(urljs_data_path, 'rb') as f:
+                        urljs_data_bytes = f.read()
+                        urljs_data = urljs_data_bytes.decode('utf-8', errors='replace')
+                    
+                    special_setup = f'''
+// Pre-loaded URL test data
+const urlTestDataMain = {urltestdata};
+const urlTestDataJS = {urljs_data};
+
+// Override fetch for URL tests
+const originalFetch = globalThis.fetch;
+globalThis.fetch = function(url) {{
+    if (url === 'resources/urltestdata.json') {{
+        return Promise.resolve({{
+            json: () => Promise.resolve(urlTestDataMain)
+        }});
+    }}
+    if (url === 'resources/urltestdata-javascript-only.json') {{
+        return Promise.resolve({{
+            json: () => Promise.resolve(urlTestDataJS)
+        }});
+    }}
+    return originalFetch(url);
+}};
+'''
+            except Exception as e:
+                self.log(f"Warning: Could not load URL test data: {e}")
+
         # Create wrapper script
         harness_path = Path(__file__).parent / 'wpt-testharness.js'
         wrapper_content = f'''
 // WPT Test Harness for jsrt
 {harness_path.read_text()}
 
+{special_setup}
 {''.join(resource_scripts)}
 // Original test content:
 {test_content}
@@ -253,7 +303,9 @@ class JSRTTestRunner:
                 capture_output=True,
                 text=True,
                 timeout=30,
-                cwd=str(self.wpt_path)  # Set working directory to wpt for relative imports
+                cwd=str(self.wpt_path),  # Set working directory to wpt for relative imports
+                encoding='utf-8',
+                errors='replace'  # Replace invalid UTF-8 sequences with replacement character
             )
             
             # Clean up wrapper

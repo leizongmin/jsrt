@@ -6,6 +6,27 @@
 // Import jsrt's assert module
 const assert = require('jsrt:assert');
 
+// Mock browser globals needed by WPT tests
+globalThis.location = {
+    search: '', // Empty search string for standalone tests
+    href: 'file:///test.html',
+    pathname: '/test.html',
+    protocol: 'file:',
+    host: '',
+    hostname: '',
+    port: ''
+};
+
+// Mock add_completion_callback for subset-tests-by-key.js
+function add_completion_callback(callback) {
+    // In our test harness, we can run the callback immediately after all tests
+    if (typeof callback === 'function') {
+        // Store it for later execution if needed
+        globalThis.wptCompletionCallbacks = globalThis.wptCompletionCallbacks || [];
+        globalThis.wptCompletionCallbacks.push(callback);
+    }
+}
+
 // Global test state - use var to avoid conflicts with tests that use same variable names
 var wptTests = [];  // Renamed to avoid conflicts
 var wptCurrentTest = null;

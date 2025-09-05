@@ -56,7 +56,7 @@ static JSRT_URL* JSRT_ParseURL(const char* url, const char* base);
 static void JSRT_FreeURL(JSRT_URL* url);
 static JSValue JSRT_URLSearchParamsToString(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv);
 static char* url_encode_with_len(const char* str, size_t len);
-static JSRT_URLSearchParams* JSRT_ParseSearchParams(const char* search_string);
+static JSRT_URLSearchParams* JSRT_ParseSearchParams(const char* search_string, size_t string_len);
 static JSRT_URLSearchParams* JSRT_ParseSearchParamsFromFormData(JSContext* ctx, JSValueConst formdata_val);
 static void JSRT_FreeSearchParams(JSRT_URLSearchParams* search_params);
 
@@ -491,7 +491,7 @@ static JSValue JSRT_URLSetSearch(JSContext* ctx, JSValueConst this_val, int argc
       }
 
       // Parse new search string into existing URLSearchParams object
-      JSRT_URLSearchParams* new_params = JSRT_ParseSearchParams(url->search);
+      JSRT_URLSearchParams* new_params = JSRT_ParseSearchParams(url->search, strlen(url->search));
       cached_params->params = new_params->params;
       new_params->params = NULL;  // Prevent double free
       JSRT_FreeSearchParams(new_params);
@@ -720,8 +720,7 @@ static int hex_to_int(char c) {
   return -1;
 }
 
-static char* url_decode(const char* str) {
-  size_t len = strlen(str);
+static char* url_decode_with_length_and_output_len(const char* str, size_t len, size_t* output_len) {
   char* decoded = malloc(len + 1);
   size_t i = 0, j = 0;
 
@@ -743,54 +742,86 @@ static char* url_decode(const char* str) {
     decoded[j++] = str[i++];
   }
   decoded[j] = '\0';
+  if (output_len) {
+    *output_len = j;
+  }
   return decoded;
 }
 
-static JSRT_URLSearchParams* JSRT_ParseSearchParams(const char* search_string) {
+static char* url_decode_with_length(const char* str, size_t len) {
+  return url_decode_with_length_and_output_len(str, len, NULL);
+}
+
+static char* url_decode(const char* str) {
+  size_t len = strlen(str);
+  return url_decode_with_length(str, len);
+}
+
+static JSRT_URLSearchParams* JSRT_ParseSearchParams(const char* search_string, size_t string_len) {
   JSRT_URLSearchParams* search_params = malloc(sizeof(JSRT_URLSearchParams));
   search_params->params = NULL;
   search_params->parent_url = NULL;
   search_params->ctx = NULL;
 
-  if (!search_string || strlen(search_string) == 0) {
+  if (!search_string || string_len == 0) {
     return search_params;
   }
 
   const char* start = search_string;
-  if (start[0] == '?')
+  size_t start_len = string_len;
+  if (start_len > 0 && start[0] == '?') {
     start++;  // Skip leading '?'
-
-  char* params_copy = strdup(start);
-  char* param_str = strtok(params_copy, "&");
+    start_len--;
+  }
 
   JSRT_URLSearchParam** tail = &search_params->params;
 
-  while (param_str) {
-    char* eq_pos = strchr(param_str, '=');
+  // Parse parameters manually without relying on C string functions
+  size_t i = 0;
+  while (i < start_len) {
+    // Find the end of this parameter (next '&' or end of string)
+    size_t param_start = i;
+    while (i < start_len && start[i] != '&') {
+      i++;
+    }
+    size_t param_len = i - param_start;
 
-    JSRT_URLSearchParam* param = malloc(sizeof(JSRT_URLSearchParam));
-    param->next = NULL;
+    if (param_len > 0) {
+      // Find '=' in this parameter
+      size_t eq_pos = param_start;
+      while (eq_pos < param_start + param_len && start[eq_pos] != '=') {
+        eq_pos++;
+      }
 
-    if (eq_pos) {
-      *eq_pos = '\0';
-      param->name = url_decode(param_str);
-      param->value = url_decode(eq_pos + 1);
-    } else {
-      param->name = url_decode(param_str);
-      param->value = strdup("");
+      JSRT_URLSearchParam* param = malloc(sizeof(JSRT_URLSearchParam));
+      param->next = NULL;
+
+      if (eq_pos < param_start + param_len) {
+        // Has '=' - split into name and value
+        size_t name_len = eq_pos - param_start;
+        size_t value_len = param_start + param_len - eq_pos - 1;
+
+        param->name = url_decode_with_length_and_output_len(start + param_start, name_len, &param->name_len);
+        param->value = url_decode_with_length_and_output_len(start + eq_pos + 1, value_len, &param->value_len);
+      } else {
+        // No '=' - name only, empty value
+        param->name = url_decode_with_length_and_output_len(start + param_start, param_len, &param->name_len);
+        param->value = strdup("");
+        param->value_len = 0;
+      }
+
+      // Lengths are already set by url_decode_with_length_and_output_len
+
+      *tail = param;
+      tail = &param->next;
     }
 
-    // Set lengths for the decoded strings
-    param->name_len = strlen(param->name);
-    param->value_len = strlen(param->value);
-
-    *tail = param;
-    tail = &param->next;
-
-    param_str = strtok(NULL, "&");
+    // Move past the '&' for next iteration
+    if (i < start_len) {
+      i++;
+    }
   }
 
-  free(params_copy);
   return search_params;
 }
 
@@ -1027,21 +1058,23 @@ static JSValue JSRT_URLSearchParamsConstructor(JSContext* ctx, JSValueConst new_
         }
       } else {
         // Otherwise, treat as string
-        const char* init_str = JS_ToCString(ctx, init);
+        size_t init_len;
+        const char* init_str = JS_ToCStringLen(ctx, &init_len, init);
         if (!init_str) {
           return JS_EXCEPTION;
         }
-        search_params = JSRT_ParseSearchParams(init_str);
+        search_params = JSRT_ParseSearchParams(init_str, init_len);
         JS_FreeCString(ctx, init_str);
       }
     }
     // Otherwise, treat as string
     else {
-      const char* init_str = JS_ToCString(ctx, init);
+      size_t init_len;
+      const char* init_str = JS_ToCStringLen(ctx, &init_len, init);
       if (!init_str) {
         return JS_EXCEPTION;
       }
-      search_params = JSRT_ParseSearchParams(init_str);
+      search_params = JSRT_ParseSearchParams(init_str, init_len);
       JS_FreeCString(ctx, init_str);
     }
   } else {
@@ -1072,7 +1105,7 @@ static JSValue JSRT_URLSearchParamsGet(JSContext* ctx, JSValueConst this_val, in
   while (param) {
     if (strcmp(param->name, name) == 0) {
       JS_FreeCString(ctx, name);
-      return JS_NewString(ctx, param->value);
+      return JS_NewStringLen(ctx, param->value, param->value_len);
     }
     param = param->next;
   }
@@ -1323,7 +1356,7 @@ static JSValue JSRT_URLSearchParamsGetAll(JSContext* ctx, JSValueConst this_val,
   JSRT_URLSearchParam* param = search_params->params;
   while (param) {
     if (strcmp(param->name, name) == 0) {
-      JS_SetPropertyUint32(ctx, result_array, array_index++, JS_NewString(ctx, param->value));
+      JS_SetPropertyUint32(ctx, result_array, array_index++, JS_NewStringLen(ctx, param->value, param->value_len));
     }
     param = param->next;
   }

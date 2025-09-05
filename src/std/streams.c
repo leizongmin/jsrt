@@ -120,6 +120,33 @@ static JSValue JSRT_ReadableStreamDefaultReaderGetClosed(JSContext* ctx, JSValue
   return JS_UNDEFINED;
 }
 
+static JSValue JSRT_ReadableStreamDefaultReaderRead(JSContext* ctx, JSValueConst this_val, int argc,
+                                                    JSValueConst* argv) {
+  JSRT_ReadableStreamDefaultReader* reader = JS_GetOpaque(this_val, JSRT_ReadableStreamDefaultReaderClassID);
+  if (!reader) {
+    return JS_EXCEPTION;
+  }
+
+  // For now, return a promise that resolves to a closed stream
+  // This is a simplified implementation - in a full implementation,
+  // this would read from the actual stream's queue
+  JSValue result = JS_NewObject(ctx);
+  JS_SetPropertyStr(ctx, result, "value", JS_UNDEFINED);
+  JS_SetPropertyStr(ctx, result, "done", JS_NewBool(ctx, true));
+
+  // Return a resolved promise with the result
+  JSValue promise_ctor = JS_GetPropertyStr(ctx, JS_GetGlobalObject(ctx), "Promise");
+  JSValue resolve_method = JS_GetPropertyStr(ctx, promise_ctor, "resolve");
+  JSValue resolve_args[] = {result};
+  JSValue promise = JS_Call(ctx, resolve_method, promise_ctor, 1, resolve_args);
+
+  JS_FreeValue(ctx, promise_ctor);
+  JS_FreeValue(ctx, resolve_method);
+  JS_FreeValue(ctx, result);
+
+  return promise;
+}
+
 // WritableStream implementation
 typedef struct {
   JSValue controller;
@@ -255,6 +282,9 @@ void JSRT_RuntimeSetupStdStreams(JSRT_Runtime* rt) {
   JSAtom closed_atom = JS_NewAtom(ctx, "closed");
   JS_DefinePropertyGetSet(ctx, reader_proto, closed_atom, get_closed, JS_UNDEFINED, JS_PROP_CONFIGURABLE);
   JS_FreeAtom(ctx, closed_atom);
+
+  // Methods
+  JS_SetPropertyStr(ctx, reader_proto, "read", JS_NewCFunction(ctx, JSRT_ReadableStreamDefaultReaderRead, "read", 0));
 
   JS_SetClassProto(ctx, JSRT_ReadableStreamDefaultReaderClassID, reader_proto);
 

@@ -201,6 +201,169 @@ static const struct {
     {"koi8-ru", "koi8-u"},
     {"koi8-u", "koi8-u"},
 
+    // Macintosh (Mac OS Roman)
+    {"csmacintosh", "macintosh"},
+    {"mac", "macintosh"},
+    {"macintosh", "macintosh"},
+    {"macroman", "macintosh"},
+    {"x-mac-roman", "macintosh"},
+
+    // Mac Cyrillic
+    {"x-mac-cyrillic", "x-mac-cyrillic"},
+    {"x-mac-ukrainian", "x-mac-cyrillic"},
+
+    // Windows-874 (Thai)
+    {"dos-874", "windows-874"},
+    {"iso-8859-11", "windows-874"},
+    {"iso8859-11", "windows-874"},
+    {"iso885911", "windows-874"},
+    {"tis-620", "windows-874"},
+    {"windows-874", "windows-874"},
+
+    // Windows-1250 (Central European)
+    {"cp1250", "windows-1250"},
+    {"windows-1250", "windows-1250"},
+    {"x-cp1250", "windows-1250"},
+
+    // Windows-1251 (Cyrillic)
+    {"cp1251", "windows-1251"},
+    {"windows-1251", "windows-1251"},
+    {"x-cp1251", "windows-1251"},
+
+    // Windows-1252 (Western European)
+    {"ansi_x3.4-1968", "windows-1252"},
+    {"ascii", "windows-1252"},
+    {"cp1252", "windows-1252"},
+    {"cp819", "windows-1252"},
+    {"csisolatin1", "windows-1252"},
+    {"ibm819", "windows-1252"},
+    {"iso-8859-1", "windows-1252"},
+    {"iso-ir-100", "windows-1252"},
+    {"iso8859-1", "windows-1252"},
+    {"iso88591", "windows-1252"},
+    {"iso_8859-1", "windows-1252"},
+    {"iso_8859-1:1987", "windows-1252"},
+    {"l1", "windows-1252"},
+    {"latin1", "windows-1252"},
+    {"us-ascii", "windows-1252"},
+    {"windows-1252", "windows-1252"},
+    {"x-cp1252", "windows-1252"},
+
+    // Windows-1253 (Greek)
+    {"cp1253", "windows-1253"},
+    {"windows-1253", "windows-1253"},
+    {"x-cp1253", "windows-1253"},
+
+    // Windows-1254 (Turkish)
+    {"cp1254", "windows-1254"},
+    {"csisolatin5", "windows-1254"},
+    {"iso-8859-9", "windows-1254"},
+    {"iso-ir-148", "windows-1254"},
+    {"iso8859-9", "windows-1254"},
+    {"iso88599", "windows-1254"},
+    {"iso_8859-9", "windows-1254"},
+    {"iso_8859-9:1989", "windows-1254"},
+    {"l5", "windows-1254"},
+    {"latin5", "windows-1254"},
+    {"windows-1254", "windows-1254"},
+    {"x-cp1254", "windows-1254"},
+
+    // Windows-1255 (Hebrew)
+    {"cp1255", "windows-1255"},
+    {"windows-1255", "windows-1255"},
+    {"x-cp1255", "windows-1255"},
+
+    // Windows-1256 (Arabic)
+    {"cp1256", "windows-1256"},
+    {"windows-1256", "windows-1256"},
+    {"x-cp1256", "windows-1256"},
+
+    // Windows-1257 (Baltic)
+    {"cp1257", "windows-1257"},
+    {"windows-1257", "windows-1257"},
+    {"x-cp1257", "windows-1257"},
+
+    // Windows-1258 (Vietnamese)
+    {"cp1258", "windows-1258"},
+    {"windows-1258", "windows-1258"},
+    {"x-cp1258", "windows-1258"},
+
+    // Legacy multi-byte Chinese (simplified) encodings - GBK
+    {"chinese", "GBK"},
+    {"csgb2312", "GBK"},
+    {"csiso58gb231280", "GBK"},
+    {"gb2312", "GBK"},
+    {"gb_2312", "GBK"},
+    {"gb_2312-80", "GBK"},
+    {"gbk", "GBK"},
+    {"iso-ir-58", "GBK"},
+    {"x-gbk", "GBK"},
+
+    // GB18030
+    {"gb18030", "gb18030"},
+
+    // Legacy multi-byte Chinese (traditional) encodings - Big5
+    {"big5", "Big5"},
+    {"big5-hkscs", "Big5"},
+    {"cn-big5", "Big5"},
+    {"csbig5", "Big5"},
+    {"x-x-big5", "Big5"},
+
+    // Legacy multi-byte Japanese encodings - EUC-JP
+    {"cseucpkdfmtjapanese", "EUC-JP"},
+    {"euc-jp", "EUC-JP"},
+    {"x-euc-jp", "EUC-JP"},
+
+    // ISO-2022-JP
+    {"csiso2022jp", "ISO-2022-JP"},
+    {"iso-2022-jp", "ISO-2022-JP"},
+
+    // Shift_JIS
+    {"csshiftjis", "Shift_JIS"},
+    {"ms932", "Shift_JIS"},
+    {"ms_kanji", "Shift_JIS"},
+    {"shift-jis", "Shift_JIS"},
+    {"shift_jis", "Shift_JIS"},
+    {"sjis", "Shift_JIS"},
+    {"windows-31j", "Shift_JIS"},
+    {"x-sjis", "Shift_JIS"},
+
+    // Legacy multi-byte Korean encodings - EUC-KR
+    {"cseuckr", "EUC-KR"},
+    {"csksc56011987", "EUC-KR"},
+    {"euc-kr", "EUC-KR"},
+    {"iso-ir-149", "EUC-KR"},
+    {"korean", "EUC-KR"},
+    {"ks_c_5601-1987", "EUC-KR"},
+    {"ks_c_5601-1989", "EUC-KR"},
+    {"ksc5601", "EUC-KR"},
+    {"ksc_5601", "EUC-KR"},
+    {"windows-949", "EUC-KR"},
+
+    // Legacy miscellaneous encodings - Replacement encodings
+    {"csiso2022kr", "replacement"},
+    {"hz-gb-2312", "replacement"},
+    {"iso-2022-cn", "replacement"},
+    {"iso-2022-cn-ext", "replacement"},
+    {"iso-2022-kr", "replacement"},
+    {"replacement", "replacement"},
+
+    // UTF-16BE
+    {"unicodefffe", "UTF-16BE"},
+    {"utf-16be", "UTF-16BE"},
+
+    // UTF-16LE
+    {"csunicode", "UTF-16LE"},
+    {"iso-10646-ucs-2", "UTF-16LE"},
+    {"ucs-2", "UTF-16LE"},
+    {"unicode", "UTF-16LE"},
+    {"unicodefeff", "UTF-16LE"},
+    {"utf-16", "UTF-16LE"},
+    {"utf-16le", "UTF-16LE"},
+
+    // x-user-defined
+    {"x-user-defined", "x-user-defined"},
+
     // Note: For server runtimes like jsrt, we only actually support UTF-8 decoding
     // but we accept the labels and normalize them to their canonical names
     // The actual decoding will fall back to UTF-8 replacement behavior for non-UTF-8 encodings
@@ -573,8 +736,17 @@ static JSValue JSRT_TextDecoderConstructor(JSContext* ctx, JSValueConst new_targ
 
   JS_SetOpaque(obj, decoder);
 
-  // Set properties
-  JS_DefinePropertyValueStr(ctx, obj, "encoding", JS_NewString(ctx, decoder->encoding), JS_PROP_C_W_E);
+  // Set properties - encoding property should be lowercase per WPT tests
+  char* lowercase_encoding = strdup(decoder->encoding);
+  if (lowercase_encoding) {
+    for (char* p = lowercase_encoding; *p; p++) {
+      *p = tolower(*p);
+    }
+    JS_DefinePropertyValueStr(ctx, obj, "encoding", JS_NewString(ctx, lowercase_encoding), JS_PROP_C_W_E);
+    free(lowercase_encoding);
+  } else {
+    JS_DefinePropertyValueStr(ctx, obj, "encoding", JS_NewString(ctx, decoder->encoding), JS_PROP_C_W_E);
+  }
   JS_DefinePropertyValueStr(ctx, obj, "fatal", JS_NewBool(ctx, decoder->fatal), JS_PROP_C_W_E);
   JS_DefinePropertyValueStr(ctx, obj, "ignoreBOM", JS_NewBool(ctx, decoder->ignore_bom), JS_PROP_C_W_E);
 

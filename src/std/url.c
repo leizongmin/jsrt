@@ -1159,7 +1159,37 @@ static JSValue JSRT_URLSearchParamsConstructor(JSContext* ctx, JSValueConst new_
       // For WPT compliance, functions like DOMException should be treated as records
       bool is_function = JS_IsFunction(ctx, init);
 
-      if (has_length && !is_function) {
+      // Check if it's truly array-like by verifying it has numeric indices AND
+      // those indices contain valid [name, value] pairs
+      bool is_array_like = false;
+      // If it's a real Array, always treat as sequence (let sequence parser handle validation)
+      if (JS_IsArray(ctx, init)) {
+        is_array_like = true;
+      } else if (has_length && !is_function) {
+        // For non-arrays with length property, only treat as sequence if it looks like
+        // it contains [name, value] pairs (to distinguish from objects like {length: 2, 0: 'a', 1: 'b'})
+        JSValue length_val = JS_GetPropertyStr(ctx, init, "length");
+        int32_t length;
+        if (!JS_IsException(length_val) && JS_ToInt32(ctx, &length, length_val) == 0 && length > 0) {
+          // Check if first element exists and is a valid [name, value] pair
+          JSValue first_element = JS_GetPropertyUint32(ctx, init, 0);
+          if (!JS_IsUndefined(first_element)) {
+            // Check if first element is array-like with length 2 (valid pair)
+            JSValue elem_length_val = JS_GetPropertyStr(ctx, first_element, "length");
+            int32_t elem_length;
+            if (!JS_IsException(elem_length_val) && JS_ToInt32(ctx, &elem_length, elem_length_val) == 0 &&
+                elem_length == 2) {
+              // This looks like a valid sequence of [name, value] pairs
+              is_array_like = true;
+            }
+            JS_FreeValue(ctx, elem_length_val);
+          }
+          JS_FreeValue(ctx, first_element);
+        }
+        JS_FreeValue(ctx, length_val);
+      }
+
+      if (is_array_like) {
         // Try to parse as sequence
         search_params = JSRT_ParseSearchParamsFromSequence(ctx, init);
         if (!search_params) {
@@ -1605,6 +1635,114 @@ static JSValue JSRT_URLSearchParamsToString(JSContext* ctx, JSValueConst this_va
   return js_result;
 }
 
+// URLSearchParams Iterator Implementation
+typedef struct {
+  JSRT_URLSearchParams* params;
+  JSRT_URLSearchParam* current;
+  int type;  // 0=entries, 1=keys, 2=values
+} JSRT_URLSearchParamsIterator;
+
+static JSClassID JSRT_URLSearchParamsIteratorClassID;
+
+static void JSRT_URLSearchParamsIteratorFinalizer(JSRuntime* rt, JSValue val) {
+  JSRT_URLSearchParamsIterator* iterator = JS_GetOpaque(val, JSRT_URLSearchParamsIteratorClassID);
+  if (iterator) {
+    free(iterator);
+  }
+}
+
+static JSClassDef JSRT_URLSearchParamsIteratorClass = {
+    "URLSearchParamsIterator",
+    .finalizer = JSRT_URLSearchParamsIteratorFinalizer,
+};
+
+static JSValue JSRT_URLSearchParamsIteratorNext(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
+  JSRT_URLSearchParamsIterator* iterator = JS_GetOpaque2(ctx, this_val, JSRT_URLSearchParamsIteratorClassID);
+  if (!iterator) {
+    return JS_EXCEPTION;
+  }
+
+  JSValue result = JS_NewObject(ctx);
+
+  if (!iterator->current) {
+    // Iterator is done
+    JS_SetPropertyStr(ctx, result, "done", JS_NewBool(ctx, true));
+    JS_SetPropertyStr(ctx, result, "value", JS_UNDEFINED);
+  } else {
+    // Return current item
+    JS_SetPropertyStr(ctx, result, "done", JS_NewBool(ctx, false));
+
+    JSValue value;
+    switch (iterator->type) {
+      case 0:  // entries - return [name, value]
+        value = JS_NewArray(ctx);
+        JS_SetPropertyUint32(ctx, value, 0, JS_NewString(ctx, iterator->current->name));
+        JS_SetPropertyUint32(ctx, value, 1, JS_NewString(ctx, iterator->current->value));
+        break;
+      case 1:  // keys - return name
+        value = JS_NewString(ctx, iterator->current->name);
+        break;
+      case 2:  // values - return value
+        value = JS_NewString(ctx, iterator->current->value);
+        break;
+      default:
+        value = JS_UNDEFINED;
+        break;
+    }
+    JS_SetPropertyStr(ctx, result, "value", value);
+
+    // Advance to next parameter
+    iterator->current = iterator->current->next;
+  }
+
+  return result;
+}
+
+static JSValue JSRT_URLSearchParamsCreateIterator(JSContext* ctx, JSValueConst this_val, int type) {
+  JSRT_URLSearchParams* search_params = JS_GetOpaque2(ctx, this_val, JSRT_URLSearchParamsClassID);
+  if (!search_params) {
+    return JS_EXCEPTION;
+  }
+
+  JSRT_URLSearchParamsIterator* iterator = malloc(sizeof(JSRT_URLSearchParamsIterator));
+  if (!iterator) {
+    return JS_EXCEPTION;
+  }
+
+  iterator->params = search_params;
+  iterator->current = search_params->params;
+  iterator->type = type;
+
+  JSValue iterator_obj = JS_NewObjectClass(ctx, JSRT_URLSearchParamsIteratorClassID);
+  if (JS_IsException(iterator_obj)) {
+    free(iterator);
+    return JS_EXCEPTION;
+  }
+
+  JS_SetOpaque(iterator_obj, iterator);
+
+  // Add next method
+  JS_SetPropertyStr(ctx, iterator_obj, "next", JS_NewCFunction(ctx, JSRT_URLSearchParamsIteratorNext, "next", 0));
+
+  return iterator_obj;
+}
+
+static JSValue JSRT_URLSearchParamsEntries(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
+  return JSRT_URLSearchParamsCreateIterator(ctx, this_val, 0);
+}
+
+static JSValue JSRT_URLSearchParamsKeys(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
+  return JSRT_URLSearchParamsCreateIterator(ctx, this_val, 1);
+}
+
+static JSValue JSRT_URLSearchParamsValues(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
+  return JSRT_URLSearchParamsCreateIterator(ctx, this_val, 2);
+}
+
+static JSValue JSRT_URLSearchParamsSymbolIterator(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
+  return JSRT_URLSearchParamsEntries(ctx, this_val, argc, argv);
+}
+
 // Setup function
 void JSRT_RuntimeSetupStdURL(JSRT_Runtime* rt) {
   JSContext* ctx = rt->ctx;
@@ -1698,6 +1836,20 @@ void JSRT_RuntimeSetupStdURL(JSRT_Runtime* rt) {
   JSAtom size_atom = JS_NewAtom(ctx, "size");
   JS_DefinePropertyGetSet(ctx, search_params_proto, size_atom, get_size, JS_UNDEFINED, JS_PROP_CONFIGURABLE);
   JS_FreeAtom(ctx, size_atom);
+
+  // Add iterator methods
+  JS_SetPropertyStr(ctx, search_params_proto, "entries",
+                    JS_NewCFunction(ctx, JSRT_URLSearchParamsEntries, "entries", 0));
+  JS_SetPropertyStr(ctx, search_params_proto, "keys", JS_NewCFunction(ctx, JSRT_URLSearchParamsKeys, "keys", 0));
+  JS_SetPropertyStr(ctx, search_params_proto, "values", JS_NewCFunction(ctx, JSRT_URLSearchParamsValues, "values", 0));
+
+  // Add Symbol.iterator as entries method
+  // For now, we'll skip Symbol.iterator registration and focus on explicit iterator methods
+  // TODO: Implement proper Symbol.iterator registration when QuickJS symbol support is confirmed
+
+  // Register iterator class
+  JS_NewClassID(&JSRT_URLSearchParamsIteratorClassID);
+  JS_NewClass(rt->rt, JSRT_URLSearchParamsIteratorClassID, &JSRT_URLSearchParamsIteratorClass);
 
   JS_SetClassProto(ctx, JSRT_URLSearchParamsClassID, search_params_proto);
 

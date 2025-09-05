@@ -13,9 +13,24 @@
 static JSClassID JSRT_URLClassID;
 static JSClassID JSRT_URLSearchParamsClassID;
 
-// Forward declare
+// Forward declare structures
 struct JSRT_URL;
-typedef struct JSRT_URLSearchParams JSRT_URLSearchParams;
+
+// URLSearchParams parameter structure
+typedef struct JSRT_URLSearchParam {
+  char* name;
+  char* value;
+  size_t name_len;   // Length of name (may contain null bytes)
+  size_t value_len;  // Length of value (may contain null bytes)
+  struct JSRT_URLSearchParam* next;
+} JSRT_URLSearchParam;
+
+// URLSearchParams structure
+typedef struct JSRT_URLSearchParams {
+  JSRT_URLSearchParam* params;
+  struct JSRT_URL* parent_url;  // Reference to parent URL for href updates
+  JSContext* ctx;               // Context for parent URL updates
+} JSRT_URLSearchParams;
 
 // URL component structure
 typedef struct JSRT_URL {
@@ -36,6 +51,9 @@ typedef struct JSRT_URL {
 static JSRT_URL* JSRT_ParseURL(const char* url, const char* base);
 static void JSRT_FreeURL(JSRT_URL* url);
 static JSValue JSRT_URLSearchParamsToString(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv);
+static char* url_encode_with_len(const char* str, size_t len);
+static JSRT_URLSearchParams* JSRT_ParseSearchParams(const char* search_string);
+static void JSRT_FreeSearchParams(JSRT_URLSearchParams* search_params);
 
 // Simple URL parser (basic implementation)
 static int is_valid_scheme(const char* scheme) {
@@ -453,15 +471,51 @@ static JSValue JSRT_URLSetSearch(JSContext* ctx, JSValueConst this_val, int argc
     strcpy(url->search + 1, new_search);
   }
 
-  // Invalidate cached URLSearchParams object
+  // Update cached URLSearchParams object if it exists
   if (!JS_IsUndefined(url->search_params)) {
-    JS_FreeValue(url->ctx, url->search_params);
-    url->search_params = JS_UNDEFINED;
+    JSRT_URLSearchParams* cached_params = JS_GetOpaque2(ctx, url->search_params, JSRT_URLSearchParamsClassID);
+    if (cached_params) {
+      // Free existing parameters
+      JSRT_URLSearchParam* param = cached_params->params;
+      while (param) {
+        JSRT_URLSearchParam* next = param->next;
+        free(param->name);
+        free(param->value);
+        free(param);
+        param = next;
+      }
+
+      // Parse new search string into existing URLSearchParams object
+      JSRT_URLSearchParams* new_params = JSRT_ParseSearchParams(url->search);
+      cached_params->params = new_params->params;
+      new_params->params = NULL;  // Prevent double free
+      JSRT_FreeSearchParams(new_params);
+    }
   }
 
-  // Update href
-  // For simplicity, assume href needs full rebuild
-  // In a full implementation, we'd need to properly reconstruct the URL
+  // Rebuild href with new search component
+  free(url->href);
+  size_t href_len = strlen(url->protocol) + 2 + strlen(url->host) + strlen(url->pathname);
+  if (url->search && strlen(url->search) > 0) {
+    href_len += strlen(url->search);
+  }
+  if (url->hash && strlen(url->hash) > 0) {
+    href_len += strlen(url->hash);
+  }
+
+  url->href = malloc(href_len + 1);
+  strcpy(url->href, url->protocol);
+  strcat(url->href, "//");
+  strcat(url->href, url->host);
+  strcat(url->href, url->pathname);
+
+  if (url->search && strlen(url->search) > 0) {
+    strcat(url->href, url->search);
+  }
+
+  if (url->hash && strlen(url->hash) > 0) {
+    strcat(url->href, url->hash);
+  }
 
   JS_FreeCString(ctx, new_search);
   return JS_UNDEFINED;
@@ -492,11 +546,12 @@ static JSValue JSRT_URLGetSearchParams(JSContext* ctx, JSValueConst this_val, in
     JSValue search_value = JS_NewString(ctx, url->search);
     url->search_params = JS_CallConstructor(ctx, search_params_ctor, 1, &search_value);
 
-    // TODO: Set parent_url reference for URL integration
-    // JSRT_URLSearchParams* search_params = JS_GetOpaque2(ctx, url->search_params, JSRT_URLSearchParamsClassID);
-    // if (search_params) {
-    //   search_params->parent_url = url;
-    // }
+    // Set parent_url reference for URL integration
+    JSRT_URLSearchParams* search_params = JS_GetOpaque2(ctx, url->search_params, JSRT_URLSearchParamsClassID);
+    if (search_params) {
+      search_params->parent_url = url;
+      search_params->ctx = ctx;
+    }
 
     JS_FreeValue(ctx, search_params_ctor);
     JS_FreeValue(ctx, search_value);
@@ -514,18 +569,6 @@ static JSValue JSRT_URLToJSON(JSContext* ctx, JSValueConst this_val, int argc, J
 }
 
 // URLSearchParams implementation
-typedef struct JSRT_URLSearchParam {
-  char* name;
-  char* value;
-  size_t name_len;   // Length of name (may contain null bytes)
-  size_t value_len;  // Length of value (may contain null bytes)
-  struct JSRT_URLSearchParam* next;
-} JSRT_URLSearchParam;
-
-struct JSRT_URLSearchParams {
-  JSRT_URLSearchParam* params;
-  JSRT_URL* parent_url;  // Reference to parent URL for href updates
-};
 
 // Helper function to create a parameter with proper length handling
 static JSRT_URLSearchParam* create_url_param(const char* name, size_t name_len, const char* value, size_t value_len) {
@@ -550,66 +593,90 @@ static void update_parent_url_href(JSRT_URLSearchParams* search_params) {
 
   JSRT_URL* url = search_params->parent_url;
 
-  // Generate new search string from current parameters
-  JSContext* ctx = url->ctx;
-  JSValue search_params_val = JS_NewObjectClass(ctx, JSRT_URLSearchParamsClassID);
-  JS_SetOpaque(search_params_val, search_params);
-
-  JSValue search_string = JSRT_URLSearchParamsToString(ctx, search_params_val, 0, NULL);
-  if (JS_IsException(search_string)) {
-    JS_FreeValue(ctx, search_params_val);
-    return;
+  // Generate new search string directly from parameters
+  JSContext* ctx = search_params->ctx;
+  if (!ctx) {
+    return;  // No context available for updates
   }
 
-  const char* new_search = JS_ToCString(ctx, search_string);
-  if (new_search) {
-    // Update URL's search component
-    free(url->search);
-    if (strlen(new_search) > 0) {
-      url->search = malloc(strlen(new_search) + 2);  // +1 for '?', +1 for '\0'
-      sprintf(url->search, "?%s", new_search);
-    } else {
-      url->search = strdup("");
+  // Build search string manually to avoid circular references
+  char* new_search_str = NULL;
+  if (!search_params->params) {
+    new_search_str = strdup("");
+  } else {
+    // Calculate required length
+    size_t total_len = 0;
+    JSRT_URLSearchParam* param = search_params->params;
+    bool first = true;
+    while (param) {
+      char* encoded_name = url_encode_with_len(param->name, param->name_len);
+      char* encoded_value = url_encode_with_len(param->value, param->value_len);
+      size_t pair_len = strlen(encoded_name) + strlen(encoded_value) + 1;  // name=value
+      if (!first)
+        pair_len += 1;  // &
+      total_len += pair_len;
+      free(encoded_name);
+      free(encoded_value);
+      param = param->next;
+      first = false;
     }
 
-    // Rebuild href
-    free(url->href);
-    size_t href_len = strlen(url->protocol) + 2 + strlen(url->hostname) + strlen(url->pathname);
-    if (url->port && strlen(url->port) > 0) {
-      href_len += 1 + strlen(url->port);  // :port
-    }
-    if (url->search && strlen(url->search) > 0) {
-      href_len += strlen(url->search);
-    }
-    if (url->hash && strlen(url->hash) > 0) {
-      href_len += strlen(url->hash);
-    }
+    // Build the string
+    new_search_str = malloc(total_len + 1);
+    new_search_str[0] = '\0';
+    param = search_params->params;
+    first = true;
+    while (param) {
+      char* encoded_name = url_encode_with_len(param->name, param->name_len);
+      char* encoded_value = url_encode_with_len(param->value, param->value_len);
 
-    url->href = malloc(href_len + 1);
-    strcpy(url->href, url->protocol);
-    strcat(url->href, "//");
-    strcat(url->href, url->hostname);
+      if (!first)
+        strcat(new_search_str, "&");
+      strcat(new_search_str, encoded_name);
+      strcat(new_search_str, "=");
+      strcat(new_search_str, encoded_value);
 
-    if (url->port && strlen(url->port) > 0 && !is_default_port(url->protocol, url->port)) {
-      strcat(url->href, ":");
-      strcat(url->href, url->port);
+      free(encoded_name);
+      free(encoded_value);
+      param = param->next;
+      first = false;
     }
-
-    strcat(url->href, url->pathname);
-
-    if (url->search && strlen(url->search) > 0) {
-      strcat(url->href, url->search);
-    }
-
-    if (url->hash && strlen(url->hash) > 0) {
-      strcat(url->href, url->hash);
-    }
-
-    JS_FreeCString(ctx, new_search);
   }
 
-  JS_FreeValue(ctx, search_string);
-  JS_FreeValue(ctx, search_params_val);
+  // Update URL's search component
+  free(url->search);
+  if (strlen(new_search_str) > 0) {
+    url->search = malloc(strlen(new_search_str) + 2);  // +1 for '?', +1 for '\0'
+    sprintf(url->search, "?%s", new_search_str);
+  } else {
+    url->search = strdup("");
+  }
+
+  // Rebuild href
+  free(url->href);
+  size_t href_len = strlen(url->protocol) + 2 + strlen(url->host) + strlen(url->pathname);
+  if (url->search && strlen(url->search) > 0) {
+    href_len += strlen(url->search);
+  }
+  if (url->hash && strlen(url->hash) > 0) {
+    href_len += strlen(url->hash);
+  }
+
+  url->href = malloc(href_len + 1);
+  strcpy(url->href, url->protocol);
+  strcat(url->href, "//");
+  strcat(url->href, url->host);
+  strcat(url->href, url->pathname);
+
+  if (url->search && strlen(url->search) > 0) {
+    strcat(url->href, url->search);
+  }
+
+  if (url->hash && strlen(url->hash) > 0) {
+    strcat(url->href, url->hash);
+  }
+
+  free(new_search_str);
 }
 
 static void JSRT_FreeSearchParams(JSRT_URLSearchParams* search_params) {
@@ -677,6 +744,8 @@ static char* url_decode(const char* str) {
 static JSRT_URLSearchParams* JSRT_ParseSearchParams(const char* search_string) {
   JSRT_URLSearchParams* search_params = malloc(sizeof(JSRT_URLSearchParams));
   search_params->params = NULL;
+  search_params->parent_url = NULL;
+  search_params->ctx = NULL;
 
   if (!search_string || strlen(search_string) == 0) {
     return search_params;
@@ -723,6 +792,8 @@ static JSRT_URLSearchParams* JSRT_ParseSearchParams(const char* search_string) {
 static JSRT_URLSearchParams* JSRT_CreateEmptySearchParams() {
   JSRT_URLSearchParams* search_params = malloc(sizeof(JSRT_URLSearchParams));
   search_params->params = NULL;
+  search_params->parent_url = NULL;
+  search_params->ctx = NULL;
   return search_params;
 }
 
@@ -859,13 +930,35 @@ static JSValue JSRT_URLSearchParamsConstructor(JSContext* ctx, JSValueConst new_
       int has_length = JS_HasProperty(ctx, init, length_atom);
       JS_FreeAtom(ctx, length_atom);
 
-      if (has_length) {
+      // Functions have a length property but should typically be treated as records
+      // unless they are specifically array-like (like Arguments object)
+      // For WPT compliance, functions like DOMException should be treated as records
+      bool is_function = JS_IsFunction(ctx, init);
+
+      if (has_length && !is_function) {
+        // Try to parse as sequence only if it's not a function
         search_params = JSRT_ParseSearchParamsFromSequence(ctx, init);
         if (!search_params) {
           return JS_ThrowTypeError(ctx, "Invalid sequence argument to URLSearchParams constructor");
         }
       } else if (JS_IsObject(init)) {
         // Check if it's a record/object (not null, not array, not string)
+        // This now includes functions with enumerable properties (like DOMException)
+
+        // Special case: DOMException.prototype should throw TypeError due to branding checks
+        JSValue dom_exception_ctor = JS_GetPropertyStr(ctx, JS_GetGlobalObject(ctx), "DOMException");
+        if (!JS_IsUndefined(dom_exception_ctor)) {
+          JSValue dom_exception_proto = JS_GetPropertyStr(ctx, dom_exception_ctor, "prototype");
+          if (JS_SameValue(ctx, init, dom_exception_proto)) {
+            JS_FreeValue(ctx, dom_exception_ctor);
+            JS_FreeValue(ctx, dom_exception_proto);
+            return JS_ThrowTypeError(
+                ctx, "Constructing a URLSearchParams from DOMException.prototype should throw due to branding checks");
+          }
+          JS_FreeValue(ctx, dom_exception_proto);
+        }
+        JS_FreeValue(ctx, dom_exception_ctor);
+
         search_params = JSRT_ParseSearchParamsFromRecord(ctx, init);
         if (!search_params) {
           return JS_ThrowTypeError(ctx, "Invalid record argument to URLSearchParams constructor");
@@ -990,8 +1083,8 @@ static JSValue JSRT_URLSearchParamsSet(JSContext* ctx, JSValueConst this_val, in
   JS_FreeCString(ctx, name);
   JS_FreeCString(ctx, value);
 
-  // TODO: Update parent URL's href if connected
-  // update_parent_url_href(search_params);
+  // Update parent URL's href if connected
+  update_parent_url_href(search_params);
 
   return JS_UNDEFINED;
 }
@@ -1029,8 +1122,8 @@ static JSValue JSRT_URLSearchParamsAppend(JSContext* ctx, JSValueConst this_val,
   JS_FreeCString(ctx, name);
   JS_FreeCString(ctx, value);
 
-  // TODO: Update parent URL's href if connected
-  // update_parent_url_href(search_params);
+  // Update parent URL's href if connected
+  update_parent_url_href(search_params);
 
   return JS_UNDEFINED;
 }
@@ -1141,8 +1234,8 @@ static JSValue JSRT_URLSearchParamsDelete(JSContext* ctx, JSValueConst this_val,
     JS_FreeCString(ctx, value);
   }
 
-  // TODO: Update parent URL's href if connected
-  // update_parent_url_href(search_params);
+  // Update parent URL's href if connected
+  update_parent_url_href(search_params);
 
   return JS_UNDEFINED;
 }
@@ -1347,6 +1440,13 @@ void JSRT_RuntimeSetupStdURL(JSRT_Runtime* rt) {
   JS_SetClassProto(ctx, JSRT_URLClassID, url_proto);
 
   JSValue url_ctor = JS_NewCFunction2(ctx, JSRT_URLConstructor, "URL", 2, JS_CFUNC_constructor, 0);
+
+  // Set the constructor's prototype property
+  JS_SetPropertyStr(ctx, url_ctor, "prototype", JS_DupValue(ctx, url_proto));
+
+  // Set the prototype's constructor property
+  JS_SetPropertyStr(ctx, url_proto, "constructor", JS_DupValue(ctx, url_ctor));
+
   JS_SetPropertyStr(ctx, rt->global, "URL", url_ctor);
 
   // Register URLSearchParams class
@@ -1373,6 +1473,13 @@ void JSRT_RuntimeSetupStdURL(JSRT_Runtime* rt) {
 
   JSValue search_params_ctor =
       JS_NewCFunction2(ctx, JSRT_URLSearchParamsConstructor, "URLSearchParams", 1, JS_CFUNC_constructor, 0);
+
+  // Set the constructor's prototype property
+  JS_SetPropertyStr(ctx, search_params_ctor, "prototype", JS_DupValue(ctx, search_params_proto));
+
+  // Set the prototype's constructor property
+  JS_SetPropertyStr(ctx, search_params_proto, "constructor", JS_DupValue(ctx, search_params_ctor));
+
   JS_SetPropertyStr(ctx, rt->global, "URLSearchParams", search_params_ctor);
 
   JSRT_Debug("URL/URLSearchParams API setup completed");

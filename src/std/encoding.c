@@ -11,17 +11,100 @@
 #include "../util/debug.h"
 
 // Encoding labels table for WPT compatibility
+// Based on https://encoding.spec.whatwg.org/encodings.json
 static const struct {
   const char* name;
   const char* canonical;
 } encodings_table[] = {
-    {"utf-8", "utf-8"},
-    {"utf8", "utf-8"},
+    // UTF-8 (The Encoding)
     {"unicode-1-1-utf-8", "utf-8"},
     {"unicode11utf8", "utf-8"},
     {"unicode20utf8", "utf-8"},
+    {"utf-8", "utf-8"},
+    {"utf8", "utf-8"},
     {"x-unicode20utf8", "utf-8"},
-    // Add more encodings as needed for WPT compatibility
+
+    // Legacy single-byte encodings
+    {"866", "ibm866"},
+    {"cp866", "ibm866"},
+    {"csibm866", "ibm866"},
+    {"ibm866", "ibm866"},
+
+    {"csisolatin2", "iso-8859-2"},
+    {"iso-8859-2", "iso-8859-2"},
+    {"iso-ir-101", "iso-8859-2"},
+    {"iso8859-2", "iso-8859-2"},
+    {"iso88592", "iso-8859-2"},
+    {"iso_8859-2", "iso-8859-2"},
+    {"iso_8859-2:1987", "iso-8859-2"},
+    {"l2", "iso-8859-2"},
+    {"latin2", "iso-8859-2"},
+
+    {"ansi_x3.4-1968", "windows-1252"},
+    {"ascii", "windows-1252"},
+    {"cp1252", "windows-1252"},
+    {"cp819", "windows-1252"},
+    {"csisolatin1", "windows-1252"},
+    {"ibm819", "windows-1252"},
+    {"iso-8859-1", "windows-1252"},
+    {"iso-ir-100", "windows-1252"},
+    {"iso8859-1", "windows-1252"},
+    {"iso88591", "windows-1252"},
+    {"iso_8859-1", "windows-1252"},
+    {"iso_8859-1:1987", "windows-1252"},
+    {"l1", "windows-1252"},
+    {"latin1", "windows-1252"},
+    {"us-ascii", "windows-1252"},
+    {"windows-1252", "windows-1252"},
+    {"x-cp1252", "windows-1252"},
+
+    // Additional ISO-8859 encodings
+    {"csisolatin3", "iso-8859-3"},
+    {"iso-8859-3", "iso-8859-3"},
+    {"iso-ir-109", "iso-8859-3"},
+    {"iso8859-3", "iso-8859-3"},
+    {"iso88593", "iso-8859-3"},
+    {"iso_8859-3", "iso-8859-3"},
+    {"iso_8859-3:1988", "iso-8859-3"},
+    {"l3", "iso-8859-3"},
+    {"latin3", "iso-8859-3"},
+
+    {"csisolatin4", "iso-8859-4"},
+    {"iso-8859-4", "iso-8859-4"},
+    {"iso-ir-110", "iso-8859-4"},
+    {"iso8859-4", "iso-8859-4"},
+    {"iso88594", "iso-8859-4"},
+    {"iso_8859-4", "iso-8859-4"},
+    {"iso_8859-4:1988", "iso-8859-4"},
+    {"l4", "iso-8859-4"},
+    {"latin4", "iso-8859-4"},
+
+    // Legacy UTF-16 encodings
+    {"csunicode", "utf-16le"},
+    {"iso-10646-ucs-2", "utf-16le"},
+    {"ucs-2", "utf-16le"},
+    {"unicode", "utf-16le"},
+    {"unicodefeff", "utf-16le"},
+    {"utf-16", "utf-16le"},
+    {"utf-16le", "utf-16le"},
+
+    {"unicodefffe", "utf-16be"},
+    {"utf-16be", "utf-16be"},
+
+    // Additional ISO-8859 encodings
+    {"csisolatincyrillic", "iso-8859-5"},
+    {"cyrillic", "iso-8859-5"},
+    {"iso-8859-5", "iso-8859-5"},
+    {"iso-ir-144", "iso-8859-5"},
+    {"iso8859-5", "iso-8859-5"},
+    {"iso88595", "iso-8859-5"},
+    {"iso_8859-5", "iso-8859-5"},
+    {"iso_8859-5:1988", "iso-8859-5"},
+
+    // Note: For server runtimes like jsrt, we only actually support UTF-8 decoding
+    // but we accept the labels and normalize them to their canonical names
+    // The actual decoding will fall back to UTF-8 replacement behavior for non-UTF-8 encodings
+    // UTF-16LE/BE support is added for validation purposes (fatal mode error checking)
     {NULL, NULL}  // Sentinel
 };
 
@@ -76,10 +159,13 @@ static const char* get_canonical_encoding(const char* label) {
   }
 
   free(normalized);
-  return "utf-8";  // Default to UTF-8 if not found
+
+  // For unknown encodings, we still return UTF-8 as the fallback
+  // This is appropriate for server runtimes that primarily handle UTF-8
+  return "utf-8";
 }
 
-// UTF-8 validation function
+// UTF-8 validation function with overlong sequence detection
 static int validate_utf8_sequence(const uint8_t* data, size_t len, const uint8_t** next) {
   if (len == 0) {
     *next = data;
@@ -94,6 +180,12 @@ static int validate_utf8_sequence(const uint8_t* data, size_t len, const uint8_t
     return c;
   }
 
+  // Invalid start bytes
+  if (c == 0xFE || c == 0xFF || (c >= 0xF8 && c <= 0xFD)) {
+    *next = data;
+    return -1;
+  }
+
   if ((c & 0xE0) == 0xC0) {
     // 2-byte sequence
     if (len < 2) {
@@ -104,8 +196,17 @@ static int validate_utf8_sequence(const uint8_t* data, size_t len, const uint8_t
       *next = data;
       return -1;
     }
+
+    uint32_t codepoint = ((c & 0x1F) << 6) | (data[1] & 0x3F);
+
+    // Check for overlong encoding: 2-byte sequences must encode >= U+0080
+    if (codepoint < 0x80) {
+      *next = data;
+      return -1;  // Overlong sequence
+    }
+
     *next = data + 2;
-    return ((c & 0x1F) << 6) | (data[1] & 0x3F);
+    return codepoint;
   }
 
   if ((c & 0xF0) == 0xE0) {
@@ -118,8 +219,23 @@ static int validate_utf8_sequence(const uint8_t* data, size_t len, const uint8_t
       *next = data;
       return -1;
     }
+
+    uint32_t codepoint = ((c & 0x0F) << 12) | ((data[1] & 0x3F) << 6) | (data[2] & 0x3F);
+
+    // Check for overlong encoding: 3-byte sequences must encode >= U+0800
+    if (codepoint < 0x800) {
+      *next = data;
+      return -1;  // Overlong sequence
+    }
+
+    // Check for UTF-16 surrogates (U+D800 to U+DFFF)
+    if (codepoint >= 0xD800 && codepoint <= 0xDFFF) {
+      *next = data;
+      return -1;  // Surrogates not allowed in UTF-8
+    }
+
     *next = data + 3;
-    return ((c & 0x0F) << 12) | ((data[1] & 0x3F) << 6) | (data[2] & 0x3F);
+    return codepoint;
   }
 
   if ((c & 0xF8) == 0xF0) {
@@ -132,12 +248,27 @@ static int validate_utf8_sequence(const uint8_t* data, size_t len, const uint8_t
       *next = data;
       return -1;
     }
+
+    uint32_t codepoint = ((c & 0x07) << 18) | ((data[1] & 0x3F) << 12) | ((data[2] & 0x3F) << 6) | (data[3] & 0x3F);
+
+    // Check for overlong encoding: 4-byte sequences must encode >= U+10000
+    if (codepoint < 0x10000) {
+      *next = data;
+      return -1;  // Overlong sequence
+    }
+
+    // Check for codepoints beyond Unicode range (> U+10FFFF)
+    if (codepoint > 0x10FFFF) {
+      *next = data;
+      return -1;  // Beyond Unicode range
+    }
+
     *next = data + 4;
-    return ((c & 0x07) << 18) | ((data[1] & 0x3F) << 12) | ((data[2] & 0x3F) << 6) | (data[3] & 0x3F);
+    return codepoint;
   }
 
   *next = data;
-  return -1;
+  return -1;  // Invalid start byte
 }
 
 // Forward declare class IDs so they can be used in finalizers
@@ -379,30 +510,89 @@ static JSValue JSRT_TextDecoderDecode(JSContext* ctx, JSValueConst this_val, int
       start_pos = 3;
     }
 
-    // For UTF-8, we can directly create a string from the bytes
-    // QuickJS expects valid UTF-8, so we'll validate if fatal is true
+    // Validate input if fatal mode is enabled
     if (decoder->fatal) {
-      // Validate UTF-8 sequence
-      const uint8_t* p = input_data + start_pos;
-      const uint8_t* end = input_data + input_len;
-      while (p < end) {
-        const uint8_t* p_next;
-        int c = validate_utf8_sequence(p, end - p, &p_next);
-        if (c < 0) {
-          return JS_ThrowTypeError(ctx, "Invalid UTF-8 sequence");
+      if (strcmp(decoder->encoding, "utf-8") == 0) {
+        // Validate UTF-8 sequence
+        const uint8_t* p = input_data + start_pos;
+        const uint8_t* end = input_data + input_len;
+        while (p < end) {
+          const uint8_t* p_next;
+          int c = validate_utf8_sequence(p, end - p, &p_next);
+          if (c < 0) {
+            return JS_ThrowTypeError(ctx, "Invalid UTF-8 sequence");
+          }
+          p = p_next;
         }
-        p = p_next;
+      } else if (strcmp(decoder->encoding, "utf-16le") == 0) {
+        // Validate UTF-16LE: must have even number of bytes for complete code units
+        size_t remaining_len = input_len - start_pos;
+        if (remaining_len % 2 != 0) {
+          return JS_ThrowTypeError(ctx, "Incomplete UTF-16LE code unit");
+        }
+        // Additional UTF-16LE validation could be added here for surrogate pairs, etc.
+      } else if (strcmp(decoder->encoding, "utf-16be") == 0) {
+        // Validate UTF-16BE: must have even number of bytes for complete code units
+        size_t remaining_len = input_len - start_pos;
+        if (remaining_len % 2 != 0) {
+          return JS_ThrowTypeError(ctx, "Incomplete UTF-16BE code unit");
+        }
       }
+      // For other encodings, we don't implement strict validation in this server runtime
     }
 
     return JS_NewStringLen(ctx, (const char*)(input_data + start_pos), input_len - start_pos);
   }
 
-  // Try to get as typed array - testing just the call
+  // Try to get as typed array (including DataView)
   size_t byte_offset, bytes_per_element;
   JSValue array_buffer = JS_GetTypedArrayBuffer(ctx, argv[0], &byte_offset, &input_len, &bytes_per_element);
   if (JS_IsException(array_buffer)) {
-    return JS_ThrowTypeError(ctx, "input must be an ArrayBuffer or typed array");
+    // Clear the exception and try DataView
+    JS_FreeValue(ctx, array_buffer);
+
+    // Check if it's a DataView
+    JSValue global = JS_GetGlobalObject(ctx);
+    JSValue dataview_ctor = JS_GetPropertyStr(ctx, global, "DataView");
+
+    if (!JS_IsException(dataview_ctor) && !JS_IsUndefined(dataview_ctor)) {
+      int is_dataview = JS_IsInstanceOf(ctx, argv[0], dataview_ctor);
+      JS_FreeValue(ctx, dataview_ctor);
+
+      if (is_dataview > 0) {
+        // Handle DataView: get its buffer, byteOffset, and byteLength
+        JSValue buffer_prop = JS_GetPropertyStr(ctx, argv[0], "buffer");
+        JSValue offset_prop = JS_GetPropertyStr(ctx, argv[0], "byteOffset");
+        JSValue length_prop = JS_GetPropertyStr(ctx, argv[0], "byteLength");
+
+        if (!JS_IsException(buffer_prop) && !JS_IsException(offset_prop) && !JS_IsException(length_prop)) {
+          array_buffer = buffer_prop;
+
+          if (JS_ToIndex(ctx, &byte_offset, offset_prop) == 0) {
+            if (JS_ToIndex(ctx, &input_len, length_prop) != 0) {
+              input_len = 0;
+            }
+          }
+
+          JS_FreeValue(ctx, offset_prop);
+          JS_FreeValue(ctx, length_prop);
+        } else {
+          JS_FreeValue(ctx, global);
+          JS_FreeValue(ctx, buffer_prop);
+          JS_FreeValue(ctx, offset_prop);
+          JS_FreeValue(ctx, length_prop);
+          return JS_ThrowTypeError(ctx, "input must be an ArrayBuffer, typed array, or DataView");
+        }
+      } else {
+        JS_FreeValue(ctx, global);
+        return JS_ThrowTypeError(ctx, "input must be an ArrayBuffer, typed array, or DataView");
+      }
+    } else {
+      JS_FreeValue(ctx, global);
+      JS_FreeValue(ctx, dataview_ctor);
+      return JS_ThrowTypeError(ctx, "input must be an ArrayBuffer, typed array, or DataView");
+    }
+    JS_FreeValue(ctx, global);
   }
 
   if (input_len == 0) {
@@ -426,20 +616,35 @@ static JSValue JSRT_TextDecoderDecode(JSContext* ctx, JSValueConst this_val, int
     start_pos = 3;
   }
 
-  // For UTF-8, we can directly create a string from the bytes
-  // QuickJS expects valid UTF-8, so we'll validate if fatal is true
+  // Validate input if fatal mode is enabled
   if (decoder->fatal) {
-    // Validate UTF-8 sequence
-    const uint8_t* p = input_data + start_pos;
-    const uint8_t* end = input_data + input_len;
-    while (p < end) {
-      const uint8_t* p_next;
-      int c = validate_utf8_sequence(p, end - p, &p_next);
-      if (c < 0) {
-        JS_FreeValue(ctx, array_buffer);
-        return JS_ThrowTypeError(ctx, "Invalid UTF-8 sequence");
+    if (strcmp(decoder->encoding, "utf-8") == 0) {
+      // Validate UTF-8 sequence
+      const uint8_t* p = input_data + start_pos;
+      const uint8_t* end = input_data + input_len;
+      while (p < end) {
+        const uint8_t* p_next;
+        int c = validate_utf8_sequence(p, end - p, &p_next);
+        if (c < 0) {
+          JS_FreeValue(ctx, array_buffer);
+          return JS_ThrowTypeError(ctx, "Invalid UTF-8 sequence");
+        }
+        p = p_next;
       }
-      p = p_next;
+    } else if (strcmp(decoder->encoding, "utf-16le") == 0) {
+      // Validate UTF-16LE: must have even number of bytes for complete code units
+      size_t remaining_len = input_len - start_pos;
+      if (remaining_len % 2 != 0) {
+        JS_FreeValue(ctx, array_buffer);
+        return JS_ThrowTypeError(ctx, "Incomplete UTF-16LE code unit");
+      }
+    } else if (strcmp(decoder->encoding, "utf-16be") == 0) {
+      // Validate UTF-16BE: must have even number of bytes for complete code units
+      size_t remaining_len = input_len - start_pos;
+      if (remaining_len % 2 != 0) {
+        JS_FreeValue(ctx, array_buffer);
+        return JS_ThrowTypeError(ctx, "Incomplete UTF-16BE code unit");
+      }
     }
   }
 

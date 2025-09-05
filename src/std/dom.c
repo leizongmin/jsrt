@@ -175,6 +175,38 @@ void JSRT_RuntimeSetupStdDOM(JSRT_Runtime* rt) {
 
   JSValue dom_exception_ctor =
       JS_NewCFunction2(ctx, JSRT_DOMExceptionConstructor, "DOMException", 2, JS_CFUNC_constructor, 0);
+
+  // Add legacy static constants to the DOMException constructor
+  // These are required for WPT compliance and backwards compatibility
+  JS_SetPropertyStr(ctx, dom_exception_ctor, "INDEX_SIZE_ERR", JS_NewInt32(ctx, 1));
+  JS_SetPropertyStr(ctx, dom_exception_ctor, "DOMSTRING_SIZE_ERR", JS_NewInt32(ctx, 2));
+  JS_SetPropertyStr(ctx, dom_exception_ctor, "HIERARCHY_REQUEST_ERR", JS_NewInt32(ctx, 3));
+  JS_SetPropertyStr(ctx, dom_exception_ctor, "WRONG_DOCUMENT_ERR", JS_NewInt32(ctx, 4));
+  JS_SetPropertyStr(ctx, dom_exception_ctor, "INVALID_CHARACTER_ERR", JS_NewInt32(ctx, 5));
+  JS_SetPropertyStr(ctx, dom_exception_ctor, "NO_DATA_ALLOWED_ERR", JS_NewInt32(ctx, 6));
+  JS_SetPropertyStr(ctx, dom_exception_ctor, "NO_MODIFICATION_ALLOWED_ERR", JS_NewInt32(ctx, 7));
+  JS_SetPropertyStr(ctx, dom_exception_ctor, "NOT_FOUND_ERR", JS_NewInt32(ctx, 8));
+  JS_SetPropertyStr(ctx, dom_exception_ctor, "NOT_SUPPORTED_ERR", JS_NewInt32(ctx, 9));
+  JS_SetPropertyStr(ctx, dom_exception_ctor, "INUSE_ATTRIBUTE_ERR", JS_NewInt32(ctx, 10));
+  JS_SetPropertyStr(ctx, dom_exception_ctor, "INVALID_STATE_ERR", JS_NewInt32(ctx, 11));
+  JS_SetPropertyStr(ctx, dom_exception_ctor, "SYNTAX_ERR", JS_NewInt32(ctx, 12));
+  JS_SetPropertyStr(ctx, dom_exception_ctor, "INVALID_MODIFICATION_ERR", JS_NewInt32(ctx, 13));
+  JS_SetPropertyStr(ctx, dom_exception_ctor, "NAMESPACE_ERR", JS_NewInt32(ctx, 14));
+  JS_SetPropertyStr(ctx, dom_exception_ctor, "INVALID_ACCESS_ERR", JS_NewInt32(ctx, 15));
+  JS_SetPropertyStr(ctx, dom_exception_ctor, "VALIDATION_ERR", JS_NewInt32(ctx, 16));
+  JS_SetPropertyStr(ctx, dom_exception_ctor, "TYPE_MISMATCH_ERR", JS_NewInt32(ctx, 17));
+  JS_SetPropertyStr(ctx, dom_exception_ctor, "SECURITY_ERR", JS_NewInt32(ctx, 18));
+  JS_SetPropertyStr(ctx, dom_exception_ctor, "NETWORK_ERR", JS_NewInt32(ctx, 19));
+  JS_SetPropertyStr(ctx, dom_exception_ctor, "ABORT_ERR", JS_NewInt32(ctx, 20));
+  JS_SetPropertyStr(ctx, dom_exception_ctor, "URL_MISMATCH_ERR", JS_NewInt32(ctx, 21));
+  JS_SetPropertyStr(ctx, dom_exception_ctor, "QUOTA_EXCEEDED_ERR", JS_NewInt32(ctx, 22));
+  JS_SetPropertyStr(ctx, dom_exception_ctor, "TIMEOUT_ERR", JS_NewInt32(ctx, 23));
+  JS_SetPropertyStr(ctx, dom_exception_ctor, "INVALID_NODE_TYPE_ERR", JS_NewInt32(ctx, 24));
+  JS_SetPropertyStr(ctx, dom_exception_ctor, "DATA_CLONE_ERR", JS_NewInt32(ctx, 25));
+
+  // Set the constructor's prototype property
+  JS_SetPropertyStr(ctx, dom_exception_ctor, "prototype", JS_DupValue(ctx, dom_exception_proto));
+
   JS_SetPropertyStr(ctx, rt->global, "DOMException", dom_exception_ctor);
 
   JSRT_Debug("DOMException setup completed");

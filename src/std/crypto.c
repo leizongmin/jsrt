@@ -132,6 +132,96 @@ static bool fallback_random_bytes(unsigned char* buf, int num) {
   return true;
 }
 
+// Helper function to check if a value is a valid integer TypedArray for getRandomValues
+static bool is_valid_integer_typed_array(JSContext* ctx, JSValue arg, const char** error_msg) {
+  if (!JS_IsObject(arg)) {
+    *error_msg = "Argument must be a typed array";
+    return false;
+  }
+
+  // First, check if it has the basic TypedArray properties (byteLength, buffer, etc.)
+  JSValue byteLength_val = JS_GetPropertyStr(ctx, arg, "byteLength");
+  JSValue buffer_val = JS_GetPropertyStr(ctx, arg, "buffer");
+
+  if (JS_IsException(byteLength_val) || JS_IsException(buffer_val) || JS_IsUndefined(byteLength_val) ||
+      JS_IsUndefined(buffer_val)) {
+    JS_FreeValue(ctx, byteLength_val);
+    JS_FreeValue(ctx, buffer_val);
+    *error_msg = "Argument must be a typed array";
+    return false;
+  }
+
+  JS_FreeValue(ctx, byteLength_val);
+  JS_FreeValue(ctx, buffer_val);
+
+  // Get the global object to access TypedArray constructors
+  JSValue global = JS_GetGlobalObject(ctx);
+
+  // Check if it's an instance of allowed integer TypedArray types
+  // We need to check instanceof for each allowed type
+  const char* allowed_types[] = {"Int8Array",         "Int16Array",  "Int32Array",  "BigInt64Array", "Uint8Array",
+                                 "Uint8ClampedArray", "Uint16Array", "Uint32Array", "BigUint64Array"};
+
+  bool is_valid_integer = false;
+
+  for (size_t i = 0; i < sizeof(allowed_types) / sizeof(allowed_types[0]); i++) {
+    JSValue ctor = JS_GetPropertyStr(ctx, global, allowed_types[i]);
+    if (!JS_IsException(ctor) && !JS_IsUndefined(ctor)) {
+      // Check instanceof
+      int is_instance = JS_IsInstanceOf(ctx, arg, ctor);
+      JS_FreeValue(ctx, ctor);
+      if (is_instance > 0) {
+        is_valid_integer = true;
+        break;
+      }
+      if (is_instance < 0) {
+        // Error occurred, continue checking other types
+        JS_GetException(ctx);  // Clear the exception
+      }
+    } else {
+      JS_FreeValue(ctx, ctor);
+    }
+  }
+
+  // If not a valid integer array, check if it's a forbidden float array or DataView
+  if (!is_valid_integer) {
+    const char* forbidden_types[] = {"Float16Array", "Float32Array", "Float64Array", "DataView"};
+
+    bool is_forbidden = false;
+    for (size_t i = 0; i < sizeof(forbidden_types) / sizeof(forbidden_types[0]); i++) {
+      JSValue ctor = JS_GetPropertyStr(ctx, global, forbidden_types[i]);
+      if (!JS_IsException(ctor) && !JS_IsUndefined(ctor)) {
+        int is_instance = JS_IsInstanceOf(ctx, arg, ctor);
+        JS_FreeValue(ctx, ctor);
+        if (is_instance > 0) {
+          is_forbidden = true;
+          break;
+        }
+        if (is_instance < 0) {
+          JS_GetException(ctx);  // Clear the exception
+        }
+      } else {
+        JS_FreeValue(ctx, ctor);
+      }
+    }
+
+    if (is_forbidden) {
+      JS_FreeValue(ctx, global);
+      *error_msg = "TypeMismatchError";
+      return false;
+    }
+  }
+
+  JS_FreeValue(ctx, global);
+
+  if (!is_valid_integer) {
+    *error_msg = "Argument must be a typed array";
+    return false;
+  }
+
+  return true;
+}
+
 // crypto.getRandomValues(typedArray)
 static JSValue jsrt_crypto_getRandomValues(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
   if (argc < 1) {
@@ -140,9 +230,31 @@ static JSValue jsrt_crypto_getRandomValues(JSContext* ctx, JSValueConst this_val
 
   JSValue arg = argv[0];
 
-  // Check if it's a typed array object
-  if (!JS_IsObject(arg)) {
-    return JS_ThrowTypeError(ctx, "crypto.getRandomValues argument must be a typed array");
+  // Validate that it's a proper integer TypedArray
+  const char* error_msg;
+  if (!is_valid_integer_typed_array(ctx, arg, &error_msg)) {
+    if (strcmp(error_msg, "TypeMismatchError") == 0) {
+      // For WPT compliance, throw DOMException with TypeMismatchError
+      // Create a DOMException with name "TypeMismatchError"
+      JSValue dom_exception_ctor = JS_GetPropertyStr(ctx, JS_GetGlobalObject(ctx), "DOMException");
+      if (!JS_IsException(dom_exception_ctor)) {
+        JSValue args[2];
+        args[0] = JS_NewString(ctx, "The operation is not supported");
+        args[1] = JS_NewString(ctx, "TypeMismatchError");
+        JSValue exception = JS_CallConstructor(ctx, dom_exception_ctor, 2, args);
+        JS_FreeValue(ctx, args[0]);
+        JS_FreeValue(ctx, args[1]);
+        JS_FreeValue(ctx, dom_exception_ctor);
+        if (!JS_IsException(exception)) {
+          JS_Throw(ctx, exception);
+          return JS_EXCEPTION;
+        }
+      }
+      // Fallback if DOMException not available
+      return JS_ThrowTypeError(ctx, "The operation is not supported");
+    } else {
+      return JS_ThrowTypeError(ctx, error_msg);
+    }
   }
 
   // Get byteLength property to determine the size

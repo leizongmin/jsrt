@@ -87,7 +87,21 @@ static int counter_capacity = 0;
 static int group_level = 0;
 
 void JSRT_RuntimeSetupStdConsole(JSRT_Runtime* rt) {
-  JSValueConst console = JS_NewObject(rt->ctx);
+  // Create a clean prototype for the console namespace object
+  // Per WPT requirements: console's [[Prototype]] must have no properties
+  // and console's [[Prototype]]'s [[Prototype]] must be Object.prototype
+  JSValue console_prototype = JS_NewObject(rt->ctx);
+
+  // Set the prototype's prototype to Object.prototype
+  JSValue object_prototype = JS_GetPropertyStr(rt->ctx, rt->global, "Object");
+  JSValue object_proto_proto = JS_GetPropertyStr(rt->ctx, object_prototype, "prototype");
+  JS_SetPrototype(rt->ctx, console_prototype, object_proto_proto);
+  JS_FreeValue(rt->ctx, object_prototype);
+  JS_FreeValue(rt->ctx, object_proto_proto);
+
+  // Create the console object with the clean prototype
+  JSValue console = JS_NewObjectProto(rt->ctx, console_prototype);
+  JS_FreeValue(rt->ctx, console_prototype);
 
   JS_SetPropertyStr(rt->ctx, console, "log", JS_NewCFunction(rt->ctx, jsrt_console_log, "log", 1));
   JS_SetPropertyStr(rt->ctx, console, "error", JS_NewCFunction(rt->ctx, jsrt_console_error, "error", 1));

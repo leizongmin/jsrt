@@ -381,6 +381,9 @@ add_library(llhttp STATIC
 target_include_directories(llhttp PUBLIC deps/llhttp/build deps/llhttp/src/native)
 target_compile_definitions(llhttp PRIVATE _GNU_SOURCE)
 
+# Add option for Node.js compatibility
+option(JSRT_NODE_COMPAT "Enable Node.js compatibility layer" ON)
+
 # Try to find system readline with robust detection
 set(READLINE_WORKING FALSE)
 
@@ -477,11 +480,19 @@ file(GLOB_RECURSE JSRT_STD_FILES "src/std/*.c")
 file(GLOB_RECURSE JSRT_UTIL_FILES "src/util/*.c")
 file(GLOB_RECURSE JSRT_HTTP_FILES "src/http/*.c")
 file(GLOB_RECURSE JSRT_WASM_FILES "src/wasm/*.c")
+
+# Add Node.js compatibility sources
+set(NODE_SOURCES "")
+if(JSRT_NODE_COMPAT)
+    file(GLOB_RECURSE NODE_SOURCES "src/node/*.c")
+endif()
+
 set(JSRT_LIB_FILES
     ${JSRT_STD_FILES}
     ${JSRT_UTIL_FILES}
     ${JSRT_HTTP_FILES}
     ${JSRT_WASM_FILES}
+    ${NODE_SOURCES}
     src/jsrt.c
     src/repl.c
     src/runtime.c)
@@ -496,6 +507,9 @@ set(JSRT_LINK_LIBS
     ${FFI_LIBRARIES})
 add_library(jsrtcore STATIC ${JSRT_LIB_FILES})
 target_compile_definitions(jsrtcore PRIVATE JSRT_VERSION="${JSRT_VERSION}")
+if(JSRT_NODE_COMPAT)
+    target_compile_definitions(jsrtcore PRIVATE JSRT_NODE_COMPAT)
+endif()
 target_link_libraries(jsrtcore PRIVATE readline)
 add_executable(jsrt src/main.c src/build.c)
 target_compile_definitions(jsrt PRIVATE JSRT_VERSION="${JSRT_VERSION}")

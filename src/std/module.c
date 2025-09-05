@@ -1,5 +1,9 @@
 #include "module.h"
 
+#ifdef JSRT_NODE_COMPAT
+#include "../node/node_modules.h"
+#endif
+
 #include <stdbool.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -442,6 +446,13 @@ char* JSRT_ModuleNormalize(JSContext* ctx, const char* module_base_name, const c
     return strdup(module_name);
   }
 
+#ifdef JSRT_NODE_COMPAT
+  // Handle node: modules specially - don't try to resolve them as files
+  if (strncmp(module_name, "node:", 5) == 0) {
+    return strdup(module_name);
+  }
+#endif
+
   // Check if this is a bare module name (not absolute or relative)
   if (!is_absolute_path(module_name) && !is_relative_path(module_name)) {
     // Try npm module resolution for ES modules
@@ -507,6 +518,14 @@ JSModuleDef* JSRT_ModuleLoader(JSContext* ctx, const char* module_name, void* op
     JS_ThrowReferenceError(ctx, "Unknown std module '%s'", std_module);
     return NULL;
   }
+
+#ifdef JSRT_NODE_COMPAT
+  // Handle node: modules
+  if (strncmp(module_name, "node:", 5) == 0) {
+    const char* node_module = module_name + 5;  // Skip "node:" prefix
+    return JSRT_LoadNodeModule(ctx, node_module);
+  }
+#endif
 
   // Load the file
   JSRT_ReadFileResult file_result = JSRT_ReadFile(module_name);
@@ -732,6 +751,17 @@ static JSValue js_require(JSContext* ctx, JSValueConst this_val, int argc, JSVal
     free(esm_context_path);
     return JS_ThrowReferenceError(ctx, "Unknown jsrt module '%s'", std_module);
   }
+
+#ifdef JSRT_NODE_COMPAT
+  // Handle node: modules
+  if (strncmp(module_name, "node:", 5) == 0) {
+    const char* node_module_name = module_name + 5;
+    JS_FreeCString(ctx, module_name);
+    JSValue result = JSRT_LoadNodeModuleCommonJS(ctx, node_module_name);
+    free(esm_context_path);
+    return result;
+  }
+#endif
 
   // Check if this is a bare module name (npm package)
   char* resolved_path;

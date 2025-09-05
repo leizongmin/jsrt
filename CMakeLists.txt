@@ -122,6 +122,20 @@ endif()
 
 add_subdirectory(deps/wamr)
 
+# Fix WAMR link libraries for Windows
+# WAMR unconditionally links -ldl which doesn't exist on Windows
+if(WIN32)
+    # Get current link libraries from vmlib target
+    get_target_property(WAMR_LINK_LIBS vmlib INTERFACE_LINK_LIBRARIES)
+    if(WAMR_LINK_LIBS)
+        # Remove -ldl from the list
+        list(REMOVE_ITEM WAMR_LINK_LIBS "-ldl")
+        # Set the cleaned link libraries back
+        set_target_properties(vmlib PROPERTIES INTERFACE_LINK_LIBRARIES "${WAMR_LINK_LIBS}")
+    endif()
+    message(STATUS "Windows detected: Removed -ldl from WAMR link libraries")
+endif()
+
 # build llhttp (minimal implementation)
 # Check if llhttp generated files exist, if not, build them
 if(NOT EXISTS "${CMAKE_SOURCE_DIR}/deps/llhttp/build/c/llhttp.c")

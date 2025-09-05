@@ -114,9 +114,10 @@ set(WAMR_BUILD_SHARED_MEMORY 0)   # Disable shared memory for now
 
 # Windows MinGW specific configuration for WAMR
 if(WIN32 AND NOT MSVC)
-    # For MinGW builds, we need to define additional flags to avoid MSVC-specific features
-    # Set a custom define that WAMR can use to avoid __try/__except in MinGW builds
-    add_definitions(-DWAMR_MINGW_BUILD=1)
+    # For MinGW builds, disable hardware bound checking to avoid MSVC-specific __try/__except
+    # MinGW doesn't support structured exception handling, only MSVC does
+    set(WAMR_DISABLE_HW_BOUND_CHECK 1)
+    message(STATUS "MinGW detected: Disabling WAMR hardware bound checking to avoid MSVC-specific SEH")
 endif()
 
 add_subdirectory(deps/wamr)

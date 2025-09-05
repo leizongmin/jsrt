@@ -120,8 +120,9 @@ static JSValue jsrt_start_timer(bool is_interval, JSContext* ctx, JSValueConst t
 
   uv_timer_init(rt->uv_loop, &timer->uv_timer);
 
-  int status =
-      uv_timer_start(&timer->uv_timer, jsrt_on_timer_callback, timer->timeout, is_interval ? timer->timeout : 0);
+  // For intervals, ensure repeat interval is at least 1ms (0 means no repeat in libuv)
+  uint64_t repeat_interval = is_interval ? (timer->timeout > 0 ? timer->timeout : 1) : 0;
+  int status = uv_timer_start(&timer->uv_timer, jsrt_on_timer_callback, timer->timeout, repeat_interval);
   if (status != 0) {
     return JS_ThrowInternalError(rt->ctx, "uv_timer_start error: status=%d", status);
   }

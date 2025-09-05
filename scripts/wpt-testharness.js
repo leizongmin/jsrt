@@ -274,6 +274,14 @@ function async_test(func, name) {
             };
         },
         
+        step_timeout: function(stepFunc, timeout) {
+            return setTimeout(() => {
+                if (!completed) {
+                    t.step(stepFunc);
+                }
+            }, timeout);
+        },
+        
         done: function() {
             if (completed) return;
             completed = true;
@@ -343,9 +351,53 @@ function promise_test(func, name) {
     }
 }
 
-// Setup function (no-op for jsrt)
-function setup() {
-    // No-op in jsrt environment
+// Global done function for single_test mode
+var globalDone = null;
+
+// Setup function with single_test support
+function setup(options) {
+    if (options && options.single_test) {
+        // Create a global done function for single test mode
+        wptTestCounter++;
+        const testName = `Single Test ${wptTestCounter}`;
+        
+        const testObj = {
+            name: testName,
+            status: null,
+            message: null
+        };
+        
+        wptTests.push(testObj);
+        wptCurrentTest = testObj;
+        
+        // Create global done function
+        globalDone = function() {
+            if (testObj.status !== null) return; // Already completed
+            testObj.status = TEST_PASS;
+            testObj.message = 'OK';
+            console.log(`✅ ${testName}`);
+            wptCurrentTest = null;
+        };
+        
+        // Handle test failures (will be caught by setTimeout errors)
+        setTimeout(() => {
+            if (testObj.status === null) {
+                testObj.status = TEST_FAIL;
+                testObj.message = 'Test timed out or failed to call done()';
+                console.log(`❌ ${testName}: Test timed out`);
+                wptCurrentTest = null;
+            }
+        }, 1000); // 1 second timeout
+    }
+}
+
+// Make done available globally for single_test mode  
+function done() {
+    if (globalDone) {
+        globalDone();
+    } else {
+        console.warn('done() called but no single_test setup found');
+    }
 }
 
 // WPT utility function for fetching JSON - stub implementation

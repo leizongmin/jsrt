@@ -15,6 +15,7 @@ static JSClassID JSRT_URLSearchParamsClassID;
 
 // Forward declare
 struct JSRT_URL;
+typedef struct JSRT_URLSearchParams JSRT_URLSearchParams;
 
 // URL component structure
 typedef struct JSRT_URL {
@@ -34,6 +35,7 @@ typedef struct JSRT_URL {
 // Forward declarations
 static JSRT_URL* JSRT_ParseURL(const char* url, const char* base);
 static void JSRT_FreeURL(JSRT_URL* url);
+static JSValue JSRT_URLSearchParamsToString(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv);
 
 // Simple URL parser (basic implementation)
 static int is_valid_scheme(const char* scheme) {
@@ -490,6 +492,12 @@ static JSValue JSRT_URLGetSearchParams(JSContext* ctx, JSValueConst this_val, in
     JSValue search_value = JS_NewString(ctx, url->search);
     url->search_params = JS_CallConstructor(ctx, search_params_ctor, 1, &search_value);
 
+    // TODO: Set parent_url reference for URL integration
+    // JSRT_URLSearchParams* search_params = JS_GetOpaque2(ctx, url->search_params, JSRT_URLSearchParamsClassID);
+    // if (search_params) {
+    //   search_params->parent_url = url;
+    // }
+
     JS_FreeValue(ctx, search_params_ctor);
     JS_FreeValue(ctx, search_value);
   }
@@ -514,6 +522,11 @@ typedef struct JSRT_URLSearchParam {
   struct JSRT_URLSearchParam* next;
 } JSRT_URLSearchParam;
 
+struct JSRT_URLSearchParams {
+  JSRT_URLSearchParam* params;
+  JSRT_URL* parent_url;  // Reference to parent URL for href updates
+};
+
 // Helper function to create a parameter with proper length handling
 static JSRT_URLSearchParam* create_url_param(const char* name, size_t name_len, const char* value, size_t value_len) {
   JSRT_URLSearchParam* param = malloc(sizeof(JSRT_URLSearchParam));
@@ -529,9 +542,75 @@ static JSRT_URLSearchParam* create_url_param(const char* name, size_t name_len, 
   return param;
 }
 
-typedef struct {
-  JSRT_URLSearchParam* params;
-} JSRT_URLSearchParams;
+// Helper function to update parent URL's href when URLSearchParams change
+static void update_parent_url_href(JSRT_URLSearchParams* search_params) {
+  if (!search_params || !search_params->parent_url) {
+    return;
+  }
+
+  JSRT_URL* url = search_params->parent_url;
+
+  // Generate new search string from current parameters
+  JSContext* ctx = url->ctx;
+  JSValue search_params_val = JS_NewObjectClass(ctx, JSRT_URLSearchParamsClassID);
+  JS_SetOpaque(search_params_val, search_params);
+
+  JSValue search_string = JSRT_URLSearchParamsToString(ctx, search_params_val, 0, NULL);
+  if (JS_IsException(search_string)) {
+    JS_FreeValue(ctx, search_params_val);
+    return;
+  }
+
+  const char* new_search = JS_ToCString(ctx, search_string);
+  if (new_search) {
+    // Update URL's search component
+    free(url->search);
+    if (strlen(new_search) > 0) {
+      url->search = malloc(strlen(new_search) + 2);  // +1 for '?', +1 for '\0'
+      sprintf(url->search, "?%s", new_search);
+    } else {
+      url->search = strdup("");
+    }
+
+    // Rebuild href
+    free(url->href);
+    size_t href_len = strlen(url->protocol) + 2 + strlen(url->hostname) + strlen(url->pathname);
+    if (url->port && strlen(url->port) > 0) {
+      href_len += 1 + strlen(url->port);  // :port
+    }
+    if (url->search && strlen(url->search) > 0) {
+      href_len += strlen(url->search);
+    }
+    if (url->hash && strlen(url->hash) > 0) {
+      href_len += strlen(url->hash);
+    }
+
+    url->href = malloc(href_len + 1);
+    strcpy(url->href, url->protocol);
+    strcat(url->href, "//");
+    strcat(url->href, url->hostname);
+
+    if (url->port && strlen(url->port) > 0 && !is_default_port(url->protocol, url->port)) {
+      strcat(url->href, ":");
+      strcat(url->href, url->port);
+    }
+
+    strcat(url->href, url->pathname);
+
+    if (url->search && strlen(url->search) > 0) {
+      strcat(url->href, url->search);
+    }
+
+    if (url->hash && strlen(url->hash) > 0) {
+      strcat(url->href, url->hash);
+    }
+
+    JS_FreeCString(ctx, new_search);
+  }
+
+  JS_FreeValue(ctx, search_string);
+  JS_FreeValue(ctx, search_params_val);
+}
 
 static void JSRT_FreeSearchParams(JSRT_URLSearchParams* search_params) {
   if (search_params) {
@@ -910,6 +989,10 @@ static JSValue JSRT_URLSearchParamsSet(JSContext* ctx, JSValueConst this_val, in
 
   JS_FreeCString(ctx, name);
   JS_FreeCString(ctx, value);
+
+  // TODO: Update parent URL's href if connected
+  // update_parent_url_href(search_params);
+
   return JS_UNDEFINED;
 }
 
@@ -945,6 +1028,10 @@ static JSValue JSRT_URLSearchParamsAppend(JSContext* ctx, JSValueConst this_val,
 
   JS_FreeCString(ctx, name);
   JS_FreeCString(ctx, value);
+
+  // TODO: Update parent URL's href if connected
+  // update_parent_url_href(search_params);
+
   return JS_UNDEFINED;
 }
 
@@ -1053,6 +1140,10 @@ static JSValue JSRT_URLSearchParamsDelete(JSContext* ctx, JSValueConst this_val,
   if (value) {
     JS_FreeCString(ctx, value);
   }
+
+  // TODO: Update parent URL's href if connected
+  // update_parent_url_href(search_params);
+
   return JS_UNDEFINED;
 }
 

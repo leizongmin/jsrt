@@ -882,7 +882,7 @@ static JSRT_URLSearchParams* JSRT_ParseSearchParamsFromSequence(JSContext* ctx, 
   // For now, skip iterator protocol and use array-like handling only
   if (false) {
     // Use iterator protocol
-    JSAtom iterator_symbol2 = JS_NewAtomStr(ctx, "Symbol.iterator");
+    JSAtom iterator_symbol2 = JS_NewAtom(ctx, "Symbol.iterator");
     JSValue iterator_method = JS_GetProperty(ctx, seq, iterator_symbol2);
     JS_FreeAtom(ctx, iterator_symbol2);
     if (JS_IsException(iterator_method)) {

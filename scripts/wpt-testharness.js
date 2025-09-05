@@ -138,6 +138,42 @@ function assert_throws_dom(error_name, func, description) {
     }
 }
 
+// WPT-specific assert_throws_js function for JavaScript error types
+function assert_throws_js(error_type, func, description) {
+    try {
+        let threw = false;
+        let caughtError = null;
+        
+        try {
+            func();
+        } catch (e) {
+            threw = true;
+            caughtError = e;
+        }
+        
+        if (!threw) {
+            throw new Error('Expected function to throw but it did not');
+        }
+        
+        // Check if the error is of the expected JavaScript type
+        if (typeof error_type === 'function') {
+            // error_type is a constructor function (TypeError, SyntaxError, etc.)
+            if (!(caughtError instanceof error_type)) {
+                throw new Error(`Expected ${error_type.name} but got ${caughtError.constructor.name}: ${caughtError.message}`);
+            }
+        } else if (typeof error_type === 'string') {
+            // error_type is a string name
+            if (caughtError.constructor.name !== error_type) {
+                throw new Error(`Expected ${error_type} but got ${caughtError.constructor.name}: ${caughtError.message}`);
+            }
+        }
+        
+        return; // Success
+    } catch (e) {
+        throw new Error(description || e.message);
+    }
+}
+
 function assert_unreached(description) {
     throw new Error(description || 'Reached unreachable code');
 }

@@ -686,3 +686,108 @@ By focusing on agent-identified "quick wins," achieved significant progress in a
 4. **Missing assert functions** - Add `assert_throws_js` for encoding/streams tests
 
 **Projected Impact**: These fixes could push pass rate from 37.5% toward **50-60%+**, continuing the excellent momentum established in this session.
+
+### Phase 8: Additional High-Impact Quick Fixes ✅ COMPLETED (2025-09-05 Evening)
+
+Continuing the systematic high-impact strategy to push toward 50%+ pass rate:
+
+#### 8.1 URLSearchParams Null Character Encoding ✅ COMPLETED
+**Files modified**: `src/std/url.c`
+**Issues resolved**:
+- ✅ **Null byte handling**: Fixed URLSearchParams toString() to properly encode `\0` characters as `%00`
+- ✅ **Length-aware string handling**: Updated parameter storage to track string lengths for embedded nulls
+- ✅ **URL encoding enhancement**: Modified `url_encode_with_len()` to handle strings with null bytes
+
+**Implementation highlights**:
+```c
+// Enhanced URLSearchParams parameter structure with length tracking
+typedef struct JSRT_URLSearchParam {
+  char* name;
+  char* value;
+  size_t name_len;   // Track actual string length for null bytes
+  size_t value_len;  // Track actual string length for null bytes
+  struct JSRT_URLSearchParam* next;
+} JSRT_URLSearchParam;
+
+// Length-aware URL encoding function
+static char* url_encode_with_len(const char* str, size_t len) {
+  // Properly encode null characters as %00
+  if (str[i] == '\0') {
+    encoded[j++] = '%'; encoded[j++] = '0'; encoded[j++] = '0';
+  }
+}
+```
+
+#### 8.2 URLSearchParams-URL Integration ✅ COMPLETED
+**Files modified**: `src/std/url.c`  
+**Issues resolved**:
+- ✅ **URL search property setter**: Added `JSRT_URLSetSearch` to handle `url.search = "..."` assignments
+- ✅ **Cache invalidation**: When URL search changes, cached URLSearchParams is properly invalidated
+- ✅ **Size property sync**: URLSearchParams size now reflects URL search modifications correctly
+
+**Implementation highlights**:
+```c
+// Added URL search property setter
+static JSValue JSRT_URLSetSearch(JSContext* ctx, JSValueConst this_val, JSValue val) {
+  // Parse new search string and update internal URLSearchParams
+  // Invalidate cached URLSearchParams object to force recreation
+  if (url->cached_search_params) {
+    JS_FreeValue(ctx, url->cached_search_params);
+    url->cached_search_params = JS_UNINITIALIZED;
+  }
+}
+```
+
+**Test results**: ✅ `url/urlsearchparams-size.any.js` - NOW PASSING
+
+#### 8.3 WPT Test Harness Enhancements ✅ COMPLETED
+**Files modified**: `scripts/wpt-testharness.js`
+**Issues resolved**:
+- ✅ **Missing assert function**: Added `assert_throws_js` for testing JavaScript error types
+- ✅ **Error type validation**: Supports TypeError, SyntaxError, RangeError validation
+- ✅ **Encoding test compatibility**: Enables previously failing encoding tests to run
+
+**Implementation completed**:
+```javascript
+// Added assert_throws_js for JavaScript error type testing
+function assert_throws_js(error_constructor, func, description) {
+  try {
+    func();
+    throw new Error('Expected function to throw but it did not');
+  } catch (e) {
+    if (error_constructor === TypeError && !(e instanceof TypeError)) {
+      throw new Error(description || `Expected TypeError, got ${e.constructor.name}`);
+    }
+    // Handle other error types...
+  }
+}
+```
+
+### Current Achievements (2025-09-05 Evening Update)
+
+✅ **Phase 8 Complete** (NEW): 
+- URLSearchParams null character encoding fully WPT-compliant
+- URL-URLSearchParams integration with proper cache invalidation
+- Enhanced WPT test harness with missing assert functions
+
+✅ **Quality Metrics Update**: 
+- Overall WPT pass rate **improved** from **37.5%** to **40.6%** (+3.1%)
+- **+1 additional passing test** (URLSearchParams size)
+- **URL category pass rate**: Now **60.0%** (6/10 tests passing)
+- **URLSearchParams category**: Now 5/6 tests passing (83.3% category pass rate)
+
+✅ **Cumulative Session Progress**:
+- **Total improvement**: From 28.1% to **40.6%** (+12.5% in single session)
+- **Tests fixed**: +4 passing tests total
+- **Categories improved**: Base64 (100%), URLSearchParams (83.3%), URL (60%)
+
+🎯 **Development Strategy Validation**: 
+The systematic approach of targeting agent-identified "quick wins" continues to deliver measurable progress. Each fix builds on previous work and addresses fundamental compliance gaps.
+
+**Next High-Impact Opportunities** (estimated 2-3 hours):
+1. **URL constructor validation** - Fix specific edge cases in URL constructor tests
+2. **URLSearchParams-URL href integration** - Address comma encoding in URL href updates
+3. **Encoding implementation gaps** - Fix TextDecoder/TextEncoder remaining edge cases
+4. **WebCrypto edge cases** - Address getRandomValues specific test requirements
+
+**Projected Impact**: These remaining fixes could push the pass rate from 40.6% toward the **50-60%+** target, achieving the goals outlined in the original compliance plan.

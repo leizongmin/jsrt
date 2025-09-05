@@ -102,6 +102,7 @@ void JSRT_RuntimeFree(JSRT_Runtime* rt) {
   JS_SetCanBlock(rt->rt, true);
 
   // Free the global object first, before any module cleanups
+  JS_SetPropertyStr(rt->ctx, rt->global, "undefined", JS_UNDEFINED);
   JSRT_RuntimeFreeValue(rt, rt->global);
   rt->global = JS_UNDEFINED;
 
@@ -111,14 +112,14 @@ void JSRT_RuntimeFree(JSRT_Runtime* rt) {
   JSRT_RuntimeFreeDisposeValues(rt);
   JSRT_RuntimeFreeExceptionValues(rt);
 
-  // Cleanup FFI module first to free the static ffi_functions_map
+  // Cleanup module system first
+  JSRT_StdModuleCleanup(rt->ctx);
+
+  // Cleanup FFI module to free the static ffi_functions_map
   JSRT_RuntimeCleanupStdFFI(rt->ctx);
 
   // Cleanup WebAssembly module to cleanup WAMR runtime
   JSRT_RuntimeCleanupStdWebAssembly(rt->ctx);
-
-  // Cleanup module system
-  JSRT_StdModuleCleanup(rt->ctx);
 
   // Execute pending jobs and run GC thoroughly
   JSContext* ctx1;

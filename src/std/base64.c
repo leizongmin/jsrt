@@ -38,46 +38,104 @@ static JSValue JSRT_btoa(JSContext* ctx, JSValueConst this_val, int argc, JSValu
     return JS_ThrowTypeError(ctx, "btoa requires 1 argument");
   }
 
-  const char* input_str = JS_ToCString(ctx, argv[0]);
-  if (!input_str) {
+  // Convert argument to string
+  JSValue str_val = JS_ToString(ctx, argv[0]);
+  if (JS_IsException(str_val)) {
     return JS_EXCEPTION;
   }
 
-  size_t input_len = strlen(input_str);
+  // Use QuickJS to iterate through Unicode code points
+  // We'll build an array of Latin-1 bytes first
+  unsigned char* latin1_bytes = NULL;
+  size_t byte_len = 0;
+  size_t byte_capacity = 0;
 
-  // Validate input - btoa should only accept valid Latin-1 (0-255) characters
-  for (size_t i = 0; i < input_len; i++) {
-    unsigned char c = (unsigned char)input_str[i];
-    if (c > 255) {
-      JS_FreeCString(ctx, input_str);
-      return JS_ThrowTypeError(ctx, "The string to be encoded contains characters outside of the Latin1 range.");
-    }
+  // Get string length (in Unicode code units)
+  JSValue length_val = JS_GetPropertyStr(ctx, str_val, "length");
+  if (JS_IsException(length_val)) {
+    JS_FreeValue(ctx, str_val);
+    return JS_EXCEPTION;
   }
 
-  // Calculate output length
-  size_t output_len = 4 * ((input_len + 2) / 3);
+  int32_t str_length;
+  if (JS_ToInt32(ctx, &str_length, length_val) < 0) {
+    JS_FreeValue(ctx, length_val);
+    JS_FreeValue(ctx, str_val);
+    return JS_EXCEPTION;
+  }
+  JS_FreeValue(ctx, length_val);
+
+  // Iterate through each character
+  for (int32_t i = 0; i < str_length; i++) {
+    // Get character code at position i
+    JSValue index_val = JS_NewInt32(ctx, i);
+    JSAtom charCodeAt_atom = JS_NewAtom(ctx, "charCodeAt");
+    JSValue char_code = JS_Invoke(ctx, str_val, charCodeAt_atom, 1, &index_val);
+    JS_FreeAtom(ctx, charCodeAt_atom);
+
+    if (JS_IsException(char_code)) {
+      JS_FreeValue(ctx, str_val);
+      free(latin1_bytes);
+      return JS_EXCEPTION;
+    }
+
+    int32_t code;
+    if (JS_ToInt32(ctx, &code, char_code) < 0) {
+      JS_FreeValue(ctx, char_code);
+      JS_FreeValue(ctx, str_val);
+      free(latin1_bytes);
+      return JS_EXCEPTION;
+    }
+    JS_FreeValue(ctx, char_code);
+
+    // Check if code point is outside Latin-1 range
+    if (code > 255) {
+      JS_FreeValue(ctx, str_val);
+      free(latin1_bytes);
+      return JS_ThrowTypeError(ctx, "The string to be encoded contains characters outside of the Latin1 range.");
+    }
+
+    // Expand buffer if needed
+    if (byte_len >= byte_capacity) {
+      byte_capacity = byte_capacity ? byte_capacity * 2 : 16;
+      unsigned char* new_bytes = realloc(latin1_bytes, byte_capacity);
+      if (!new_bytes) {
+        JS_FreeValue(ctx, str_val);
+        free(latin1_bytes);
+        return JS_ThrowOutOfMemory(ctx);
+      }
+      latin1_bytes = new_bytes;
+    }
+
+    latin1_bytes[byte_len++] = (unsigned char)code;
+  }
+
+  JS_FreeValue(ctx, str_val);
+
+  // Now encode the Latin-1 bytes to Base64
+  size_t output_len = 4 * ((byte_len + 2) / 3);
   char* output = malloc(output_len + 1);
   if (!output) {
-    JS_FreeCString(ctx, input_str);
+    free(latin1_bytes);
     return JS_ThrowOutOfMemory(ctx);
   }
 
   size_t j = 0;
-  for (size_t i = 0; i < input_len; i += 3) {
-    uint32_t octet_a = i < input_len ? (unsigned char)input_str[i] : 0;
-    uint32_t octet_b = i + 1 < input_len ? (unsigned char)input_str[i + 1] : 0;
-    uint32_t octet_c = i + 2 < input_len ? (unsigned char)input_str[i + 2] : 0;
+  for (size_t i = 0; i < byte_len; i += 3) {
+    uint32_t octet_a = i < byte_len ? latin1_bytes[i] : 0;
+    uint32_t octet_b = i + 1 < byte_len ? latin1_bytes[i + 1] : 0;
+    uint32_t octet_c = i + 2 < byte_len ? latin1_bytes[i + 2] : 0;
 
     uint32_t triple = (octet_a << 16) + (octet_b << 8) + octet_c;
 
     output[j++] = base64_encode_table[(triple >> 18) & 63];
     output[j++] = base64_encode_table[(triple >> 12) & 63];
-    output[j++] = i + 1 < input_len ? base64_encode_table[(triple >> 6) & 63] : '=';
-    output[j++] = i + 2 < input_len ? base64_encode_table[triple & 63] : '=';
+    output[j++] = i + 1 < byte_len ? base64_encode_table[(triple >> 6) & 63] : '=';
+    output[j++] = i + 2 < byte_len ? base64_encode_table[triple & 63] : '=';
   }
 
   output[output_len] = '\0';
-  JS_FreeCString(ctx, input_str);
+  free(latin1_bytes);
 
   JSValue result = JS_NewString(ctx, output);
   free(output);
@@ -95,67 +153,146 @@ static JSValue JSRT_atob(JSContext* ctx, JSValueConst this_val, int argc, JSValu
     return JS_EXCEPTION;
   }
 
-  size_t input_len = strlen(input_str);
+  // Trim whitespace from input (HTML5 spec requirement)
+  const char* start = input_str;
+  const char* end = input_str + strlen(input_str);
 
-  // Base64 input length must be a multiple of 4
-  if (input_len % 4 != 0) {
+  // Skip leading whitespace
+  while (start < end && (*start == ' ' || *start == '\t' || *start == '\n' || *start == '\r' || *start == '\f')) {
+    start++;
+  }
+
+  // Skip trailing whitespace
+  while (end > start && (end[-1] == ' ' || end[-1] == '\t' || end[-1] == '\n' || end[-1] == '\r' || end[-1] == '\f')) {
+    end--;
+  }
+
+  size_t input_len = end - start;
+
+  // Create a trimmed copy of the string
+  char* trimmed_input = malloc(input_len + 1);
+  if (!trimmed_input) {
     JS_FreeCString(ctx, input_str);
+    return JS_ThrowOutOfMemory(ctx);
+  }
+  memcpy(trimmed_input, start, input_len);
+  trimmed_input[input_len] = '\0';
+
+  // Add implicit padding if needed (HTML5 spec allows this)
+  size_t padded_len = input_len;
+  char* padded_input = trimmed_input;
+
+  if (input_len % 4 != 0) {
+    padded_len = ((input_len + 3) / 4) * 4;  // Round up to next multiple of 4
+    padded_input = malloc(padded_len + 1);
+    if (!padded_input) {
+      JS_FreeCString(ctx, input_str);
+      free(trimmed_input);
+      return JS_ThrowOutOfMemory(ctx);
+    }
+
+    // Copy original and add padding
+    memcpy(padded_input, trimmed_input, input_len);
+    for (size_t i = input_len; i < padded_len; i++) {
+      padded_input[i] = '=';
+    }
+    padded_input[padded_len] = '\0';
+
+    // Update our working variables
+    input_len = padded_len;
+    free(trimmed_input);
+    trimmed_input = padded_input;
+  }
+
+  // Validate padding - must be correct amount and in correct positions
+  size_t padding_count = 0;
+  size_t first_padding_pos = input_len;  // Position of first padding character
+
+  for (size_t i = 0; i < input_len; i++) {
+    if (trimmed_input[i] == '=') {
+      if (padding_count == 0) {
+        first_padding_pos = i;
+      }
+      padding_count++;
+    } else if (padding_count > 0) {
+      // Non-padding character after padding started
+      JS_FreeCString(ctx, input_str);
+      free(trimmed_input);
+      return JS_ThrowTypeError(ctx, "The string to be decoded is not correctly encoded.");
+    }
+  }
+
+  // Check if padding is at the end
+  if (padding_count > 0 && first_padding_pos + padding_count != input_len) {
+    JS_FreeCString(ctx, input_str);
+    free(trimmed_input);
     return JS_ThrowTypeError(ctx, "The string to be decoded is not correctly encoded.");
   }
 
-  // Validate padding - padding ('=') can only appear at the end
-  // and only in the last group of 4 characters
-  for (size_t i = 0; i < input_len; i++) {
-    if (input_str[i] == '=') {
-      // Padding found - check if it's in a valid position
-      if (i < input_len - 2) {
-        // Padding not in the last 2 positions
-        JS_FreeCString(ctx, input_str);
-        return JS_ThrowTypeError(ctx, "The string to be decoded is not correctly encoded.");
-      }
-      // Check that all remaining characters after first padding are also padding
-      for (size_t j = i + 1; j < input_len; j++) {
-        if (input_str[j] != '=') {
-          JS_FreeCString(ctx, input_str);
-          return JS_ThrowTypeError(ctx, "The string to be decoded is not correctly encoded.");
-        }
-      }
-      break;
-    }
+  // Check padding correctness based on data length
+  size_t data_chars = input_len - padding_count;
+
+  // Valid combinations:
+  // 4 data chars, 0 padding (4 total)
+  // 3 data chars, 1 padding (4 total)
+  // 2 data chars, 2 padding (4 total)
+  // 1 data char is never valid (would need 3 padding, but that's not allowed)
+  // 0 data chars is never valid
+
+  // Special case: empty string is valid
+  if (input_len == 0) {
+    JS_FreeCString(ctx, input_str);
+    free(trimmed_input);
+    return JS_NewString(ctx, "");
+  }
+
+  if (padding_count >= 3 || data_chars == 1) {
+    JS_FreeCString(ctx, input_str);
+    free(trimmed_input);
+    return JS_ThrowTypeError(ctx, "The string to be decoded is not correctly encoded.");
+  }
+
+  // Additionally, check the correct padding for data length
+  if ((data_chars == 2 && padding_count != 2) || (data_chars == 3 && padding_count != 1)) {
+    JS_FreeCString(ctx, input_str);
+    free(trimmed_input);
+    return JS_ThrowTypeError(ctx, "The string to be decoded is not correctly encoded.");
   }
 
   // Calculate output length
   size_t output_len = input_len / 4 * 3;
-  if (input_len >= 1 && input_str[input_len - 1] == '=')
+  if (input_len >= 1 && trimmed_input[input_len - 1] == '=')
     output_len--;
-  if (input_len >= 2 && input_str[input_len - 2] == '=')
+  if (input_len >= 2 && trimmed_input[input_len - 2] == '=')
     output_len--;
 
   unsigned char* output = malloc(output_len + 1);
   if (!output) {
     JS_FreeCString(ctx, input_str);
+    free(trimmed_input);
     return JS_ThrowOutOfMemory(ctx);
   }
 
   size_t j = 0;
   for (size_t i = 0; i < input_len; i += 4) {
-    uint8_t sextet_a = base64_decode_table[(unsigned char)input_str[i]];
-    uint8_t sextet_b = base64_decode_table[(unsigned char)input_str[i + 1]];
-    uint8_t sextet_c = base64_decode_table[(unsigned char)input_str[i + 2]];
-    uint8_t sextet_d = base64_decode_table[(unsigned char)input_str[i + 3]];
+    uint8_t sextet_a = base64_decode_table[(unsigned char)trimmed_input[i]];
+    uint8_t sextet_b = base64_decode_table[(unsigned char)trimmed_input[i + 1]];
+    uint8_t sextet_c = base64_decode_table[(unsigned char)trimmed_input[i + 2]];
+    uint8_t sextet_d = base64_decode_table[(unsigned char)trimmed_input[i + 3]];
 
     // Check for invalid characters
-    if (sextet_a == 255 || sextet_b == 255 || (sextet_c == 255 && input_str[i + 2] != '=') ||
-        (sextet_d == 255 && input_str[i + 3] != '=')) {
+    if (sextet_a == 255 || sextet_b == 255 || (sextet_c == 255 && trimmed_input[i + 2] != '=') ||
+        (sextet_d == 255 && trimmed_input[i + 3] != '=')) {
       JS_FreeCString(ctx, input_str);
+      free(trimmed_input);
       free(output);
       return JS_ThrowTypeError(ctx, "The string to be decoded contains invalid characters.");
     }
 
     // Handle padding
-    if (input_str[i + 2] == '=')
+    if (trimmed_input[i + 2] == '=')
       sextet_c = 0;
-    if (input_str[i + 3] == '=')
+    if (trimmed_input[i + 3] == '=')
       sextet_d = 0;
 
     uint32_t triple = (sextet_a << 18) + (sextet_b << 12) + (sextet_c << 6) + sextet_d;
@@ -170,9 +307,34 @@ static JSValue JSRT_atob(JSContext* ctx, JSValueConst this_val, int argc, JSValu
 
   output[output_len] = '\0';
   JS_FreeCString(ctx, input_str);
+  free(trimmed_input);
 
-  JSValue result = JS_NewStringLen(ctx, (const char*)output, output_len);
+  // Convert binary output to JavaScript string where each byte becomes a Unicode code point
+  // Use String.fromCharCode.apply(null, array_of_codes) for efficiency
+  JSValue global = JS_GetGlobalObject(ctx);
+  JSValue string_constructor = JS_GetPropertyStr(ctx, global, "String");
+  JSValue from_char_code = JS_GetPropertyStr(ctx, string_constructor, "fromCharCode");
+
+  // Create array of character codes
+  JSValue char_codes = JS_NewArray(ctx);
+  for (size_t i = 0; i < output_len; i++) {
+    JSValue code = JS_NewInt32(ctx, output[i]);
+    JS_SetPropertyUint32(ctx, char_codes, i, code);
+  }
+
+  // Call String.fromCharCode.apply(null, char_codes)
+  JSValue apply_args[2] = {JS_NULL, char_codes};
+  JSValue apply_func = JS_GetPropertyStr(ctx, from_char_code, "apply");
+  JSValue result = JS_Call(ctx, apply_func, from_char_code, 2, apply_args);
+
+  // Cleanup
+  JS_FreeValue(ctx, apply_func);
+  JS_FreeValue(ctx, char_codes);
+  JS_FreeValue(ctx, from_char_code);
+  JS_FreeValue(ctx, string_constructor);
+  JS_FreeValue(ctx, global);
   free(output);
+
   return result;
 }
 

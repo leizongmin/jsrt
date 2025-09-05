@@ -342,6 +342,13 @@ class JSRTTestRunner:
                 if result['status'] in ['FAIL', 'ERROR', 'TIMEOUT'] and 'reason' not in result:
                     if result.get('stderr'):
                         print(f"    Error: {result['stderr'][:200]}...")
+                    elif result.get('stdout'):
+                        # Show stdout for debugging
+                        lines = result['stdout'].split('\n')
+                        for line in lines:
+                            if line.strip() and '❌' in line:
+                                print(f"    {line}")
+                                break
                 elif 'reason' in result:
                     print(f"    {result['reason']}")
                 

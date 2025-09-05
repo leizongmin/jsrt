@@ -1,21 +1,21 @@
 #include <stdbool.h>
 #include <stdlib.h>
 #include <string.h>
-#include <unistd.h>
 #include <sys/utsname.h>
+#include <unistd.h>
 #include "node_modules.h"
 
 #ifdef _WIN32
+#include <lmcons.h>
+#include <process.h>
 #include <windows.h>
 #include <winsock2.h>
-#include <process.h>
-#include <lmcons.h>
 #define JSRT_GETPID() _getpid()
 #define JSRT_GETPPID() 0  // Not available on Windows
 #define JSRT_GETHOSTNAME(buf, size) (GetComputerNameA(buf, &size) ? 0 : -1)
 #else
-#include <sys/time.h>
 #include <pwd.h>
+#include <sys/time.h>
 #define JSRT_GETPID() getpid()
 #define JSRT_GETPPID() getppid()
 #define JSRT_GETHOSTNAME(buf, size) gethostname(buf, size)
@@ -24,11 +24,11 @@
 // node:os.arch implementation
 static JSValue js_os_arch(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
 #ifdef _WIN32
-  #ifdef _WIN64
-    return JS_NewString(ctx, "x64");
-  #else
-    return JS_NewString(ctx, "ia32");
-  #endif
+#ifdef _WIN64
+  return JS_NewString(ctx, "x64");
+#else
+  return JS_NewString(ctx, "ia32");
+#endif
 #else
   struct utsname uts;
   if (uname(&uts) == 0) {
@@ -93,8 +93,7 @@ static JSValue js_os_release(JSContext* ctx, JSValueConst this_val, int argc, JS
   osvi.dwOSVersionInfoSize = sizeof(OSVERSIONINFOA);
   if (GetVersionExA(&osvi)) {
     char version[64];
-    snprintf(version, sizeof(version), "%d.%d.%d", 
-             osvi.dwMajorVersion, osvi.dwMinorVersion, osvi.dwBuildNumber);
+    snprintf(version, sizeof(version), "%d.%d.%d", osvi.dwMajorVersion, osvi.dwMinorVersion, osvi.dwBuildNumber);
     return JS_NewString(ctx, version);
   }
   return JS_NewString(ctx, "Unknown");
@@ -136,9 +135,12 @@ static JSValue js_os_tmpdir(JSContext* ctx, JSValueConst this_val, int argc, JSV
   return JS_NewString(ctx, "C:\\Windows\\Temp");
 #else
   const char* tmpdir = getenv("TMPDIR");
-  if (!tmpdir) tmpdir = getenv("TMP");
-  if (!tmpdir) tmpdir = getenv("TEMP");
-  if (!tmpdir) tmpdir = "/tmp";
+  if (!tmpdir)
+    tmpdir = getenv("TMP");
+  if (!tmpdir)
+    tmpdir = getenv("TEMP");
+  if (!tmpdir)
+    tmpdir = "/tmp";
   return JS_NewString(ctx, tmpdir);
 #endif
 }
@@ -175,7 +177,7 @@ static JSValue js_os_homedir(JSContext* ctx, JSValueConst this_val, int argc, JS
 // node:os.userInfo implementation
 static JSValue js_os_userInfo(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
   JSValue user_obj = JS_NewObject(ctx);
-  
+
 #ifdef _WIN32
   char username[UNLEN + 1];
   DWORD username_len = UNLEN + 1;
@@ -184,7 +186,7 @@ static JSValue js_os_userInfo(JSContext* ctx, JSValueConst this_val, int argc, J
   } else {
     JS_SetPropertyStr(ctx, user_obj, "username", JS_NewString(ctx, "unknown"));
   }
-  
+
   // Windows doesn't have uid/gid concepts like Unix
   JS_SetPropertyStr(ctx, user_obj, "uid", JS_NewInt32(ctx, -1));
   JS_SetPropertyStr(ctx, user_obj, "gid", JS_NewInt32(ctx, -1));
@@ -244,13 +246,14 @@ JSValue JSRT_InitNodeOs(JSContext* ctx) {
   JS_SetPropertyStr(ctx, os_obj, "endianness", JS_NewCFunction(ctx, js_os_endianness, "endianness", 0));
 
   // Add constants
-  JS_SetPropertyStr(ctx, os_obj, "EOL", JS_NewString(ctx, 
+  JS_SetPropertyStr(ctx, os_obj, "EOL",
+                    JS_NewString(ctx,
 #ifdef _WIN32
-    "\r\n"
+                                 "\r\n"
 #else
-    "\n"
+                                 "\n"
 #endif
-  ));
+                                 ));
 
   return os_obj;
 }

@@ -1429,49 +1429,77 @@ Successfully implemented the core Node.js compatibility infrastructure:
 4. **`node:path` Module** - Fully implemented with:
    - ✅ `path.join(...)` - Cross-platform path joining
    - ✅ `path.resolve(...)` - Absolute path resolution
-   - ✅ `path.normalize(path)` - Basic path normalization
+   - ✅ `path.normalize(path)` - Complete path normalization with `.` and `..` resolution
    - ✅ `path.isAbsolute(path)` - Absolute path detection
    - ✅ `path.dirname(path)` - Directory name extraction
    - ✅ `path.basename(path, ext)` - Base name extraction with optional extension removal
    - ✅ `path.extname(path)` - File extension extraction
-   - ✅ `path.relative(from, to)` - Relative path calculation (stub)
+   - ✅ `path.relative(from, to)` - Complete relative path calculation
    - ✅ `path.sep` - Platform-specific path separator
    - ✅ `path.delimiter` - Platform-specific PATH delimiter
    - ✅ Platform objects (`path.posix`, `path.win32`)
+
+5. **`node:os` Module** - Fully implemented with:
+   - ✅ `os.arch()` - CPU architecture detection
+   - ✅ `os.platform()` - Operating system platform
+   - ✅ `os.type()` - Operating system name
+   - ✅ `os.release()` - Operating system release version
+   - ✅ `os.hostname()` - System hostname
+   - ✅ `os.tmpdir()` - Temporary directory path
+   - ✅ `os.homedir()` - User home directory
+   - ✅ `os.userInfo()` - Current user information
+   - ✅ `os.endianness()` - CPU endianness
+   - ✅ `os.EOL` - Platform-specific end-of-line marker
 
 ### Current Status
 
 **Working Features:**
 - ✅ CommonJS `require('node:path')` loading
-- ✅ Basic path manipulation functions working correctly
+- ✅ ES module `import` from `'node:path'` working correctly
+- ✅ Complete path manipulation functions (join, resolve, normalize, relative, etc.)
+- ✅ Path normalization with `.` and `..` segment resolution
 - ✅ Cross-platform path separator handling
 - ✅ Integration with existing jsrt module system
 - ✅ Build system integration
+- ✅ CommonJS `require('node:os')` loading  
+- ✅ ES module `import` from `'node:os'` working correctly
+- ✅ Complete OS utilities (arch, platform, hostname, userInfo, etc.)
+- ✅ Cross-platform OS information detection
+
+**Fixed Issues:**
+- ✅ ES module memory management issues resolved - no more segmentation faults
+- ✅ Path normalization complete with proper `.` and `..` resolution
+- ✅ Relative path calculation fully implemented
+- ✅ Comprehensive error handling added
 
 **Known Issues:**
-- ⚠️ ES module import has memory management issues causing segmentation faults
-- ⚠️ Path normalization needs complete implementation for `.` and `..` resolution
-- ⚠️ Relative path calculation is not implemented
+- ⚠️ Runtime cleanup assertion failure (broader jsrt issue, not node-specific)
 
 **Testing Results:**
-- ✅ Basic CommonJS functionality verified
-- ✅ Path joining with separator handling working
-- ✅ Cross-platform compatibility confirmed
-- ⚠️ ES module tests cause runtime crashes (needs debugging)
+- ✅ Both CommonJS and ES module functionality verified for `node:path`
+- ✅ Both CommonJS and ES module functionality verified for `node:os`
+- ✅ Path joining, normalization, and relative path calculation working
+- ✅ Cross-platform compatibility confirmed (Linux tested, Windows/macOS supported)
+- ✅ All major path and OS utility functions implemented
 
 ### Next Steps
 
-**Immediate (Week 2):**
-1. Fix ES module memory management issues in `node_path.c`
-2. Complete path normalization algorithm
-3. Implement `path.relative()` function
-4. Add comprehensive error handling
+**Immediate (Week 3):**
+1. ✅ ~~Fix ES module memory management issues in `node_path.c`~~
+2. ✅ ~~Complete path normalization algorithm~~
+3. ✅ ~~Implement `path.relative()` function~~
+4. ✅ ~~Add comprehensive error handling~~
+5. ✅ ~~Implement `node:os` module~~
 
 **Phase 2 - Core Modules (Weeks 3-4):**
-1. `node:os` - Operating system utilities
-2. `node:util` - Utility functions
+1. ✅ `node:os` - Operating system utilities (COMPLETED)
+2. `node:util` - Utility functions  
 3. `node:events` - EventEmitter implementation
 4. `node:buffer` - Buffer class implementation
+
+**Phase 3 - I/O Modules (Weeks 5-6):**
+1. `node:stream` - Stream implementation
+2. `node:fs` - File system operations
 
 Legend:
 - ✅ Implemented

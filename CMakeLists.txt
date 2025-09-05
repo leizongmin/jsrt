@@ -111,6 +111,14 @@ set(WAMR_BUILD_BULK_MEMORY 1)     # Enable bulk memory operations
 set(WAMR_BUILD_MEMORY64 0)        # Disable 64-bit memory for simplicity
 set(WAMR_BUILD_MULTI_MODULE 0)    # Disable multi-module for simplicity
 set(WAMR_BUILD_SHARED_MEMORY 0)   # Disable shared memory for now
+
+# Windows MinGW specific configuration for WAMR
+if(WIN32 AND NOT MSVC)
+    # For MinGW builds, we need to define additional flags to avoid MSVC-specific features
+    # Set a custom define that WAMR can use to avoid __try/__except in MinGW builds
+    add_definitions(-DWAMR_MINGW_BUILD=1)
+endif()
+
 add_subdirectory(deps/wamr)
 
 # build llhttp (minimal implementation)

@@ -98,6 +98,12 @@ make clean && make
 - ✅ Follow existing patterns and conventions in the codebase
 - ❌ Never commit without formatting and testing
 
+### Dependency Management Rules
+- ❌ **NEVER**: Modify code directly in the `deps/` directory (git submodules)
+- ✅ **ALWAYS**: Use CMake configuration or build flags to address dependency issues
+- ✅ **ALWAYS**: Update submodule references to use official upstream versions
+- ❌ **NEVER**: Commit changes that modify submodule source code directly
+
 ## Testing Guidelines
 
 ### Test Organization

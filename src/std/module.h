@@ -20,4 +20,8 @@ void JSRT_StdCommonJSInit(JSRT_Runtime* rt);
 // Cleanup module system with context
 void JSRT_StdModuleCleanup(JSContext* ctx);
 
+// Node.js compatibility module functions
+JSValue JSRT_CreateNodePathModule(JSContext* ctx);
+int js_node_path_init(JSContext* ctx, JSModuleDef* m);
+
 #endif

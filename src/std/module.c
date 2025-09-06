@@ -6,12 +6,15 @@
 #include <string.h>
 
 #ifdef _WIN32
-#include <io.h>  // for _access
+#include <direct.h>  // for _getcwd
+#include <io.h>      // for _access
 #include <windows.h>
 #define F_OK 0
 #define access _access
+#define getcwd _getcwd
 #define PATH_SEPARATOR '\\'
 #define PATH_SEPARATOR_STR "\\"
+#define PATH_DELIMITER ';'
 // Windows implementation of realpath using _fullpath
 static char* jsrt_realpath(const char* path, char* resolved_path) {
   return _fullpath(resolved_path, path, _MAX_PATH);
@@ -20,6 +23,7 @@ static char* jsrt_realpath(const char* path, char* resolved_path) {
 #include <unistd.h>
 #define PATH_SEPARATOR '/'
 #define PATH_SEPARATOR_STR "/"
+#define PATH_DELIMITER ':'
 // Unix implementation uses system realpath
 #define jsrt_realpath(path, resolved) realpath(path, resolved)
 #endif
@@ -508,6 +512,33 @@ JSModuleDef* JSRT_ModuleLoader(JSContext* ctx, const char* module_name, void* op
     return NULL;
   }
 
+  // Handle node: modules (Node.js compatibility)
+  if (strncmp(module_name, "node:", 5) == 0) {
+    const char* node_module = module_name + 5;  // Skip "node:" prefix
+
+    if (strcmp(node_module, "path") == 0) {
+      // Create node:path module with init function
+      JSModuleDef* m = JS_NewCModule(ctx, module_name, js_node_path_init);
+      if (m) {
+        JS_AddModuleExport(ctx, m, "default");
+        JS_AddModuleExport(ctx, m, "join");
+        JS_AddModuleExport(ctx, m, "resolve");
+        JS_AddModuleExport(ctx, m, "normalize");
+        JS_AddModuleExport(ctx, m, "dirname");
+        JS_AddModuleExport(ctx, m, "basename");
+        JS_AddModuleExport(ctx, m, "extname");
+        JS_AddModuleExport(ctx, m, "relative");
+        JS_AddModuleExport(ctx, m, "isAbsolute");
+        JS_AddModuleExport(ctx, m, "sep");
+        JS_AddModuleExport(ctx, m, "delimiter");
+      }
+      return m;
+    }
+
+    JS_ThrowReferenceError(ctx, "Unknown node module '%s'", node_module);
+    return NULL;
+  }
+
   // Load the file
   JSRT_ReadFileResult file_result = JSRT_ReadFile(module_name);
   if (file_result.error != JSRT_READ_FILE_OK) {
@@ -733,6 +764,22 @@ static JSValue js_require(JSContext* ctx, JSValueConst this_val, int argc, JSVal
     return JS_ThrowReferenceError(ctx, "Unknown jsrt module '%s'", std_module);
   }
 
+  // Handle node: modules (Node.js compatibility)
+  if (strncmp(module_name, "node:", 5) == 0) {
+    const char* node_module = module_name + 5;  // Skip "node:" prefix
+
+    if (strcmp(node_module, "path") == 0) {
+      JSValue result = JSRT_CreateNodePathModule(ctx);
+      JS_FreeCString(ctx, module_name);
+      free(esm_context_path);
+      return result;
+    }
+
+    JS_FreeCString(ctx, module_name);
+    free(esm_context_path);
+    return JS_ThrowReferenceError(ctx, "Unknown node module '%s'", node_module);
+  }
+
   // Check if this is a bare module name (npm package)
   char* resolved_path;
 
@@ -890,4 +937,401 @@ void JSRT_StdModuleCleanup(JSContext* ctx) {
     module_cache_size = 0;
     module_cache_capacity = 0;
   }
+}
+
+// ==== Node.js Path Module Implementation ====
+
+// Helper function to get the current working directory
+static char* get_current_directory() {
+  char* cwd = getcwd(NULL, 0);  // Let getcwd allocate the buffer
+  if (!cwd) {
+    return strdup(".");  // Fallback to current directory
+  }
+  return cwd;
+}
+
+// node:path.join - Join path segments using platform-specific separator
+static JSValue js_node_path_join(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
+  if (argc == 0) {
+    return JS_NewString(ctx, ".");
+  }
+
+  size_t total_len = 0;
+  char** segments = malloc(argc * sizeof(char*));
+
+  // Get all string arguments and calculate total length
+  for (int i = 0; i < argc; i++) {
+    segments[i] = (char*)JS_ToCString(ctx, argv[i]);
+    if (!segments[i]) {
+      // Cleanup on error
+      for (int j = 0; j < i; j++) {
+        JS_FreeCString(ctx, segments[j]);
+      }
+      free(segments);
+      return JS_EXCEPTION;
+    }
+    total_len += strlen(segments[i]) + 1;  // +1 for separator
+  }
+
+  // Allocate result buffer
+  char* result = malloc(total_len + 1);
+  if (!result) {
+    for (int i = 0; i < argc; i++) {
+      JS_FreeCString(ctx, segments[i]);
+    }
+    free(segments);
+    return JS_ThrowOutOfMemory(ctx);
+  }
+
+  result[0] = '\0';
+  bool first = true;
+
+  // Join all segments
+  for (int i = 0; i < argc; i++) {
+    if (strlen(segments[i]) > 0) {  // Skip empty segments
+      if (!first && !is_path_separator(result[strlen(result) - 1])) {
+        strcat(result, PATH_SEPARATOR_STR);
+      }
+      strcat(result, segments[i]);
+      first = false;
+    }
+    JS_FreeCString(ctx, segments[i]);
+  }
+  free(segments);
+
+  if (result[0] == '\0') {
+    strcpy(result, ".");
+  }
+
+  // Normalize the result
+  char* normalized = normalize_path(result);
+  free(result);
+
+  JSValue ret = JS_NewString(ctx, normalized);
+  free(normalized);
+  return ret;
+}
+
+// node:path.resolve - Resolve path segments to an absolute path
+static JSValue js_node_path_resolve(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
+  char* current = get_current_directory();
+
+  for (int i = 0; i < argc; i++) {
+    const char* segment = JS_ToCString(ctx, argv[i]);
+    if (!segment) {
+      free(current);
+      return JS_EXCEPTION;
+    }
+
+    if (strlen(segment) > 0) {
+      if (is_absolute_path(segment)) {
+        // Replace current with absolute segment
+        free(current);
+        current = strdup(segment);
+      } else {
+        // Join relative segment to current
+        char* temp = path_join(current, segment);
+        free(current);
+        current = temp;
+      }
+    }
+
+    JS_FreeCString(ctx, segment);
+  }
+
+  if (!current) {
+    current = get_current_directory();
+  }
+
+  // Normalize the final result
+  char* normalized = normalize_path(current);
+  free(current);
+
+  JSValue ret = JS_NewString(ctx, normalized);
+  free(normalized);
+  return ret;
+}
+
+// node:path.normalize - Normalize a path, removing duplicate separators and resolving . and ..
+static JSValue js_node_path_normalize(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
+  if (argc < 1) {
+    return JS_ThrowTypeError(ctx, "path.normalize requires a path argument");
+  }
+
+  const char* path = JS_ToCString(ctx, argv[0]);
+  if (!path) {
+    return JS_EXCEPTION;
+  }
+
+  // First normalize separators
+  char* normalized = normalize_path(path);
+  JS_FreeCString(ctx, path);
+
+  if (!normalized) {
+    return JS_ThrowOutOfMemory(ctx);
+  }
+
+  // Handle . and .. resolution
+  char* segments[256];  // Support up to 256 path segments
+  int segment_count = 0;
+
+  // Split path into segments
+  char* path_copy = strdup(normalized);
+  char* token = strtok(path_copy, PATH_SEPARATOR_STR);
+
+  // Track whether path was absolute
+  bool is_absolute = is_absolute_path(normalized);
+
+  while (token && segment_count < 256) {
+    if (strcmp(token, ".") == 0) {
+      // Skip current directory references
+      continue;
+    } else if (strcmp(token, "..") == 0) {
+      // Go up one directory
+      if (segment_count > 0 && strcmp(segments[segment_count - 1], "..") != 0) {
+        // Remove the last segment
+        free(segments[segment_count - 1]);
+        segment_count--;
+      } else if (!is_absolute) {
+        // For relative paths, keep .. if we can't go up further
+        segments[segment_count] = strdup("..");
+        segment_count++;
+      }
+      // For absolute paths, .. at root is ignored
+    } else {
+      // Regular segment
+      segments[segment_count] = strdup(token);
+      segment_count++;
+    }
+    token = strtok(NULL, PATH_SEPARATOR_STR);
+  }
+
+  free(path_copy);
+
+  // Rebuild the path
+  size_t total_len = 0;
+  for (int i = 0; i < segment_count; i++) {
+    total_len += strlen(segments[i]) + 1;  // +1 for separator
+  }
+  total_len += is_absolute ? 1 : 0;  // +1 for leading separator if absolute
+
+  char* result = malloc(total_len + 1);
+  if (!result) {
+    // Cleanup segments
+    for (int i = 0; i < segment_count; i++) {
+      free(segments[i]);
+    }
+    free(normalized);
+    return JS_ThrowOutOfMemory(ctx);
+  }
+
+  result[0] = '\0';
+
+  if (is_absolute) {
+    strcat(result, PATH_SEPARATOR_STR);
+  }
+
+  for (int i = 0; i < segment_count; i++) {
+    if (i > 0 || is_absolute) {
+      strcat(result, PATH_SEPARATOR_STR);
+    }
+    strcat(result, segments[i]);
+    free(segments[i]);
+  }
+
+  // Handle empty result
+  if (result[0] == '\0') {
+    strcpy(result, ".");
+  }
+
+  free(normalized);
+
+  JSValue ret = JS_NewString(ctx, result);
+  free(result);
+  return ret;
+}
+
+// node:path.dirname - Get directory name of a path
+static JSValue js_node_path_dirname(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
+  if (argc < 1) {
+    return JS_ThrowTypeError(ctx, "path.dirname requires a path argument");
+  }
+
+  const char* path = JS_ToCString(ctx, argv[0]);
+  if (!path) {
+    return JS_EXCEPTION;
+  }
+
+  char* dirname_result = get_parent_directory(path);
+  JS_FreeCString(ctx, path);
+
+  if (!dirname_result) {
+    return JS_NewString(ctx, ".");
+  }
+
+  JSValue ret = JS_NewString(ctx, dirname_result);
+  free(dirname_result);
+  return ret;
+}
+
+// node:path.basename - Get base name of a path
+static JSValue js_node_path_basename(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
+  if (argc < 1) {
+    return JS_ThrowTypeError(ctx, "path.basename requires a path argument");
+  }
+
+  const char* path = JS_ToCString(ctx, argv[0]);
+  if (!path) {
+    return JS_EXCEPTION;
+  }
+
+  const char* ext = NULL;
+  if (argc >= 2) {
+    ext = JS_ToCString(ctx, argv[1]);
+    if (!ext) {
+      JS_FreeCString(ctx, path);
+      return JS_EXCEPTION;
+    }
+  }
+
+  // Find the basename
+  const char* last_sep = find_last_separator(path);
+  const char* basename_start = last_sep ? last_sep + 1 : path;
+
+  // Remove extension if provided
+  char* basename = strdup(basename_start);
+  if (ext && strlen(ext) > 0) {
+    size_t basename_len = strlen(basename);
+    size_t ext_len = strlen(ext);
+    if (basename_len >= ext_len && strcmp(basename + basename_len - ext_len, ext) == 0) {
+      basename[basename_len - ext_len] = '\0';
+    }
+  }
+
+  JS_FreeCString(ctx, path);
+  if (ext)
+    JS_FreeCString(ctx, ext);
+
+  JSValue ret = JS_NewString(ctx, basename);
+  free(basename);
+  return ret;
+}
+
+// node:path.extname - Get extension of a path
+static JSValue js_node_path_extname(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
+  if (argc < 1) {
+    return JS_ThrowTypeError(ctx, "path.extname requires a path argument");
+  }
+
+  const char* path = JS_ToCString(ctx, argv[0]);
+  if (!path) {
+    return JS_EXCEPTION;
+  }
+
+  // Find last dot after last separator
+  const char* last_sep = find_last_separator(path);
+  const char* search_start = last_sep ? last_sep + 1 : path;
+  const char* last_dot = strrchr(search_start, '.');
+
+  JSValue ret;
+  if (last_dot && last_dot != search_start) {
+    ret = JS_NewString(ctx, last_dot);
+  } else {
+    ret = JS_NewString(ctx, "");
+  }
+
+  JS_FreeCString(ctx, path);
+  return ret;
+}
+
+// node:path.isAbsolute - Check if a path is absolute
+static JSValue js_node_path_is_absolute(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
+  if (argc < 1) {
+    return JS_FALSE;
+  }
+
+  const char* path = JS_ToCString(ctx, argv[0]);
+  if (!path) {
+    return JS_EXCEPTION;
+  }
+
+  bool absolute = is_absolute_path(path);
+  JS_FreeCString(ctx, path);
+
+  return JS_NewBool(ctx, absolute);
+}
+
+// node:path.relative - Get relative path from one path to another
+static JSValue js_node_path_relative(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
+  if (argc < 2) {
+    return JS_ThrowTypeError(ctx, "path.relative requires from and to arguments");
+  }
+
+  // For now, return empty string - TODO: implement proper relative path calculation
+  return JS_NewString(ctx, "");
+}
+
+// Create the Node.js path module object
+JSValue JSRT_CreateNodePathModule(JSContext* ctx) {
+  JSValue path_obj = JS_NewObject(ctx);
+
+  // Add methods
+  JS_SetPropertyStr(ctx, path_obj, "join", JS_NewCFunction(ctx, js_node_path_join, "join", 0));
+  JS_SetPropertyStr(ctx, path_obj, "resolve", JS_NewCFunction(ctx, js_node_path_resolve, "resolve", 0));
+  JS_SetPropertyStr(ctx, path_obj, "normalize", JS_NewCFunction(ctx, js_node_path_normalize, "normalize", 1));
+  JS_SetPropertyStr(ctx, path_obj, "dirname", JS_NewCFunction(ctx, js_node_path_dirname, "dirname", 1));
+  JS_SetPropertyStr(ctx, path_obj, "basename", JS_NewCFunction(ctx, js_node_path_basename, "basename", 2));
+  JS_SetPropertyStr(ctx, path_obj, "extname", JS_NewCFunction(ctx, js_node_path_extname, "extname", 1));
+  JS_SetPropertyStr(ctx, path_obj, "relative", JS_NewCFunction(ctx, js_node_path_relative, "relative", 2));
+  JS_SetPropertyStr(ctx, path_obj, "isAbsolute", JS_NewCFunction(ctx, js_node_path_is_absolute, "isAbsolute", 1));
+
+  // Add properties
+  JS_SetPropertyStr(ctx, path_obj, "sep", JS_NewString(ctx, PATH_SEPARATOR_STR));
+
+  char delimiter[2] = {PATH_DELIMITER, '\0'};
+  JS_SetPropertyStr(ctx, path_obj, "delimiter", JS_NewString(ctx, delimiter));
+
+  return path_obj;
+}
+
+// ES module initialization for node:path
+int js_node_path_init(JSContext* ctx, JSModuleDef* m) {
+  JSValue path_module = JSRT_CreateNodePathModule(ctx);
+
+  // Export as default
+  JS_SetModuleExport(ctx, m, "default", JS_DupValue(ctx, path_module));
+
+  // Export individual functions
+  JSValue join = JS_GetPropertyStr(ctx, path_module, "join");
+  JS_SetModuleExport(ctx, m, "join", join);
+
+  JSValue resolve = JS_GetPropertyStr(ctx, path_module, "resolve");
+  JS_SetModuleExport(ctx, m, "resolve", resolve);
+
+  JSValue normalize = JS_GetPropertyStr(ctx, path_module, "normalize");
+  JS_SetModuleExport(ctx, m, "normalize", normalize);
+
+  JSValue dirname = JS_GetPropertyStr(ctx, path_module, "dirname");
+  JS_SetModuleExport(ctx, m, "dirname", dirname);
+
+  JSValue basename = JS_GetPropertyStr(ctx, path_module, "basename");
+  JS_SetModuleExport(ctx, m, "basename", basename);
+
+  JSValue extname = JS_GetPropertyStr(ctx, path_module, "extname");
+  JS_SetModuleExport(ctx, m, "extname", extname);
+
+  JSValue relative = JS_GetPropertyStr(ctx, path_module, "relative");
+  JS_SetModuleExport(ctx, m, "relative", relative);
+
+  JSValue isAbsolute = JS_GetPropertyStr(ctx, path_module, "isAbsolute");
+  JS_SetModuleExport(ctx, m, "isAbsolute", isAbsolute);
+
+  JSValue sep = JS_GetPropertyStr(ctx, path_module, "sep");
+  JS_SetModuleExport(ctx, m, "sep", sep);
+
+  JSValue delimiter = JS_GetPropertyStr(ctx, path_module, "delimiter");
+  JS_SetModuleExport(ctx, m, "delimiter", delimiter);
+
+  JS_FreeValue(ctx, path_module);
+  return 0;
 }

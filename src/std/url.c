@@ -234,17 +234,15 @@ static char* normalize_port(const char* port_str, const char* protocol) {
   // Convert port string to number (handles leading zeros)
   char* endptr;
   long port_num = strtol(port_str, &endptr, 10);
-  
+
   // Check for invalid port (not a number or out of range)
   if (*endptr != '\0' || port_num < 0 || port_num > 65535) {
     return strdup("");  // Invalid port becomes empty
   }
 
   // Check for default ports that should be omitted
-  if ((strcmp(protocol, "http:") == 0 && port_num == 80) ||
-      (strcmp(protocol, "https:") == 0 && port_num == 443) ||
-      (strcmp(protocol, "ftp:") == 0 && port_num == 21) ||
-      (strcmp(protocol, "ws:") == 0 && port_num == 80) ||
+  if ((strcmp(protocol, "http:") == 0 && port_num == 80) || (strcmp(protocol, "https:") == 0 && port_num == 443) ||
+      (strcmp(protocol, "ftp:") == 0 && port_num == 21) || (strcmp(protocol, "ws:") == 0 && port_num == 80) ||
       (strcmp(protocol, "wss:") == 0 && port_num == 443)) {
     return strdup("");  // Default port becomes empty
   }
@@ -290,6 +288,17 @@ static JSRT_URL* JSRT_ParseURL(const char* url, const char* base) {
   free(trimmed_url);  // Free the intermediate result
   if (!cleaned_url)
     return NULL;
+
+  // Handle empty URL string - per WHATWG URL spec, empty string should resolve to base
+  if (strlen(cleaned_url) == 0) {
+    if (base) {
+      free(cleaned_url);
+      return JSRT_ParseURL(base, NULL);  // Parse base URL as absolute
+    } else {
+      free(cleaned_url);
+      return NULL;  // Empty URL with no base is invalid
+    }
+  }
 
   // Validate URL characters first
   if (!validate_url_characters(cleaned_url)) {
@@ -476,7 +485,7 @@ static JSRT_URL* JSRT_ParseURL(const char* url, const char* base) {
       free(parsed->port);
       parsed->port = normalize_port(port_start + 1, parsed->protocol);
       *port_start = ':';  // Restore
-      
+
       // Reconstruct host field with normalized port
       free(parsed->host);
       if (strlen(parsed->port) > 0) {

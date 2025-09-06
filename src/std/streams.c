@@ -721,6 +721,57 @@ static JSValue JSRT_WritableStreamDefaultWriterGetClosed(JSContext* ctx, JSValue
   return promise;
 }
 
+static JSValue JSRT_WritableStreamDefaultWriterClose(JSContext* ctx, JSValueConst this_val, int argc,
+                                                     JSValueConst* argv) {
+  JSRT_WritableStreamDefaultWriter* writer = JS_GetOpaque(this_val, JSRT_WritableStreamDefaultWriterClassID);
+  if (!writer) {
+    return JS_EXCEPTION;
+  }
+
+  // Get the stream
+  JSRT_WritableStream* stream = JS_GetOpaque(writer->stream, JSRT_WritableStreamClassID);
+  if (!stream) {
+    return JS_EXCEPTION;
+  }
+
+  // Mark writer as closed
+  writer->closed = true;
+
+  // Check if we have an underlyingSink with a close method
+  if (!JS_IsUndefined(stream->underlying_sink)) {
+    JSValue close_method = JS_GetPropertyStr(ctx, stream->underlying_sink, "close");
+    if (!JS_IsUndefined(close_method) && JS_IsFunction(ctx, close_method)) {
+      // Call the close method WITHOUT controller argument per spec
+      JSValue result = JS_Call(ctx, close_method, stream->underlying_sink, 0, NULL);
+      JS_FreeValue(ctx, close_method);
+      if (JS_IsException(result)) {
+        return result;
+      }
+      JS_FreeValue(ctx, result);
+    } else {
+      JS_FreeValue(ctx, close_method);
+    }
+  }
+
+  // Get the controller and close it
+  if (!JS_IsUndefined(stream->controller)) {
+    JSRT_WritableStreamDefaultController* controller =
+        JS_GetOpaque(stream->controller, JSRT_WritableStreamDefaultControllerClassID);
+    if (controller) {
+      controller->closed = true;
+    }
+  }
+
+  // Return resolved promise
+  JSValue promise_ctor = JS_GetPropertyStr(ctx, JS_GetGlobalObject(ctx), "Promise");
+  JSValue resolve_method = JS_GetPropertyStr(ctx, promise_ctor, "resolve");
+  JSValue undefined_val = JS_UNDEFINED;
+  JSValue promise = JS_Call(ctx, resolve_method, promise_ctor, 1, &undefined_val);
+  JS_FreeValue(ctx, resolve_method);
+  JS_FreeValue(ctx, promise_ctor);
+  return promise;
+}
+
 static JSValue JSRT_WritableStreamDefaultWriterGetReady(JSContext* ctx, JSValueConst this_val, int argc,
                                                         JSValueConst* argv) {
   JSRT_WritableStreamDefaultWriter* writer = JS_GetOpaque(this_val, JSRT_WritableStreamDefaultWriterClassID);
@@ -951,6 +1002,8 @@ void JSRT_RuntimeSetupStdStreams(JSRT_Runtime* rt) {
   // Methods
   JS_SetPropertyStr(ctx, writer_proto, "write",
                     JS_NewCFunction(ctx, JSRT_WritableStreamDefaultWriterWrite, "write", 1));
+  JS_SetPropertyStr(ctx, writer_proto, "close",
+                    JS_NewCFunction(ctx, JSRT_WritableStreamDefaultWriterClose, "close", 0));
 
   JS_SetClassProto(ctx, JSRT_WritableStreamDefaultWriterClassID, writer_proto);
 

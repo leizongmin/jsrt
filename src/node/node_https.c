@@ -11,6 +11,28 @@
 // Forward declarations
 static JSValue js_https_create_server(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv);
 static JSValue js_https_request(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv);
+static JSValue js_https_get(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv);
+
+// Placeholder functions for request object methods
+static JSValue js_request_write(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv);
+static JSValue js_request_end(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv);
+static JSValue js_request_on(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv);
+
+// Placeholder request object methods
+static JSValue js_request_write(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
+  // Placeholder - in a real implementation, this would write data to the HTTPS connection
+  return JS_UNDEFINED;
+}
+
+static JSValue js_request_end(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
+  // Placeholder - in a real implementation, this would finalize the request
+  return JS_UNDEFINED;
+}
+
+static JSValue js_request_on(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
+  // Placeholder - in a real implementation, this would register event listeners
+  return JS_UNDEFINED;
+}
 
 // https.createServer([options][, requestListener])
 static JSValue js_https_create_server(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
@@ -78,13 +100,13 @@ static JSValue js_https_request(JSContext* ctx, JSValueConst this_val, int argc,
 
   // Add basic HTTP methods to the request object
   // write() method
-  JS_SetPropertyStr(ctx, request_obj, "write", JS_NewCFunction(ctx, NULL, "write", 1));  // Placeholder
+  JS_SetPropertyStr(ctx, request_obj, "write", JS_NewCFunction(ctx, js_request_write, "write", 1));
 
   // end() method
-  JS_SetPropertyStr(ctx, request_obj, "end", JS_NewCFunction(ctx, NULL, "end", 1));  // Placeholder
+  JS_SetPropertyStr(ctx, request_obj, "end", JS_NewCFunction(ctx, js_request_end, "end", 1));
 
   // on() method for events (basic EventEmitter functionality)
-  JS_SetPropertyStr(ctx, request_obj, "on", JS_NewCFunction(ctx, NULL, "on", 2));  // Placeholder
+  JS_SetPropertyStr(ctx, request_obj, "on", JS_NewCFunction(ctx, js_request_on, "on", 2));
 
   // For a complete implementation, we would:
   // 1. Create actual SSL socket connection

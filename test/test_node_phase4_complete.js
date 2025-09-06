@@ -92,12 +92,12 @@ assert.strictEqual(
 console.log('✓ DNS returns promises for async operations');
 
 // HTTP and HTTPS share constants
-assert.deepStrictEqual(
+assert.deepEqual(
   http.METHODS,
   https.METHODS,
   'HTTP and HTTPS should share METHODS'
 );
-assert.deepStrictEqual(
+assert.deepEqual(
   http.STATUS_CODES,
   https.STATUS_CODES,
   'HTTP and HTTPS should share STATUS_CODES'

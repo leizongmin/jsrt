@@ -568,14 +568,34 @@ JSValue JSRT_InitNodePath(JSContext* ctx) {
   char delimiter[2] = {PATH_DELIMITER, '\0'};
   JS_SetPropertyStr(ctx, path_obj, "delimiter", JS_NewString(ctx, delimiter));
 
-  // Platform-specific properties
+  // Platform-specific properties - avoid circular reference
 #ifdef _WIN32
-  JSValue win32 = JS_DupValue(ctx, path_obj);
+  // On Windows, win32 should be the main object, posix is minimal
+  JSValue win32 = JS_NewObject(ctx);
+  // Copy all methods to win32
+  JSValue join_val = JS_GetPropertyStr(ctx, path_obj, "join");
+  JS_SetPropertyStr(ctx, win32, "join", JS_DupValue(ctx, join_val));
+  JS_FreeValue(ctx, join_val);
+
+  JSValue resolve_val = JS_GetPropertyStr(ctx, path_obj, "resolve");
+  JS_SetPropertyStr(ctx, win32, "resolve", JS_DupValue(ctx, resolve_val));
+  JS_FreeValue(ctx, resolve_val);
+
   JS_SetPropertyStr(ctx, path_obj, "win32", win32);
   JSValue posix = JS_NewObject(ctx);  // Minimal posix implementation
   JS_SetPropertyStr(ctx, path_obj, "posix", posix);
 #else
-  JSValue posix = JS_DupValue(ctx, path_obj);
+  // On Unix, posix should be the main object, win32 is minimal
+  JSValue posix = JS_NewObject(ctx);
+  // Copy all methods to posix
+  JSValue join_val = JS_GetPropertyStr(ctx, path_obj, "join");
+  JS_SetPropertyStr(ctx, posix, "join", JS_DupValue(ctx, join_val));
+  JS_FreeValue(ctx, join_val);
+
+  JSValue resolve_val = JS_GetPropertyStr(ctx, path_obj, "resolve");
+  JS_SetPropertyStr(ctx, posix, "resolve", JS_DupValue(ctx, resolve_val));
+  JS_FreeValue(ctx, resolve_val);
+
   JS_SetPropertyStr(ctx, path_obj, "posix", posix);
   JSValue win32 = JS_NewObject(ctx);  // Minimal win32 implementation
   JS_SetPropertyStr(ctx, path_obj, "win32", win32);

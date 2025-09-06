@@ -28,10 +28,16 @@ RUN apt-get update && apt-get install -y \
     python3-pip \
     && rm -rf /var/lib/apt/lists/*
 
-# Install clang-format from Ubuntu repository (faster than LLVM repository)
-RUN apt-get update \
-    && apt-get install -y clang-format \
-    && rm -rf /var/lib/apt/lists/*
+# Install clang-format-20 from LLVM APT repository (using Tsinghua mirror)
+RUN wget -qO- https://apt.llvm.org/llvm-snapshot.gpg.key | apt-key add - \
+    && echo "deb https://mirrors.tuna.tsinghua.edu.cn/llvm-apt/jammy/ llvm-toolchain-jammy-20 main" > /etc/apt/sources.list.d/llvm.list \
+    && apt-get update \
+    && apt-get install -y clang-format-20 \
+    && ln -sf /usr/bin/clang-format-20 /usr/bin/clang-format \
+    && apt-get clean \
+    && rm -rf /var/lib/apt/lists/* \
+    && echo "Installed clang-format version:" \
+    && clang-format --version
 
 # Install Node.js 22 from NodeSource (stable and reliable)
 RUN curl -fsSL https://deb.nodesource.com/setup_22.x | bash - \

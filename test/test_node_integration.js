@@ -6,11 +6,14 @@ console.log('Testing both node:path and node:os modules together...');
 // Test path module
 const path = require('node:path');
 console.log('\n🔧 Testing node:path module:');
-console.log('  path.join("home", "user", "docs"):', path.join('home', 'user', 'docs'));
+console.log(
+  '  path.join("home", "user", "docs"):',
+  path.join('home', 'user', 'docs')
+);
 console.log('  path.normalize("/a/b/../c"):', path.normalize('/a/b/../c'));
 console.log('  path.relative("/a/b", "/a/c"):', path.relative('/a/b', '/a/c'));
 
-// Test os module  
+// Test os module
 const os = require('node:os');
 console.log('\n💻 Testing node:os module:');
 console.log('  os.platform():', os.platform());

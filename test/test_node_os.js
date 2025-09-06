@@ -15,7 +15,17 @@ console.log('Testing os.platform()...');
 const platform = os.platform();
 console.log('Platform:', platform);
 assert.ok(typeof platform === 'string');
-assert.ok(['linux', 'darwin', 'win32', 'freebsd', 'openbsd', 'netbsd', 'sunos'].includes(platform));
+assert.ok(
+  [
+    'linux',
+    'darwin',
+    'win32',
+    'freebsd',
+    'openbsd',
+    'netbsd',
+    'sunos',
+  ].includes(platform)
+);
 
 console.log('Testing os.type()...');
 const type = os.type();

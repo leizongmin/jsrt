@@ -1,4 +1,12 @@
-import { join, normalize, relative, dirname, basename, extname, isAbsolute } from 'node:path';
+import {
+  join,
+  normalize,
+  relative,
+  dirname,
+  basename,
+  extname,
+  isAbsolute,
+} from 'node:path';
 
 console.log('Testing node:path ES module imports...');
 

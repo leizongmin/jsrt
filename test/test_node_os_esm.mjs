@@ -1,4 +1,15 @@
-import { arch, platform, type, release, hostname, tmpdir, homedir, userInfo, endianness, EOL } from 'node:os';
+import {
+  arch,
+  platform,
+  type,
+  release,
+  hostname,
+  tmpdir,
+  homedir,
+  userInfo,
+  endianness,
+  EOL,
+} from 'node:os';
 
 console.log('Testing node:os ES module imports...');
 

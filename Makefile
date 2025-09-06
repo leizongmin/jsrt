@@ -244,20 +244,34 @@ docker-build:
 claude: docker-build
 	@echo "Starting Claude Code in Docker environment..."
 	@echo "Repository mapped to /repo inside container"
+	@echo "Running as current user (UID=$(shell id -u), GID=$(shell id -g))"
 	@echo "Claude Code will run with unsafe operations allowed"
 	docker run -it --rm \
+		--user "$(shell id -u):$(shell id -g)" \
 		-v "$(CURDIR):/repo" \
+		-v "/etc/passwd:/etc/passwd:ro" \
+		-v "/etc/group:/etc/group:ro" \
 		-w /repo \
 		--name jsrt-claude-session \
+		-e HOME="/tmp" \
+		-e USER="$(shell whoami)" \
+		-e ANTHROPIC_BASE_URL=$(ANTHROPIC_BASE_URL) \
+		-e ANTHROPIC_AUTH_TOKEN=$(ANTHROPIC_AUTH_TOKEN) \
 		$(DOCKER_IMAGE_NAME):$(DOCKER_TAG)
 
 .PHONY: claude-shell
 claude-shell: docker-build
 	@echo "Starting interactive shell in Claude development environment..."
+	@echo "Running as current user (UID=$(shell id -u), GID=$(shell id -g))"
 	docker run -it --rm \
+		--user "$(shell id -u):$(shell id -g)" \
 		-v "$(CURDIR):/repo" \
+		-v "/etc/passwd:/etc/passwd:ro" \
+		-v "/etc/group:/etc/group:ro" \
 		-w /repo \
 		--name jsrt-claude-shell \
+		-e HOME="/tmp" \
+		-e USER="$(shell whoami)" \
 		--entrypoint /bin/bash \
 		$(DOCKER_IMAGE_NAME):$(DOCKER_TAG)
 

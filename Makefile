@@ -245,6 +245,7 @@ claude: docker-build
 	@echo "Starting Claude Code in Docker environment..."
 	@echo "Repository mapped to /repo inside container"
 	@echo "Running as current user (UID=$(shell id -u), GID=$(shell id -g))"
+	@echo "Git configured as: $(shell git config --global user.name) <$(shell git config --global user.email)>"
 	@echo "Claude Code will run with unsafe operations allowed"
 	docker run -it --rm \
 		--user "$(shell id -u):$(shell id -g)" \
@@ -255,6 +256,8 @@ claude: docker-build
 		--name jsrt-claude-session \
 		-e HOME="/tmp" \
 		-e USER="$(shell whoami)" \
+		-e GIT_USER_NAME="$(shell git config --global user.name)" \
+		-e GIT_USER_EMAIL="$(shell git config --global user.email)" \
 		-e ANTHROPIC_BASE_URL=$(ANTHROPIC_BASE_URL) \
 		-e ANTHROPIC_AUTH_TOKEN=$(ANTHROPIC_AUTH_TOKEN) \
 		$(DOCKER_IMAGE_NAME):$(DOCKER_TAG)
@@ -263,6 +266,7 @@ claude: docker-build
 claude-shell: docker-build
 	@echo "Starting interactive shell in Claude development environment..."
 	@echo "Running as current user (UID=$(shell id -u), GID=$(shell id -g))"
+	@echo "Git configured as: $(shell git config --global user.name) <$(shell git config --global user.email)>"
 	docker run -it --rm \
 		--user "$(shell id -u):$(shell id -g)" \
 		-v "$(CURDIR):/repo" \
@@ -272,6 +276,8 @@ claude-shell: docker-build
 		--name jsrt-claude-shell \
 		-e HOME="/tmp" \
 		-e USER="$(shell whoami)" \
+		-e GIT_USER_NAME="$(shell git config --global user.name)" \
+		-e GIT_USER_EMAIL="$(shell git config --global user.email)" \
 		--entrypoint /bin/bash \
 		$(DOCKER_IMAGE_NAME):$(DOCKER_TAG)
 

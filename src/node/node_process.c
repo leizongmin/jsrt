@@ -5,10 +5,12 @@
 
 // Platform-specific includes and implementations
 #ifdef _WIN32
+// clang-format off
 #include <windows.h>   // Must come first to define basic Windows types
 #include <process.h>
 #include <tlhelp32.h>
 #include <winsock2.h>  // For struct timeval
+// clang-format on
 
 // Windows implementation of missing functions
 static int jsrt_getppid(void) {

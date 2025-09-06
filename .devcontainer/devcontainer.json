@@ -1,0 +1,66 @@
+{
+  "name": "jsrt Development Container",
+  "image": "mcr.microsoft.com/devcontainers/base:ubuntu-22.04",
+  
+  "features": {
+    "ghcr.io/devcontainers/features/common-utils:2": {
+      "installZsh": true,
+      "installOhMyZsh": true,
+      "upgradePackages": true,
+      "username": "vscode",
+      "userUid": "automatic",
+      "userGid": "automatic"
+    },
+    "ghcr.io/devcontainers/features/git:1": {
+      "ppa": true,
+      "version": "latest"
+    },
+    "ghcr.io/devcontainers/features/node:1": {
+      "nodeGypDependencies": true,
+      "version": "lts"
+    }
+  },
+
+  "customizations": {
+    "vscode": {
+      "extensions": [
+        "ms-vscode.cpptools-extension-pack",
+        "ms-vscode.cmake-tools",
+        "xaver.clang-format",
+        "ms-vscode.makefile-tools",
+        "ms-vscode.hexeditor",
+        "github.copilot",
+        "github.copilot-chat"
+      ],
+      "settings": {
+        "C_Cpp.default.configurationProvider": "ms-vscode.cmake-tools",
+        "cmake.configureOnOpen": false,
+        "clang-format.executable": "/usr/bin/clang-format-20",
+        "clang-format.fallbackStyle": "file"
+      }
+    }
+  },
+
+  "onCreateCommand": [
+    "sudo apt-get update",
+    "sudo apt-get install -y build-essential cmake git wget curl",
+    "sudo apt-get install -y clang-format-20 || sudo apt-get install -y clang-format",
+    "sudo apt-get install -y libssl-dev libffi-dev",
+    "git submodule update --init --recursive"
+  ],
+
+  "postCreateCommand": [
+    "make clang-format",
+    "make"
+  ],
+
+  "forwardPorts": [],
+  
+  "mounts": [
+    "source=${localWorkspaceFolder}/.git,target=${containerWorkspaceFolder}/.git,type=bind,consistency=cached"
+  ],
+
+  "workspaceFolder": "/workspaces/jsrt",
+
+  "remoteUser": "vscode"
+}

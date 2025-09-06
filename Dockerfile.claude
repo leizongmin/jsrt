@@ -1,0 +1,97 @@
+# Dockerfile for jsrt development with Claude Code
+FROM ubuntu:22.04
+
+# Set environment variables to avoid interactive prompts
+ENV DEBIAN_FRONTEND=noninteractive
+ENV TZ=UTC
+
+# Install system dependencies
+RUN apt-get update && apt-get install -y \
+    build-essential \
+    cmake \
+    git \
+    wget \
+    curl \
+    vim \
+    nano \
+    libssl-dev \
+    libffi-dev \
+    ca-certificates \
+    gnupg \
+    lsb-release \
+    software-properties-common \
+    python3 \
+    python3-pip \
+    && rm -rf /var/lib/apt/lists/*
+
+# Install clang-format-20 from LLVM repository (similar to Makefile logic)
+RUN wget -qO- https://apt.llvm.org/llvm-snapshot.gpg.key | tee /etc/apt/trusted.gpg.d/apt.llvm.org.asc >/dev/null \
+    && echo "deb http://apt.llvm.org/jammy/ llvm-toolchain-jammy-20 main" | tee /etc/apt/sources.list.d/llvm-toolchain-jammy-20.list >/dev/null \
+    && apt-get update \
+    && apt-get install -y clang-format-20 \
+    && rm -rf /var/lib/apt/lists/*
+
+# Create symlink for clang-format
+RUN ln -sf /usr/bin/clang-format-20 /usr/bin/clang-format
+
+# Install Node.js (needed for some build tools)
+RUN curl -fsSL https://deb.nodesource.com/setup_lts.x | bash - \
+    && apt-get install -y nodejs
+
+# Install Claude Code
+# Note: Claude Code installation method depends on the specific distribution
+# This could be:
+# 1. A VS Code extension (if it's Claude for VS Code)
+# 2. A standalone application 
+# 3. A CLI tool
+# 4. Part of another development environment
+#
+# For now, we'll install VS Code and prepare for Claude extensions
+# Users should update this section based on the actual Claude Code requirements
+
+# Install VS Code
+RUN wget -qO- https://packages.microsoft.com/keys/microsoft.asc | gpg --dearmor > packages.microsoft.gpg \
+    && install -o root -g root -m 644 packages.microsoft.gpg /etc/apt/trusted.gpg.d/ \
+    && echo "deb [arch=amd64,arm64,armhf signed-by=/etc/apt/trusted.gpg.d/packages.microsoft.gpg] https://packages.microsoft.com/repos/code stable main" > /etc/apt/sources.list.d/vscode.list \
+    && apt-get update \
+    && apt-get install -y code \
+    && rm -rf /var/lib/apt/lists/*
+
+# Create a wrapper script for claude-code
+# This script can be updated to launch the actual Claude Code application
+RUN echo '#!/bin/bash' > /usr/local/bin/claude-code \
+    && echo 'echo "=== Claude Code Development Environment ==="' >> /usr/local/bin/claude-code \
+    && echo 'echo "Repository: /repo"' >> /usr/local/bin/claude-code \
+    && echo 'echo "Claude Code wrapper - update this script with actual Claude Code launch command"' >> /usr/local/bin/claude-code \
+    && echo 'echo ""' >> /usr/local/bin/claude-code \
+    && echo '# Placeholder: Replace with actual Claude Code command' >> /usr/local/bin/claude-code \
+    && echo '# Example: /usr/local/bin/claude-ai-code --allow-unsafe-operations "$@"' >> /usr/local/bin/claude-code \
+    && echo '# Example: code --enable-proposed-api --extensions-dir=/claude-extensions "$@"' >> /usr/local/bin/claude-code \
+    && echo 'echo "Available commands in this environment:"' >> /usr/local/bin/claude-code \
+    && echo 'echo "  make         - Build the project"' >> /usr/local/bin/claude-code \
+    && echo 'echo "  make test    - Run tests"' >> /usr/local/bin/claude-code \
+    && echo 'echo "  code .       - Open VS Code"' >> /usr/local/bin/claude-code \
+    && echo 'echo "  bash         - Interactive shell"' >> /usr/local/bin/claude-code \
+    && echo 'echo ""' >> /usr/local/bin/claude-code \
+    && echo 'echo "To update Claude Code installation, edit /usr/local/bin/claude-code"' >> /usr/local/bin/claude-code \
+    && echo '# Start an interactive shell for now' >> /usr/local/bin/claude-code \
+    && echo 'exec /bin/bash "$@"' >> /usr/local/bin/claude-code \
+    && chmod +x /usr/local/bin/claude-code
+
+# Set up working directory
+WORKDIR /repo
+
+# Create entrypoint script for claude-code with unsafe operations allowed
+RUN echo '#!/bin/bash' > /usr/local/bin/claude-entrypoint \
+    && echo 'cd /repo' >> /usr/local/bin/claude-entrypoint \
+    && echo '# Fix git ownership issue in Docker for repo and submodules' >> /usr/local/bin/claude-entrypoint \
+    && echo 'git config --global --add safe.directory "*" 2>/dev/null || true' >> /usr/local/bin/claude-entrypoint \
+    && echo '# Allow unsafe operations and start Claude Code' >> /usr/local/bin/claude-entrypoint \
+    && echo '# Note: The --allow-unsafe-operations flag should be passed to Claude Code when it becomes available' >> /usr/local/bin/claude-entrypoint \
+    && echo 'export CLAUDE_ALLOW_UNSAFE_OPERATIONS=1' >> /usr/local/bin/claude-entrypoint \
+    && echo 'exec claude-code "$@"' >> /usr/local/bin/claude-entrypoint \
+    && chmod +x /usr/local/bin/claude-entrypoint
+
+# Set the entrypoint
+ENTRYPOINT ["/usr/local/bin/claude-entrypoint"]
+CMD []

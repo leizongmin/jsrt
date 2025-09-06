@@ -200,3 +200,40 @@ wpt_g: jsrt_g wpt-download
 wpt-list:
 	@echo "Available WPT test categories:"
 	python3 scripts/run-wpt.py --list-categories
+
+# Docker and Claude Code commands
+DOCKER_IMAGE_NAME = jsrt-claude-dev
+DOCKER_TAG = latest
+
+.PHONY: docker-build
+docker-build:
+	@echo "Building Docker image for Claude Code development environment..."
+	docker build -t $(DOCKER_IMAGE_NAME):$(DOCKER_TAG) -f Dockerfile.claude .
+	@echo "✓ Docker image built: $(DOCKER_IMAGE_NAME):$(DOCKER_TAG)"
+
+.PHONY: claude
+claude: docker-build
+	@echo "Starting Claude Code in Docker environment..."
+	@echo "Repository mapped to /repo inside container"
+	@echo "Claude Code will run with unsafe operations allowed"
+	docker run -it --rm \
+		-v "$(CURDIR):/repo" \
+		-w /repo \
+		--name jsrt-claude-session \
+		$(DOCKER_IMAGE_NAME):$(DOCKER_TAG)
+
+.PHONY: claude-shell
+claude-shell: docker-build
+	@echo "Starting interactive shell in Claude development environment..."
+	docker run -it --rm \
+		-v "$(CURDIR):/repo" \
+		-w /repo \
+		--name jsrt-claude-shell \
+		--entrypoint /bin/bash \
+		$(DOCKER_IMAGE_NAME):$(DOCKER_TAG)
+
+.PHONY: docker-clean
+docker-clean:
+	@echo "Cleaning up Docker images and containers..."
+	docker rmi $(DOCKER_IMAGE_NAME):$(DOCKER_TAG) 2>/dev/null || true
+	@echo "✓ Docker cleanup completed"

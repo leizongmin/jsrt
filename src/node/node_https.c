@@ -756,7 +756,8 @@ JSValue JSRT_InitNodeHttps(JSContext* ctx) {
   JS_SetPropertyStr(ctx, https_obj, "get", JS_NewCFunction(ctx, js_https_get, "get", 3));
 
   // Enhanced HTTPS Agent class with connection pooling
-  JS_SetPropertyStr(ctx, https_obj, "Agent", JS_NewCFunction2(ctx, js_https_agent_constructor, "Agent", 1, JS_CFUNC_constructor, 0));
+  JS_SetPropertyStr(ctx, https_obj, "Agent",
+                    JS_NewCFunction2(ctx, js_https_agent_constructor, "Agent", 1, JS_CFUNC_constructor, 0));
 
   // Import HTTP constants and classes that also apply to HTTPS
   JSValue http_module = JSRT_LoadNodeModuleCommonJS(ctx, "http");

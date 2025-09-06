@@ -402,14 +402,14 @@ static JSValue js_http_request(JSContext* ctx, JSValueConst this_val, int argc, 
 // HTTP Agent constructor for connection pooling
 static JSValue js_http_agent_constructor(JSContext* ctx, JSValueConst new_target, int argc, JSValueConst* argv) {
   JSValue agent = JS_NewObject(ctx);
-  
+
   // Set default properties
   JS_SetPropertyStr(ctx, agent, "maxSockets", JS_NewInt32(ctx, 5));
   JS_SetPropertyStr(ctx, agent, "maxFreeSockets", JS_NewInt32(ctx, 256));
   JS_SetPropertyStr(ctx, agent, "timeout", JS_NewInt32(ctx, 30000));  // 30 seconds
   JS_SetPropertyStr(ctx, agent, "keepAlive", JS_TRUE);
   JS_SetPropertyStr(ctx, agent, "protocol", JS_NewString(ctx, "http:"));
-  
+
   // Parse options if provided
   if (argc > 0 && JS_IsObject(argv[0])) {
     JSValue maxSockets = JS_GetPropertyStr(ctx, argv[0], "maxSockets");
@@ -417,14 +417,14 @@ static JSValue js_http_agent_constructor(JSContext* ctx, JSValueConst new_target
       JS_SetPropertyStr(ctx, agent, "maxSockets", JS_DupValue(ctx, maxSockets));
     }
     JS_FreeValue(ctx, maxSockets);
-    
+
     JSValue keepAlive = JS_GetPropertyStr(ctx, argv[0], "keepAlive");
     if (JS_IsBool(keepAlive)) {
       JS_SetPropertyStr(ctx, agent, "keepAlive", JS_DupValue(ctx, keepAlive));
     }
     JS_FreeValue(ctx, keepAlive);
   }
-  
+
   return agent;
 }
 
@@ -454,7 +454,8 @@ JSValue JSRT_InitNodeHttp(JSContext* ctx) {
   JS_SetPropertyStr(ctx, http_module, "request", JS_NewCFunction(ctx, js_http_request, "request", 2));
 
   // HTTP Agent class with connection pooling
-  JS_SetPropertyStr(ctx, http_module, "Agent", JS_NewCFunction2(ctx, js_http_agent_constructor, "Agent", 1, JS_CFUNC_constructor, 0));
+  JS_SetPropertyStr(ctx, http_module, "Agent",
+                    JS_NewCFunction2(ctx, js_http_agent_constructor, "Agent", 1, JS_CFUNC_constructor, 0));
 
   // Export constructors
   JS_SetPropertyStr(ctx, http_module, "Server", server_ctor);

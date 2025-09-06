@@ -112,9 +112,10 @@ static char* compute_origin(const char* protocol, const char* hostname, const ch
     scheme[strlen(scheme) - 1] = '\0';
   }
 
-  // Some schemes always have null origin
-  if (strcmp(scheme, "file") == 0 || strcmp(scheme, "data") == 0 || strcmp(scheme, "javascript") == 0 ||
-      strcmp(scheme, "blob") == 0) {
+  // Special schemes that can have tuple origins: http, https, ftp, ws, wss
+  // All other schemes (including file, data, javascript, blob, and custom schemes) have null origin
+  if (strcmp(scheme, "http") != 0 && strcmp(scheme, "https") != 0 && strcmp(scheme, "ftp") != 0 &&
+      strcmp(scheme, "ws") != 0 && strcmp(scheme, "wss") != 0) {
     free(scheme);
     return strdup("null");
   }
@@ -362,6 +363,29 @@ static JSRT_URL* JSRT_ParseURL(const char* url, const char* base) {
     // No protocol found - this is not a valid absolute URL
     JSRT_FreeURL(parsed);
     return NULL;
+  }
+
+  // Rebuild href from parsed components
+  free(parsed->href);
+  size_t href_len = strlen(parsed->protocol) + 2 + strlen(parsed->host) + strlen(parsed->pathname);
+  if (parsed->search && strlen(parsed->search) > 0) {
+    href_len += strlen(parsed->search);
+  }
+  if (parsed->hash && strlen(parsed->hash) > 0) {
+    href_len += strlen(parsed->hash);
+  }
+
+  parsed->href = malloc(href_len + 1);
+  strcpy(parsed->href, parsed->protocol);
+  strcat(parsed->href, "//");
+  strcat(parsed->href, parsed->host);
+  strcat(parsed->href, parsed->pathname);
+
+  if (parsed->search && strlen(parsed->search) > 0) {
+    strcat(parsed->href, parsed->search);
+  }
+  if (parsed->hash && strlen(parsed->hash) > 0) {
+    strcat(parsed->href, parsed->hash);
   }
 
   return parsed;

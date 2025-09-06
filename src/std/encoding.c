@@ -1109,7 +1109,129 @@ static JSValue JSRT_TextDecoderDecode(JSContext* ctx, JSValueConst this_val, int
       // For other encodings, we don't implement strict validation in this server runtime
     }
 
-    return JS_NewStringLen(ctx, (const char*)(input_data + start_pos), input_len - start_pos);
+    // Handle different encodings
+    if (strcmp(decoder->encoding, "utf-16le") == 0 || strcmp(decoder->encoding, "UTF-16LE") == 0) {
+      // UTF-16LE decoding
+      size_t remaining_len = input_len - start_pos;
+      const uint8_t* utf16_data = input_data + start_pos;
+
+      size_t utf8_capacity = remaining_len * 3 + 1;
+      char* utf8_output = malloc(utf8_capacity);
+      if (!utf8_output) {
+        return JS_EXCEPTION;
+      }
+
+      size_t utf8_len = 0;
+      size_t i = 0;
+
+      while (i + 1 < remaining_len) {
+        uint16_t code_unit = utf16_data[i] | (utf16_data[i + 1] << 8);
+        i += 2;
+
+        if (code_unit < 0x80) {
+          utf8_output[utf8_len++] = (char)code_unit;
+        } else if (code_unit < 0x800) {
+          utf8_output[utf8_len++] = 0xC0 | (code_unit >> 6);
+          utf8_output[utf8_len++] = 0x80 | (code_unit & 0x3F);
+        } else if (code_unit >= 0xD800 && code_unit <= 0xDBFF) {
+          if (i + 1 < remaining_len) {
+            uint16_t low_surrogate = utf16_data[i] | (utf16_data[i + 1] << 8);
+            if (low_surrogate >= 0xDC00 && low_surrogate <= 0xDFFF) {
+              uint32_t code_point = 0x10000 + ((code_unit & 0x3FF) << 10) + (low_surrogate & 0x3FF);
+              i += 2;
+
+              utf8_output[utf8_len++] = 0xF0 | (code_point >> 18);
+              utf8_output[utf8_len++] = 0x80 | ((code_point >> 12) & 0x3F);
+              utf8_output[utf8_len++] = 0x80 | ((code_point >> 6) & 0x3F);
+              utf8_output[utf8_len++] = 0x80 | (code_point & 0x3F);
+            } else {
+              utf8_output[utf8_len++] = 0xEF;
+              utf8_output[utf8_len++] = 0xBF;
+              utf8_output[utf8_len++] = 0xBD;
+            }
+          } else {
+            utf8_output[utf8_len++] = 0xEF;
+            utf8_output[utf8_len++] = 0xBF;
+            utf8_output[utf8_len++] = 0xBD;
+          }
+        } else if (code_unit >= 0xDC00 && code_unit <= 0xDFFF) {
+          utf8_output[utf8_len++] = 0xEF;
+          utf8_output[utf8_len++] = 0xBF;
+          utf8_output[utf8_len++] = 0xBD;
+        } else {
+          utf8_output[utf8_len++] = 0xE0 | (code_unit >> 12);
+          utf8_output[utf8_len++] = 0x80 | ((code_unit >> 6) & 0x3F);
+          utf8_output[utf8_len++] = 0x80 | (code_unit & 0x3F);
+        }
+      }
+
+      utf8_output[utf8_len] = '\0';
+      JSValue result = JS_NewStringLen(ctx, utf8_output, utf8_len);
+      free(utf8_output);
+      return result;
+    } else if (strcmp(decoder->encoding, "utf-16be") == 0 || strcmp(decoder->encoding, "UTF-16BE") == 0) {
+      // UTF-16BE decoding
+      size_t remaining_len = input_len - start_pos;
+      const uint8_t* utf16_data = input_data + start_pos;
+
+      size_t utf8_capacity = remaining_len * 3 + 1;
+      char* utf8_output = malloc(utf8_capacity);
+      if (!utf8_output) {
+        return JS_EXCEPTION;
+      }
+
+      size_t utf8_len = 0;
+      size_t i = 0;
+
+      while (i + 1 < remaining_len) {
+        uint16_t code_unit = (utf16_data[i] << 8) | utf16_data[i + 1];
+        i += 2;
+
+        if (code_unit < 0x80) {
+          utf8_output[utf8_len++] = (char)code_unit;
+        } else if (code_unit < 0x800) {
+          utf8_output[utf8_len++] = 0xC0 | (code_unit >> 6);
+          utf8_output[utf8_len++] = 0x80 | (code_unit & 0x3F);
+        } else if (code_unit >= 0xD800 && code_unit <= 0xDBFF) {
+          if (i + 1 < remaining_len) {
+            uint16_t low_surrogate = (utf16_data[i] << 8) | utf16_data[i + 1];
+            if (low_surrogate >= 0xDC00 && low_surrogate <= 0xDFFF) {
+              uint32_t code_point = 0x10000 + ((code_unit & 0x3FF) << 10) + (low_surrogate & 0x3FF);
+              i += 2;
+
+              utf8_output[utf8_len++] = 0xF0 | (code_point >> 18);
+              utf8_output[utf8_len++] = 0x80 | ((code_point >> 12) & 0x3F);
+              utf8_output[utf8_len++] = 0x80 | ((code_point >> 6) & 0x3F);
+              utf8_output[utf8_len++] = 0x80 | (code_point & 0x3F);
+            } else {
+              utf8_output[utf8_len++] = 0xEF;
+              utf8_output[utf8_len++] = 0xBF;
+              utf8_output[utf8_len++] = 0xBD;
+            }
+          } else {
+            utf8_output[utf8_len++] = 0xEF;
+            utf8_output[utf8_len++] = 0xBF;
+            utf8_output[utf8_len++] = 0xBD;
+          }
+        } else if (code_unit >= 0xDC00 && code_unit <= 0xDFFF) {
+          utf8_output[utf8_len++] = 0xEF;
+          utf8_output[utf8_len++] = 0xBF;
+          utf8_output[utf8_len++] = 0xBD;
+        } else {
+          utf8_output[utf8_len++] = 0xE0 | (code_unit >> 12);
+          utf8_output[utf8_len++] = 0x80 | ((code_unit >> 6) & 0x3F);
+          utf8_output[utf8_len++] = 0x80 | (code_unit & 0x3F);
+        }
+      }
+
+      utf8_output[utf8_len] = '\0';
+      JSValue result = JS_NewStringLen(ctx, utf8_output, utf8_len);
+      free(utf8_output);
+      return result;
+    } else {
+      // UTF-8 and other encodings
+      return JS_NewStringLen(ctx, (const char*)(input_data + start_pos), input_len - start_pos);
+    }
   }
 
   // Try to get as typed array (including DataView)
@@ -1216,8 +1338,152 @@ static JSValue JSRT_TextDecoderDecode(JSContext* ctx, JSValueConst this_val, int
     }
   }
 
-  // Create string from the buffer
-  JSValue result = JS_NewStringLen(ctx, (const char*)(input_data + start_pos), input_len - start_pos);
+  // Handle different encodings
+  JSValue result;
+  if (strcmp(decoder->encoding, "utf-16le") == 0 || strcmp(decoder->encoding, "UTF-16LE") == 0) {
+    // UTF-16LE decoding
+    size_t remaining_len = input_len - start_pos;
+    const uint8_t* utf16_data = input_data + start_pos;
+
+    // Calculate maximum UTF-8 output size (worst case: all non-ASCII characters = 3 bytes each)
+    size_t utf8_capacity = remaining_len * 3 + 1;
+    char* utf8_output = malloc(utf8_capacity);
+    if (!utf8_output) {
+      JS_FreeValue(ctx, array_buffer);
+      return JS_EXCEPTION;
+    }
+
+    size_t utf8_len = 0;
+    size_t i = 0;
+
+    while (i + 1 < remaining_len) {
+      // Read UTF-16LE code unit (little-endian)
+      uint16_t code_unit = utf16_data[i] | (utf16_data[i + 1] << 8);
+      i += 2;
+
+      if (code_unit < 0x80) {
+        // ASCII
+        utf8_output[utf8_len++] = (char)code_unit;
+      } else if (code_unit < 0x800) {
+        // 2-byte UTF-8
+        utf8_output[utf8_len++] = 0xC0 | (code_unit >> 6);
+        utf8_output[utf8_len++] = 0x80 | (code_unit & 0x3F);
+      } else if (code_unit >= 0xD800 && code_unit <= 0xDBFF) {
+        // High surrogate - check for low surrogate
+        if (i + 1 < remaining_len) {
+          uint16_t low_surrogate = utf16_data[i] | (utf16_data[i + 1] << 8);
+          if (low_surrogate >= 0xDC00 && low_surrogate <= 0xDFFF) {
+            // Valid surrogate pair - decode to code point
+            uint32_t code_point = 0x10000 + ((code_unit & 0x3FF) << 10) + (low_surrogate & 0x3FF);
+            i += 2;
+
+            // Encode as 4-byte UTF-8
+            utf8_output[utf8_len++] = 0xF0 | (code_point >> 18);
+            utf8_output[utf8_len++] = 0x80 | ((code_point >> 12) & 0x3F);
+            utf8_output[utf8_len++] = 0x80 | ((code_point >> 6) & 0x3F);
+            utf8_output[utf8_len++] = 0x80 | (code_point & 0x3F);
+          } else {
+            // Lone high surrogate - replace with U+FFFD
+            utf8_output[utf8_len++] = 0xEF;
+            utf8_output[utf8_len++] = 0xBF;
+            utf8_output[utf8_len++] = 0xBD;
+          }
+        } else {
+          // Lone high surrogate at end - replace with U+FFFD
+          utf8_output[utf8_len++] = 0xEF;
+          utf8_output[utf8_len++] = 0xBF;
+          utf8_output[utf8_len++] = 0xBD;
+        }
+      } else if (code_unit >= 0xDC00 && code_unit <= 0xDFFF) {
+        // Lone low surrogate - replace with U+FFFD
+        utf8_output[utf8_len++] = 0xEF;
+        utf8_output[utf8_len++] = 0xBF;
+        utf8_output[utf8_len++] = 0xBD;
+      } else {
+        // 3-byte UTF-8
+        utf8_output[utf8_len++] = 0xE0 | (code_unit >> 12);
+        utf8_output[utf8_len++] = 0x80 | ((code_unit >> 6) & 0x3F);
+        utf8_output[utf8_len++] = 0x80 | (code_unit & 0x3F);
+      }
+    }
+
+    utf8_output[utf8_len] = '\0';
+    result = JS_NewStringLen(ctx, utf8_output, utf8_len);
+    free(utf8_output);
+  } else if (strcmp(decoder->encoding, "utf-16be") == 0 || strcmp(decoder->encoding, "UTF-16BE") == 0) {
+    // UTF-16BE decoding
+    size_t remaining_len = input_len - start_pos;
+    const uint8_t* utf16_data = input_data + start_pos;
+
+    size_t utf8_capacity = remaining_len * 3 + 1;
+    char* utf8_output = malloc(utf8_capacity);
+    if (!utf8_output) {
+      JS_FreeValue(ctx, array_buffer);
+      return JS_EXCEPTION;
+    }
+
+    size_t utf8_len = 0;
+    size_t i = 0;
+
+    while (i + 1 < remaining_len) {
+      // Read UTF-16BE code unit (big-endian)
+      uint16_t code_unit = (utf16_data[i] << 8) | utf16_data[i + 1];
+      i += 2;
+
+      if (code_unit < 0x80) {
+        // ASCII
+        utf8_output[utf8_len++] = (char)code_unit;
+      } else if (code_unit < 0x800) {
+        // 2-byte UTF-8
+        utf8_output[utf8_len++] = 0xC0 | (code_unit >> 6);
+        utf8_output[utf8_len++] = 0x80 | (code_unit & 0x3F);
+      } else if (code_unit >= 0xD800 && code_unit <= 0xDBFF) {
+        // High surrogate - check for low surrogate
+        if (i + 1 < remaining_len) {
+          uint16_t low_surrogate = (utf16_data[i] << 8) | utf16_data[i + 1];
+          if (low_surrogate >= 0xDC00 && low_surrogate <= 0xDFFF) {
+            // Valid surrogate pair - decode to code point
+            uint32_t code_point = 0x10000 + ((code_unit & 0x3FF) << 10) + (low_surrogate & 0x3FF);
+            i += 2;
+
+            // Encode as 4-byte UTF-8
+            utf8_output[utf8_len++] = 0xF0 | (code_point >> 18);
+            utf8_output[utf8_len++] = 0x80 | ((code_point >> 12) & 0x3F);
+            utf8_output[utf8_len++] = 0x80 | ((code_point >> 6) & 0x3F);
+            utf8_output[utf8_len++] = 0x80 | (code_point & 0x3F);
+          } else {
+            // Lone high surrogate - replace with U+FFFD
+            utf8_output[utf8_len++] = 0xEF;
+            utf8_output[utf8_len++] = 0xBF;
+            utf8_output[utf8_len++] = 0xBD;
+          }
+        } else {
+          // Lone high surrogate at end - replace with U+FFFD
+          utf8_output[utf8_len++] = 0xEF;
+          utf8_output[utf8_len++] = 0xBF;
+          utf8_output[utf8_len++] = 0xBD;
+        }
+      } else if (code_unit >= 0xDC00 && code_unit <= 0xDFFF) {
+        // Lone low surrogate - replace with U+FFFD
+        utf8_output[utf8_len++] = 0xEF;
+        utf8_output[utf8_len++] = 0xBF;
+        utf8_output[utf8_len++] = 0xBD;
+      } else {
+        // 3-byte UTF-8
+        utf8_output[utf8_len++] = 0xE0 | (code_unit >> 12);
+        utf8_output[utf8_len++] = 0x80 | ((code_unit >> 6) & 0x3F);
+        utf8_output[utf8_len++] = 0x80 | (code_unit & 0x3F);
+      }
+    }
+
+    utf8_output[utf8_len] = '\0';
+    result = JS_NewStringLen(ctx, utf8_output, utf8_len);
+    free(utf8_output);
+  } else {
+    // UTF-8 and other encodings - create string from the buffer
+    result = JS_NewStringLen(ctx, (const char*)(input_data + start_pos), input_len - start_pos);
+  }
+
   JS_FreeValue(ctx, array_buffer);
   return result;
 }

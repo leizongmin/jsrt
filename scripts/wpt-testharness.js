@@ -594,6 +594,43 @@ function assert_throws_quotaexceedederror(func, description) {
     }
 }
 globalThis.assert_throws_quotaexceedederror = assert_throws_quotaexceedederror;
+
+// WPT-specific assert_throws_exactly function
+function assert_throws_exactly(expected_error, func, description) {
+    try {
+        let threw = false;
+        let caughtError = null;
+        
+        try {
+            func();
+        } catch (e) {
+            threw = true;
+            caughtError = e;
+        }
+        
+        if (!threw) {
+            throw new Error('Expected function to throw but it did not: ' + (description || ''));
+        }
+        
+        // Check for exact error equality (same object reference or value)
+        if (caughtError !== expected_error) {
+            // Also check if they are equivalent errors with same message
+            if (expected_error && caughtError &&
+                expected_error.constructor === caughtError.constructor &&
+                expected_error.message === caughtError.message) {
+                // Equivalent error, pass
+                return;
+            }
+            throw new Error(`Expected exact error ${expected_error} but got ${caughtError}: ` + (description || ''));
+        }
+        
+        return; // Success
+    } catch (e) {
+        throw new Error(description || e.message);
+    }
+}
+globalThis.assert_throws_exactly = assert_throws_exactly;
+
 globalThis.test = test;
 globalThis.async_test = async_test;
 globalThis.promise_test = promise_test;

@@ -1,5 +1,6 @@
 #include "streams.h"
 
+#include <math.h>
 #include <quickjs.h>
 #include <stdbool.h>
 #include <stdint.h>
@@ -496,7 +497,9 @@ static JSValue JSRT_WritableStreamDefaultControllerClose(JSContext* ctx, JSValue
 typedef struct {
   JSValue controller;
   bool locked;
-  JSValue underlying_sink;  // Store the underlyingSink for write method calls
+  JSValue underlying_sink;           // Store the underlyingSink for write method calls
+  int high_water_mark;               // Store the highWaterMark from queuingStrategy
+  bool high_water_mark_is_infinity;  // True if highWaterMark is Infinity
 } JSRT_WritableStream;
 
 static void JSRT_WritableStreamFinalize(JSRuntime* rt, JSValue val) {
@@ -521,6 +524,8 @@ static JSValue JSRT_WritableStreamConstructor(JSContext* ctx, JSValueConst new_t
   JSRT_WritableStream* stream = malloc(sizeof(JSRT_WritableStream));
   stream->locked = false;
   stream->underlying_sink = JS_UNDEFINED;
+  stream->high_water_mark = 1;  // Default highWaterMark
+  stream->high_water_mark_is_infinity = false;
 
   JSValue obj = JS_NewObjectClass(ctx, JSRT_WritableStreamClassID);
   JS_SetOpaque(obj, stream);
@@ -543,9 +548,49 @@ static JSValue JSRT_WritableStreamConstructor(JSContext* ctx, JSValueConst new_t
 
   stream->controller = controller;
 
+  // Handle queuingStrategy parameter (second argument)
+  if (argc > 1 && !JS_IsUndefined(argv[1]) && JS_IsObject(argv[1])) {
+    JSValue queuingStrategy = argv[1];
+    JSValue highWaterMark = JS_GetPropertyStr(ctx, queuingStrategy, "highWaterMark");
+
+    if (!JS_IsUndefined(highWaterMark) && JS_IsNumber(highWaterMark)) {
+      double hwm_double;
+      JS_ToFloat64(ctx, &hwm_double, highWaterMark);
+      if (isinf(hwm_double)) {
+        stream->high_water_mark_is_infinity = true;
+        stream->high_water_mark = 0;  // Not used when infinity
+      } else {
+        int32_t hwm;
+        JS_ToInt32(ctx, &hwm, highWaterMark);
+        stream->high_water_mark = hwm;
+        stream->high_water_mark_is_infinity = false;
+      }
+    }
+    JS_FreeValue(ctx, highWaterMark);
+  }
+
   // If underlyingSink is provided, store it and call its start method
   if (argc > 0 && !JS_IsUndefined(argv[0]) && JS_IsObject(argv[0])) {
     JSValue underlyingSink = argv[0];
+
+    // Check for invalid type property - per spec, WritableStream cannot have 'bytes' type
+    JSValue type_prop = JS_GetPropertyStr(ctx, underlyingSink, "type");
+    if (!JS_IsUndefined(type_prop)) {
+      const char* type_str = JS_ToCString(ctx, type_prop);
+      if (type_str && strcmp(type_str, "bytes") == 0) {
+        JS_FreeCString(ctx, type_str);
+        JS_FreeValue(ctx, type_prop);
+        // Don't free controller_data - JS_FreeValue(ctx, controller) handles it
+        JS_FreeValue(ctx, controller);
+        free(stream);
+        return JS_ThrowRangeError(ctx, "WritableStream does not support 'bytes' type");
+      }
+      if (type_str) {
+        JS_FreeCString(ctx, type_str);
+      }
+    }
+    JS_FreeValue(ctx, type_prop);
+
     stream->underlying_sink = JS_DupValue(ctx, underlyingSink);  // Store the underlyingSink
     JSValue start = JS_GetPropertyStr(ctx, underlyingSink, "start");
 
@@ -640,6 +685,8 @@ typedef struct {
   bool closed;
   bool errored;
   int desired_size;
+  int high_water_mark;               // Inherited from the stream's highWaterMark
+  bool high_water_mark_is_infinity;  // True if highWaterMark is Infinity
 } JSRT_WritableStreamDefaultWriter;
 
 static void JSRT_WritableStreamDefaultWriterFinalize(JSRuntime* rt, JSValue val) {
@@ -682,6 +729,10 @@ static JSValue JSRT_WritableStreamDefaultWriterConstructor(JSContext* ctx, JSVal
   writer->errored = false;
   writer->desired_size = 1;  // Default desired size
 
+  // Inherit highWaterMark from the stream
+  writer->high_water_mark = stream->high_water_mark;
+  writer->high_water_mark_is_infinity = stream->high_water_mark_is_infinity;
+
   JSValue obj = JS_NewObjectClass(ctx, JSRT_WritableStreamDefaultWriterClassID);
   JS_SetOpaque(obj, writer);
   return obj;
@@ -704,7 +755,10 @@ static JSValue JSRT_WritableStreamDefaultWriterGetDesiredSize(JSContext* ctx, JS
     }
   }
 
-  return JS_NewInt32(ctx, writer->desired_size);
+  if (writer->high_water_mark_is_infinity) {
+    return JS_NewFloat64(ctx, INFINITY);
+  }
+  return JS_NewInt32(ctx, writer->high_water_mark);
 }
 
 static JSValue JSRT_WritableStreamDefaultWriterGetClosed(JSContext* ctx, JSValueConst this_val, int argc,

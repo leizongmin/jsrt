@@ -203,10 +203,20 @@ static JSValue JSRT_AbortSignalAny(JSContext* ctx, JSValueConst this_val, int ar
     JS_FreeValue(ctx, item);
   }
 
-  // For now, return a non-aborted signal
-  // In a full implementation, we would set up listeners on all input signals
-  // and abort the returned signal when any of them abort
-  return JSRT_CreateAbortSignal(ctx, false, JS_UNDEFINED);
+  // Create a new signal that will be aborted when any input signal aborts
+  JSValue result_signal = JSRT_CreateAbortSignal(ctx, false, JS_UNDEFINED);
+  JSRT_AbortSignal* result_signal_data = JS_GetOpaque2(ctx, result_signal, JSRT_AbortSignalClassID);
+  if (!result_signal_data) {
+    return JS_ThrowInternalError(ctx, "Failed to create AbortSignal");
+  }
+
+  // For a complete implementation, we need to set up event listeners
+  // For now, return the signal as-is. The proper implementation would need
+  // a dependency tracking system to monitor source signals and abort
+  // the result signal when any source is aborted.
+  // This is a complex feature that requires event listener setup.
+
+  return result_signal;
 }
 
 // AbortController implementation

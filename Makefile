@@ -253,7 +253,7 @@ claude: docker-build
 		-v "/etc/passwd:/etc/passwd:ro" \
 		-v "/etc/group:/etc/group:ro" \
 		-w /repo \
-		--name jsrt-claude-session \
+		--name claude-session-$(shell basename $(CURDIR)) \
 		-e HOME="/tmp" \
 		-e USER="$(shell whoami)" \
 		-e GIT_USER_NAME="$(shell git config --global user.name)" \
@@ -273,7 +273,7 @@ claude-shell: docker-build
 		-v "/etc/passwd:/etc/passwd:ro" \
 		-v "/etc/group:/etc/group:ro" \
 		-w /repo \
-		--name jsrt-claude-shell \
+		--name claude-shell-$(shell basename $(CURDIR)) \
 		-e HOME="/tmp" \
 		-e USER="$(shell whoami)" \
 		-e GIT_USER_NAME="$(shell git config --global user.name)" \

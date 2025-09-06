@@ -4,9 +4,21 @@
 #include <stdlib.h>
 #include <string.h>
 #include <sys/stat.h>
+#ifdef _WIN32
+#include <direct.h>  // For _mkdir on Windows
+#include <io.h>      // For access function
+#else
 #include <unistd.h>
+#endif
 #include "../util/debug.h"
 #include "node_modules.h"
+
+// Cross-platform mkdir wrapper
+#ifdef _WIN32
+#define JSRT_MKDIR(path, mode) _mkdir(path)
+#else
+#define JSRT_MKDIR(path, mode) mkdir(path, mode)
+#endif
 
 // Helper to convert errno to Node.js error code
 static const char* errno_to_node_code(int err) {
@@ -326,7 +338,7 @@ static JSValue js_fs_mkdir_sync(JSContext* ctx, JSValueConst this_val, int argc,
     JS_FreeValue(ctx, mode_val);
   }
 
-  if (mkdir(path, mode) != 0) {
+  if (JSRT_MKDIR(path, mode) != 0) {
     JSValue error = create_fs_error(ctx, errno, "mkdir", path);
     JS_FreeCString(ctx, path);
     return JS_Throw(ctx, error);

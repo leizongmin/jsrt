@@ -74,8 +74,9 @@ typedef struct {
 } jsrt_ffi_function_t;
 
 // Global storage for FFI function metadata
-static JSValue ffi_functions_map = JS_UNINITIALIZED;
+static JSValue ffi_functions_map;
 static int next_function_id = 1;
+static bool ffi_initialized = false;
 
 // Function wrapper data structure
 typedef struct {
@@ -145,8 +146,9 @@ struct ffi_struct_def {
 
 // Store function metadata for lookup during calls
 static int store_function_metadata(JSContext* ctx, jsrt_ffi_function_t* func) {
-  if (JS_IsUninitialized(ffi_functions_map)) {
+  if (!ffi_initialized) {
     ffi_functions_map = JS_NewObject(ctx);
+    ffi_initialized = true;
   }
 
   int function_id = next_function_id++;
@@ -165,7 +167,7 @@ static int store_function_metadata(JSContext* ctx, jsrt_ffi_function_t* func) {
 
 // Retrieve function metadata during calls
 static bool get_function_metadata_by_id(JSContext* ctx, int function_id, jsrt_ffi_function_t* func) {
-  if (JS_IsUninitialized(ffi_functions_map)) {
+  if (!ffi_initialized) {
     return false;
   }
 
@@ -2738,10 +2740,10 @@ JSValue JSRT_CreateFFIModule(JSContext* ctx) {
 // Cleanup FFI module
 void JSRT_RuntimeCleanupStdFFI(JSContext* ctx) {
   // Clean up global ffi_functions_map if it was initialized
-  if (!JS_IsUninitialized(ffi_functions_map)) {
+  if (ffi_initialized) {
     JSRT_Debug("FFI: Cleaning up global ffi_functions_map");
     JS_FreeValue(ctx, ffi_functions_map);
-    ffi_functions_map = JS_UNINITIALIZED;
+    ffi_initialized = false;
   }
 
   // Reset function ID counter

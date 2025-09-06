@@ -5,6 +5,10 @@ FROM ubuntu:22.04
 ENV DEBIAN_FRONTEND=noninteractive
 ENV TZ=UTC
 
+# Set up Chinese mirror for faster package downloads
+RUN sed -i 's|http://archive.ubuntu.com/ubuntu/|https://mirrors.aliyun.com/ubuntu/|g' /etc/apt/sources.list \
+    && sed -i 's|http://security.ubuntu.com/ubuntu/|https://mirrors.aliyun.com/ubuntu/|g' /etc/apt/sources.list
+
 # Install system dependencies
 RUN apt-get update && apt-get install -y \
     build-essential \
@@ -34,9 +38,10 @@ RUN wget -qO- https://apt.llvm.org/llvm-snapshot.gpg.key | tee /etc/apt/trusted.
 # Create symlink for clang-format
 RUN ln -sf /usr/bin/clang-format-20 /usr/bin/clang-format
 
-# Install Node.js (needed for some build tools)
+# Install Node.js (needed for some build tools) - using Chinese mirror
 RUN curl -fsSL https://deb.nodesource.com/setup_lts.x | bash - \
-    && apt-get install -y nodejs
+    && apt-get install -y nodejs \
+    && npm config set registry https://registry.npmmirror.com
 
 # Install Claude Code
 # Note: Claude Code installation method depends on the specific distribution

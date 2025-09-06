@@ -122,7 +122,7 @@ try {
   console.log('✓ mkdirSync works correctly');
 
   // Test readdirSync on a known directory
-  const entries = fs.readdirSync('/tmp');
+  const entries = fs.readdirSync(tmpDir);
   assert.ok(Array.isArray(entries), 'readdirSync should return an array');
   console.log('✓ readdirSync works correctly');
 
@@ -164,7 +164,7 @@ console.log('\nTesting Buffer integration...');
 const Buffer = require('node:buffer').Buffer;
 
 if (Buffer) {
-  const testBufferPath = '/tmp/jsrt_buffer_test.txt';
+  const testBufferPath = tmpDir + '/jsrt_buffer_test.txt';
   const bufferData = Buffer.from('Buffer test data');
 
   try {

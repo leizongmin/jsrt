@@ -113,13 +113,17 @@ try {
   // Test crypto functionality
   const buf = crypto.randomBytes(16);
   assert.strictEqual(buf.length, 16, 'randomBytes should work');
-  
+
   const uuid = crypto.randomUUID();
   assert.strictEqual(typeof uuid, 'string', 'randomUUID should work');
   assert.strictEqual(uuid.length, 36, 'UUID should be correct length');
 
-  console.log('  ✅ node:crypto - Cryptographic operations (randomBytes, randomUUID)');
-  console.log('  📋 node:fs - File system operations (existing, needs enhancement)');
+  console.log(
+    '  ✅ node:crypto - Cryptographic operations (randomBytes, randomUUID)'
+  );
+  console.log(
+    '  📋 node:fs - File system operations (existing, needs enhancement)'
+  );
   console.log('  📋 node:stream - Stream operations (existing)');
   console.log('  📋 SSL/TLS server support for node:https');
   console.log('  📋 Advanced networking features');

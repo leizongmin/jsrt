@@ -271,13 +271,28 @@ static JSValue js_event_emitter_remove_all_listeners(JSContext* ctx, JSValueCons
 
 // EventEmitter constructor
 static JSValue js_event_emitter_constructor(JSContext* ctx, JSValueConst new_target, int argc, JSValueConst* argv) {
-  JSValue emitter = JS_NewObject(ctx);
+  JSValue proto, emitter;
+
+  if (JS_IsUndefined(new_target)) {
+    // Called as function, not constructor
+    return JS_ThrowTypeError(ctx, "EventEmitter constructor must be called with 'new'");
+  }
+
+  // Create a new object
+  emitter = JS_NewObject(ctx);
+  if (JS_IsException(emitter))
+    return emitter;
+
+  // Get the prototype from new_target (the constructor)
+  proto = JS_GetPropertyStr(ctx, new_target, "prototype");
+  if (!JS_IsException(proto)) {
+    // Set the prototype of the new object
+    JS_SetPrototype(ctx, emitter, proto);
+    JS_FreeValue(ctx, proto);
+  }
 
   // Initialize _events property
   JS_SetPropertyStr(ctx, emitter, "_events", JS_NewObject(ctx));
-
-  // The methods are now on the prototype, so no need to add them here
-  // They will be inherited automatically
 
   return emitter;
 }

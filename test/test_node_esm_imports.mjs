@@ -15,7 +15,9 @@ console.log('✓ Stream ES imports work correctly');
 
 // Test fs imports
 console.log('Testing fs ES imports...');
-const testFile = '/tmp/esm_test.txt';
+import os from 'node:os';
+const tmpDir = os.tmpdir();
+const testFile = tmpDir + '/esm_test.txt';
 const testData = 'ES module test data';
 
 writeFileSync(testFile, testData);

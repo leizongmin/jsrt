@@ -38,9 +38,11 @@ assert.ok(typeof fs.constants.X_OK === 'number', 'Should have X_OK constant');
 
 console.log('✓ Constants are available');
 
-// Create a test file path
-const testFilePath = '/tmp/jsrt_test_file.txt';
-const testDirPath = '/tmp/jsrt_test_dir';
+// Create a test file path using cross-platform temporary directory
+const os = require('node:os');
+const tmpDir = os.tmpdir();
+const testFilePath = tmpDir + '/jsrt_test_file.txt';
+const testDirPath = tmpDir + '/jsrt_test_dir';
 const testData = 'Hello, Node.js fs module!';
 
 try {

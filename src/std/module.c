@@ -387,6 +387,147 @@ static char* resolve_npm_module(const char* module_name, const char* base_path, 
   return main_path;
 }
 
+// Check if a package is an ES module by reading its package.json
+static bool is_package_esm(const char* package_dir) {
+  char* package_json_path = path_join(package_dir, "package.json");
+  if (!package_json_path)
+    return false;
+
+  JSRT_ReadFileResult json_result = JSRT_ReadFile(package_json_path);
+  free(package_json_path);
+
+  if (json_result.error != JSRT_READ_FILE_OK) {
+    JSRT_ReadFileResultFree(&json_result);
+    return false;  // Default to CommonJS
+  }
+
+  // Parse package.json
+  JSRuntime* rt = JS_NewRuntime();
+  JSContext* ctx = JS_NewContext(rt);
+
+  JSValue package_json = JSRT_ParseJSON(ctx, json_result.data);
+  JSRT_ReadFileResultFree(&json_result);
+
+  bool is_esm = false;
+  if (!JS_IsNull(package_json) && !JS_IsException(package_json)) {
+    const char* type = JSRT_GetPackageType(ctx, package_json);
+    if (type && strcmp(type, "module") == 0) {
+      is_esm = true;
+    }
+    if (type) {
+      JS_FreeCString(ctx, type);
+    }
+    JS_FreeValue(ctx, package_json);
+  }
+
+  JS_FreeContext(ctx);
+  JS_FreeRuntime(rt);
+
+  return is_esm;
+}
+
+// Resolve package imports (paths starting with #)
+static char* resolve_package_import(const char* import_name, const char* requesting_module_path) {
+  if (!import_name || import_name[0] != '#') {
+    return NULL;  // Not a package import
+  }
+
+  // Find the nearest package.json by walking up from the requesting module
+  char* current_dir = requesting_module_path ? get_parent_directory(requesting_module_path) : strdup(".");
+  if (!current_dir)
+    current_dir = strdup(".");
+
+  char* package_json_path = NULL;
+  char* temp_dir = strdup(current_dir);
+
+  // Walk up directories looking for package.json
+  while (temp_dir && strlen(temp_dir) > 1) {
+    char* test_path = path_join(temp_dir, "package.json");
+    if (test_path) {
+      JSRT_ReadFileResult result = JSRT_ReadFile(test_path);
+      if (result.error == JSRT_READ_FILE_OK) {
+        package_json_path = test_path;
+        JSRT_ReadFileResultFree(&result);
+        break;
+      }
+      JSRT_ReadFileResultFree(&result);
+      free(test_path);
+    }
+
+    // Go up one directory
+    char* parent = get_parent_directory(temp_dir);
+    free(temp_dir);
+    temp_dir = parent;
+  }
+
+  free(current_dir);
+  if (temp_dir)
+    free(temp_dir);
+
+  if (!package_json_path) {
+    return NULL;  // No package.json found
+  }
+
+  // Read and parse package.json
+  JSRT_ReadFileResult json_result = JSRT_ReadFile(package_json_path);
+  char* package_dir = get_parent_directory(package_json_path);
+  free(package_json_path);
+
+  if (json_result.error != JSRT_READ_FILE_OK) {
+    JSRT_ReadFileResultFree(&json_result);
+    if (package_dir)
+      free(package_dir);
+    return NULL;
+  }
+
+  JSRuntime* rt = JS_NewRuntime();
+  JSContext* ctx = JS_NewContext(rt);
+  JSValue package_json = JSRT_ParseJSON(ctx, json_result.data);
+  JSRT_ReadFileResultFree(&json_result);
+
+  char* resolved_path = NULL;
+  if (!JS_IsNull(package_json) && !JS_IsException(package_json)) {
+    // Get the imports object
+    JSValue imports = JS_GetPropertyStr(ctx, package_json, "imports");
+    if (!JS_IsUndefined(imports) && !JS_IsNull(imports)) {
+      // Look up the import name
+      JSValue import_value = JS_GetPropertyStr(ctx, imports, import_name);
+      if (!JS_IsUndefined(import_value) && !JS_IsNull(import_value)) {
+        if (JS_IsString(import_value)) {
+          // Simple string mapping
+          const char* import_path = JS_ToCString(ctx, import_value);
+          if (import_path) {
+            resolved_path = path_join(package_dir, import_path);
+            JS_FreeCString(ctx, import_path);
+          }
+        } else if (JS_IsObject(import_value)) {
+          // Conditional mapping - try 'default' first
+          JSValue default_value = JS_GetPropertyStr(ctx, import_value, "default");
+          if (!JS_IsUndefined(default_value) && JS_IsString(default_value)) {
+            const char* import_path = JS_ToCString(ctx, default_value);
+            if (import_path) {
+              resolved_path = path_join(package_dir, import_path);
+              JS_FreeCString(ctx, import_path);
+            }
+          }
+          JS_FreeValue(ctx, default_value);
+        }
+      }
+      JS_FreeValue(ctx, import_value);
+    }
+    JS_FreeValue(ctx, imports);
+    JS_FreeValue(ctx, package_json);
+  }
+
+  JS_FreeContext(ctx);
+  JS_FreeRuntime(rt);
+  if (package_dir)
+    free(package_dir);
+
+  JSRT_Debug("resolve_package_import: '%s' -> '%s'", import_name, resolved_path ? resolved_path : "NULL");
+  return resolved_path;
+}
+
 static char* resolve_module_path(const char* module_name, const char* base_path) {
   JSRT_Debug("resolve_module_path: module_name='%s', base_path='%s'", module_name, base_path ? base_path : "null");
 
@@ -452,6 +593,17 @@ char* JSRT_ModuleNormalize(JSContext* ctx, const char* module_base_name, const c
     return strdup(module_name);
   }
 #endif
+
+  // Handle package imports (starting with #)
+  if (module_name[0] == '#') {
+    char* import_path = resolve_package_import(module_name, module_base_name);
+    if (import_path) {
+      JSRT_Debug("JSRT_ModuleNormalize: resolved package import to '%s'", import_path);
+      return import_path;
+    }
+    // If package import resolution failed, return error
+    return NULL;
+  }
 
   // Check if this is a bare module name (not absolute or relative)
   if (!is_absolute_path(module_name) && !is_relative_path(module_name)) {
@@ -767,8 +919,24 @@ static JSValue js_require(JSContext* ctx, JSValueConst this_val, int argc, JSVal
   char* resolved_path;
 
   if (!is_relative_path(module_name) && !is_absolute_path(module_name)) {
-    // Try npm module resolution first
+    // Check if this is an npm package and if it's an ES module
     JSRT_Debug("js_require: trying npm module resolution");
+
+    // First, find the package directory to check if it's ES module
+    char* start_dir = effective_module_path ? get_parent_directory(effective_module_path) : strdup(".");
+    if (!start_dir)
+      start_dir = strdup(".");
+
+    char* package_dir = find_node_modules_path(start_dir, module_name);
+    free(start_dir);
+
+    // For CommonJS require(), we skip ES module checking to avoid runtime conflicts
+    // The ES module detection is handled in the ES module loader path instead
+
+    if (package_dir) {
+      free(package_dir);
+    }
+
     resolved_path = resolve_npm_module(module_name, effective_module_path, false);
     if (!resolved_path) {
       // Fallback to treating as relative path

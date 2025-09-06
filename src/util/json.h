@@ -10,5 +10,6 @@ JSValue JSRT_ParseJSON(JSContext* ctx, const char* json_str);
 const char* JSRT_GetPackageMain(JSContext* ctx, JSValue package_json);
 const char* JSRT_GetPackageModule(JSContext* ctx, JSValue package_json);
 const char* JSRT_GetPackageName(JSContext* ctx, JSValue package_json);
+const char* JSRT_GetPackageType(JSContext* ctx, JSValue package_json);
 
 #endif

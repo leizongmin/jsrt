@@ -58,3 +58,19 @@ const char* JSRT_GetPackageName(JSContext* ctx, JSValue package_json) {
   JS_FreeValue(ctx, name_val);
   return name_str;
 }
+
+const char* JSRT_GetPackageType(JSContext* ctx, JSValue package_json) {
+  if (JS_IsNull(package_json) || JS_IsUndefined(package_json)) {
+    return "commonjs";  // Default type
+  }
+
+  JSValue type_val = JS_GetPropertyStr(ctx, package_json, "type");
+  if (JS_IsUndefined(type_val) || JS_IsNull(type_val)) {
+    JS_FreeValue(ctx, type_val);
+    return "commonjs";  // Default type
+  }
+
+  const char* type_str = JS_ToCString(ctx, type_val);
+  JS_FreeValue(ctx, type_val);
+  return type_str;
+}

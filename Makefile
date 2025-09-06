@@ -157,7 +157,7 @@ coverage: test_cov
 	lcov --summary target/coverage/coverage_filtered.info
 
 .PHONY: coverage-merged
-coverage-merged: test_cov
+coverage-merged: test_cov wpt-download
 	@echo "Generating merged coverage report (regular tests + WPT)..."
 	# Capture coverage from regular tests (already executed by test_cov dependency)
 	lcov --capture --directory target/coverage --output-file target/coverage/coverage_tests.info

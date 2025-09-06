@@ -5,9 +5,9 @@
 
 // Platform-specific includes and implementations
 #ifdef _WIN32
+#include <windows.h>    // Must come first to define basic Windows types
 #include <process.h>
 #include <tlhelp32.h>
-#include <windows.h>
 #include <winsock2.h>  // For struct timeval
 
 // Windows implementation of missing functions

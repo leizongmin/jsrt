@@ -270,8 +270,26 @@ function test(func, name) {
     // Run the test immediately
     wptCurrentTest = testObj;
     
+    // Create test object with WPT methods
+    const t = {
+        step: function(stepFunc, ...args) {
+            try {
+                return stepFunc.apply(this, args);
+            } catch (e) {
+                this.step_func = null;
+                throw e;
+            }
+        },
+        
+        step_func: function(stepFunc, context) {
+            return (...args) => {
+                return t.step(() => stepFunc.apply(context || this, args));
+            };
+        }
+    };
+    
     try {
-        func();
+        func(t);  // Pass test object to function
         testObj.status = TEST_PASS;
         testObj.message = 'OK';
         console.log(`✅ ${testName}`);
@@ -512,6 +530,24 @@ globalThis.assert_throws = assert_throws;
 globalThis.assert_throws_dom = assert_throws_dom;
 globalThis.assert_unreached = assert_unreached;
 globalThis.promise_rejects_exactly = promise_rejects_exactly;
+
+// Add promise_rejects_js for WPT compatibility
+function promise_rejects_js(test, expected_error, promise, description) {
+    return promise.then(() => {
+        assert_unreached('Promise should have rejected but resolved: ' + (description || ''));
+    }, (error) => {
+        if (expected_error === TypeError && !(error instanceof TypeError)) {
+            assert_unreached('Expected TypeError but got ' + error.constructor.name + ': ' + (description || ''));
+        } else if (expected_error === RangeError && !(error instanceof RangeError)) {
+            assert_unreached('Expected RangeError but got ' + error.constructor.name + ': ' + (description || ''));
+        } else if (expected_error === SyntaxError && !(error instanceof SyntaxError)) {
+            assert_unreached('Expected SyntaxError but got ' + error.constructor.name + ': ' + (description || ''));
+        }
+        // Promise rejected with expected error type
+    });
+}
+
+globalThis.promise_rejects_js = promise_rejects_js;
 
 // WPT-specific assert_throws_quotaexceedederror function
 function assert_throws_quotaexceedederror(func, description) {

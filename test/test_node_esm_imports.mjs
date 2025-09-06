@@ -21,7 +21,7 @@ const testFile = tmpDir + '/esm_test.txt';
 const testData = 'ES module test data';
 
 writeFileSync(testFile, testData);
-const readData = readFileSync(testFile);
+const readData = readFileSync(testFile, { encoding: 'utf8' });
 const exists = existsSync(testFile);
 
 if (readData === testData && exists) {

@@ -3,6 +3,9 @@
 #include "../util/debug.h"
 #include "node_modules.h"
 
+// Forward declarations
+static JSValue js_buffer_to_string(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv);
+
 // Helper to get buffer data from JSValue
 static uint8_t* get_buffer_data(JSContext* ctx, JSValue obj, size_t* size) {
   size_t byte_offset;
@@ -22,14 +25,36 @@ static uint8_t* get_buffer_data(JSContext* ctx, JSValue obj, size_t* size) {
   return buffer + byte_offset;
 }
 
-// Helper to create Uint8Array from ArrayBuffer
+// Helper to create Uint8Array from ArrayBuffer with Buffer methods
 static JSValue create_uint8_array(JSContext* ctx, JSValue array_buffer) {
   JSValue global = JS_GetGlobalObject(ctx);
   JSValue uint8_array_ctor = JS_GetPropertyStr(ctx, global, "Uint8Array");
   JSValue uint8_array = JS_CallConstructor(ctx, uint8_array_ctor, 1, &array_buffer);
+
+  // Add Buffer-specific methods to the Uint8Array instance
+  if (!JS_IsException(uint8_array)) {
+    // Add toString method that converts bytes to string
+    JSValue toString_func = JS_NewCFunction(ctx, js_buffer_to_string, "toString", 1);
+    JS_SetPropertyStr(ctx, uint8_array, "toString", toString_func);
+  }
+
   JS_FreeValue(ctx, uint8_array_ctor);
   JS_FreeValue(ctx, global);
   return uint8_array;
+}
+
+// Buffer.prototype.toString([encoding])
+static JSValue js_buffer_to_string(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
+  // Get buffer data
+  size_t buffer_size;
+  uint8_t* buffer_data = get_buffer_data(ctx, this_val, &buffer_size);
+
+  if (!buffer_data) {
+    return JS_ThrowTypeError(ctx, "Invalid buffer object");
+  }
+
+  // For now, just convert bytes to UTF-8 string (ignoring encoding parameter)
+  return JS_NewStringLen(ctx, (const char*)buffer_data, buffer_size);
 }
 
 // Buffer.alloc(size[, fill[, encoding]])

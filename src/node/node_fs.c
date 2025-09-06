@@ -116,21 +116,55 @@ static JSValue js_fs_read_file_sync(JSContext* ctx, JSValueConst this_val, int a
 
   buffer[size] = '\0';
 
-  // Check if encoding is specified (simplified - always return string for now)
+  // Enhanced Buffer integration - check for encoding options
   JSValue result;
   if (argc > 1 && JS_IsObject(argv[1])) {
     JSValue encoding = JS_GetPropertyStr(ctx, argv[1], "encoding");
     if (JS_IsString(encoding)) {
+      // Return string for text data when encoding is specified
       result = JS_NewStringLen(ctx, buffer, size);
     } else {
-      // Return Buffer for binary data
-      JSValue buffer_ctor = JS_GetPropertyStr(ctx, JS_GetGlobalObject(ctx), "Buffer");
+      // Return Buffer for binary data when no encoding specified
+      // Load Buffer from node:buffer module
+      JSValue buffer_module = JSRT_LoadNodeModuleCommonJS(ctx, "buffer");
+      if (!JS_IsException(buffer_module)) {
+        JSValue buffer_ctor = JS_GetPropertyStr(ctx, buffer_module, "Buffer");
+        if (!JS_IsUndefined(buffer_ctor)) {
+          JSValue from_func = JS_GetPropertyStr(ctx, buffer_ctor, "from");
+          if (JS_IsFunction(ctx, from_func)) {
+            // Create ArrayBuffer from raw data for proper binary handling
+            JSValue array_buffer = JS_NewArrayBufferCopy(ctx, (const uint8_t*)buffer, size);
+            JSValue args[1] = {array_buffer};
+            result = JS_Call(ctx, from_func, buffer_ctor, 1, args);
+            JS_FreeValue(ctx, array_buffer);
+          } else {
+            result = JS_NewStringLen(ctx, buffer, size);
+          }
+          JS_FreeValue(ctx, from_func);
+        } else {
+          result = JS_NewStringLen(ctx, buffer, size);
+        }
+        JS_FreeValue(ctx, buffer_ctor);
+        JS_FreeValue(ctx, buffer_module);
+      } else {
+        result = JS_NewStringLen(ctx, buffer, size);
+      }
+    }
+    JS_FreeValue(ctx, encoding);
+  } else {
+    // Default behavior: return Buffer for binary compatibility
+    // Load Buffer from node:buffer module
+    JSValue buffer_module = JSRT_LoadNodeModuleCommonJS(ctx, "buffer");
+    if (!JS_IsException(buffer_module)) {
+      JSValue buffer_ctor = JS_GetPropertyStr(ctx, buffer_module, "Buffer");
       if (!JS_IsUndefined(buffer_ctor)) {
         JSValue from_func = JS_GetPropertyStr(ctx, buffer_ctor, "from");
         if (JS_IsFunction(ctx, from_func)) {
-          JSValue args[1] = {JS_NewStringLen(ctx, buffer, size)};
+          // Create ArrayBuffer from raw data for proper binary handling
+          JSValue array_buffer = JS_NewArrayBufferCopy(ctx, (const uint8_t*)buffer, size);
+          JSValue args[1] = {array_buffer};
           result = JS_Call(ctx, from_func, buffer_ctor, 1, args);
-          JS_FreeValue(ctx, args[0]);
+          JS_FreeValue(ctx, array_buffer);
         } else {
           result = JS_NewStringLen(ctx, buffer, size);
         }
@@ -139,10 +173,10 @@ static JSValue js_fs_read_file_sync(JSContext* ctx, JSValueConst this_val, int a
         result = JS_NewStringLen(ctx, buffer, size);
       }
       JS_FreeValue(ctx, buffer_ctor);
+      JS_FreeValue(ctx, buffer_module);
+    } else {
+      result = JS_NewStringLen(ctx, buffer, size);
     }
-    JS_FreeValue(ctx, encoding);
-  } else {
-    result = JS_NewStringLen(ctx, buffer, size);
   }
 
   free(buffer);
@@ -162,39 +196,66 @@ static JSValue js_fs_write_file_sync(JSContext* ctx, JSValueConst this_val, int 
     return JS_EXCEPTION;
   }
 
-  const char* data;
+  const uint8_t* data;
   size_t data_len;
+  bool is_binary = false;
 
   if (JS_IsString(argv[1])) {
-    data = JS_ToCStringLen(ctx, &data_len, argv[1]);
-    if (!data) {
+    // String data
+    const char* str_data = JS_ToCStringLen(ctx, &data_len, argv[1]);
+    if (!str_data) {
       JS_FreeCString(ctx, path);
       return JS_EXCEPTION;
     }
+    data = (const uint8_t*)str_data;
   } else {
-    // Try to handle Buffer objects
-    JSValue to_string = JS_GetPropertyStr(ctx, argv[1], "toString");
-    if (JS_IsFunction(ctx, to_string)) {
-      JSValue str_result = JS_Call(ctx, to_string, argv[1], 0, NULL);
-      data = JS_ToCStringLen(ctx, &data_len, str_result);
-      JS_FreeValue(ctx, str_result);
-      JS_FreeValue(ctx, to_string);
-      if (!data) {
+    // Enhanced Buffer handling - check if it's a TypedArray (Buffer)
+    JSValue global = JS_GetGlobalObject(ctx);
+    JSValue uint8_array_ctor = JS_GetPropertyStr(ctx, global, "Uint8Array");
+
+    if (JS_IsInstanceOf(ctx, argv[1], uint8_array_ctor) > 0) {
+      // It's a Buffer/Uint8Array - get binary data directly
+      size_t byte_offset;
+      JSValue array_buffer = JS_GetTypedArrayBuffer(ctx, argv[1], &byte_offset, &data_len, NULL);
+      if (JS_IsException(array_buffer)) {
+        JS_FreeValue(ctx, uint8_array_ctor);
+        JS_FreeValue(ctx, global);
         JS_FreeCString(ctx, path);
         return JS_EXCEPTION;
       }
+
+      size_t buffer_size;
+      uint8_t* buffer_data = JS_GetArrayBuffer(ctx, &buffer_size, array_buffer);
+      JS_FreeValue(ctx, array_buffer);
+
+      if (!buffer_data) {
+        JS_FreeValue(ctx, uint8_array_ctor);
+        JS_FreeValue(ctx, global);
+        JS_FreeCString(ctx, path);
+        return JS_ThrowTypeError(ctx, "Failed to get buffer data");
+      }
+
+      data = buffer_data + byte_offset;
+      is_binary = true;
     } else {
-      JS_FreeValue(ctx, to_string);
+      // For non-Buffer, non-TypedArray objects, reject
+      JS_FreeValue(ctx, uint8_array_ctor);
+      JS_FreeValue(ctx, global);
       JS_FreeCString(ctx, path);
-      return JS_ThrowTypeError(ctx, "data must be string or Buffer");
+      return JS_ThrowTypeError(ctx, "data must be string, Buffer, or TypedArray");
     }
+
+    JS_FreeValue(ctx, uint8_array_ctor);
+    JS_FreeValue(ctx, global);
   }
 
   FILE* file = fopen(path, "wb");
   if (!file) {
     JSValue error = create_fs_error(ctx, errno, "open", path);
     JS_FreeCString(ctx, path);
-    JS_FreeCString(ctx, data);
+    if (!is_binary) {
+      JS_FreeCString(ctx, (const char*)data);
+    }
     return JS_Throw(ctx, error);
   }
 
@@ -204,12 +265,16 @@ static JSValue js_fs_write_file_sync(JSContext* ctx, JSValueConst this_val, int 
   if (written != data_len) {
     JSValue error = create_fs_error(ctx, errno, "write", path);
     JS_FreeCString(ctx, path);
-    JS_FreeCString(ctx, data);
+    if (!is_binary) {
+      JS_FreeCString(ctx, (const char*)data);
+    }
     return JS_Throw(ctx, error);
   }
 
   JS_FreeCString(ctx, path);
-  JS_FreeCString(ctx, data);
+  if (!is_binary) {
+    JS_FreeCString(ctx, (const char*)data);
+  }
 
   return JS_UNDEFINED;
 }

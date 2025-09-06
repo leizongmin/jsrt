@@ -1,7 +1,5 @@
 #include <stdlib.h>
 #include <string.h>
-#include <sys/time.h>
-#include <unistd.h>
 #include "../util/debug.h"
 #include "node_modules.h"
 
@@ -10,7 +8,7 @@
 #include <process.h>
 #include <tlhelp32.h>
 #include <windows.h>
-#include <winsock2.h>
+#include <winsock2.h>  // For struct timeval
 
 // Windows implementation of missing functions
 static int jsrt_getppid(void) {
@@ -53,11 +51,15 @@ static int jsrt_gettimeofday(struct timeval* tv, void* tz) {
 #define JSRT_GETPID() getpid()
 #define JSRT_GETPPID() jsrt_getppid()
 #define JSRT_GETTIMEOFDAY(tv, tz) jsrt_gettimeofday(tv, tz)
+
 #else
 #include <sys/time.h>
+#include <unistd.h>
+
 #define JSRT_GETPID() getpid()
 #define JSRT_GETPPID() getppid()
 #define JSRT_GETTIMEOFDAY(tv, tz) gettimeofday(tv, tz)
+
 #endif
 
 // Node.js process.hrtime() implementation

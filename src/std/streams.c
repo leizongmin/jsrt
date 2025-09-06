@@ -430,6 +430,13 @@ static JSValue JSRT_ReadableStreamDefaultReaderReleaseLock(JSContext* ctx, JSVal
   // Mark the reader as closed
   reader->closed = true;
 
+  // Clear the cached closed promise so a new one will be created
+  // This is required by WPT test: "closed is replaced when stream closes and reader releases its lock"
+  if (!JS_IsUninitialized(reader->closed_promise)) {
+    JS_FreeValue(ctx, reader->closed_promise);
+    reader->closed_promise = JS_UNINITIALIZED;
+  }
+
   return JS_UNDEFINED;
 }
 
@@ -549,9 +556,28 @@ static JSValue JSRT_WritableStreamConstructor(JSContext* ctx, JSValueConst new_t
   stream->controller = controller;
 
   // Handle queuingStrategy parameter (second argument)
+  // Per spec, queuingStrategy is processed at IDL layer (before underlyingSink)
   if (argc > 1 && !JS_IsUndefined(argv[1]) && JS_IsObject(argv[1])) {
     JSValue queuingStrategy = argv[1];
+
+    // Access size property first - this may throw (as expected by WPT tests)
+    JSValue size_prop = JS_GetPropertyStr(ctx, queuingStrategy, "size");
+    if (JS_IsException(size_prop)) {
+      // Clean up and propagate the exception
+      JS_FreeValue(ctx, controller);  // This will free controller_data via finalizer
+      free(stream);
+      return size_prop;
+    }
+    JS_FreeValue(ctx, size_prop);
+
+    // Then access highWaterMark property
     JSValue highWaterMark = JS_GetPropertyStr(ctx, queuingStrategy, "highWaterMark");
+    if (JS_IsException(highWaterMark)) {
+      // Clean up and propagate the exception
+      JS_FreeValue(ctx, controller);  // This will free controller_data via finalizer
+      free(stream);
+      return highWaterMark;
+    }
 
     if (!JS_IsUndefined(highWaterMark) && JS_IsNumber(highWaterMark)) {
       double hwm_double;
@@ -711,10 +737,29 @@ static JSValue JSRT_WritableStreamDefaultWriterConstructor(JSContext* ctx, JSVal
   }
 
   JSValue stream_val = argv[0];
+  
+  // Check if it's a WritableStream by trying to get the opaque data
   JSRT_WritableStream* stream = JS_GetOpaque(stream_val, JSRT_WritableStreamClassID);
   if (!stream) {
-    return JS_ThrowTypeError(ctx,
-                             "WritableStreamDefaultWriter constructor should get a WritableStream object as argument");
+    // Check if the argument is actually a WritableStream by checking prototype or constructor
+    JSValue proto = JS_GetPrototype(ctx, stream_val);
+    JSValue writablestream_ctor = JS_GetPropertyStr(ctx, JS_GetGlobalObject(ctx), "WritableStream");
+    JSValue writablestream_proto = JS_GetPropertyStr(ctx, writablestream_ctor, "prototype");
+    
+    int is_equal = JS_StrictEq(ctx, proto, writablestream_proto);
+    bool is_writablestream = (is_equal == 1);
+    
+    JS_FreeValue(ctx, proto);
+    JS_FreeValue(ctx, writablestream_ctor);
+    JS_FreeValue(ctx, writablestream_proto);
+    
+    if (!is_writablestream) {
+      return JS_ThrowTypeError(ctx, "WritableStreamDefaultWriter constructor should get a WritableStream object as argument");
+    }
+    
+    // If we reach here, it might be a WritableStream but without opaque data somehow
+    // This shouldn't happen in normal cases
+    return JS_ThrowTypeError(ctx, "Invalid WritableStream object");
   }
 
   if (stream->locked) {
@@ -847,6 +892,51 @@ static JSValue JSRT_WritableStreamDefaultWriterClose(JSContext* ctx, JSValueCons
   JSValue resolve_method = JS_GetPropertyStr(ctx, promise_ctor, "resolve");
   JSValue undefined_val = JS_UNDEFINED;
   JSValue promise = JS_Call(ctx, resolve_method, promise_ctor, 1, &undefined_val);
+  JS_FreeValue(ctx, resolve_method);
+  JS_FreeValue(ctx, promise_ctor);
+  return promise;
+}
+
+static JSValue JSRT_WritableStreamDefaultWriterAbort(JSContext* ctx, JSValueConst this_val, int argc,
+                                                     JSValueConst* argv) {
+  JSRT_WritableStreamDefaultWriter* writer = JS_GetOpaque(this_val, JSRT_WritableStreamDefaultWriterClassID);
+  if (!writer) {
+    return JS_EXCEPTION;
+  }
+
+  // Get the stream
+  JSRT_WritableStream* stream = JS_GetOpaque(writer->stream, JSRT_WritableStreamClassID);
+  if (!stream) {
+    return JS_EXCEPTION;
+  }
+
+  // Mark writer as closed/errored
+  writer->closed = true;
+  writer->errored = true;
+
+  // Get the abort reason
+  JSValue reason = argc > 0 ? argv[0] : JS_UNDEFINED;
+
+  // Check if we have an underlyingSink with an abort method
+  if (!JS_IsUndefined(stream->underlying_sink)) {
+    JSValue abort_method = JS_GetPropertyStr(ctx, stream->underlying_sink, "abort");
+    if (!JS_IsUndefined(abort_method) && JS_IsFunction(ctx, abort_method)) {
+      // Call the abort method with reason
+      JSValue result = JS_Call(ctx, abort_method, stream->underlying_sink, 1, &reason);
+      JS_FreeValue(ctx, abort_method);
+      if (JS_IsException(result)) {
+        return result;
+      }
+      JS_FreeValue(ctx, result);
+    } else {
+      JS_FreeValue(ctx, abort_method);
+    }
+  }
+
+  // Return resolved promise with reason
+  JSValue promise_ctor = JS_GetPropertyStr(ctx, JS_GetGlobalObject(ctx), "Promise");
+  JSValue resolve_method = JS_GetPropertyStr(ctx, promise_ctor, "resolve");
+  JSValue promise = JS_Call(ctx, resolve_method, promise_ctor, 1, &reason);
   JS_FreeValue(ctx, resolve_method);
   JS_FreeValue(ctx, promise_ctor);
   return promise;
@@ -1085,6 +1175,8 @@ void JSRT_RuntimeSetupStdStreams(JSRT_Runtime* rt) {
                     JS_NewCFunction(ctx, JSRT_WritableStreamDefaultWriterWrite, "write", 1));
   JS_SetPropertyStr(ctx, writer_proto, "close",
                     JS_NewCFunction(ctx, JSRT_WritableStreamDefaultWriterClose, "close", 0));
+  JS_SetPropertyStr(ctx, writer_proto, "abort",
+                    JS_NewCFunction(ctx, JSRT_WritableStreamDefaultWriterAbort, "abort", 1));
 
   JS_SetClassProto(ctx, JSRT_WritableStreamDefaultWriterClassID, writer_proto);
 

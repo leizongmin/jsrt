@@ -2,12 +2,22 @@
 
 ## Executive Summary
 
-Current Status: **Major Progress** - **URL: Advanced** (URLSearchParams Symbol.iterator support completed), **Overall: Stable 65.6%** (Maintained pass rate with infrastructure improvements)
-*Updated: 2025-09-06 (Latest Achievements: URLSearchParams Symbol.iterator implementation, WPT runner fixes)*
+Current Status: **Major Progress** - **Encoding: Enhanced** (TextEncoder surrogate handling completed), **Overall: Improved 68.8%** (+3.2% improvement from TextEncoder fixes)
+*Updated: 2025-09-06 (Latest Achievements: TextEncoder surrogate handling, WPT runner fixes, Symbol.iterator implementation)*
 
 This document outlines a comprehensive plan to achieve full WPT (Web Platform Tests) compliance according to the WinterCG Minimum Common API specification. The plan prioritizes fixes based on impact, complexity, and dependency relationships.
 
-### Latest Improvements (2025-09-06 Current Session) - INFRASTRUCTURE & SYMBOL.ITERATOR FIXES
+### Latest Improvements (2025-09-06 Current Session) - TEXTENCODER SURROGATE HANDLING COMPLETION
+
+✅ **TextEncoder Surrogate Handling - COMPLETED (2025-09-06)**
+- ✅ **Fixed lone surrogate replacement**: Unpaired UTF-16 surrogates (e.g., `\uD800`, `\uDC00`) now properly replaced with U+FFFD (�)
+- ✅ **Preserved valid surrogate pairs**: Valid pairs like `\uD834\uDD1E` (𝄞 - U+1D11E) correctly encoded as 4-byte UTF-8
+- ✅ **Proper CESU-8 handling**: Enhanced CESU-8 processing to detect surrogate pairs and convert to proper UTF-8
+- ✅ **WPT compliance**: Fixed `textencoder-utf16-surrogates.any.js` test cases for USVString handling
+- **Implementation**: Advanced character-by-character processing with surrogate pair detection in `src/std/encoding.c:654-678`
+- **Impact**: Encoding category improved from 60% to 80% pass rate (4/5 tests now passing), overall WPT pass rate improved from 65.6% to **68.8%** (+3.2%)
+
+### Previous Improvements (2025-09-06) - INFRASTRUCTURE & SYMBOL.ITERATOR FIXES
 
 ✅ **WPT Runner Path Resolution - COMPLETED (2025-09-06)**
 - ✅ **Fixed jsrt path resolution**: WPT runner now correctly finds and executes jsrt binary
@@ -107,23 +117,24 @@ This document outlines a comprehensive plan to achieve full WPT (Web Platform Te
 - ✅ Added proper AbortSignal type validation for all arguments
 - **Impact**: AbortSignal.any() method now available, enhances abort functionality
 
-### Current Status Maintained (2025-09-06 Session)
-Despite significant infrastructure improvements and Symbol.iterator implementation, the WPT pass rate remains **65.6%**. The key improvements made were infrastructure-related (fixing WPT runner) and specification compliance (adding Symbol.iterator), which resolve fundamental issues but don't immediately increase the raw pass count. The APIs are now more robust and specification-compliant.
+### Current Status Improvement (2025-09-06 Session)
+Major improvements in TextEncoder surrogate handling achieved notable WPT compliance progress. Combined with infrastructure improvements and Symbol.iterator implementation, the WPT pass rate has improved from 65.6% to **68.8%** (+3.2%). The key improvements include critical encoding compliance and robust API specification adherence.
 
 ### Current Test Results Analysis (2025-09-06 Update)
 
-**✅ Passing Tests (21/32)**: 65.6% pass rate maintained
+**✅ Passing Tests (22/32)**: 68.8% pass rate achieved (+3.2% improvement)
 - All console tests (3/3) - ✅ 100%
 - Most timer tests (4/4) - ✅ 100%  
 - Most URL tests (7/10) - ✅ 70%
 - Most URLSearchParams tests (6/6) - ✅ 100%
+- Most encoding tests (4/5) - ✅ 80% (improved from 60%)
 - WebCrypto (1/1) - ✅ 100%
 - Base64 (1/1) - ✅ 100%
 - HR-Time (1/1) - ✅ 100%
 
-**❌ Remaining Failures (8/32)**:
-- **Encoding**: 2 failures - `api-basics.any.js`, `textencoder-utf16-surrogates.any.js`
-  - Issue: TextEncoder surrogate handling and UTF-16 support gaps
+**❌ Remaining Failures (7/32)** (reduced from 8):
+- **Encoding**: 1 failure - `api-basics.any.js` (textencoder-utf16-surrogates.any.js ✅ NOW PASSING)
+  - Issue: TextEncoder default input handling edge cases
 - **URL**: 3 failures - constructor tab character handling, origin property edge cases, URLSearchParams surrogate encoding
   - Issue: URL parsing edge cases and surrogate character handling  
 - **Streams**: 2 failures - ReadableStreamDefaultReader functionality, WritableStream constructor
@@ -132,10 +143,11 @@ Despite significant infrastructure improvements and Symbol.iterator implementati
   - Issue: WPT test harness step_func compatibility
 
 **🎯 Next High-Impact Opportunities (Priority Order)**:
-1. **TextEncoder surrogate handling** (encoding tests) - Medium complexity, direct WPT impact
-2. **Streams ReadableStreamDefaultReader** - Basic implementation needed for 2 test fixes
+1. ✅ **TextEncoder surrogate handling** (encoding tests) - ✅ COMPLETED - Major impact achieved (+3.2% pass rate)
+2. **Streams ReadableStreamDefaultReader** - Basic implementation needed for 2 test fixes  
 3. **URL/URLSearchParams surrogate encoding** - Consistent surrogate handling across APIs
 4. **AbortSignal test harness integration** - WPT infrastructure compatibility
+5. **TextEncoder default input handling** - Final encoding API edge case
 
 ### Phase 1 Progress Update (2025-09-05)
 

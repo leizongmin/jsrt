@@ -1,7 +1,9 @@
 const assert = require('jsrt:assert');
 
 console.log('=== Node.js Compatibility Layer Integration Test ===');
-console.log('Testing node:path, node:os, node:util, and node:events modules together...');
+console.log(
+  'Testing node:path, node:os, node:util, and node:events modules together...'
+);
 
 // Test path module
 const path = require('node:path');
@@ -24,7 +26,10 @@ console.log('  os.hostname():', os.hostname());
 // Test util module
 const util = require('node:util');
 console.log('\n🛠️ Testing node:util module:');
-console.log('  util.format("Hello %s", "world"):', util.format('Hello %s', 'world'));
+console.log(
+  '  util.format("Hello %s", "world"):',
+  util.format('Hello %s', 'world')
+);
 console.log('  util.isArray([1,2,3]):', util.isArray([1, 2, 3]));
 console.log('  util.isObject({}):', util.isObject({}));
 
@@ -33,9 +38,14 @@ const { EventEmitter } = require('node:events');
 console.log('\n📡 Testing node:events module:');
 const emitter = new EventEmitter();
 let eventFired = false;
-emitter.on('test', () => { eventFired = true; });
+emitter.on('test', () => {
+  eventFired = true;
+});
 emitter.emit('test');
-console.log('  EventEmitter event emission:', eventFired ? 'working' : 'failed');
+console.log(
+  '  EventEmitter event emission:',
+  eventFired ? 'working' : 'failed'
+);
 
 // Integration example: cross-platform path construction with event notification
 console.log('\n🔗 Phase 2 Integration Example:');
@@ -54,7 +64,7 @@ const pathsInfo = {
   home: homeDir,
   temp: tempDir,
   config: configPath,
-  log: logPath
+  log: logPath,
 };
 console.log('  Paths object:');
 console.log(util.inspect(pathsInfo));
@@ -100,12 +110,28 @@ if (os.platform() === 'win32') {
 
 // Test util type checking
 assert.strictEqual(util.isString(homeDir), true, 'homeDir should be a string');
-assert.strictEqual(util.isObject(pathsInfo), true, 'pathsInfo should be an object');
-assert.strictEqual(util.isFunction(fileEmitter.emit), true, 'emit should be a function');
+assert.strictEqual(
+  util.isObject(pathsInfo),
+  true,
+  'pathsInfo should be an object'
+);
+assert.strictEqual(
+  util.isFunction(fileEmitter.emit),
+  true,
+  'emit should be a function'
+);
 
 // Test event listener count
-assert.strictEqual(fileEmitter.listenerCount('file-created'), 1, 'Should have 1 file-created listener');
-assert.strictEqual(fileEmitter.listenerCount('file-deleted'), 1, 'Should have 1 file-deleted listener');
+assert.strictEqual(
+  fileEmitter.listenerCount('file-created'),
+  1,
+  'Should have 1 file-created listener'
+);
+assert.strictEqual(
+  fileEmitter.listenerCount('file-deleted'),
+  1,
+  'Should have 1 file-deleted listener'
+);
 
 console.log('\n✅ All integration tests passed!');
 console.log('🎉 Node.js compatibility layer Phase 2 complete!');

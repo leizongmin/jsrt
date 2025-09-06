@@ -168,7 +168,11 @@ emitter.on('multi-args', (a, b, c) => {
 emitter.emit('multi-args', 'first', 42, { key: 'value' });
 assert.strictEqual(arg1, 'first', 'First argument should be passed correctly');
 assert.strictEqual(arg2, 42, 'Second argument should be passed correctly');
-assert.deepEqual(arg3, { key: 'value' }, 'Third argument should be passed correctly');
+assert.deepEqual(
+  arg3,
+  { key: 'value' },
+  'Third argument should be passed correctly'
+);
 console.log('✓ Multiple arguments work correctly');
 
 console.log('\n✅ All events module tests passed!');

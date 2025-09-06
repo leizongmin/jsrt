@@ -1,7 +1,9 @@
 const assert = require('jsrt:assert');
 
 console.log('=== Node.js Compatibility Layer Integration Test with Buffer ===');
-console.log('Testing node:path, node:os, node:util, node:events, and node:buffer modules together...');
+console.log(
+  'Testing node:path, node:os, node:util, node:events, and node:buffer modules together...'
+);
 
 // Test path module
 const path = require('node:path');
@@ -24,8 +26,11 @@ console.log('  os.hostname():', os.hostname());
 // Test util module
 const util = require('node:util');
 console.log('\n🛠️ Testing node:util module:');
-console.log('  util.format("Hello %s", "world"):', util.format("Hello %s", "world"));
-console.log('  util.isArray([1,2,3]):', util.isArray([1,2,3]));
+console.log(
+  '  util.format("Hello %s", "world"):',
+  util.format('Hello %s', 'world')
+);
+console.log('  util.isArray([1,2,3]):', util.isArray([1, 2, 3]));
 console.log('  util.isObject({}):', util.isObject({}));
 
 // Test events module
@@ -63,7 +68,7 @@ const paths = {
   home: homeDir,
   temp: tempDir,
   config: configPath,
-  log: logPath
+  log: logPath,
 };
 
 console.log('  Home directory:', homeDir);
@@ -79,7 +84,9 @@ let operationCount = 0;
 
 fileEmitter.on('file-created', (filename, size) => {
   operationCount++;
-  console.log(`  📄 File created: ${filename} (${size} bytes, operation #${operationCount})`);
+  console.log(
+    `  📄 File created: ${filename} (${size} bytes, operation #${operationCount})`
+  );
 });
 
 fileEmitter.on('file-deleted', (filename) => {
@@ -89,7 +96,9 @@ fileEmitter.on('file-deleted', (filename) => {
 
 fileEmitter.on('buffer-operation', (operation, data) => {
   operationCount++;
-  console.log(`  🗄️ Buffer ${operation}: ${data.length} bytes (operation #${operationCount})`);
+  console.log(
+    `  🗄️ Buffer ${operation}: ${data.length} bytes (operation #${operationCount})`
+  );
 });
 
 // Simulate file operations with buffers
@@ -104,18 +113,49 @@ fileEmitter.emit('buffer-operation', 'append', logData);
 fileEmitter.emit('file-deleted', 'myapp.log');
 
 console.log('  Total operations:', operationCount);
-console.log('  Relative path from home to log:', path.relative(homeDir, logPath));
+console.log(
+  '  Relative path from home to log:',
+  path.relative(homeDir, logPath)
+);
 
 // Test integration with type checking
-assert.strictEqual(util.isFunction(Buffer.from), true, 'Buffer.from should be a function');
-assert.strictEqual(util.isFunction(path.join), true, 'path.join should be a function');
-assert.strictEqual(util.isFunction(os.platform), true, 'os.platform should be a function');
-assert.strictEqual(util.isFunction(fileEmitter.emit), true, 'emit should be a function');
+assert.strictEqual(
+  util.isFunction(Buffer.from),
+  true,
+  'Buffer.from should be a function'
+);
+assert.strictEqual(
+  util.isFunction(path.join),
+  true,
+  'path.join should be a function'
+);
+assert.strictEqual(
+  util.isFunction(os.platform),
+  true,
+  'os.platform should be a function'
+);
+assert.strictEqual(
+  util.isFunction(fileEmitter.emit),
+  true,
+  'emit should be a function'
+);
 
 // Test event listener count
-assert.strictEqual(fileEmitter.listenerCount('file-created'), 1, 'Should have 1 file-created listener');
-assert.strictEqual(fileEmitter.listenerCount('file-deleted'), 1, 'Should have 1 file-deleted listener');
-assert.strictEqual(fileEmitter.listenerCount('buffer-operation'), 1, 'Should have 1 buffer-operation listener');
+assert.strictEqual(
+  fileEmitter.listenerCount('file-created'),
+  1,
+  'Should have 1 file-created listener'
+);
+assert.strictEqual(
+  fileEmitter.listenerCount('file-deleted'),
+  1,
+  'Should have 1 file-deleted listener'
+);
+assert.strictEqual(
+  fileEmitter.listenerCount('buffer-operation'),
+  1,
+  'Should have 1 buffer-operation listener'
+);
 
 console.log('\n✅ All integration tests passed!');
 console.log('🎉 Node.js compatibility layer Phase 3 progress complete!');

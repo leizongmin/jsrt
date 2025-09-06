@@ -8,11 +8,33 @@ const path = require('node:path');
 console.log('Testing path.normalize...');
 // Test path normalization - platform-aware expectations
 assert.strictEqual(
-  path.normalize(path.sep + 'a' + path.sep + 'b' + path.sep + 'c' + path.sep + '..' + path.sep + 'd'),
+  path.normalize(
+    path.sep +
+      'a' +
+      path.sep +
+      'b' +
+      path.sep +
+      'c' +
+      path.sep +
+      '..' +
+      path.sep +
+      'd'
+  ),
   path.sep + 'a' + path.sep + 'b' + path.sep + 'd'
 );
 assert.strictEqual(
-  path.normalize(path.sep + 'a' + path.sep + 'b' + path.sep + 'c' + path.sep + '.' + path.sep + 'd'),
+  path.normalize(
+    path.sep +
+      'a' +
+      path.sep +
+      'b' +
+      path.sep +
+      'c' +
+      path.sep +
+      '.' +
+      path.sep +
+      'd'
+  ),
   path.sep + 'a' + path.sep + 'b' + path.sep + 'c' + path.sep + 'd'
 );
 assert.strictEqual(path.normalize('a/../b'), 'b');
@@ -24,19 +46,31 @@ console.log('✅ path.normalize tests passed');
 console.log('Testing path.relative...');
 // Test path.relative - platform-aware expectations
 assert.strictEqual(
-  path.relative(path.sep + 'a' + path.sep + 'b', path.sep + 'a' + path.sep + 'b' + path.sep + 'c'),
+  path.relative(
+    path.sep + 'a' + path.sep + 'b',
+    path.sep + 'a' + path.sep + 'b' + path.sep + 'c'
+  ),
   'c'
 );
 assert.strictEqual(
-  path.relative(path.sep + 'a' + path.sep + 'b' + path.sep + 'c', path.sep + 'a' + path.sep + 'b'),
+  path.relative(
+    path.sep + 'a' + path.sep + 'b' + path.sep + 'c',
+    path.sep + 'a' + path.sep + 'b'
+  ),
   '..'
 );
 assert.strictEqual(
-  path.relative(path.sep + 'a' + path.sep + 'b', path.sep + 'c' + path.sep + 'd'),
+  path.relative(
+    path.sep + 'a' + path.sep + 'b',
+    path.sep + 'c' + path.sep + 'd'
+  ),
   '..' + path.sep + '..' + path.sep + 'c' + path.sep + 'd'
 );
 assert.strictEqual(
-  path.relative(path.sep + 'a' + path.sep + 'b', path.sep + 'a' + path.sep + 'b'),
+  path.relative(
+    path.sep + 'a' + path.sep + 'b',
+    path.sep + 'a' + path.sep + 'b'
+  ),
   '.'
 );
 

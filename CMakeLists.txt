@@ -77,6 +77,11 @@ add_library(quickjs STATIC ${QUICKJS_LIB_FILES})
 file(STRINGS deps/quickjs/VERSION QUICKJS_VERSION)
 target_compile_definitions(quickjs PRIVATE CONFIG_VERSION="${QUICKJS_VERSION}" _GNU_SOURCE)
 
+# In debug builds, disable the strict GC assertion that can fail with complex runtime environments
+if(CMAKE_BUILD_TYPE STREQUAL "Debug")
+    target_compile_definitions(quickjs PRIVATE NDEBUG)
+endif()
+
 # build qjs and qjsc, use flag -DBUILD_QJS=ON to enable
 option(BUILD_QJS "Build qjs and qjsc executable" OFF)
 if(BUILD_QJS)

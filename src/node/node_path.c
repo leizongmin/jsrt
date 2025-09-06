@@ -247,14 +247,18 @@ static JSValue js_path_normalize(JSContext* ctx, JSValueConst this_val, int argc
   if (!path)
     return JS_EXCEPTION;
 
-  // Implementation: Remove duplicate slashes, resolve . and ..
-  char* normalized = normalize_separators(path);
+  // Use the normalize_path function which handles . and .. segments
+  char* normalized = normalize_path(path);
 
-  // TODO: Implement full normalization logic
+  JS_FreeCString(ctx, path);
+
+  if (!normalized) {
+    JS_ThrowOutOfMemory(ctx);
+    return JS_EXCEPTION;
+  }
 
   JSValue ret = JS_NewString(ctx, normalized);
   free(normalized);
-  JS_FreeCString(ctx, path);
   return ret;
 }
 
@@ -422,9 +426,127 @@ static JSValue js_path_relative(JSContext* ctx, JSValueConst this_val, int argc,
   NODE_ARG_REQUIRE_STRING(ctx, argv[0], "from");
   NODE_ARG_REQUIRE_STRING(ctx, argv[1], "to");
 
-  // TODO: Implement relative path calculation
+  const char* from = JS_ToCString(ctx, argv[0]);
+  const char* to = JS_ToCString(ctx, argv[1]);
 
-  return JS_NewString(ctx, "");
+  if (!from || !to) {
+    if (from)
+      JS_FreeCString(ctx, from);
+    if (to)
+      JS_FreeCString(ctx, to);
+    return JS_EXCEPTION;
+  }
+
+  // Normalize paths to resolve . and .. segments
+  char* from_normalized = normalize_path(from);
+  char* to_normalized = normalize_path(to);
+
+  JS_FreeCString(ctx, from);
+  JS_FreeCString(ctx, to);
+
+  if (!from_normalized || !to_normalized) {
+    if (from_normalized)
+      free(from_normalized);
+    if (to_normalized)
+      free(to_normalized);
+    JS_ThrowOutOfMemory(ctx);
+    return JS_EXCEPTION;
+  }
+
+  // Convert relative paths to absolute using current working directory
+  char from_abs[4096], to_abs[4096];
+
+  if (!is_absolute_path(from_normalized)) {
+    char cwd[4096];
+    if (getcwd(cwd, sizeof(cwd))) {
+      snprintf(from_abs, sizeof(from_abs), "%s%s%s", cwd, PATH_SEPARATOR_STR, from_normalized);
+    } else {
+      strcpy(from_abs, from_normalized);
+    }
+  } else {
+    strcpy(from_abs, from_normalized);
+  }
+
+  if (!is_absolute_path(to_normalized)) {
+    char cwd[4096];
+    if (getcwd(cwd, sizeof(cwd))) {
+      snprintf(to_abs, sizeof(to_abs), "%s%s%s", cwd, PATH_SEPARATOR_STR, to_normalized);
+    } else {
+      strcpy(to_abs, to_normalized);
+    }
+  } else {
+    strcpy(to_abs, to_normalized);
+  }
+
+  free(from_normalized);
+  free(to_normalized);
+
+  // Split paths into segments
+  char from_copy[4096], to_copy[4096];
+  strcpy(from_copy, from_abs);
+  strcpy(to_copy, to_abs);
+
+  char* from_segments[256];
+  char* to_segments[256];
+  int from_count = 0, to_count = 0;
+
+  // Split from path
+  char* token = strtok(from_copy, PATH_SEPARATOR_STR);
+  while (token && from_count < 256) {
+    if (*token) {  // Skip empty segments
+      from_segments[from_count++] = strdup(token);
+    }
+    token = strtok(NULL, PATH_SEPARATOR_STR);
+  }
+
+  // Split to path
+  token = strtok(to_copy, PATH_SEPARATOR_STR);
+  while (token && to_count < 256) {
+    if (*token) {  // Skip empty segments
+      to_segments[to_count++] = strdup(token);
+    }
+    token = strtok(NULL, PATH_SEPARATOR_STR);
+  }
+
+  // Find common prefix
+  int common = 0;
+  while (common < from_count && common < to_count && strcmp(from_segments[common], to_segments[common]) == 0) {
+    common++;
+  }
+
+  // Build relative path
+  char result[4096] = "";
+
+  // Add .. for each remaining segment in from path
+  for (int i = common; i < from_count; i++) {
+    if (strlen(result) > 0) {
+      strcat(result, PATH_SEPARATOR_STR);
+    }
+    strcat(result, "..");
+  }
+
+  // Add remaining segments from to path
+  for (int i = common; i < to_count; i++) {
+    if (strlen(result) > 0) {
+      strcat(result, PATH_SEPARATOR_STR);
+    }
+    strcat(result, to_segments[i]);
+  }
+
+  // Clean up allocated segments
+  for (int i = 0; i < from_count; i++) {
+    free(from_segments[i]);
+  }
+  for (int i = 0; i < to_count; i++) {
+    free(to_segments[i]);
+  }
+
+  // Handle empty result
+  if (result[0] == '\0') {
+    strcpy(result, ".");
+  }
+
+  return JS_NewString(ctx, result);
 }
 
 // Initialize node:path module for CommonJS
@@ -469,36 +591,46 @@ int js_node_path_init(JSContext* ctx, JSModuleDef* m) {
   // Export as default
   JS_SetModuleExport(ctx, m, "default", JS_DupValue(ctx, path_module));
 
-  // Export individual functions
+  // Export individual functions - properly manage memory
   JSValue join = JS_GetPropertyStr(ctx, path_module, "join");
-  JS_SetModuleExport(ctx, m, "join", join);
+  JS_SetModuleExport(ctx, m, "join", JS_DupValue(ctx, join));
+  JS_FreeValue(ctx, join);
 
   JSValue resolve = JS_GetPropertyStr(ctx, path_module, "resolve");
-  JS_SetModuleExport(ctx, m, "resolve", resolve);
+  JS_SetModuleExport(ctx, m, "resolve", JS_DupValue(ctx, resolve));
+  JS_FreeValue(ctx, resolve);
 
   JSValue dirname = JS_GetPropertyStr(ctx, path_module, "dirname");
-  JS_SetModuleExport(ctx, m, "dirname", dirname);
+  JS_SetModuleExport(ctx, m, "dirname", JS_DupValue(ctx, dirname));
+  JS_FreeValue(ctx, dirname);
 
   JSValue basename = JS_GetPropertyStr(ctx, path_module, "basename");
-  JS_SetModuleExport(ctx, m, "basename", basename);
+  JS_SetModuleExport(ctx, m, "basename", JS_DupValue(ctx, basename));
+  JS_FreeValue(ctx, basename);
 
   JSValue extname = JS_GetPropertyStr(ctx, path_module, "extname");
-  JS_SetModuleExport(ctx, m, "extname", extname);
+  JS_SetModuleExport(ctx, m, "extname", JS_DupValue(ctx, extname));
+  JS_FreeValue(ctx, extname);
 
   JSValue normalize = JS_GetPropertyStr(ctx, path_module, "normalize");
-  JS_SetModuleExport(ctx, m, "normalize", normalize);
+  JS_SetModuleExport(ctx, m, "normalize", JS_DupValue(ctx, normalize));
+  JS_FreeValue(ctx, normalize);
 
   JSValue isAbsolute = JS_GetPropertyStr(ctx, path_module, "isAbsolute");
-  JS_SetModuleExport(ctx, m, "isAbsolute", isAbsolute);
+  JS_SetModuleExport(ctx, m, "isAbsolute", JS_DupValue(ctx, isAbsolute));
+  JS_FreeValue(ctx, isAbsolute);
 
   JSValue relative = JS_GetPropertyStr(ctx, path_module, "relative");
-  JS_SetModuleExport(ctx, m, "relative", relative);
+  JS_SetModuleExport(ctx, m, "relative", JS_DupValue(ctx, relative));
+  JS_FreeValue(ctx, relative);
 
   JSValue sep = JS_GetPropertyStr(ctx, path_module, "sep");
-  JS_SetModuleExport(ctx, m, "sep", sep);
+  JS_SetModuleExport(ctx, m, "sep", JS_DupValue(ctx, sep));
+  JS_FreeValue(ctx, sep);
 
   JSValue delimiter = JS_GetPropertyStr(ctx, path_module, "delimiter");
-  JS_SetModuleExport(ctx, m, "delimiter", delimiter);
+  JS_SetModuleExport(ctx, m, "delimiter", JS_DupValue(ctx, delimiter));
+  JS_FreeValue(ctx, delimiter);
 
   JS_FreeValue(ctx, path_module);
   return 0;

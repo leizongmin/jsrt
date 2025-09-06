@@ -1,7 +1,10 @@
 cpu_count := $(shell nproc 2>/dev/null || sysctl -n hw.logicalcpu 2>/dev/null || echo 4)
 
 .PHONY: all
-all: clang-format prettier jsrt
+all: format jsrt
+
+.PHONY: format
+format: clang-format prettier
 
 .PHONY: jsrt
 jsrt:
@@ -133,7 +136,7 @@ test: jsrt npm-install
 test-fast: jsrt
 	cd target/release && ctest --verbose --parallel 4
 
-# Quick test - only essential tests without network dependencies  
+# Quick test - only essential tests without network dependencies
 .PHONY: test-quick
 test-quick: jsrt
 	cd target/release && ctest --verbose -R "test_(assert|base64|console|timer|http_llhttp_fast)"

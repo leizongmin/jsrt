@@ -92,6 +92,41 @@ try {
   console.log('  ❌ Phase 4 modules failed:', error.message);
 }
 
+// Phase 5 - Advanced modules
+console.log('\n📁 Phase 5 - Advanced Modules (🚧 IN PROGRESS):');
+try {
+  const crypto = require('node:crypto');
+
+  assert.ok(crypto, 'node:crypto should load');
+  assert.strictEqual(
+    typeof crypto.randomBytes,
+    'function',
+    'crypto.randomBytes should exist'
+  );
+  assert.strictEqual(
+    typeof crypto.randomUUID,
+    'function',
+    'crypto.randomUUID should exist'
+  );
+  assert.ok(crypto.constants, 'crypto.constants should exist');
+
+  // Test crypto functionality
+  const buf = crypto.randomBytes(16);
+  assert.strictEqual(buf.length, 16, 'randomBytes should work');
+  
+  const uuid = crypto.randomUUID();
+  assert.strictEqual(typeof uuid, 'string', 'randomUUID should work');
+  assert.strictEqual(uuid.length, 36, 'UUID should be correct length');
+
+  console.log('  ✅ node:crypto - Cryptographic operations (randomBytes, randomUUID)');
+  console.log('  📋 node:fs - File system operations (existing, needs enhancement)');
+  console.log('  📋 node:stream - Stream operations (existing)');
+  console.log('  📋 SSL/TLS server support for node:https');
+  console.log('  📋 Advanced networking features');
+} catch (error) {
+  console.log('  ❌ Phase 5 modules failed:', error.message);
+}
+
 // Test cross-module integration
 console.log('\n🔗 Testing cross-module integration:');
 try {
@@ -165,7 +200,7 @@ const phases = [
   { name: 'Phase 2 - Core Modules', status: '✅ COMPLETED', modules: 3 },
   { name: 'Phase 3 - I/O Operations', status: '📋 PLANNED', modules: 2 },
   { name: 'Phase 4 - Networking', status: '✅ COMPLETED', modules: 4 },
-  { name: 'Phase 5 - Advanced', status: '📋 PLANNED', modules: 5 },
+  { name: 'Phase 5 - Advanced', status: '🚧 IN PROGRESS', modules: 5 },
 ];
 
 phases.forEach((phase) => {
@@ -173,13 +208,13 @@ phases.forEach((phase) => {
 });
 
 console.log('\n🎉 Node.js Compatibility Implementation Status:');
-console.log(`✅ Total Modules Implemented: 9`);
-console.log(`📋 Total Modules Planned: 7`);
-console.log(`🎯 Overall Progress: 56% complete`);
+console.log(`✅ Total Modules Implemented: 10`);
+console.log(`📋 Total Modules Planned: 6`);
+console.log(`🎯 Overall Progress: 63% complete`);
 
 console.log('\n🚀 Ready for production use with implemented modules!');
 console.log(
-  '🔧 Phase 5 development can begin with file system and advanced features.'
+  '🔧 Phase 5 in progress: crypto implemented, fs/stream enhancements next.'
 );
 
 console.log('\n✅ All compatibility layer tests passed!');

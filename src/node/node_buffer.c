@@ -195,7 +195,31 @@ static JSValue js_buffer_from(JSContext* ctx, JSValueConst this_val, int argc, J
     return uint8_array;
   }
 
-  return JS_ThrowTypeError(ctx, "Buffer.from() argument must be a string or array");
+  // Handle Uint8Array or other TypedArray input
+  JSValue global = JS_GetGlobalObject(ctx);
+  JSValue uint8_array_ctor = JS_GetPropertyStr(ctx, global, "Uint8Array");
+  if (JS_IsInstanceOf(ctx, arg, uint8_array_ctor) > 0) {
+    // It's already a Uint8Array, just return it as is (or duplicate it)
+    JS_FreeValue(ctx, uint8_array_ctor);
+    JS_FreeValue(ctx, global);
+    return JS_DupValue(ctx, arg);
+  }
+  JS_FreeValue(ctx, uint8_array_ctor);
+  JS_FreeValue(ctx, global);
+
+  // Handle ArrayBuffer input
+  JSValue global_obj = JS_GetGlobalObject(ctx);
+  JSValue array_buffer_ctor = JS_GetPropertyStr(ctx, global_obj, "ArrayBuffer");
+  if (JS_IsInstanceOf(ctx, arg, array_buffer_ctor) > 0) {
+    JSValue uint8_array = create_uint8_array(ctx, JS_DupValue(ctx, arg));
+    JS_FreeValue(ctx, array_buffer_ctor);
+    JS_FreeValue(ctx, global_obj);
+    return uint8_array;
+  }
+  JS_FreeValue(ctx, array_buffer_ctor);
+  JS_FreeValue(ctx, global_obj);
+
+  return JS_ThrowTypeError(ctx, "Buffer.from() argument must be a string, array, ArrayBuffer, or TypedArray");
 }
 
 // Buffer.isBuffer(obj)

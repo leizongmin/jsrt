@@ -128,14 +128,15 @@ void JSRT_RuntimeFree(JSRT_Runtime* rt) {
     int job_count = 0;
     while (JS_ExecutePendingJob(rt->rt, &ctx1) > 0) {
       job_count++;
-      if (job_count > 100) break; // Prevent infinite loop
+      if (job_count > 100)
+        break;  // Prevent infinite loop
     }
-    
+
     // Run garbage collection multiple times
     for (int gc_pass = 0; gc_pass < 3; gc_pass++) {
       JS_RunGC(rt->rt);
     }
-    
+
     // If no jobs were executed in this round, we're likely done
     if (job_count == 0) {
       break;
@@ -150,11 +151,11 @@ void JSRT_RuntimeFree(JSRT_Runtime* rt) {
   // Free the context
   JS_FreeContext(rt->ctx);
   rt->ctx = NULL;
-  
+
   // Free the runtime
   JS_FreeRuntime(rt->rt);
   rt->rt = NULL;
-  
+
   free(rt);
 }
 

@@ -197,24 +197,63 @@ static int validate_url_characters(const char* url) {
   return 1;  // Valid
 }
 
+// Strip leading and trailing ASCII whitespace from URL string
+// ASCII whitespace: space (0x20), tab (0x09), LF (0x0A), CR (0x0D), FF (0x0C)
+static char* strip_url_whitespace(const char* url) {
+  if (!url)
+    return NULL;
+
+  // Find start (skip leading whitespace)
+  const char* start = url;
+  while (*start && (*start == 0x20 || *start == 0x09 || *start == 0x0A || *start == 0x0D || *start == 0x0C)) {
+    start++;
+  }
+
+  // Find end (skip trailing whitespace)
+  const char* end = start + strlen(start);
+  while (end > start &&
+         (*(end - 1) == 0x20 || *(end - 1) == 0x09 || *(end - 1) == 0x0A || *(end - 1) == 0x0D || *(end - 1) == 0x0C)) {
+    end--;
+  }
+
+  // Create trimmed string
+  size_t len = end - start;
+  char* trimmed = malloc(len + 1);
+  memcpy(trimmed, start, len);
+  trimmed[len] = '\0';
+
+  return trimmed;
+}
+
 static JSRT_URL* JSRT_ParseURL(const char* url, const char* base) {
+  // Strip leading and trailing ASCII whitespace per WHATWG URL spec
+  char* trimmed_url = strip_url_whitespace(url);
+  if (!trimmed_url)
+    return NULL;
+
   // Validate URL characters first
-  if (!validate_url_characters(url)) {
+  if (!validate_url_characters(trimmed_url)) {
+    free(trimmed_url);
     return NULL;  // Invalid characters detected
   }
   if (base && !validate_url_characters(base)) {
+    free(trimmed_url);
     return NULL;  // Invalid characters in base URL
   }
 
   // Check if URL has a scheme (protocol)
   // A URL has a scheme if it contains ':' before any '/', '?', or '#'
+  // AND there is at least one character before the colon
   // However, special schemes (http, https, ftp, ws, wss) are only absolute if followed by "//"
   int has_scheme = 0;
   char* colon_pos = NULL;
-  for (const char* p = url; *p; p++) {
+  for (const char* p = trimmed_url; *p; p++) {
     if (*p == ':') {
-      colon_pos = (char*)p;
-      has_scheme = 1;
+      // Only consider it a scheme if there's at least one character before the colon
+      if (p > trimmed_url) {
+        colon_pos = (char*)p;
+        has_scheme = 1;
+      }
       break;
     } else if (*p == '/' || *p == '?' || *p == '#') {
       break;  // No colon found before path/query/fragment
@@ -223,11 +262,11 @@ static JSRT_URL* JSRT_ParseURL(const char* url, const char* base) {
 
   // Special schemes require "://" to be absolute
   if (has_scheme && colon_pos) {
-    int scheme_len = colon_pos - url;
+    int scheme_len = colon_pos - trimmed_url;
     const char* special_schemes[] = {"http", "https", "ftp", "ws", "wss", "file", NULL};
 
     for (int i = 0; special_schemes[i]; i++) {
-      if (strncmp(url, special_schemes[i], scheme_len) == 0 && strlen(special_schemes[i]) == scheme_len) {
+      if (strncmp(trimmed_url, special_schemes[i], scheme_len) == 0 && strlen(special_schemes[i]) == scheme_len) {
         // This is a special scheme - only absolute if followed by "//"
         if (strncmp(colon_pos, "://", 3) != 0) {
           has_scheme = 0;  // Treat as relative
@@ -238,15 +277,17 @@ static JSRT_URL* JSRT_ParseURL(const char* url, const char* base) {
   }
 
   // Handle relative URLs with base
-  if (base && (url[0] == '/' || (!has_scheme && url[0] != '\0'))) {
-    return resolve_relative_url(url, base);
+  if (base && (trimmed_url[0] == '/' || (!has_scheme && trimmed_url[0] != '\0'))) {
+    JSRT_URL* result = resolve_relative_url(trimmed_url, base);
+    free(trimmed_url);
+    return result;
   }
 
   JSRT_URL* parsed = malloc(sizeof(JSRT_URL));
   memset(parsed, 0, sizeof(JSRT_URL));
 
   // Initialize with empty strings to prevent NULL dereference
-  parsed->href = strdup(url);
+  parsed->href = strdup(trimmed_url);
   parsed->protocol = strdup("");
   parsed->host = strdup("");
   parsed->hostname = strdup("");
@@ -274,6 +315,7 @@ static JSRT_URL* JSRT_ParseURL(const char* url, const char* base) {
     // Build origin
     free(parsed->origin);
     parsed->origin = compute_origin(parsed->protocol, parsed->hostname, parsed->port);
+    free(trimmed_url);
     return parsed;
   }
 
@@ -299,6 +341,7 @@ static JSRT_URL* JSRT_ParseURL(const char* url, const char* base) {
     // Build origin
     free(parsed->origin);
     parsed->origin = compute_origin(parsed->protocol, parsed->hostname, parsed->port);
+    free(trimmed_url);
     return parsed;
   } else if (has_scheme) {
     // Handle non-special schemes (like "a:", "mailto:", "data:", etc.)
@@ -318,6 +361,7 @@ static JSRT_URL* JSRT_ParseURL(const char* url, const char* base) {
       // Build origin (non-special schemes have null origin)
       free(parsed->origin);
       parsed->origin = strdup("null");
+      free(trimmed_url);
       return parsed;
     }
   }
@@ -439,6 +483,7 @@ static JSRT_URL* JSRT_ParseURL(const char* url, const char* base) {
     strcat(parsed->href, parsed->hash);
   }
 
+  free(trimmed_url);
   return parsed;
 }
 

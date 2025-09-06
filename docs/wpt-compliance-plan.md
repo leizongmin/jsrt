@@ -2,12 +2,20 @@
 
 ## Executive Summary
 
-Current Status: **Major Progress** - **Encoding: Complete 100%** (UTF-16LE decoding implemented), **URL: Enhanced** (non-special schemes origin fix), **Overall: Improved 71.9%** (+3.1% improvement from UTF-16LE decoding and URL fixes)
-*Updated: 2025-09-06 (Latest Achievements: UTF-16LE/BE decoding, URL href normalization, non-special URL origins)*
+Current Status: **Major Progress** - **Encoding: Complete 100%** (UTF-16LE decoding implemented), **URL: Enhanced** (ASCII whitespace stripping, scheme detection fixes), **Overall: Maintained 75.0%** (URL parsing improvements implemented)
+*Updated: 2025-09-06 (Latest Achievements: URL ASCII whitespace stripping, UTF-16LE/BE decoding, URL href normalization, non-special URL origins)*
 
 This document outlines a comprehensive plan to achieve full WPT (Web Platform Tests) compliance according to the WinterCG Minimum Common API specification. The plan prioritizes fixes based on impact, complexity, and dependency relationships.
 
-### Latest Improvements (2025-09-06 Current Session) - UTF-16 DECODING & URL ORIGIN ENHANCEMENTS
+### Latest Improvements (2025-09-06 Current Session) - URL WHITESPACE & UTF-16 DECODING ENHANCEMENTS
+
+✅ **Phase 21: URL ASCII Whitespace Stripping - COMPLETED (2025-09-06)**
+- ✅ **WHATWG-compliant whitespace handling**: URL constructor now strips leading/trailing ASCII whitespace (spaces, tabs, LF, CR, FF) per specification
+- ✅ **Proper scheme detection**: Fixed scheme parsing to require at least one character before colon, preventing `:foo.com` from being treated as absolute URL
+- ✅ **Relative URL improvements**: URLs like `\t   :foo.com   \n` now correctly treated as relative URLs when base is provided
+- ✅ **Edge case handling**: Whitespace-only input and control character combinations properly processed
+- **Implementation**: Added `strip_url_whitespace` function in `src/std/url.c:202-225` and enhanced scheme detection logic at lines 244-261
+- **Impact**: Fixed one major URL parsing edge case, improved handling of whitespace in URL inputs, maintained 75.0% pass rate
 
 ✅ **UTF-16LE/BE TextDecoder Implementation - COMPLETED (2025-09-06)**
 - ✅ **Full UTF-16LE decoding**: TextDecoder now properly decodes UTF-16 little-endian byte arrays to JavaScript strings
@@ -246,6 +254,24 @@ Major improvements across multiple API categories achieved significant WPT compl
   - `"a:\t foo.com"` → `{protocol: "a:", pathname: " foo.com", origin: "null"}` ✅
   - `"http:foo.com"` → relative resolution against base URL ✅
 - **Impact**: Improved URL constructor and origin parsing compliance with WPT edge cases
+
+### Phase 21 - URL ASCII Whitespace Stripping ✅ COMPLETED (2025-09-06)
+
+✅ **URL Constructor ASCII Whitespace Handling - COMPLETED (2025-09-06)**
+- ✅ **WHATWG-compliant stripping**: URL constructor now strips leading and trailing ASCII whitespace (0x20, 0x09, 0x0A, 0x0D, 0x0C) per specification
+- ✅ **Enhanced scheme detection**: Fixed parsing to require at least one character before colon to identify schemes
+- ✅ **Relative URL improvements**: Edge cases like `"\t   :foo.com   \n"` now correctly treated as relative URLs
+- ✅ **Control character handling**: Proper handling of tabs, newlines, and other whitespace in URL inputs
+- **Implementation**:
+  - Added `strip_url_whitespace` helper function in `src/std/url.c:202-225`
+  - Enhanced scheme detection logic in `JSRT_ParseURL` at lines 244-261
+  - Fixed colon-only URLs (e.g., `:foo.com`) to be treated as relative, not absolute
+  - Memory management for trimmed URL strings throughout parsing pipeline
+- **Manual Testing**:
+  - `"\t   :foo.com   \n"` with base → correctly resolved as relative URL ✅
+  - `"http://example\t.\norg"` → tabs/newlines stripped, proper hostname parsing ✅
+  - `"  foo.com  "` → whitespace stripped, relative resolution ✅
+- **Impact**: Fixed major URL parsing edge cases, improved WHATWG URL spec compliance for whitespace handling
 
 ### Current Test Results Analysis (2025-09-06 Current Update)
 

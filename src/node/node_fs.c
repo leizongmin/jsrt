@@ -296,6 +296,40 @@ static JSValue js_fs_exists_sync(JSContext* ctx, JSValueConst this_val, int argc
   return JS_NewBool(ctx, result == 0);
 }
 
+// fs.Stats.isFile() method
+static JSValue js_fs_stat_is_file(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
+  JSValue mode_val = JS_GetPropertyStr(ctx, this_val, "_mode");
+  if (JS_IsException(mode_val)) {
+    return JS_EXCEPTION;
+  }
+
+  int32_t mode;
+  if (JS_ToInt32(ctx, &mode, mode_val) < 0) {
+    JS_FreeValue(ctx, mode_val);
+    return JS_EXCEPTION;
+  }
+  JS_FreeValue(ctx, mode_val);
+
+  return JS_NewBool(ctx, S_ISREG(mode));
+}
+
+// fs.Stats.isDirectory() method
+static JSValue js_fs_stat_is_directory(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
+  JSValue mode_val = JS_GetPropertyStr(ctx, this_val, "_mode");
+  if (JS_IsException(mode_val)) {
+    return JS_EXCEPTION;
+  }
+
+  int32_t mode;
+  if (JS_ToInt32(ctx, &mode, mode_val) < 0) {
+    JS_FreeValue(ctx, mode_val);
+    return JS_EXCEPTION;
+  }
+  JS_FreeValue(ctx, mode_val);
+
+  return JS_NewBool(ctx, S_ISDIR(mode));
+}
+
 // fs.statSync(path)
 static JSValue js_fs_stat_sync(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
   if (argc < 1) {
@@ -328,12 +362,11 @@ static JSValue js_fs_stat_sync(JSContext* ctx, JSValueConst this_val, int argc, 
   JS_SetPropertyStr(ctx, stats, "ctime", JS_NewDate(ctx, st.st_ctime * 1000.0));
 
   // Helper methods
-  JSValue is_file_func = JS_NewCFunction(ctx, NULL, "isFile", 0);
-  JSValue is_dir_func = JS_NewCFunction(ctx, NULL, "isDirectory", 0);
+  JSValue is_file_func = JS_NewCFunction(ctx, js_fs_stat_is_file, "isFile", 0);
+  JSValue is_dir_func = JS_NewCFunction(ctx, js_fs_stat_is_directory, "isDirectory", 0);
 
-  // Simplified implementation - store the mode for later checks
-  JS_SetPropertyStr(ctx, is_file_func, "_mode", JS_NewInt32(ctx, st.st_mode));
-  JS_SetPropertyStr(ctx, is_dir_func, "_mode", JS_NewInt32(ctx, st.st_mode));
+  // Store the mode for the methods to access
+  JS_SetPropertyStr(ctx, stats, "_mode", JS_NewInt32(ctx, st.st_mode));
 
   JS_SetPropertyStr(ctx, stats, "isFile", is_file_func);
   JS_SetPropertyStr(ctx, stats, "isDirectory", is_dir_func);

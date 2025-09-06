@@ -427,7 +427,51 @@ static JSValue js_https_request_on(JSContext* ctx, JSValueConst this_val, int ar
 
 // https.createServer([options][, requestListener])
 static JSValue js_https_create_server(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
-  // Load SSL functions if not already loaded
+  // Parse options for certificates FIRST (before loading OpenSSL)
+  JSValueConst options = JS_UNDEFINED;
+  JSValueConst request_listener = JS_UNDEFINED;
+
+  if (argc >= 1) {
+    if (JS_IsObject(argv[0]) && !JS_IsFunction(ctx, argv[0])) {
+      options = argv[0];
+      if (argc >= 2 && JS_IsFunction(ctx, argv[1])) {
+        request_listener = argv[1];
+      }
+    } else if (JS_IsFunction(ctx, argv[0])) {
+      request_listener = argv[0];
+    }
+  }
+
+  // Check for certificate requirements FIRST (consistent across platforms)
+  if (JS_IsUndefined(options)) {
+    JSValue error = JS_NewError(ctx);
+    JS_SetPropertyStr(ctx, error, "code", JS_NewString(ctx, "ENOCERT"));
+    JS_SetPropertyStr(ctx, error, "message",
+                      JS_NewString(ctx,
+                                   "HTTPS server requires SSL certificate and private key. "
+                                   "Please provide 'cert' and 'key' options in the first argument."));
+    return JS_Throw(ctx, error);
+  }
+
+  // Check if cert and key are provided in options
+  JSValue cert = JS_GetPropertyStr(ctx, options, "cert");
+  JSValue key = JS_GetPropertyStr(ctx, options, "key");
+  bool has_cert = JS_IsString(cert);
+  bool has_key = JS_IsString(key);
+  JS_FreeValue(ctx, cert);
+  JS_FreeValue(ctx, key);
+
+  if (!has_cert || !has_key) {
+    JSValue error = JS_NewError(ctx);
+    JS_SetPropertyStr(ctx, error, "code", JS_NewString(ctx, "ENOCERT"));
+    JS_SetPropertyStr(ctx, error, "message",
+                      JS_NewString(ctx,
+                                   "HTTPS server requires both 'cert' and 'key' options. "
+                                   "Please provide valid certificate and private key as file paths or PEM strings."));
+    return JS_Throw(ctx, error);
+  }
+
+  // Now load SSL functions (after certificate validation)
   if (!load_ssl_functions()) {
     JSValue error = JS_NewError(ctx);
     JS_SetPropertyStr(ctx, error, "code", JS_NewString(ctx, "ENOSSL"));
@@ -447,43 +491,15 @@ static JSValue js_https_create_server(JSContext* ctx, JSValueConst this_val, int
     return node_throw_error(ctx, NODE_ERR_INVALID_ARG_TYPE, "Failed to create SSL context");
   }
 
-  // Parse options for certificates
-  JSValueConst options = JS_UNDEFINED;
-  JSValueConst request_listener = JS_UNDEFINED;
-
-  if (argc >= 1) {
-    if (JS_IsObject(argv[0]) && !JS_IsFunction(ctx, argv[0])) {
-      options = argv[0];
-      if (argc >= 2 && JS_IsFunction(ctx, argv[1])) {
-        request_listener = argv[1];
-      }
-    } else if (JS_IsFunction(ctx, argv[0])) {
-      request_listener = argv[0];
-    }
-  }
-
-  // Load certificates if provided
-  if (!JS_IsUndefined(options)) {
-    if (!load_ssl_certificates(ssl_ctx, ctx, options)) {
-      ssl_funcs.SSL_CTX_free(ssl_ctx);
-      JSValue error = JS_NewError(ctx);
-      JS_SetPropertyStr(ctx, error, "code", JS_NewString(ctx, "ENOCERT"));
-      JS_SetPropertyStr(ctx, error, "message",
-                        JS_NewString(ctx,
-                                     "Failed to load SSL certificate and/or private key. "
-                                     "Please provide valid 'cert' and 'key' options as file paths or PEM strings."));
-      return JS_Throw(ctx, error);
-    }
-  } else {
-    // For testing purposes, allow creating server without certificates
-    // In production, certificates should always be provided
+  // Load certificates (we already validated they exist)
+  if (!load_ssl_certificates(ssl_ctx, ctx, options)) {
     ssl_funcs.SSL_CTX_free(ssl_ctx);
     JSValue error = JS_NewError(ctx);
     JS_SetPropertyStr(ctx, error, "code", JS_NewString(ctx, "ENOCERT"));
     JS_SetPropertyStr(ctx, error, "message",
                       JS_NewString(ctx,
-                                   "HTTPS server requires SSL certificate and private key. "
-                                   "Please provide 'cert' and 'key' options in the first argument."));
+                                   "Failed to load SSL certificate and/or private key. "
+                                   "Please provide valid 'cert' and 'key' options as file paths or PEM strings."));
     return JS_Throw(ctx, error);
   }
 

@@ -139,11 +139,14 @@ console.log('✓ HTTP server creation works');
 // Test HTTPS server creation (should indicate incomplete)
 try {
   const httpsServer = https.createServer();
-  console.log('❌ HTTPS server should indicate incomplete implementation');
-  assert.fail('HTTPS server should throw error');
+  console.log('❌ HTTPS server should require certificates');
+  assert.fail('HTTPS server should require certificates');
 } catch (error) {
-  assert.ok(error.code === 'ENOTIMPL', 'HTTPS should throw ENOTIMPL');
-  console.log('✓ HTTPS server properly indicates incomplete implementation');
+  assert.ok(
+    error.code === 'ENOCERT',
+    'HTTPS should throw ENOCERT for missing certificates'
+  );
+  console.log('✅ HTTPS server properly requires SSL certificates');
 }
 
 // Create HTTP request

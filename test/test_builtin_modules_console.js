@@ -71,9 +71,11 @@ assert.ok(pathWithPrefix.join, 'node:path should have join method');
 // Test multiple requires in same statement
 console.log('\nTesting multiple requires in expressions:');
 const joinResult = require('node:path').join('a', 'b');
+// Platform-aware path checking - expect appropriate separator for platform
+const expectedResult = 'a' + path.sep + 'b';
 assert.strictEqual(
   joinResult,
-  'a/b',
+  expectedResult,
   'Direct method call on require result should work'
 );
 console.log('✓ Direct method calls on require results work');

@@ -271,22 +271,28 @@ static JSValue js_event_emitter_remove_all_listeners(JSContext* ctx, JSValueCons
 
 // EventEmitter constructor
 static JSValue js_event_emitter_constructor(JSContext* ctx, JSValueConst new_target, int argc, JSValueConst* argv) {
-  JSValue emitter = JS_NewObject(ctx);
+  JSValue proto, emitter;
+
+  if (JS_IsUndefined(new_target)) {
+    // Called as function, not constructor
+    return JS_ThrowTypeError(ctx, "EventEmitter constructor must be called with 'new'");
+  }
+
+  // Create a new object
+  emitter = JS_NewObject(ctx);
+  if (JS_IsException(emitter))
+    return emitter;
+
+  // Get the prototype from new_target (the constructor)
+  proto = JS_GetPropertyStr(ctx, new_target, "prototype");
+  if (!JS_IsException(proto)) {
+    // Set the prototype of the new object
+    JS_SetPrototype(ctx, emitter, proto);
+    JS_FreeValue(ctx, proto);
+  }
 
   // Initialize _events property
   JS_SetPropertyStr(ctx, emitter, "_events", JS_NewObject(ctx));
-
-  // Add methods to the instance
-  JS_SetPropertyStr(ctx, emitter, "on", JS_NewCFunction(ctx, js_event_emitter_on, "on", 2));
-  JS_SetPropertyStr(ctx, emitter, "addListener", JS_NewCFunction(ctx, js_event_emitter_add_listener, "addListener", 2));
-  JS_SetPropertyStr(ctx, emitter, "once", JS_NewCFunction(ctx, js_event_emitter_once, "once", 2));
-  JS_SetPropertyStr(ctx, emitter, "removeListener",
-                    JS_NewCFunction(ctx, js_event_emitter_remove_listener, "removeListener", 2));
-  JS_SetPropertyStr(ctx, emitter, "emit", JS_NewCFunction(ctx, js_event_emitter_emit, "emit", 1));
-  JS_SetPropertyStr(ctx, emitter, "listenerCount",
-                    JS_NewCFunction(ctx, js_event_emitter_listener_count, "listenerCount", 1));
-  JS_SetPropertyStr(ctx, emitter, "removeAllListeners",
-                    JS_NewCFunction(ctx, js_event_emitter_remove_all_listeners, "removeAllListeners", 0));
 
   return emitter;
 }
@@ -298,6 +304,24 @@ JSValue JSRT_InitNodeEvents(JSContext* ctx) {
   // Create EventEmitter constructor
   JSValue EventEmitter =
       JS_NewCFunction2(ctx, js_event_emitter_constructor, "EventEmitter", 0, JS_CFUNC_constructor, 0);
+
+  // Create and set up EventEmitter prototype
+  JSValue prototype = JS_NewObject(ctx);
+  JS_SetPropertyStr(ctx, prototype, "on", JS_NewCFunction(ctx, js_event_emitter_on, "on", 2));
+  JS_SetPropertyStr(ctx, prototype, "addListener",
+                    JS_NewCFunction(ctx, js_event_emitter_add_listener, "addListener", 2));
+  JS_SetPropertyStr(ctx, prototype, "once", JS_NewCFunction(ctx, js_event_emitter_once, "once", 2));
+  JS_SetPropertyStr(ctx, prototype, "removeListener",
+                    JS_NewCFunction(ctx, js_event_emitter_remove_listener, "removeListener", 2));
+  JS_SetPropertyStr(ctx, prototype, "emit", JS_NewCFunction(ctx, js_event_emitter_emit, "emit", 1));
+  JS_SetPropertyStr(ctx, prototype, "listenerCount",
+                    JS_NewCFunction(ctx, js_event_emitter_listener_count, "listenerCount", 1));
+  JS_SetPropertyStr(ctx, prototype, "removeAllListeners",
+                    JS_NewCFunction(ctx, js_event_emitter_remove_all_listeners, "removeAllListeners", 0));
+
+  // Set the prototype on the constructor
+  JS_SetPropertyStr(ctx, EventEmitter, "prototype", prototype);
+
   JS_SetPropertyStr(ctx, events_obj, "EventEmitter", EventEmitter);
 
   // Export EventEmitter as default export as well

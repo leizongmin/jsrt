@@ -568,38 +568,61 @@ JSValue JSRT_InitNodePath(JSContext* ctx) {
   char delimiter[2] = {PATH_DELIMITER, '\0'};
   JS_SetPropertyStr(ctx, path_obj, "delimiter", JS_NewString(ctx, delimiter));
 
-  // Platform-specific properties - avoid circular reference
-#ifdef _WIN32
-  // On Windows, win32 should be the main object, posix is minimal
+  // Platform-specific properties - both posix and win32 should have all methods
+  // Create both posix and win32 objects with full method implementations
+  JSValue posix = JS_NewObject(ctx);
   JSValue win32 = JS_NewObject(ctx);
-  // Copy all methods to win32
+
+  // Copy all methods to both posix and win32
   JSValue join_val = JS_GetPropertyStr(ctx, path_obj, "join");
+  JS_SetPropertyStr(ctx, posix, "join", JS_DupValue(ctx, join_val));
   JS_SetPropertyStr(ctx, win32, "join", JS_DupValue(ctx, join_val));
   JS_FreeValue(ctx, join_val);
 
   JSValue resolve_val = JS_GetPropertyStr(ctx, path_obj, "resolve");
+  JS_SetPropertyStr(ctx, posix, "resolve", JS_DupValue(ctx, resolve_val));
   JS_SetPropertyStr(ctx, win32, "resolve", JS_DupValue(ctx, resolve_val));
   JS_FreeValue(ctx, resolve_val);
 
-  JS_SetPropertyStr(ctx, path_obj, "win32", win32);
-  JSValue posix = JS_NewObject(ctx);  // Minimal posix implementation
-  JS_SetPropertyStr(ctx, path_obj, "posix", posix);
-#else
-  // On Unix, posix should be the main object, win32 is minimal
-  JSValue posix = JS_NewObject(ctx);
-  // Copy all methods to posix
-  JSValue join_val = JS_GetPropertyStr(ctx, path_obj, "join");
-  JS_SetPropertyStr(ctx, posix, "join", JS_DupValue(ctx, join_val));
-  JS_FreeValue(ctx, join_val);
+  JSValue normalize_val = JS_GetPropertyStr(ctx, path_obj, "normalize");
+  JS_SetPropertyStr(ctx, posix, "normalize", JS_DupValue(ctx, normalize_val));
+  JS_SetPropertyStr(ctx, win32, "normalize", JS_DupValue(ctx, normalize_val));
+  JS_FreeValue(ctx, normalize_val);
 
-  JSValue resolve_val = JS_GetPropertyStr(ctx, path_obj, "resolve");
-  JS_SetPropertyStr(ctx, posix, "resolve", JS_DupValue(ctx, resolve_val));
-  JS_FreeValue(ctx, resolve_val);
+  JSValue isAbsolute_val = JS_GetPropertyStr(ctx, path_obj, "isAbsolute");
+  JS_SetPropertyStr(ctx, posix, "isAbsolute", JS_DupValue(ctx, isAbsolute_val));
+  JS_SetPropertyStr(ctx, win32, "isAbsolute", JS_DupValue(ctx, isAbsolute_val));
+  JS_FreeValue(ctx, isAbsolute_val);
 
+  JSValue dirname_val = JS_GetPropertyStr(ctx, path_obj, "dirname");
+  JS_SetPropertyStr(ctx, posix, "dirname", JS_DupValue(ctx, dirname_val));
+  JS_SetPropertyStr(ctx, win32, "dirname", JS_DupValue(ctx, dirname_val));
+  JS_FreeValue(ctx, dirname_val);
+
+  JSValue basename_val = JS_GetPropertyStr(ctx, path_obj, "basename");
+  JS_SetPropertyStr(ctx, posix, "basename", JS_DupValue(ctx, basename_val));
+  JS_SetPropertyStr(ctx, win32, "basename", JS_DupValue(ctx, basename_val));
+  JS_FreeValue(ctx, basename_val);
+
+  JSValue extname_val = JS_GetPropertyStr(ctx, path_obj, "extname");
+  JS_SetPropertyStr(ctx, posix, "extname", JS_DupValue(ctx, extname_val));
+  JS_SetPropertyStr(ctx, win32, "extname", JS_DupValue(ctx, extname_val));
+  JS_FreeValue(ctx, extname_val);
+
+  JSValue relative_val = JS_GetPropertyStr(ctx, path_obj, "relative");
+  JS_SetPropertyStr(ctx, posix, "relative", JS_DupValue(ctx, relative_val));
+  JS_SetPropertyStr(ctx, win32, "relative", JS_DupValue(ctx, relative_val));
+  JS_FreeValue(ctx, relative_val);
+
+  // Add platform-specific properties
+  JS_SetPropertyStr(ctx, posix, "sep", JS_NewString(ctx, "/"));
+  JS_SetPropertyStr(ctx, posix, "delimiter", JS_NewString(ctx, ":"));
+  JS_SetPropertyStr(ctx, win32, "sep", JS_NewString(ctx, "\\"));
+  JS_SetPropertyStr(ctx, win32, "delimiter", JS_NewString(ctx, ";"));
+
+  // Set the objects on the main path object
   JS_SetPropertyStr(ctx, path_obj, "posix", posix);
-  JSValue win32 = JS_NewObject(ctx);  // Minimal win32 implementation
   JS_SetPropertyStr(ctx, path_obj, "win32", win32);
-#endif
 
   return path_obj;
 }

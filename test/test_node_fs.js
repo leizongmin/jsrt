@@ -4,6 +4,7 @@ console.log('=== Node.js File System Tests ===');
 
 // Test CommonJS import
 const fs = require('node:fs');
+const Buffer = require('node:buffer').Buffer;
 assert.ok(fs, 'Should be able to require node:fs');
 assert.ok(fs.readFileSync, 'Should have readFileSync function');
 assert.ok(fs.writeFileSync, 'Should have writeFileSync function');
@@ -69,10 +70,32 @@ try {
     'Test file should exist after writing'
   );
 
-  // Test readFileSync
+  // Test readFileSync (returns Buffer by default)
   const readData = fs.readFileSync(testFilePath);
-  assert.strictEqual(readData, testData, 'Read data should match written data');
+  assert.ok(
+    Buffer.isBuffer(readData),
+    'readFileSync should return Buffer by default'
+  );
+  assert.strictEqual(
+    readData.toString(),
+    testData,
+    'Read data should match written data when converted to string'
+  );
   console.log('✓ readFileSync works correctly');
+
+  // Test readFileSync with encoding (returns string)
+  const readDataString = fs.readFileSync(testFilePath, { encoding: 'utf8' });
+  assert.strictEqual(
+    typeof readDataString,
+    'string',
+    'readFileSync with encoding should return string'
+  );
+  assert.strictEqual(
+    readDataString,
+    testData,
+    'Read data with encoding should match written data'
+  );
+  console.log('✓ readFileSync with encoding works correctly');
 
   // Test statSync
   const stats = fs.statSync(testFilePath);
@@ -161,7 +184,6 @@ try {
 
 // Test with Buffer integration
 console.log('\nTesting Buffer integration...');
-const Buffer = require('node:buffer').Buffer;
 
 if (Buffer) {
   const testBufferPath = tmpDir + '/jsrt_buffer_test.txt';

@@ -61,17 +61,20 @@ console.log('\n📋 Testing HTTPS server creation:');
 try {
   const server = https.createServer();
   console.log(
-    '❌ HTTPS createServer should throw error for incomplete implementation'
+    '❌ HTTPS createServer should throw error for missing certificates'
   );
-  assert.fail('HTTPS createServer should throw error');
+  assert.fail('HTTPS createServer should require certificates');
 } catch (error) {
-  assert.ok(error.code === 'ENOTIMPL', 'Should throw ENOTIMPL error');
   assert.ok(
-    error.message.includes('not fully implemented'),
-    'Error should mention incomplete implementation'
+    error.code === 'ENOCERT',
+    'Should throw ENOCERT error for missing certificates'
+  );
+  assert.ok(
+    error.message.includes('certificate and private key'),
+    'Error should mention missing certificates'
   );
   console.log(
-    '✓ HTTPS createServer properly indicates incomplete implementation'
+    '✅ HTTPS createServer properly requires SSL certificates and private key'
   );
 }
 

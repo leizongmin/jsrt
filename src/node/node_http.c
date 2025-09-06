@@ -399,6 +399,35 @@ static JSValue js_http_request(JSContext* ctx, JSValueConst this_val, int argc, 
   return client_req;
 }
 
+// HTTP Agent constructor for connection pooling
+static JSValue js_http_agent_constructor(JSContext* ctx, JSValueConst new_target, int argc, JSValueConst* argv) {
+  JSValue agent = JS_NewObject(ctx);
+
+  // Set default properties
+  JS_SetPropertyStr(ctx, agent, "maxSockets", JS_NewInt32(ctx, 5));
+  JS_SetPropertyStr(ctx, agent, "maxFreeSockets", JS_NewInt32(ctx, 256));
+  JS_SetPropertyStr(ctx, agent, "timeout", JS_NewInt32(ctx, 30000));  // 30 seconds
+  JS_SetPropertyStr(ctx, agent, "keepAlive", JS_TRUE);
+  JS_SetPropertyStr(ctx, agent, "protocol", JS_NewString(ctx, "http:"));
+
+  // Parse options if provided
+  if (argc > 0 && JS_IsObject(argv[0])) {
+    JSValue maxSockets = JS_GetPropertyStr(ctx, argv[0], "maxSockets");
+    if (JS_IsNumber(maxSockets)) {
+      JS_SetPropertyStr(ctx, agent, "maxSockets", JS_DupValue(ctx, maxSockets));
+    }
+    JS_FreeValue(ctx, maxSockets);
+
+    JSValue keepAlive = JS_GetPropertyStr(ctx, argv[0], "keepAlive");
+    if (JS_IsBool(keepAlive)) {
+      JS_SetPropertyStr(ctx, agent, "keepAlive", JS_DupValue(ctx, keepAlive));
+    }
+    JS_FreeValue(ctx, keepAlive);
+  }
+
+  return agent;
+}
+
 // Module initialization
 JSValue JSRT_InitNodeHttp(JSContext* ctx) {
   JSValue http_module = JS_NewObject(ctx);
@@ -424,6 +453,10 @@ JSValue JSRT_InitNodeHttp(JSContext* ctx) {
   JS_SetPropertyStr(ctx, http_module, "createServer", JS_NewCFunction(ctx, js_http_create_server, "createServer", 1));
   JS_SetPropertyStr(ctx, http_module, "request", JS_NewCFunction(ctx, js_http_request, "request", 2));
 
+  // HTTP Agent class with connection pooling
+  JS_SetPropertyStr(ctx, http_module, "Agent",
+                    JS_NewCFunction2(ctx, js_http_agent_constructor, "Agent", 1, JS_CFUNC_constructor, 0));
+
   // Export constructors
   JS_SetPropertyStr(ctx, http_module, "Server", server_ctor);
   JS_SetPropertyStr(ctx, http_module, "ServerResponse", response_ctor);
@@ -445,6 +478,14 @@ JSValue JSRT_InitNodeHttp(JSContext* ctx) {
   JS_SetPropertyStr(ctx, status_codes, "500", JS_NewString(ctx, "Internal Server Error"));
   JS_SetPropertyStr(ctx, http_module, "STATUS_CODES", status_codes);
 
+  // Global agent with connection pooling
+  JSValue globalAgent = js_http_agent_constructor(ctx, JS_UNDEFINED, 0, NULL);
+  JS_SetPropertyStr(ctx, globalAgent, "maxSockets", JS_NewInt32(ctx, 5));
+  JS_SetPropertyStr(ctx, globalAgent, "maxFreeSockets", JS_NewInt32(ctx, 256));
+  JS_SetPropertyStr(ctx, globalAgent, "keepAlive", JS_TRUE);
+  JS_SetPropertyStr(ctx, globalAgent, "protocol", JS_NewString(ctx, "http:"));
+  JS_SetPropertyStr(ctx, http_module, "globalAgent", globalAgent);
+
   return http_module;
 }
 
@@ -455,6 +496,8 @@ int js_node_http_init(JSContext* ctx, JSModuleDef* m) {
   // Export individual functions
   JS_SetModuleExport(ctx, m, "createServer", JS_GetPropertyStr(ctx, http_module, "createServer"));
   JS_SetModuleExport(ctx, m, "request", JS_GetPropertyStr(ctx, http_module, "request"));
+  JS_SetModuleExport(ctx, m, "Agent", JS_GetPropertyStr(ctx, http_module, "Agent"));
+  JS_SetModuleExport(ctx, m, "globalAgent", JS_GetPropertyStr(ctx, http_module, "globalAgent"));
   JS_SetModuleExport(ctx, m, "Server", JS_GetPropertyStr(ctx, http_module, "Server"));
   JS_SetModuleExport(ctx, m, "ServerResponse", JS_GetPropertyStr(ctx, http_module, "ServerResponse"));
   JS_SetModuleExport(ctx, m, "IncomingMessage", JS_GetPropertyStr(ctx, http_module, "IncomingMessage"));

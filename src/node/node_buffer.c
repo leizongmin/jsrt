@@ -3,6 +3,9 @@
 #include "../util/debug.h"
 #include "node_modules.h"
 
+// Forward declarations
+static JSValue js_buffer_to_string(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv);
+
 // Helper to get buffer data from JSValue
 static uint8_t* get_buffer_data(JSContext* ctx, JSValue obj, size_t* size) {
   size_t byte_offset;
@@ -22,14 +25,36 @@ static uint8_t* get_buffer_data(JSContext* ctx, JSValue obj, size_t* size) {
   return buffer + byte_offset;
 }
 
-// Helper to create Uint8Array from ArrayBuffer
+// Helper to create Uint8Array from ArrayBuffer with Buffer methods
 static JSValue create_uint8_array(JSContext* ctx, JSValue array_buffer) {
   JSValue global = JS_GetGlobalObject(ctx);
   JSValue uint8_array_ctor = JS_GetPropertyStr(ctx, global, "Uint8Array");
   JSValue uint8_array = JS_CallConstructor(ctx, uint8_array_ctor, 1, &array_buffer);
+
+  // Add Buffer-specific methods to the Uint8Array instance
+  if (!JS_IsException(uint8_array)) {
+    // Add toString method that converts bytes to string
+    JSValue toString_func = JS_NewCFunction(ctx, js_buffer_to_string, "toString", 1);
+    JS_SetPropertyStr(ctx, uint8_array, "toString", toString_func);
+  }
+
   JS_FreeValue(ctx, uint8_array_ctor);
   JS_FreeValue(ctx, global);
   return uint8_array;
+}
+
+// Buffer.prototype.toString([encoding])
+static JSValue js_buffer_to_string(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
+  // Get buffer data
+  size_t buffer_size;
+  uint8_t* buffer_data = get_buffer_data(ctx, this_val, &buffer_size);
+
+  if (!buffer_data) {
+    return JS_ThrowTypeError(ctx, "Invalid buffer object");
+  }
+
+  // For now, just convert bytes to UTF-8 string (ignoring encoding parameter)
+  return JS_NewStringLen(ctx, (const char*)buffer_data, buffer_size);
 }
 
 // Buffer.alloc(size[, fill[, encoding]])
@@ -195,7 +220,31 @@ static JSValue js_buffer_from(JSContext* ctx, JSValueConst this_val, int argc, J
     return uint8_array;
   }
 
-  return JS_ThrowTypeError(ctx, "Buffer.from() argument must be a string or array");
+  // Handle Uint8Array or other TypedArray input
+  JSValue global = JS_GetGlobalObject(ctx);
+  JSValue uint8_array_ctor = JS_GetPropertyStr(ctx, global, "Uint8Array");
+  if (JS_IsInstanceOf(ctx, arg, uint8_array_ctor) > 0) {
+    // It's already a Uint8Array, just return it as is (or duplicate it)
+    JS_FreeValue(ctx, uint8_array_ctor);
+    JS_FreeValue(ctx, global);
+    return JS_DupValue(ctx, arg);
+  }
+  JS_FreeValue(ctx, uint8_array_ctor);
+  JS_FreeValue(ctx, global);
+
+  // Handle ArrayBuffer input
+  JSValue global_obj = JS_GetGlobalObject(ctx);
+  JSValue array_buffer_ctor = JS_GetPropertyStr(ctx, global_obj, "ArrayBuffer");
+  if (JS_IsInstanceOf(ctx, arg, array_buffer_ctor) > 0) {
+    JSValue uint8_array = create_uint8_array(ctx, JS_DupValue(ctx, arg));
+    JS_FreeValue(ctx, array_buffer_ctor);
+    JS_FreeValue(ctx, global_obj);
+    return uint8_array;
+  }
+  JS_FreeValue(ctx, array_buffer_ctor);
+  JS_FreeValue(ctx, global_obj);
+
+  return JS_ThrowTypeError(ctx, "Buffer.from() argument must be a string, array, ArrayBuffer, or TypedArray");
 }
 
 // Buffer.isBuffer(obj)
@@ -217,6 +266,16 @@ static JSValue js_buffer_is_buffer(JSContext* ctx, JSValueConst this_val, int ar
 
   JS_FreeValue(ctx, uint8_array_ctor);
   return JS_FALSE;
+}
+
+// Buffer constructor function
+static JSValue js_buffer_constructor(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
+  if (argc < 1) {
+    return JS_ThrowTypeError(ctx, "Buffer constructor requires at least 1 argument");
+  }
+
+  // For now, delegate to Buffer.from
+  return js_buffer_from(ctx, this_val, argc, argv);
 }
 
 // Buffer.concat(list[, totalLength])
@@ -298,7 +357,7 @@ JSValue JSRT_InitNodeBuffer(JSContext* ctx) {
   JSValue buffer_obj = JS_NewObject(ctx);
 
   // Create Buffer constructor function
-  JSValue Buffer = JS_NewObject(ctx);
+  JSValue Buffer = JS_NewCFunction2(ctx, js_buffer_constructor, "Buffer", 1, JS_CFUNC_constructor, 0);
 
   // Static methods on Buffer
   JS_SetPropertyStr(ctx, Buffer, "alloc", JS_NewCFunction(ctx, js_buffer_alloc, "alloc", 3));

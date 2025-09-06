@@ -13,7 +13,10 @@ try {
   assert.fail('Should require certificates');
 } catch (error) {
   assert.strictEqual(error.code, 'ENOCERT', 'Should throw ENOCERT error');
-  assert.ok(error.message.includes('certificate'), 'Should mention certificates');
+  assert.ok(
+    error.message.includes('certificate'),
+    'Should mention certificates'
+  );
   console.log('✓ HTTPS server properly requires SSL certificates');
 }
 
@@ -21,7 +24,7 @@ try {
 try {
   const server = https.createServer({
     cert: 'dummy-cert-content',
-    key: 'dummy-key-content'
+    key: 'dummy-key-content',
   });
   console.log('✓ HTTPS server creation attempted (OpenSSL handling)');
 } catch (error) {
@@ -40,18 +43,33 @@ console.log('\n🔄 Testing HTTPS connection pooling and Agent:');
 const agent = new https.Agent({
   maxSockets: 10,
   keepAlive: true,
-  maxFreeSockets: 256
+  maxFreeSockets: 256,
 });
 
 assert.ok(agent, 'Agent should be created');
-assert.strictEqual(typeof agent.maxSockets, 'number', 'Agent should have maxSockets');
-assert.strictEqual(typeof agent.keepAlive, 'boolean', 'Agent should have keepAlive');
+assert.strictEqual(
+  typeof agent.maxSockets,
+  'number',
+  'Agent should have maxSockets'
+);
+assert.strictEqual(
+  typeof agent.keepAlive,
+  'boolean',
+  'Agent should have keepAlive'
+);
 console.log('✓ HTTPS Agent created with connection pooling options');
 
 // Test 4: Global agent with enhanced features
 assert.ok(https.globalAgent, 'Global agent should exist');
-assert.strictEqual(https.globalAgent.protocol, 'https:', 'Global agent should have HTTPS protocol');
-assert.ok(https.globalAgent.keepAlive, 'Global agent should support keep-alive');
+assert.strictEqual(
+  https.globalAgent.protocol,
+  'https:',
+  'Global agent should have HTTPS protocol'
+);
+assert.ok(
+  https.globalAgent.keepAlive,
+  'Global agent should support keep-alive'
+);
 console.log('✓ HTTPS global agent has enhanced connection pooling features');
 
 console.log('\n📡 Testing HTTPS request with connection pooling:');
@@ -61,20 +79,37 @@ const request1 = https.request({
   hostname: 'example.com',
   port: 443,
   path: '/test',
-  keepAlive: true
+  keepAlive: true,
 });
 
 assert.ok(request1, 'HTTPS request should be created');
-assert.strictEqual(request1._hostname, 'example.com', 'Request should store hostname');
+assert.strictEqual(
+  request1._hostname,
+  'example.com',
+  'Request should store hostname'
+);
 assert.strictEqual(request1._port, 443, 'Request should store port');
-assert.strictEqual(request1._keepAlive, true, 'Request should support keep-alive');
-assert.ok(typeof request1._pooled === 'boolean', 'Request should indicate pooling status');
+assert.strictEqual(
+  request1._keepAlive,
+  true,
+  'Request should support keep-alive'
+);
+assert.ok(
+  typeof request1._pooled === 'boolean',
+  'Request should indicate pooling status'
+);
 console.log('✓ HTTPS request supports connection pooling and keep-alive');
 
 // Test 6: HTTPS request methods with enhanced functionality
-assert.ok(typeof request1.write === 'function', 'Request should have write method');
+assert.ok(
+  typeof request1.write === 'function',
+  'Request should have write method'
+);
 assert.ok(typeof request1.end === 'function', 'Request should have end method');
-assert.ok(typeof request1.on === 'function', 'Request should have event handling');
+assert.ok(
+  typeof request1.on === 'function',
+  'Request should have event handling'
+);
 console.log('✓ HTTPS request has enhanced methods for connection management');
 
 // Test 7: HTTPS get method with automatic connection handling
@@ -92,7 +127,9 @@ assert.ok(https.METHODS, 'Should inherit HTTP methods');
 assert.ok(https.STATUS_CODES, 'Should inherit HTTP status codes');
 console.log('✓ HTTPS module exports enhanced Agent and compatibility features');
 
-console.log('\n✅ All Enhanced HTTPS SSL/TLS and Connection Pooling tests passed!');
+console.log(
+  '\n✅ All Enhanced HTTPS SSL/TLS and Connection Pooling tests passed!'
+);
 console.log('🎉 HTTPS module ready with:');
 console.log('  ✅ SSL/TLS server support with certificate loading');
 console.log('  ✅ Connection pooling and keep-alive for HTTP agents');

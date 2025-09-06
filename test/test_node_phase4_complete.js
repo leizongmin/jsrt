@@ -142,7 +142,10 @@ try {
   console.log('❌ HTTPS server should require certificates');
   assert.fail('HTTPS server should require certificates');
 } catch (error) {
-  assert.ok(error.code === 'ENOCERT', 'HTTPS should throw ENOCERT for missing certificates');
+  assert.ok(
+    error.code === 'ENOCERT',
+    'HTTPS should throw ENOCERT for missing certificates'
+  );
   console.log('✅ HTTPS server properly requires SSL certificates');
 }
 

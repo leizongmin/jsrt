@@ -65,7 +65,10 @@ try {
   );
   assert.fail('HTTPS createServer should require certificates');
 } catch (error) {
-  assert.ok(error.code === 'ENOCERT', 'Should throw ENOCERT error for missing certificates');
+  assert.ok(
+    error.code === 'ENOCERT',
+    'Should throw ENOCERT error for missing certificates'
+  );
   assert.ok(
     error.message.includes('certificate and private key'),
     'Error should mention missing certificates'

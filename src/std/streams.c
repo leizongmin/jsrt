@@ -938,8 +938,7 @@ void JSRT_RuntimeSetupStdStreams(JSRT_Runtime* rt) {
   // Methods
   JS_SetPropertyStr(ctx, readable_proto, "getReader",
                     JS_NewCFunction(ctx, JSRT_ReadableStreamGetReader, "getReader", 0));
-  JS_SetPropertyStr(ctx, readable_proto, "cancel",
-                    JS_NewCFunction(ctx, JSRT_ReadableStreamCancel, "cancel", 1));
+  JS_SetPropertyStr(ctx, readable_proto, "cancel", JS_NewCFunction(ctx, JSRT_ReadableStreamCancel, "cancel", 1));
 
   JS_SetClassProto(ctx, JSRT_ReadableStreamClassID, readable_proto);
 

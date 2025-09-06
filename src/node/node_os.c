@@ -1,8 +1,6 @@
 #include <stdbool.h>
 #include <stdlib.h>
 #include <string.h>
-#include <sys/utsname.h>
-#include <unistd.h>
 #include "node_modules.h"
 
 #ifdef _WIN32
@@ -16,6 +14,8 @@
 #else
 #include <pwd.h>
 #include <sys/time.h>
+#include <sys/utsname.h>
+#include <unistd.h>
 #define JSRT_GETPID() getpid()
 #define JSRT_GETPPID() getppid()
 #define JSRT_GETHOSTNAME(buf, size) gethostname(buf, size)

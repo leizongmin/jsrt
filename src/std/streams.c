@@ -737,7 +737,7 @@ static JSValue JSRT_WritableStreamDefaultWriterConstructor(JSContext* ctx, JSVal
   }
 
   JSValue stream_val = argv[0];
-  
+
   // Check if it's a WritableStream by trying to get the opaque data
   JSRT_WritableStream* stream = JS_GetOpaque(stream_val, JSRT_WritableStreamClassID);
   if (!stream) {
@@ -745,18 +745,19 @@ static JSValue JSRT_WritableStreamDefaultWriterConstructor(JSContext* ctx, JSVal
     JSValue proto = JS_GetPrototype(ctx, stream_val);
     JSValue writablestream_ctor = JS_GetPropertyStr(ctx, JS_GetGlobalObject(ctx), "WritableStream");
     JSValue writablestream_proto = JS_GetPropertyStr(ctx, writablestream_ctor, "prototype");
-    
+
     int is_equal = JS_StrictEq(ctx, proto, writablestream_proto);
     bool is_writablestream = (is_equal == 1);
-    
+
     JS_FreeValue(ctx, proto);
     JS_FreeValue(ctx, writablestream_ctor);
     JS_FreeValue(ctx, writablestream_proto);
-    
+
     if (!is_writablestream) {
-      return JS_ThrowTypeError(ctx, "WritableStreamDefaultWriter constructor should get a WritableStream object as argument");
+      return JS_ThrowTypeError(
+          ctx, "WritableStreamDefaultWriter constructor should get a WritableStream object as argument");
     }
-    
+
     // If we reach here, it might be a WritableStream but without opaque data somehow
     // This shouldn't happen in normal cases
     return JS_ThrowTypeError(ctx, "Invalid WritableStream object");

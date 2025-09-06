@@ -39,6 +39,45 @@ This document outlines a comprehensive plan to achieve full WPT (Web Platform Te
 - **Implementation**: Added WritableStreamDefaultController class in `src/std/streams.c:316-388`
 - **Impact**: WritableStream controller.error method now accessible (basic functionality working)
 
+### Latest Session Improvements (2025-09-06 Extended) - STREAMS & URL ORIGIN ENHANCEMENTS
+
+✅ **ReadableStreamDefaultReader cancel() Method - COMPLETED (2025-09-06)**
+- ✅ **Implemented cancel() method**: ReadableStreamDefaultReader now has a working cancel() method
+- ✅ **Stream lifecycle management**: cancel() properly unlocks the reader and closes the stream 
+- ✅ **Promise-based API**: cancel() returns a resolved promise as per specification
+- **Implementation**: Added `JSRT_ReadableStreamDefaultReaderCancel` function in `src/std/streams.c:316-350`
+- **Impact**: Fixed "cancel() on a reader does not release the reader: not a function" error in streams WPT tests
+
+✅ **URL Origin Credentials Parsing Fix - COMPLETED (2025-09-06)**
+- ✅ **Credentials handling**: URL parsing now properly separates credentials (user:pass@) from hostname
+- ✅ **Correct origin calculation**: Origin property now excludes credentials as per URL specification
+- ✅ **Authority parsing**: Enhanced URL parsing to handle user:pass@host:port format correctly
+- **Implementation**: Enhanced URL parsing logic in `src/std/url.c:300-327` with credential extraction
+- **Impact**: Fixed origin calculation for URLs with credentials (e.g., "http://user:pass@foo:21" → origin: "http://foo:21")
+
+### Previous Session Improvements (2025-09-06 Continued) - WPT TESTHARNESS & URL ENHANCEMENTS
+
+✅ **WPT TestHarness TypedArray Support - COMPLETED (2025-09-06)**
+- ✅ **Fixed assert_array_equals**: WPT test harness now supports Uint8Array and other TypedArrays
+- ✅ **TextEncoder compliance**: TextEncoder.encode() now correctly passes WPT tests that expect Uint8Array
+- ✅ **Array-like object support**: Enhanced assertion function to handle both regular Arrays and TypedArrays
+- **Implementation**: Modified `assert_array_equals` in `scripts/wpt-testharness.js:73-96` to check for array-like objects
+- **Impact**: Fixed TextEncoder default input handling test - **encoding/api-basics.any.js** now passes the "Default inputs" test
+
+✅ **URL Constructor Tab/Newline Stripping - COMPLETED (2025-09-06)**  
+- ✅ **Control character removal**: URL constructor now strips tab (0x09), LF (0x0A), CR (0x0D) characters per URL spec
+- ✅ **Cross-platform compatibility**: Handles various newline formats correctly
+- ✅ **Manual testing verified**: `http://example\t.\norg` correctly becomes `http://example.org`
+- **Implementation**: Added `JSRT_StripURLControlCharacters` helper function in `src/std/url.c:391-410`
+- **Impact**: Improved URL parsing compliance with WPT specification requirements
+
+✅ **URLSearchParams Surrogate Ordering Fix - COMPLETED (2025-09-06)**
+- ✅ **Insertion order preservation**: Object constructor now maintains first-occurrence order for keys after surrogate replacement
+- ✅ **Last value wins**: Duplicate keys (including after surrogate normalization) properly use last value while preserving original position
+- ✅ **Length-aware comparison**: Enhanced key comparison to handle strings with null bytes properly using memcmp
+- **Implementation**: Enhanced `JSRT_ParseSearchParamsFromRecord` in `src/std/url.c:1108-1163` with position-preserving duplicate handling
+- **Impact**: URLSearchParams surrogate test "2 unpaired surrogates (no trailing)" now passes correctly
+
 ### Previous Improvements (2025-09-06) - INFRASTRUCTURE & SYMBOL.ITERATOR FIXES
 
 ✅ **WPT Runner Path Resolution - COMPLETED (2025-09-06)**

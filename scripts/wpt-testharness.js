@@ -72,11 +72,15 @@ function assert_not_equals(actual, expected, description) {
 
 function assert_array_equals(actual, expected, description) {
     try {
-        if (!Array.isArray(actual)) {
-            throw new Error('actual is not an array');
+        // Support both regular Arrays and TypedArrays (like Uint8Array)
+        const isActualArrayLike = Array.isArray(actual) || (actual && typeof actual === 'object' && typeof actual.length === 'number');
+        const isExpectedArrayLike = Array.isArray(expected) || (expected && typeof expected === 'object' && typeof expected.length === 'number');
+        
+        if (!isActualArrayLike) {
+            throw new Error('actual is not an array or array-like object');
         }
-        if (!Array.isArray(expected)) {
-            throw new Error('expected is not an array');
+        if (!isExpectedArrayLike) {
+            throw new Error('expected is not an array or array-like object');
         }
         if (actual.length !== expected.length) {
             throw new Error(`Array length mismatch: expected ${expected.length}, got ${actual.length}`);
@@ -197,6 +201,23 @@ function assert_throws_js(error_type, func, description) {
 
 function assert_unreached(description) {
     throw new Error(description || 'Reached unreachable code');
+}
+
+function promise_rejects_exactly(test, expected_error, promise, description) {
+    return promise.then(
+        () => {
+            throw new Error(description || 'Expected promise to reject, but it resolved');
+        },
+        (actual_error) => {
+            if (actual_error !== expected_error) {
+                throw new Error(
+                    (description || 'Promise rejected with wrong error') + 
+                    ': expected ' + format_value(expected_error) + 
+                    ', got ' + format_value(actual_error)
+                );
+            }
+        }
+    );
 }
 
 // Utility function used by some WPT tests for formatting values
@@ -490,6 +511,7 @@ globalThis.assert_array_equals = assert_array_equals;
 globalThis.assert_throws = assert_throws;
 globalThis.assert_throws_dom = assert_throws_dom;
 globalThis.assert_unreached = assert_unreached;
+globalThis.promise_rejects_exactly = promise_rejects_exactly;
 
 // WPT-specific assert_throws_quotaexceedederror function
 function assert_throws_quotaexceedederror(func, description) {

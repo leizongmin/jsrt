@@ -297,23 +297,32 @@ static JSRT_URL* JSRT_ParseURL(const char* url, const char* base) {
     parsed->pathname = strdup("/");
   }
 
-  // What's left is the host
+  // What's left is the host (authority part)
   if (strlen(ptr) > 0) {
+    // First, handle credentials (user:pass@host:port)
+    char* credentials_end = strchr(ptr, '@');
+    char* authority = ptr;
+
+    if (credentials_end) {
+      // Skip credentials for hostname/port parsing
+      authority = credentials_end + 1;
+    }
+
     free(parsed->host);
     parsed->host = strdup(ptr);
 
-    // Check for port
-    char* port_start = strchr(ptr, ':');
+    // Check for port in the authority part (after @)
+    char* port_start = strchr(authority, ':');
     if (port_start) {
       *port_start = '\0';
       free(parsed->hostname);
-      parsed->hostname = strdup(ptr);
+      parsed->hostname = strdup(authority);
       free(parsed->port);
       parsed->port = strdup(port_start + 1);
-      *port_start = ':';  // Restore for host
+      *port_start = ':';  // Restore
     } else {
       free(parsed->hostname);
-      parsed->hostname = strdup(ptr);
+      parsed->hostname = strdup(authority);
     }
   }
 
@@ -388,30 +397,67 @@ static JSClassDef JSRT_URLClass = {
     .finalizer = JSRT_URLFinalize,
 };
 
+// Helper function to strip tab and newline characters from URL strings
+// According to URL spec, these characters should be removed: tab (0x09), LF (0x0A), CR (0x0D)
+static char* JSRT_StripURLControlCharacters(const char* input) {
+  if (!input)
+    return NULL;
+
+  size_t len = strlen(input);
+  char* result = malloc(len + 1);
+  if (!result)
+    return NULL;
+
+  size_t j = 0;
+  for (size_t i = 0; i < len; i++) {
+    char c = input[i];
+    // Skip tab, line feed, and carriage return
+    if (c != 0x09 && c != 0x0A && c != 0x0D) {
+      result[j++] = c;
+    }
+  }
+  result[j] = '\0';
+  return result;
+}
+
 static JSValue JSRT_URLConstructor(JSContext* ctx, JSValueConst new_target, int argc, JSValueConst* argv) {
   if (argc < 1) {
     return JS_ThrowTypeError(ctx, "URL constructor requires at least 1 argument");
   }
 
-  const char* url_str = JS_ToCString(ctx, argv[0]);
+  const char* url_str_raw = JS_ToCString(ctx, argv[0]);
+  if (!url_str_raw) {
+    return JS_EXCEPTION;
+  }
+
+  // Strip control characters as per URL specification
+  char* url_str = JSRT_StripURLControlCharacters(url_str_raw);
+  JS_FreeCString(ctx, url_str_raw);
   if (!url_str) {
     return JS_EXCEPTION;
   }
 
-  const char* base_str = NULL;
+  const char* base_str_raw = NULL;
+  char* base_str = NULL;
   if (argc >= 2 && !JS_IsUndefined(argv[1])) {
-    base_str = JS_ToCString(ctx, argv[1]);
+    base_str_raw = JS_ToCString(ctx, argv[1]);
+    if (!base_str_raw) {
+      free(url_str);
+      return JS_EXCEPTION;
+    }
+    base_str = JSRT_StripURLControlCharacters(base_str_raw);
+    JS_FreeCString(ctx, base_str_raw);
     if (!base_str) {
-      JS_FreeCString(ctx, url_str);
+      free(url_str);
       return JS_EXCEPTION;
     }
   }
 
   JSRT_URL* url = JSRT_ParseURL(url_str, base_str);
   if (!url) {
-    JS_FreeCString(ctx, url_str);
+    free(url_str);
     if (base_str) {
-      JS_FreeCString(ctx, base_str);
+      free(base_str);
     }
     return JS_ThrowTypeError(ctx, "Invalid URL");
   }
@@ -421,9 +467,9 @@ static JSValue JSRT_URLConstructor(JSContext* ctx, JSValueConst new_target, int 
   JSValue obj = JS_NewObjectClass(ctx, JSRT_URLClassID);
   JS_SetOpaque(obj, url);
 
-  JS_FreeCString(ctx, url_str);
+  free(url_str);
   if (base_str) {
-    JS_FreeCString(ctx, base_str);
+    free(base_str);
   }
 
   return obj;
@@ -876,6 +922,23 @@ static void JSRT_AddSearchParam(JSRT_URLSearchParams* search_params, const char*
   }
 }
 
+// Length-aware version for handling strings with null bytes
+static void JSRT_AddSearchParamWithLength(JSRT_URLSearchParams* search_params, const char* name, size_t name_len,
+                                          const char* value, size_t value_len) {
+  JSRT_URLSearchParam* param = create_url_param(name, name_len, value, value_len);
+
+  // Add at end to maintain insertion order
+  if (!search_params->params) {
+    search_params->params = param;
+  } else {
+    JSRT_URLSearchParam* tail = search_params->params;
+    while (tail->next) {
+      tail = tail->next;
+    }
+    tail->next = param;
+  }
+}
+
 static JSRT_URLSearchParams* JSRT_ParseSearchParamsFromSequence(JSContext* ctx, JSValue seq) {
   JSRT_URLSearchParams* search_params = JSRT_CreateEmptySearchParams();
 
@@ -1070,23 +1133,44 @@ static JSRT_URLSearchParams* JSRT_ParseSearchParamsFromRecord(JSContext* ctx, JS
 
     if (name_str && value_str) {
       // For object constructor, later values should overwrite earlier ones for same key
-      // First, check if this key already exists and remove it
-      JSRT_URLSearchParam** current = &search_params->params;
-      while (*current) {
-        if (strcmp((*current)->name, name_str) == 0) {
-          // Remove the existing parameter with the same name
-          JSRT_URLSearchParam* to_remove = *current;
-          *current = (*current)->next;
-          free(to_remove->name);
-          free(to_remove->value);
-          free(to_remove);
-        } else {
-          current = &(*current)->next;
+      // But maintain the position of the first occurrence of the key
+      JSRT_URLSearchParam* existing = NULL;
+      JSRT_URLSearchParam* current = search_params->params;
+      while (current) {
+        if (current->name_len == name_len && memcmp(current->name, name_str, name_len) == 0) {
+          if (!existing) {
+            // First match - update this one and remember it
+            free(current->value);
+            current->value = malloc(value_len + 1);
+            if (current->value) {
+              memcpy(current->value, value_str, value_len);
+              current->value[value_len] = '\0';
+              current->value_len = value_len;
+            }
+            existing = current;
+          } else {
+            // Additional match - remove this one
+            // This is a complex operation, let's use the existing removal logic
+            JSRT_URLSearchParam** prev_next = &search_params->params;
+            while (*prev_next != current) {
+              prev_next = &(*prev_next)->next;
+            }
+            *prev_next = current->next;
+            free(current->name);
+            free(current->value);
+            JSRT_URLSearchParam* to_free = current;
+            current = current->next;
+            free(to_free);
+            continue;
+          }
         }
+        current = current->next;
       }
 
-      // Add the new parameter
-      JSRT_AddSearchParam(search_params, name_str, value_str);
+      // If no existing key found, add new parameter
+      if (!existing) {
+        JSRT_AddSearchParamWithLength(search_params, name_str, name_len, value_str, value_len);
+      }
     }
 
     if (name_str)

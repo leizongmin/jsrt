@@ -9,9 +9,13 @@ ENV TZ=UTC
 RUN sed -i 's|http://archive.ubuntu.com/ubuntu/|http://mirrors.aliyun.com/ubuntu/|g' /etc/apt/sources.list \
     && sed -i 's|http://security.ubuntu.com/ubuntu/|http://mirrors.aliyun.com/ubuntu/|g' /etc/apt/sources.list
 
-# Install system dependencies
-RUN apt-get update && apt-get install -y \
+# Add GCC 13 repository and install system dependencies
+RUN apt-get update && apt-get install -y software-properties-common \
+    && add-apt-repository -y ppa:ubuntu-toolchain-r/test \
+    && apt-get update && apt-get install -y \
     build-essential \
+    gcc-13 \
+    g++-13 \
     cmake \
     git \
     wget \
@@ -23,9 +27,10 @@ RUN apt-get update && apt-get install -y \
     ca-certificates \
     gnupg \
     lsb-release \
-    software-properties-common \
     python3 \
     python3-pip \
+    && update-alternatives --install /usr/bin/gcc gcc /usr/bin/gcc-13 100 \
+    && update-alternatives --install /usr/bin/g++ g++ /usr/bin/g++-13 100 \
     && rm -rf /var/lib/apt/lists/*
 
 # Install clang-format-20 from LLVM APT repository (using Tsinghua mirror)

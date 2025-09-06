@@ -580,6 +580,112 @@ static JSValue JSRT_TextEncoderConstructor(JSContext* ctx, JSValueConst new_targ
   return obj;
 }
 
+// Helper function for surrogate handling - converts JSValue string to UTF-8 with surrogate replacement
+char* JSRT_StringToUTF8WithSurrogateReplacement(JSContext* ctx, JSValue string_val, size_t* output_len) {
+  // Get string as CESU-8 bytes to detect surrogates
+  size_t input_len;
+  const char* input = JS_ToCStringLen2(ctx, &input_len, string_val, 1);  // cesu8=1
+  if (!input) {
+    return NULL;
+  }
+
+  // Process CESU-8 input, replacing surrogate sequences with U+FFFD
+  size_t output_capacity = input_len * 2;
+  uint8_t* output = malloc(output_capacity);
+  if (!output) {
+    JS_FreeCString(ctx, input);
+    return NULL;
+  }
+
+  size_t processed_len = 0;
+  size_t i = 0;
+
+  while (i < input_len) {
+    uint8_t b1 = (uint8_t)input[i];
+
+    if (b1 < 0x80) {
+      // ASCII - copy as-is
+      output[processed_len++] = b1;
+      i++;
+    } else if ((b1 & 0xE0) == 0xC0) {
+      // 2-byte UTF-8 - copy as-is (no surrogates here)
+      if (i + 1 < input_len) {
+        output[processed_len++] = b1;
+        output[processed_len++] = (uint8_t)input[i + 1];
+        i += 2;
+      } else {
+        i++;
+      }
+    } else if ((b1 & 0xF0) == 0xE0) {
+      // 3-byte UTF-8 - check for surrogates (0xED 0xA0-0xAF or 0xED 0xB0-0xBF)
+      if (i + 2 < input_len) {
+        uint8_t b2 = (uint8_t)input[i + 1];
+        uint8_t b3 = (uint8_t)input[i + 2];
+
+        // Check if this is a surrogate in CESU-8
+        if (b1 == 0xED && (b2 & 0xF0) == 0xA0) {
+          // This is a high surrogate (0xED 0xA0-0xAF)
+          // Check if followed by a low surrogate (0xED 0xB0-0xBF)
+          if (i + 5 < input_len && (uint8_t)input[i + 3] == 0xED && ((uint8_t)input[i + 4] & 0xF0) == 0xB0) {
+            // Valid surrogate pair - decode to proper UTF-8
+            uint16_t high = 0xD800 | ((b2 & 0x0F) << 6) | (b3 & 0x3F);
+            uint16_t low = 0xDC00 | (((uint8_t)input[i + 4] & 0x0F) << 6) | ((uint8_t)input[i + 5] & 0x3F);
+            uint32_t codepoint = 0x10000 + ((high & 0x3FF) << 10) + (low & 0x3FF);
+
+            // Encode as 4-byte UTF-8
+            output[processed_len++] = 0xF0 | (codepoint >> 18);
+            output[processed_len++] = 0x80 | ((codepoint >> 12) & 0x3F);
+            output[processed_len++] = 0x80 | ((codepoint >> 6) & 0x3F);
+            output[processed_len++] = 0x80 | (codepoint & 0x3F);
+            i += 6;  // Skip both surrogate sequences
+            continue;
+          } else {
+            // Lone high surrogate - replace with U+FFFD
+            output[processed_len++] = 0xEF;
+            output[processed_len++] = 0xBF;
+            output[processed_len++] = 0xBD;
+          }
+        } else if (b1 == 0xED && (b2 & 0xF0) == 0xB0) {
+          // This is a low surrogate without preceding high surrogate - replace with U+FFFD
+          output[processed_len++] = 0xEF;
+          output[processed_len++] = 0xBF;
+          output[processed_len++] = 0xBD;
+        } else {
+          // Regular 3-byte character - copy as-is
+          output[processed_len++] = b1;
+          output[processed_len++] = b2;
+          output[processed_len++] = b3;
+        }
+        i += 3;
+      } else {
+        i++;
+      }
+    } else if ((b1 & 0xF8) == 0xF0) {
+      // 4-byte UTF-8 - copy as-is (already proper UTF-8)
+      if (i + 3 < input_len) {
+        output[processed_len++] = b1;
+        output[processed_len++] = (uint8_t)input[i + 1];
+        output[processed_len++] = (uint8_t)input[i + 2];
+        output[processed_len++] = (uint8_t)input[i + 3];
+        i += 4;
+      } else {
+        i++;
+      }
+    } else {
+      // Invalid byte - skip
+      i++;
+    }
+  }
+
+  JS_FreeCString(ctx, input);
+
+  // Null-terminate the result
+  output[processed_len] = '\0';
+  *output_len = processed_len;
+
+  return (char*)output;
+}
+
 static JSValue JSRT_TextEncoderEncode(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
   JSRT_TextEncoder* encoder = JS_GetOpaque2(ctx, this_val, JSRT_TextEncoderClassID);
   if (!encoder) {

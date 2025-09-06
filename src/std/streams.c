@@ -11,8 +11,102 @@
 // Forward declare class IDs
 JSClassID JSRT_ReadableStreamClassID;
 JSClassID JSRT_ReadableStreamDefaultReaderClassID;
+JSClassID JSRT_ReadableStreamDefaultControllerClassID;
 JSClassID JSRT_WritableStreamClassID;
+JSClassID JSRT_WritableStreamDefaultControllerClassID;
 JSClassID JSRT_TransformStreamClassID;
+
+// ReadableStreamDefaultController implementation
+typedef struct {
+  JSValue stream;
+  char** queue;  // Simple queue of string chunks
+  size_t queue_size;
+  size_t queue_capacity;
+  bool closed;
+} JSRT_ReadableStreamDefaultController;
+
+static void JSRT_ReadableStreamDefaultControllerFinalize(JSRuntime* rt, JSValue val) {
+  JSRT_ReadableStreamDefaultController* controller = JS_GetOpaque(val, JSRT_ReadableStreamDefaultControllerClassID);
+  if (controller) {
+    if (!JS_IsUndefined(controller->stream)) {
+      JS_FreeValueRT(rt, controller->stream);
+    }
+    // Free queue
+    for (size_t i = 0; i < controller->queue_size; i++) {
+      free(controller->queue[i]);
+    }
+    free(controller->queue);
+    free(controller);
+  }
+}
+
+static JSClassDef JSRT_ReadableStreamDefaultControllerClass = {
+    .class_name = "ReadableStreamDefaultController",
+    .finalizer = JSRT_ReadableStreamDefaultControllerFinalize,
+};
+
+static JSValue JSRT_ReadableStreamDefaultControllerEnqueue(JSContext* ctx, JSValueConst this_val, int argc,
+                                                           JSValueConst* argv) {
+  JSRT_ReadableStreamDefaultController* controller =
+      JS_GetOpaque(this_val, JSRT_ReadableStreamDefaultControllerClassID);
+  if (!controller) {
+    return JS_EXCEPTION;
+  }
+
+  if (controller->closed) {
+    return JS_ThrowTypeError(ctx, "Cannot enqueue a chunk into a readable stream that is closed or errored");
+  }
+
+  if (argc > 0) {
+    // Convert chunk to string for simplicity
+    const char* chunk_str = JS_ToCString(ctx, argv[0]);
+    if (chunk_str) {
+      // Expand queue if needed
+      if (controller->queue_size >= controller->queue_capacity) {
+        size_t new_capacity = controller->queue_capacity * 2 + 1;
+        char** new_queue = realloc(controller->queue, new_capacity * sizeof(char*));
+        if (new_queue) {
+          controller->queue = new_queue;
+          controller->queue_capacity = new_capacity;
+        }
+      }
+
+      // Add chunk to queue
+      if (controller->queue_size < controller->queue_capacity) {
+        controller->queue[controller->queue_size] = strdup(chunk_str);
+        controller->queue_size++;
+      }
+
+      JS_FreeCString(ctx, chunk_str);
+    }
+  }
+
+  return JS_UNDEFINED;
+}
+
+static JSValue JSRT_ReadableStreamDefaultControllerClose(JSContext* ctx, JSValueConst this_val, int argc,
+                                                         JSValueConst* argv) {
+  JSRT_ReadableStreamDefaultController* controller =
+      JS_GetOpaque(this_val, JSRT_ReadableStreamDefaultControllerClassID);
+  if (!controller) {
+    return JS_EXCEPTION;
+  }
+
+  controller->closed = true;
+  return JS_UNDEFINED;
+}
+
+static JSValue JSRT_ReadableStreamDefaultControllerError(JSContext* ctx, JSValueConst this_val, int argc,
+                                                         JSValueConst* argv) {
+  JSRT_ReadableStreamDefaultController* controller =
+      JS_GetOpaque(this_val, JSRT_ReadableStreamDefaultControllerClassID);
+  if (!controller) {
+    return JS_EXCEPTION;
+  }
+
+  controller->closed = true;  // Error also closes the stream
+  return JS_UNDEFINED;
+}
 
 // ReadableStream implementation
 typedef struct {
@@ -37,11 +131,52 @@ static JSClassDef JSRT_ReadableStreamClass = {
 
 static JSValue JSRT_ReadableStreamConstructor(JSContext* ctx, JSValueConst new_target, int argc, JSValueConst* argv) {
   JSRT_ReadableStream* stream = malloc(sizeof(JSRT_ReadableStream));
-  stream->controller = JS_UNDEFINED;
   stream->locked = false;
 
   JSValue obj = JS_NewObjectClass(ctx, JSRT_ReadableStreamClassID);
   JS_SetOpaque(obj, stream);
+
+  // Create the controller
+  JSRT_ReadableStreamDefaultController* controller_data = malloc(sizeof(JSRT_ReadableStreamDefaultController));
+  controller_data->stream = JS_DupValue(ctx, obj);
+  controller_data->queue = NULL;
+  controller_data->queue_size = 0;
+  controller_data->queue_capacity = 0;
+  controller_data->closed = false;
+
+  JSValue controller = JS_NewObjectClass(ctx, JSRT_ReadableStreamDefaultControllerClassID);
+  JS_SetOpaque(controller, controller_data);
+
+  // Add methods to controller
+  JS_SetPropertyStr(ctx, controller, "enqueue",
+                    JS_NewCFunction(ctx, JSRT_ReadableStreamDefaultControllerEnqueue, "enqueue", 1));
+  JS_SetPropertyStr(ctx, controller, "close",
+                    JS_NewCFunction(ctx, JSRT_ReadableStreamDefaultControllerClose, "close", 0));
+  JS_SetPropertyStr(ctx, controller, "error",
+                    JS_NewCFunction(ctx, JSRT_ReadableStreamDefaultControllerError, "error", 1));
+
+  stream->controller = controller;
+
+  // If underlyingSource is provided, call its start method
+  if (argc > 0 && !JS_IsUndefined(argv[0]) && JS_IsObject(argv[0])) {
+    JSValue underlyingSource = argv[0];
+    JSValue start = JS_GetPropertyStr(ctx, underlyingSource, "start");
+
+    if (!JS_IsUndefined(start) && JS_IsFunction(ctx, start)) {
+      JSValue start_args[] = {controller};
+      JSValue result = JS_Call(ctx, start, underlyingSource, 1, start_args);
+      if (JS_IsException(result)) {
+        JS_FreeValue(ctx, start);
+        JS_FreeValue(ctx, controller);
+        free(controller_data);
+        free(stream);
+        return JS_EXCEPTION;
+      }
+      JS_FreeValue(ctx, result);
+    }
+    JS_FreeValue(ctx, start);
+  }
+
   return obj;
 }
 
@@ -127,12 +262,43 @@ static JSValue JSRT_ReadableStreamDefaultReaderRead(JSContext* ctx, JSValueConst
     return JS_EXCEPTION;
   }
 
-  // For now, return a promise that resolves to a closed stream
-  // This is a simplified implementation - in a full implementation,
-  // this would read from the actual stream's queue
+  // Get the stream and its controller
+  JSRT_ReadableStream* stream = JS_GetOpaque(reader->stream, JSRT_ReadableStreamClassID);
+  if (!stream) {
+    return JS_EXCEPTION;
+  }
+
+  JSRT_ReadableStreamDefaultController* controller =
+      JS_GetOpaque(stream->controller, JSRT_ReadableStreamDefaultControllerClassID);
+  if (!controller) {
+    return JS_EXCEPTION;
+  }
+
   JSValue result = JS_NewObject(ctx);
-  JS_SetPropertyStr(ctx, result, "value", JS_UNDEFINED);
-  JS_SetPropertyStr(ctx, result, "done", JS_NewBool(ctx, true));
+
+  // Check if there are chunks in the queue
+  if (controller->queue_size > 0) {
+    // Return the first chunk from the queue
+    char* chunk = controller->queue[0];
+    JS_SetPropertyStr(ctx, result, "value", JS_NewString(ctx, chunk));
+    JS_SetPropertyStr(ctx, result, "done", JS_NewBool(ctx, false));
+
+    // Remove the chunk from queue
+    free(chunk);
+    for (size_t i = 1; i < controller->queue_size; i++) {
+      controller->queue[i - 1] = controller->queue[i];
+    }
+    controller->queue_size--;
+  } else if (controller->closed) {
+    // Stream is closed and no more chunks
+    JS_SetPropertyStr(ctx, result, "value", JS_UNDEFINED);
+    JS_SetPropertyStr(ctx, result, "done", JS_NewBool(ctx, true));
+  } else {
+    // Stream is still open but no chunks yet - return undefined for now
+    // In a full implementation, this would return a pending promise
+    JS_SetPropertyStr(ctx, result, "value", JS_UNDEFINED);
+    JS_SetPropertyStr(ctx, result, "done", JS_NewBool(ctx, false));
+  }
 
   // Return a resolved promise with the result
   JSValue promise_ctor = JS_GetPropertyStr(ctx, JS_GetGlobalObject(ctx), "Promise");
@@ -145,6 +311,41 @@ static JSValue JSRT_ReadableStreamDefaultReaderRead(JSContext* ctx, JSValueConst
   JS_FreeValue(ctx, result);
 
   return promise;
+}
+
+// WritableStreamDefaultController implementation
+typedef struct {
+  JSValue stream;
+  bool closed;
+  bool errored;
+} JSRT_WritableStreamDefaultController;
+
+static void JSRT_WritableStreamDefaultControllerFinalize(JSRuntime* rt, JSValue val) {
+  JSRT_WritableStreamDefaultController* controller = JS_GetOpaque(val, JSRT_WritableStreamDefaultControllerClassID);
+  if (controller) {
+    if (!JS_IsUndefined(controller->stream)) {
+      JS_FreeValueRT(rt, controller->stream);
+    }
+    free(controller);
+  }
+}
+
+static JSClassDef JSRT_WritableStreamDefaultControllerClass = {
+    .class_name = "WritableStreamDefaultController",
+    .finalizer = JSRT_WritableStreamDefaultControllerFinalize,
+};
+
+static JSValue JSRT_WritableStreamDefaultControllerError(JSContext* ctx, JSValueConst this_val, int argc,
+                                                         JSValueConst* argv) {
+  JSRT_WritableStreamDefaultController* controller =
+      JS_GetOpaque(this_val, JSRT_WritableStreamDefaultControllerClassID);
+  if (!controller) {
+    return JS_EXCEPTION;
+  }
+
+  controller->errored = true;
+  controller->closed = true;  // Error also closes the stream
+  return JS_UNDEFINED;
 }
 
 // WritableStream implementation
@@ -170,11 +371,46 @@ static JSClassDef JSRT_WritableStreamClass = {
 
 static JSValue JSRT_WritableStreamConstructor(JSContext* ctx, JSValueConst new_target, int argc, JSValueConst* argv) {
   JSRT_WritableStream* stream = malloc(sizeof(JSRT_WritableStream));
-  stream->controller = JS_UNDEFINED;
   stream->locked = false;
 
   JSValue obj = JS_NewObjectClass(ctx, JSRT_WritableStreamClassID);
   JS_SetOpaque(obj, stream);
+
+  // Create the controller
+  JSRT_WritableStreamDefaultController* controller_data = malloc(sizeof(JSRT_WritableStreamDefaultController));
+  controller_data->stream = JS_DupValue(ctx, obj);
+  controller_data->closed = false;
+  controller_data->errored = false;
+
+  JSValue controller = JS_NewObjectClass(ctx, JSRT_WritableStreamDefaultControllerClassID);
+  JS_SetOpaque(controller, controller_data);
+
+  // Add methods to controller
+  JS_SetPropertyStr(ctx, controller, "error",
+                    JS_NewCFunction(ctx, JSRT_WritableStreamDefaultControllerError, "error", 1));
+
+  stream->controller = controller;
+
+  // If underlyingSink is provided, call its start method
+  if (argc > 0 && !JS_IsUndefined(argv[0]) && JS_IsObject(argv[0])) {
+    JSValue underlyingSink = argv[0];
+    JSValue start = JS_GetPropertyStr(ctx, underlyingSink, "start");
+
+    if (!JS_IsUndefined(start) && JS_IsFunction(ctx, start)) {
+      JSValue start_args[] = {controller};
+      JSValue result = JS_Call(ctx, start, underlyingSink, 1, start_args);
+      if (JS_IsException(result)) {
+        JS_FreeValue(ctx, start);
+        JS_FreeValue(ctx, controller);
+        free(controller_data);
+        free(stream);
+        return JS_EXCEPTION;
+      }
+      JS_FreeValue(ctx, result);
+    }
+    JS_FreeValue(ctx, start);
+  }
+
   return obj;
 }
 
@@ -271,6 +507,10 @@ void JSRT_RuntimeSetupStdStreams(JSRT_Runtime* rt) {
       JS_NewCFunction2(ctx, JSRT_ReadableStreamConstructor, "ReadableStream", 0, JS_CFUNC_constructor, 0);
   JS_SetPropertyStr(ctx, rt->global, "ReadableStream", readable_ctor);
 
+  // Register ReadableStreamDefaultController class
+  JS_NewClassID(&JSRT_ReadableStreamDefaultControllerClassID);
+  JS_NewClass(rt->rt, JSRT_ReadableStreamDefaultControllerClassID, &JSRT_ReadableStreamDefaultControllerClass);
+
   // Register ReadableStreamDefaultReader class
   JS_NewClassID(&JSRT_ReadableStreamDefaultReaderClassID);
   JS_NewClass(rt->rt, JSRT_ReadableStreamDefaultReaderClassID, &JSRT_ReadableStreamDefaultReaderClass);
@@ -295,6 +535,10 @@ void JSRT_RuntimeSetupStdStreams(JSRT_Runtime* rt) {
   // Register WritableStream class
   JS_NewClassID(&JSRT_WritableStreamClassID);
   JS_NewClass(rt->rt, JSRT_WritableStreamClassID, &JSRT_WritableStreamClass);
+
+  // Register WritableStreamDefaultController class
+  JS_NewClassID(&JSRT_WritableStreamDefaultControllerClassID);
+  JS_NewClass(rt->rt, JSRT_WritableStreamDefaultControllerClassID, &JSRT_WritableStreamDefaultControllerClass);
 
   JSValue writable_proto = JS_NewObject(ctx);
 

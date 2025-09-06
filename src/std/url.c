@@ -8,6 +8,7 @@
 #include <string.h>
 
 #include "../util/debug.h"
+#include "encoding.h"  // For surrogate handling helper
 #include "formdata.h"
 
 // Forward declare class IDs
@@ -1055,17 +1056,45 @@ static JSRT_URLSearchParams* JSRT_ParseSearchParamsFromRecord(JSContext* ctx, JS
       continue;
     }
 
-    const char* name_str = JS_AtomToCString(ctx, properties[i].atom);
-    const char* value_str = JS_ToCString(ctx, value);
+    // Convert atom to JSValue for surrogate handling
+    JSValue name_val = JS_AtomToString(ctx, properties[i].atom);
+    if (JS_IsException(name_val)) {
+      JS_FreeValue(ctx, value);
+      continue;
+    }
+
+    // Use surrogate handling helper for both name and value
+    size_t name_len, value_len;
+    const char* name_str = JSRT_StringToUTF8WithSurrogateReplacement(ctx, name_val, &name_len);
+    const char* value_str = JSRT_StringToUTF8WithSurrogateReplacement(ctx, value, &value_len);
 
     if (name_str && value_str) {
+      // For object constructor, later values should overwrite earlier ones for same key
+      // First, check if this key already exists and remove it
+      JSRT_URLSearchParam** current = &search_params->params;
+      while (*current) {
+        if (strcmp((*current)->name, name_str) == 0) {
+          // Remove the existing parameter with the same name
+          JSRT_URLSearchParam* to_remove = *current;
+          *current = (*current)->next;
+          free(to_remove->name);
+          free(to_remove->value);
+          free(to_remove);
+        } else {
+          current = &(*current)->next;
+        }
+      }
+
+      // Add the new parameter
       JSRT_AddSearchParam(search_params, name_str, value_str);
     }
 
     if (name_str)
-      JS_FreeCString(ctx, name_str);
+      free((char*)name_str);
     if (value_str)
-      JS_FreeCString(ctx, value_str);
+      free((char*)value_str);
+
+    JS_FreeValue(ctx, name_val);
     JS_FreeValue(ctx, value);
   }
 

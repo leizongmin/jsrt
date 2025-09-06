@@ -219,6 +219,16 @@ static JSValue js_buffer_is_buffer(JSContext* ctx, JSValueConst this_val, int ar
   return JS_FALSE;
 }
 
+// Buffer constructor function
+static JSValue js_buffer_constructor(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
+  if (argc < 1) {
+    return JS_ThrowTypeError(ctx, "Buffer constructor requires at least 1 argument");
+  }
+
+  // For now, delegate to Buffer.from
+  return js_buffer_from(ctx, this_val, argc, argv);
+}
+
 // Buffer.concat(list[, totalLength])
 static JSValue js_buffer_concat(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
   if (argc < 1) {
@@ -298,7 +308,7 @@ JSValue JSRT_InitNodeBuffer(JSContext* ctx) {
   JSValue buffer_obj = JS_NewObject(ctx);
 
   // Create Buffer constructor function
-  JSValue Buffer = JS_NewObject(ctx);
+  JSValue Buffer = JS_NewCFunction2(ctx, js_buffer_constructor, "Buffer", 1, JS_CFUNC_constructor, 0);
 
   // Static methods on Buffer
   JS_SetPropertyStr(ctx, Buffer, "alloc", JS_NewCFunction(ctx, js_buffer_alloc, "alloc", 3));

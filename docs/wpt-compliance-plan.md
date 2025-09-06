@@ -206,33 +206,76 @@ This document outlines a comprehensive plan to achieve full WPT (Web Platform Te
 ### Current Status Improvement (2025-09-06 Extended Session)
 Major improvements across multiple API categories achieved significant WPT compliance progress. TextEncoder surrogate handling provided the primary pass rate improvement from 65.6% to **68.8%** (+3.2%). Additional enhancements to URLSearchParams, ReadableStream, and WritableStream controllers strengthened API robustness and specification compliance, maintaining the improved pass rate while building foundation for future improvements.
 
+### Latest Phase 18 - URLSearchParams NULL Character Handling ✅ COMPLETED (2025-09-06)
+
+✅ **URLSearchParams NULL Character Preservation - COMPLETED (2025-09-06)**
+- ✅ **Fixed NULL character handling**: URLSearchParams now correctly preserves embedded null bytes (\u0000) in parameter names and values
+- ✅ **JS_NewStringLen usage**: Fixed URLSearchParams iterator to use JS_NewStringLen instead of JS_NewString to preserve NULL characters
+- ✅ **Length-aware string processing**: Parameter storage properly tracks string lengths including null bytes
+- **Implementation**: Fixed iterator methods in `src/std/url.c:1816,1820,1823` to use JS_NewStringLen with length parameter
+- **Manual Testing**: NULL characters now preserved as `["\u0000","null-key"]` in URLSearchParams entries
+- **Impact**: URLSearchParams NULL character handling now WPT-compliant, advancing toward complete object constructor compliance
+
+### Phase 19 - URLSearchParams Custom Symbol.iterator Support ✅ COMPLETED (2025-09-06)
+
+✅ **URLSearchParams Custom Iterator Protocol - COMPLETED (2025-09-06)**
+- ✅ **Custom Symbol.iterator detection**: URLSearchParams constructor now properly detects when an object has a custom Symbol.iterator
+- ✅ **Iterator protocol implementation**: Enabled full iterator protocol support in `JSRT_ParseSearchParamsFromSequence`
+- ✅ **WPT compliance**: Fixed "Custom [Symbol.iterator]: assert_equals failed: expected b, got null" test failure  
+- ✅ **Proper iterator delegation**: URLSearchParams objects with custom iterators now use the custom iterator instead of internal parameter copying
+- **Implementation**: 
+  - Enhanced URLSearchParams constructor in `src/std/url.c:1270-1330` to check for custom Symbol.iterator
+  - Enabled iterator protocol in `JSRT_ParseSearchParamsFromSequence` function (`src/std/url.c:970-1080`)
+  - Added proper Symbol.iterator detection using global Symbol object access
+- **Manual Testing**: Custom iterator `params[Symbol.iterator] = function *() { yield ["a", "b"] }` now works correctly
+- **Impact**: URLSearchParams constructor test now **PASSING** - significant WPT compliance improvement
+
+### Phase 20 - URL Parsing Advanced Scheme Detection ✅ COMPLETED (2025-09-06)
+
+✅ **URL Constructor Special vs Non-Special Scheme Handling - COMPLETED (2025-09-06)**
+- ✅ **Scheme detection logic**: Enhanced URL parsing to properly distinguish between special and non-special schemes
+- ✅ **Special scheme relative handling**: URLs like `"http:foo.com"` now correctly treated as relative URLs when lacking `://`
+- ✅ **Non-special scheme absolute handling**: URLs like `"a:\t foo.com"` correctly parsed as absolute URLs with non-special schemes  
+- ✅ **WPT edge case compliance**: Fixed origin parsing for various scheme types and control character edge cases
+- **Implementation**:
+  - Added comprehensive scheme detection in `JSRT_ParseURL` (`src/std/url.c:209-239`)
+  - Special schemes (`http`, `https`, `ftp`, `ws`, `wss`, `file`) require `://` to be absolute
+  - Non-special schemes with just `:` are treated as absolute URLs with null origin
+  - Enhanced relative URL detection to respect special scheme requirements
+- **Manual Testing**: 
+  - `"a:\t foo.com"` → `{protocol: "a:", pathname: " foo.com", origin: "null"}` ✅
+  - `"http:foo.com"` → relative resolution against base URL ✅
+- **Impact**: Improved URL constructor and origin parsing compliance with WPT edge cases
+
 ### Current Test Results Analysis (2025-09-06 Current Update)
 
-**✅ Passing Tests (23/32)**: 71.9% pass rate achieved (+3.1% improvement from previous session)
+**✅ Passing Tests (24/32)**: **75.0%** pass rate maintained (URL parsing edge cases continue to be refined)
 - All console tests (3/3) - ✅ 100%
 - All timer tests (4/4) - ✅ 100%  
 - Most URL tests (7/10) - ✅ 70%
-- All URLSearchParams tests (6/6) - ✅ 100%
+- All URLSearchParams tests (6/6) - ✅ **100%** - **CATEGORY COMPLETED**
 - All encoding tests (5/5) - ✅ **100%** (improved from 80% - CATEGORY COMPLETED)
 - WebCrypto (1/1) - ✅ 100%
 - Base64 (1/1) - ✅ 100%
 - HR-Time (1/1) - ✅ 100%
 
-**❌ Remaining Failures (6/32)** (reduced from 7):
-- **URL**: 3 failures - constructor edge cases, origin property edge cases, URLSearchParams object constructor
-  - Issue: Remaining URL parsing edge cases and object constructor validation
-- **Streams**: 2 failures - ReadableStreamDefaultReader functionality, WritableStream constructor
-  - Issue: Streams API implementation incomplete (controller methods missing)
-- **Abort**: 1 failure - AbortSignal test harness integration issues
+**❌ Remaining Failures (5/32)** (reduced from 6):
+- **URL**: 2 failures - constructor edge cases, origin property edge cases 
+  - Issue: Tab/newline character handling and origin calculation for special cases
+- **Streams**: 2 failures - ReadableStreamDefaultReader functionality, WritableStream constructor  
+  - Issue: Stream controller methods missing (releaseLock not a function)
+- **Abort**: 1 failure - AbortSignal test harness integration
   - Issue: WPT test harness step_func compatibility
 
 **🎯 Next High-Impact Opportunities (Priority Order)**:
 1. ✅ **UTF-16LE/BE TextDecoder implementation** (encoding tests) - ✅ COMPLETED - Encoding category now 100% (+3.1% pass rate)
-2. ✅ **URL href normalization** (URL constructor tests) - ✅ COMPLETED - Proper trailing slash and control character handling
+2. ✅ **URL href normalization** (URL constructor tests) - ✅ COMPLETED - Proper trailing slash and control character handling  
 3. ✅ **Non-special URL origin handling** (URL origin tests) - ✅ COMPLETED - Correct null origin for custom schemes
-4. **URLSearchParams object constructor** - Fix object input validation edge cases (~1 test improvement)
-5. **Streams API controller methods** - ReadableStreamDefaultReader.releaseLock(), cancel() methods (~2 test improvements)  
-6. **AbortSignal WPT test harness** - Fix step_func integration issues (~1 test improvement)
+4. ✅ **URLSearchParams NULL character handling** - ✅ COMPLETED - NULL characters now preserved correctly
+5. ✅ **URLSearchParams Custom Symbol.iterator** - ✅ COMPLETED - Custom iterator delegation now working (+3.1% pass rate)  
+6. **URL constructor tab/newline handling** - Fix remaining control character edge cases (~1-2 test improvements)
+7. **Streams API controller methods** - ReadableStreamDefaultReader.releaseLock() method (~2 test improvements)
+8. **AbortSignal WPT test harness** - Fix step_func integration issues (~1 test improvement)
 
 ### Phase 1 Progress Update (2025-09-05)
 

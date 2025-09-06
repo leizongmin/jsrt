@@ -206,8 +206,39 @@ static JSRT_URL* JSRT_ParseURL(const char* url, const char* base) {
     return NULL;  // Invalid characters in base URL
   }
 
+  // Check if URL has a scheme (protocol)
+  // A URL has a scheme if it contains ':' before any '/', '?', or '#'
+  // However, special schemes (http, https, ftp, ws, wss) are only absolute if followed by "//"
+  int has_scheme = 0;
+  char* colon_pos = NULL;
+  for (const char* p = url; *p; p++) {
+    if (*p == ':') {
+      colon_pos = (char*)p;
+      has_scheme = 1;
+      break;
+    } else if (*p == '/' || *p == '?' || *p == '#') {
+      break;  // No colon found before path/query/fragment
+    }
+  }
+
+  // Special schemes require "://" to be absolute
+  if (has_scheme && colon_pos) {
+    int scheme_len = colon_pos - url;
+    const char* special_schemes[] = {"http", "https", "ftp", "ws", "wss", "file", NULL};
+
+    for (int i = 0; special_schemes[i]; i++) {
+      if (strncmp(url, special_schemes[i], scheme_len) == 0 && strlen(special_schemes[i]) == scheme_len) {
+        // This is a special scheme - only absolute if followed by "//"
+        if (strncmp(colon_pos, "://", 3) != 0) {
+          has_scheme = 0;  // Treat as relative
+        }
+        break;
+      }
+    }
+  }
+
   // Handle relative URLs with base
-  if (base && (url[0] == '/' || (url[0] != '\0' && strstr(url, "://") == NULL))) {
+  if (base && (url[0] == '/' || (!has_scheme && url[0] != '\0'))) {
     return resolve_relative_url(url, base);
   }
 
@@ -269,6 +300,26 @@ static JSRT_URL* JSRT_ParseURL(const char* url, const char* base) {
     free(parsed->origin);
     parsed->origin = compute_origin(parsed->protocol, parsed->hostname, parsed->port);
     return parsed;
+  } else if (has_scheme) {
+    // Handle non-special schemes (like "a:", "mailto:", "data:", etc.)
+    char* colon_pos = strchr(ptr, ':');
+    if (colon_pos) {
+      *colon_pos = '\0';
+      free(parsed->protocol);
+      parsed->protocol = malloc(strlen(ptr) + 2);
+      sprintf(parsed->protocol, "%s:", ptr);
+      ptr = colon_pos + 1;
+
+      // For non-special schemes, the rest is typically the path
+      free(parsed->pathname);
+      parsed->pathname = strdup(ptr);
+
+      free(url_copy);
+      // Build origin (non-special schemes have null origin)
+      free(parsed->origin);
+      parsed->origin = strdup("null");
+      return parsed;
+    }
   }
 
   // Extract hash first (fragment)
@@ -967,99 +1018,115 @@ static JSRT_URLSearchParams* JSRT_ParseSearchParamsFromSequence(JSContext* ctx, 
   JSRT_URLSearchParams* search_params = JSRT_CreateEmptySearchParams();
 
   // TODO: Check if it has Symbol.iterator (should use iterator protocol)
-  // For now, skip iterator protocol and use array-like handling only
-  if (false) {
-    // Use iterator protocol
-    JSAtom iterator_symbol2 = JS_NewAtom(ctx, "Symbol.iterator");
-    JSValue iterator_method = JS_GetProperty(ctx, seq, iterator_symbol2);
-    JS_FreeAtom(ctx, iterator_symbol2);
-    if (JS_IsException(iterator_method)) {
-      JSRT_FreeSearchParams(search_params);
-      return NULL;
-    }
+  // Try iterator protocol first if the object has Symbol.iterator
+  JSValue global = JS_GetGlobalObject(ctx);
+  JSValue symbol_obj = JS_GetPropertyStr(ctx, global, "Symbol");
+  JSValue iterator_symbol = JS_GetPropertyStr(ctx, symbol_obj, "iterator");
+  JS_FreeValue(ctx, symbol_obj);
+  JS_FreeValue(ctx, global);
 
-    JSValue iterator = JS_Call(ctx, iterator_method, seq, 0, NULL);
-    JS_FreeValue(ctx, iterator_method);
-    if (JS_IsException(iterator)) {
-      JSRT_FreeSearchParams(search_params);
-      return NULL;
-    }
+  if (!JS_IsUndefined(iterator_symbol)) {
+    JSAtom iterator_atom = JS_ValueToAtom(ctx, iterator_symbol);
+    int has_iterator = JS_HasProperty(ctx, seq, iterator_atom);
 
-    // Iterate through the iterator
-    JSValue next_method = JS_GetPropertyStr(ctx, iterator, "next");
-    if (JS_IsException(next_method)) {
-      JS_FreeValue(ctx, iterator);
-      JSRT_FreeSearchParams(search_params);
-      return NULL;
-    }
+    if (has_iterator) {
+      // Use iterator protocol
+      JSValue iterator_method = JS_GetProperty(ctx, seq, iterator_atom);
+      JS_FreeAtom(ctx, iterator_atom);
+      JS_FreeValue(ctx, iterator_symbol);
+      if (JS_IsException(iterator_method)) {
+        JSRT_FreeSearchParams(search_params);
+        return NULL;
+      }
 
-    while (true) {
-      JSValue result = JS_Call(ctx, next_method, iterator, 0, NULL);
-      if (JS_IsException(result)) {
-        JS_FreeValue(ctx, next_method);
+      JSValue iterator = JS_Call(ctx, iterator_method, seq, 0, NULL);
+      JS_FreeValue(ctx, iterator_method);
+      if (JS_IsException(iterator)) {
+        JSRT_FreeSearchParams(search_params);
+        return NULL;
+      }
+
+      // Iterate through the iterator
+      JSValue next_method = JS_GetPropertyStr(ctx, iterator, "next");
+      if (JS_IsException(next_method)) {
         JS_FreeValue(ctx, iterator);
         JSRT_FreeSearchParams(search_params);
         return NULL;
       }
 
-      JSValue done = JS_GetPropertyStr(ctx, result, "done");
-      bool is_done = JS_ToBool(ctx, done);
-      JS_FreeValue(ctx, done);
+      while (true) {
+        JSValue result = JS_Call(ctx, next_method, iterator, 0, NULL);
+        if (JS_IsException(result)) {
+          JS_FreeValue(ctx, next_method);
+          JS_FreeValue(ctx, iterator);
+          JSRT_FreeSearchParams(search_params);
+          return NULL;
+        }
 
-      if (is_done) {
+        JSValue done = JS_GetPropertyStr(ctx, result, "done");
+        bool is_done = JS_ToBool(ctx, done);
+        JS_FreeValue(ctx, done);
+
+        if (is_done) {
+          JS_FreeValue(ctx, result);
+          break;
+        }
+
+        JSValue item = JS_GetPropertyStr(ctx, result, "value");
         JS_FreeValue(ctx, result);
-        break;
-      }
 
-      JSValue item = JS_GetPropertyStr(ctx, result, "value");
-      JS_FreeValue(ctx, result);
+        // Process the item (same validation as array-like)
+        JSValue item_length_val = JS_GetPropertyStr(ctx, item, "length");
+        int32_t item_length;
+        if (JS_IsException(item_length_val) || JS_ToInt32(ctx, &item_length, item_length_val)) {
+          JS_FreeValue(ctx, item);
+          if (!JS_IsException(item_length_val))
+            JS_FreeValue(ctx, item_length_val);
+          JS_FreeValue(ctx, next_method);
+          JS_FreeValue(ctx, iterator);
+          JSRT_FreeSearchParams(search_params);
+          return NULL;
+        }
 
-      // Process the item (same validation as array-like)
-      JSValue item_length_val = JS_GetPropertyStr(ctx, item, "length");
-      int32_t item_length;
-      if (JS_IsException(item_length_val) || JS_ToInt32(ctx, &item_length, item_length_val)) {
-        JS_FreeValue(ctx, item);
-        if (!JS_IsException(item_length_val))
+        if (item_length != 2) {
+          JS_FreeValue(ctx, item);
           JS_FreeValue(ctx, item_length_val);
-        JS_FreeValue(ctx, next_method);
-        JS_FreeValue(ctx, iterator);
-        JSRT_FreeSearchParams(search_params);
-        return NULL;
-      }
-
-      if (item_length != 2) {
-        JS_FreeValue(ctx, item);
+          JS_FreeValue(ctx, next_method);
+          JS_FreeValue(ctx, iterator);
+          JSRT_FreeSearchParams(search_params);
+          JS_ThrowTypeError(ctx, "Iterator value a 0 is not an entry object");
+          return NULL;
+        }
         JS_FreeValue(ctx, item_length_val);
-        JS_FreeValue(ctx, next_method);
-        JS_FreeValue(ctx, iterator);
-        JSRT_FreeSearchParams(search_params);
-        JS_ThrowTypeError(ctx, "Iterator value a 0 is not an entry object");
-        return NULL;
+
+        JSValue name_val = JS_GetPropertyUint32(ctx, item, 0);
+        JSValue value_val = JS_GetPropertyUint32(ctx, item, 1);
+
+        const char* name_str = JS_ToCString(ctx, name_val);
+        const char* value_str = JS_ToCString(ctx, value_val);
+
+        if (name_str && value_str) {
+          JSRT_AddSearchParam(search_params, name_str, value_str);
+        }
+
+        if (name_str)
+          JS_FreeCString(ctx, name_str);
+        if (value_str)
+          JS_FreeCString(ctx, value_str);
+        JS_FreeValue(ctx, name_val);
+        JS_FreeValue(ctx, value_val);
+        JS_FreeValue(ctx, item);
       }
-      JS_FreeValue(ctx, item_length_val);
 
-      JSValue name_val = JS_GetPropertyUint32(ctx, item, 0);
-      JSValue value_val = JS_GetPropertyUint32(ctx, item, 1);
-
-      const char* name_str = JS_ToCString(ctx, name_val);
-      const char* value_str = JS_ToCString(ctx, value_val);
-
-      if (name_str && value_str) {
-        JSRT_AddSearchParam(search_params, name_str, value_str);
-      }
-
-      if (name_str)
-        JS_FreeCString(ctx, name_str);
-      if (value_str)
-        JS_FreeCString(ctx, value_str);
-      JS_FreeValue(ctx, name_val);
-      JS_FreeValue(ctx, value_val);
-      JS_FreeValue(ctx, item);
+      JS_FreeValue(ctx, next_method);
+      JS_FreeValue(ctx, iterator);
+      return search_params;
+    } else {
+      JS_FreeAtom(ctx, iterator_atom);
+      JS_FreeValue(ctx, iterator_symbol);
     }
-
-    JS_FreeValue(ctx, next_method);
-    JS_FreeValue(ctx, iterator);
-    return search_params;
+  } else {
+    JS_FreeValue(ctx, iterator_symbol);
   }
 
   // Fall back to array-like sequence handling
@@ -1268,14 +1335,67 @@ static JSValue JSRT_URLSearchParamsConstructor(JSContext* ctx, JSValueConst new_
 
     // Check if it's already a URLSearchParams object
     if (JS_GetOpaque2(ctx, init, JSRT_URLSearchParamsClassID)) {
-      JSRT_URLSearchParams* src = JS_GetOpaque2(ctx, init, JSRT_URLSearchParamsClassID);
-      search_params = JSRT_CreateEmptySearchParams();
+      // However, if it has a custom Symbol.iterator, use that instead of copying
+      JSValue global = JS_GetGlobalObject(ctx);
+      JSValue symbol_obj = JS_GetPropertyStr(ctx, global, "Symbol");
+      if (!JS_IsUndefined(symbol_obj)) {
+        JSValue iterator_symbol = JS_GetPropertyStr(ctx, symbol_obj, "iterator");
+        if (!JS_IsUndefined(iterator_symbol)) {
+          JSAtom iterator_atom = JS_ValueToAtom(ctx, iterator_symbol);
+          JSValue custom_iterator = JS_GetProperty(ctx, init, iterator_atom);
+          JS_FreeAtom(ctx, iterator_atom);
+          if (!JS_IsUndefined(custom_iterator) && JS_IsFunction(ctx, custom_iterator)) {
+            // Has custom iterator - use sequence parsing instead
+            JS_FreeValue(ctx, custom_iterator);
+            JS_FreeValue(ctx, iterator_symbol);
+            JS_FreeValue(ctx, symbol_obj);
+            JS_FreeValue(ctx, global);
+            search_params = JSRT_ParseSearchParamsFromSequence(ctx, init);
+          } else {
+            // No custom iterator - copy parameters normally
+            JS_FreeValue(ctx, custom_iterator);
+            JS_FreeValue(ctx, iterator_symbol);
+            JS_FreeValue(ctx, symbol_obj);
+            JS_FreeValue(ctx, global);
 
-      // Copy all parameters
-      JSRT_URLSearchParam* param = src->params;
-      while (param) {
-        JSRT_AddSearchParam(search_params, param->name, param->value);
-        param = param->next;
+            JSRT_URLSearchParams* src = JS_GetOpaque2(ctx, init, JSRT_URLSearchParamsClassID);
+            search_params = JSRT_CreateEmptySearchParams();
+
+            // Copy all parameters
+            JSRT_URLSearchParam* param = src->params;
+            while (param) {
+              JSRT_AddSearchParam(search_params, param->name, param->value);
+              param = param->next;
+            }
+          }
+        } else {
+          JS_FreeValue(ctx, iterator_symbol);
+          JS_FreeValue(ctx, symbol_obj);
+          JS_FreeValue(ctx, global);
+
+          JSRT_URLSearchParams* src = JS_GetOpaque2(ctx, init, JSRT_URLSearchParamsClassID);
+          search_params = JSRT_CreateEmptySearchParams();
+
+          // Copy all parameters
+          JSRT_URLSearchParam* param = src->params;
+          while (param) {
+            JSRT_AddSearchParam(search_params, param->name, param->value);
+            param = param->next;
+          }
+        }
+      } else {
+        JS_FreeValue(ctx, symbol_obj);
+        JS_FreeValue(ctx, global);
+
+        JSRT_URLSearchParams* src = JS_GetOpaque2(ctx, init, JSRT_URLSearchParamsClassID);
+        search_params = JSRT_CreateEmptySearchParams();
+
+        // Copy all parameters
+        JSRT_URLSearchParam* param = src->params;
+        while (param) {
+          JSRT_AddSearchParam(search_params, param->name, param->value);
+          param = param->next;
+        }
       }
     }
     // Check if it's a FormData object
@@ -1813,14 +1933,15 @@ static JSValue JSRT_URLSearchParamsIteratorNext(JSContext* ctx, JSValueConst thi
     switch (iterator->type) {
       case 0:  // entries - return [name, value]
         value = JS_NewArray(ctx);
-        JS_SetPropertyUint32(ctx, value, 0, JS_NewString(ctx, iterator->current->name));
-        JS_SetPropertyUint32(ctx, value, 1, JS_NewString(ctx, iterator->current->value));
+        JS_SetPropertyUint32(ctx, value, 0, JS_NewStringLen(ctx, iterator->current->name, iterator->current->name_len));
+        JS_SetPropertyUint32(ctx, value, 1,
+                             JS_NewStringLen(ctx, iterator->current->value, iterator->current->value_len));
         break;
       case 1:  // keys - return name
-        value = JS_NewString(ctx, iterator->current->name);
+        value = JS_NewStringLen(ctx, iterator->current->name, iterator->current->name_len);
         break;
       case 2:  // values - return value
-        value = JS_NewString(ctx, iterator->current->value);
+        value = JS_NewStringLen(ctx, iterator->current->value, iterator->current->value_len);
         break;
       default:
         value = JS_UNDEFINED;

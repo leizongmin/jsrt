@@ -5,16 +5,16 @@ console.log('Testing node:path module (final validation)...');
 // Test CommonJS require
 const path = require('node:path');
 
-// Test path.join
-assert.strictEqual(path.join('a', 'b', 'c'), 'a/b/c');
-assert.strictEqual(path.join('/a', 'b', 'c'), '/a/b/c');
-assert.strictEqual(path.join('a', '', 'c'), 'a/c');
+// Test path.join - platform-aware expectations
+assert.strictEqual(path.join('a', 'b', 'c'), 'a' + path.sep + 'b' + path.sep + 'c');
+assert.strictEqual(path.join('/a', 'b', 'c'), path.sep + 'a' + path.sep + 'b' + path.sep + 'c');
+assert.strictEqual(path.join('a', '', 'c'), 'a' + path.sep + 'c');
 assert.strictEqual(path.join(''), '.');
-assert.strictEqual(path.join('/a/', 'b'), '/a/b');
+assert.strictEqual(path.join('/a/', 'b'), path.sep + 'a' + path.sep + 'b');
 console.log('✓ path.join tests passed');
 
 // Test path.resolve (basic cases)
-assert.strictEqual(path.resolve('/foo'), '/foo');
+assert.strictEqual(path.resolve('/foo'), path.sep + 'foo');
 console.log('✓ path.resolve tests passed');
 
 // Test path.isAbsolute

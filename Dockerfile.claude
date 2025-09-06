@@ -53,9 +53,11 @@ RUN echo '#!/bin/bash' > /usr/local/bin/claude-entrypoint \
     && echo '# Configure git user from environment variables' >> /usr/local/bin/claude-entrypoint \
     && echo 'if [ -n "$GIT_USER_NAME" ]; then' >> /usr/local/bin/claude-entrypoint \
     && echo '  git config --global user.name "$GIT_USER_NAME"' >> /usr/local/bin/claude-entrypoint \
+    && echo '  git config user.name "$GIT_USER_NAME"' >> /usr/local/bin/claude-entrypoint \
     && echo 'fi' >> /usr/local/bin/claude-entrypoint \
     && echo 'if [ -n "$GIT_USER_EMAIL" ]; then' >> /usr/local/bin/claude-entrypoint \
     && echo '  git config --global user.email "$GIT_USER_EMAIL"' >> /usr/local/bin/claude-entrypoint \
+    && echo '  git config user.email "$GIT_USER_EMAIL"' >> /usr/local/bin/claude-entrypoint \
     && echo 'fi' >> /usr/local/bin/claude-entrypoint \
     && echo 'export BASH_DEFAULT_TIMEOUT_MS=600000' >> /usr/local/bin/claude-entrypoint \
     && echo 'export BASH_MAX_TIMEOUT_MS=600000' >> /usr/local/bin/claude-entrypoint \

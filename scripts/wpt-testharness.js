@@ -375,14 +375,25 @@ function promise_test(func, name) {
         name: testName,
         func: func,
         status: null,
-        message: null
+        message: null,
+        step: function(stepFunc, context) {
+            if (typeof stepFunc === 'function') {
+                return stepFunc.call(context);
+            }
+            return stepFunc;
+        },
+        step_func: function(stepFunc, context) {
+            return function(...args) {
+                return stepFunc.call(context, ...args);
+            };
+        }
     };
     
     wptTests.push(testObj);
     wptCurrentTest = testObj;
     
     try {
-        const result = func();
+        const result = func(testObj);  // Pass test object as first argument
         if (result && typeof result.then === 'function') {
             // It's a promise
             result.then(() => {

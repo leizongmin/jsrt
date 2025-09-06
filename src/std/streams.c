@@ -197,6 +197,32 @@ static JSValue JSRT_ReadableStreamGetReader(JSContext* ctx, JSValueConst this_va
   return reader;
 }
 
+static JSValue JSRT_ReadableStreamCancel(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
+  JSRT_ReadableStream* stream = JS_GetOpaque(this_val, JSRT_ReadableStreamClassID);
+  if (!stream) {
+    return JS_EXCEPTION;
+  }
+
+  JSValue reason = argc > 0 ? argv[0] : JS_UNDEFINED;
+
+  // Get the controller and close it
+  if (!JS_IsUndefined(stream->controller)) {
+    JSRT_ReadableStreamDefaultController* controller =
+        JS_GetOpaque(stream->controller, JSRT_ReadableStreamDefaultControllerClassID);
+    if (controller) {
+      controller->closed = true;
+    }
+  }
+
+  // Return a resolved promise with the reason
+  JSValue promise_ctor = JS_GetPropertyStr(ctx, JS_GetGlobalObject(ctx), "Promise");
+  JSValue resolve_method = JS_GetPropertyStr(ctx, promise_ctor, "resolve");
+  JSValue promise = JS_Call(ctx, resolve_method, promise_ctor, 1, &reason);
+  JS_FreeValue(ctx, resolve_method);
+  JS_FreeValue(ctx, promise_ctor);
+  return promise;
+}
+
 // ReadableStreamDefaultReader implementation
 typedef struct {
   JSValue stream;
@@ -912,6 +938,8 @@ void JSRT_RuntimeSetupStdStreams(JSRT_Runtime* rt) {
   // Methods
   JS_SetPropertyStr(ctx, readable_proto, "getReader",
                     JS_NewCFunction(ctx, JSRT_ReadableStreamGetReader, "getReader", 0));
+  JS_SetPropertyStr(ctx, readable_proto, "cancel",
+                    JS_NewCFunction(ctx, JSRT_ReadableStreamCancel, "cancel", 1));
 
   JS_SetClassProto(ctx, JSRT_ReadableStreamClassID, readable_proto);
 

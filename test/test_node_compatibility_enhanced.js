@@ -1,7 +1,9 @@
 const assert = require('jsrt:assert');
 
 console.log('=== Enhanced Node.js Compatibility Layer Summary Test ===');
-console.log('Testing complete implementation status with new Phase 3 & 5 additions...\\n');
+console.log(
+  'Testing complete implementation status with new Phase 3 & 5 additions...\\n'
+);
 
 // Phase 1 - Foundation modules
 console.log('📁 Phase 1 - Foundation (COMPLETED):');
@@ -14,12 +16,22 @@ try {
   assert.ok(os, 'node:os should load');
   assert.ok(querystring, 'node:querystring should load');
   assert.strictEqual(typeof path.join, 'function', 'path.join should exist');
-  assert.strictEqual(typeof os.platform, 'function', 'os.platform should exist');
-  assert.strictEqual(typeof querystring.parse, 'function', 'querystring.parse should exist');
+  assert.strictEqual(
+    typeof os.platform,
+    'function',
+    'os.platform should exist'
+  );
+  assert.strictEqual(
+    typeof querystring.parse,
+    'function',
+    'querystring.parse should exist'
+  );
 
   console.log('  ✅ node:path - Complete path manipulation utilities');
   console.log('  ✅ node:os - Complete operating system utilities');
-  console.log('  ✅ node:querystring - Complete query string parsing utilities');
+  console.log(
+    '  ✅ node:querystring - Complete query string parsing utilities'
+  );
 } catch (error) {
   console.log('  ❌ Phase 1 modules failed:', error.message);
 }
@@ -36,15 +48,29 @@ try {
   assert.ok(events, 'node:events should load');
   assert.ok(buffer, 'node:buffer should load');
   assert.ok(process, 'node:process should load');
-  assert.strictEqual(typeof util.format, 'function', 'util.format should exist');
-  assert.strictEqual(typeof events.EventEmitter, 'function', 'EventEmitter should exist');
+  assert.strictEqual(
+    typeof util.format,
+    'function',
+    'util.format should exist'
+  );
+  assert.strictEqual(
+    typeof events.EventEmitter,
+    'function',
+    'EventEmitter should exist'
+  );
   assert.strictEqual(typeof buffer.Buffer, 'function', 'Buffer should exist');
-  assert.strictEqual(typeof process.hrtime, 'function', 'process.hrtime should exist');
+  assert.strictEqual(
+    typeof process.hrtime,
+    'function',
+    'process.hrtime should exist'
+  );
 
   console.log('  ✅ node:util - Utility functions and type checking');
   console.log('  ✅ node:events - Complete EventEmitter implementation');
   console.log('  ✅ node:buffer - Buffer class with core operations');
-  console.log('  ✅ node:process - Process utilities with Node.js compatibility');
+  console.log(
+    '  ✅ node:process - Process utilities with Node.js compatibility'
+  );
 } catch (error) {
   console.log('  ❌ Phase 2 modules failed:', error.message);
 }
@@ -57,11 +83,23 @@ try {
 
   assert.ok(fs, 'node:fs should load');
   assert.ok(stream, 'node:stream should load');
-  assert.strictEqual(typeof fs.readFileSync, 'function', 'fs.readFileSync should exist');
-  assert.strictEqual(typeof stream.Readable, 'function', 'stream.Readable should exist');
+  assert.strictEqual(
+    typeof fs.readFileSync,
+    'function',
+    'fs.readFileSync should exist'
+  );
+  assert.strictEqual(
+    typeof stream.Readable,
+    'function',
+    'stream.Readable should exist'
+  );
 
-  console.log('  ✅ node:fs - File system operations with enhanced Buffer support');
-  console.log('  ✅ node:stream - Stream operations (Readable, Writable, Transform)');
+  console.log(
+    '  ✅ node:fs - File system operations with enhanced Buffer support'
+  );
+  console.log(
+    '  ✅ node:stream - Stream operations (Readable, Writable, Transform)'
+  );
 } catch (error) {
   console.log('  ❌ Phase 3 modules failed:', error.message);
 }
@@ -78,15 +116,29 @@ try {
   assert.ok(http, 'node:http should load');
   assert.ok(dns, 'node:dns should load');
   assert.ok(https, 'node:https should load');
-  assert.strictEqual(typeof net.createServer, 'function', 'net.createServer should exist');
-  assert.strictEqual(typeof http.createServer, 'function', 'http.createServer should exist');
+  assert.strictEqual(
+    typeof net.createServer,
+    'function',
+    'net.createServer should exist'
+  );
+  assert.strictEqual(
+    typeof http.createServer,
+    'function',
+    'http.createServer should exist'
+  );
   assert.strictEqual(typeof dns.lookup, 'function', 'dns.lookup should exist');
-  assert.strictEqual(typeof https.createServer, 'function', 'https.createServer should exist');
+  assert.strictEqual(
+    typeof https.createServer,
+    'function',
+    'https.createServer should exist'
+  );
 
   console.log('  ✅ node:net - TCP networking (Socket, Server)');
   console.log('  ✅ node:http - HTTP protocol (Server, Request, Response)');
   console.log('  ✅ node:dns - DNS lookup operations with promises');
-  console.log('  ✅ node:https - HTTPS support with SSL/TLS and connection pooling');
+  console.log(
+    '  ✅ node:https - HTTPS support with SSL/TLS and connection pooling'
+  );
 } catch (error) {
   console.log('  ❌ Phase 4 modules failed:', error.message);
 }
@@ -97,11 +149,23 @@ try {
   const crypto = require('node:crypto');
 
   assert.ok(crypto, 'node:crypto should load');
-  assert.strictEqual(typeof crypto.randomBytes, 'function', 'crypto.randomBytes should exist');
-  assert.strictEqual(typeof crypto.randomUUID, 'function', 'crypto.randomUUID should exist');
+  assert.strictEqual(
+    typeof crypto.randomBytes,
+    'function',
+    'crypto.randomBytes should exist'
+  );
+  assert.strictEqual(
+    typeof crypto.randomUUID,
+    'function',
+    'crypto.randomUUID should exist'
+  );
 
-  console.log('  ✅ node:crypto - Cryptographic operations (randomBytes, randomUUID)');
-  console.log('  ✅ Enhanced Buffer Support - TypedArray/ArrayBuffer integration');
+  console.log(
+    '  ✅ node:crypto - Cryptographic operations (randomBytes, randomUUID)'
+  );
+  console.log(
+    '  ✅ Enhanced Buffer Support - TypedArray/ArrayBuffer integration'
+  );
   console.log('  ✅ SSL/TLS Server Support - HTTPS with certificate loading');
   console.log('  ✅ Advanced Networking - Connection pooling and keep-alive');
 } catch (error) {
@@ -121,7 +185,10 @@ try {
 
   // Test HTTP server inherits EventEmitter
   const server = http.createServer();
-  assert.ok(server instanceof events.EventEmitter, 'HTTP server should inherit EventEmitter');
+  assert.ok(
+    server instanceof events.EventEmitter,
+    'HTTP server should inherit EventEmitter'
+  );
   server.close();
 
   // Test Buffer integration
@@ -130,17 +197,33 @@ try {
 
   // Test DNS async operations
   const dnsPromise = dns.lookup('localhost');
-  assert.strictEqual(typeof dnsPromise.then, 'function', 'DNS should return promises');
+  assert.strictEqual(
+    typeof dnsPromise.then,
+    'function',
+    'DNS should return promises'
+  );
 
   // Test HTTPS constants inheritance
-  assert.deepEqual(http.METHODS, https.METHODS, 'HTTP and HTTPS should share METHODS');
+  assert.deepEqual(
+    http.METHODS,
+    https.METHODS,
+    'HTTP and HTTPS should share METHODS'
+  );
 
   // Test querystring parsing
   const parsed = querystring.parse('a=1&b=2');
-  assert.deepEqual(parsed, {a: '1', b: '2'}, 'Query string parsing should work');
+  assert.deepEqual(
+    parsed,
+    { a: '1', b: '2' },
+    'Query string parsing should work'
+  );
 
   // Test process enhancements
-  assert.strictEqual(typeof process.hrtime, 'function', 'Process hrtime should be available');
+  assert.strictEqual(
+    typeof process.hrtime,
+    'function',
+    'Process hrtime should be available'
+  );
 
   console.log('  ✅ HTTP server inherits EventEmitter from node:events');
   console.log('  ✅ Buffer integration working across modules');
@@ -200,7 +283,9 @@ console.log('🔧 All phases completed with enhanced functionality.');
 
 console.log('\\n📋 Newly Added Modules:');
 console.log('  ✅ node:querystring - Query string parsing and encoding');
-console.log('  ✅ node:process - Extended process utilities with Node.js compatibility');
+console.log(
+  '  ✅ node:process - Extended process utilities with Node.js compatibility'
+);
 console.log('  ✅ Enhanced Buffer integration across fs operations');
 console.log('  ✅ SSL/TLS server support with certificate management');
 console.log('  ✅ Advanced networking with connection pooling');

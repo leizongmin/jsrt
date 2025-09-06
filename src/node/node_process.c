@@ -204,6 +204,7 @@ JSValue JSRT_InitNodeProcess(JSContext* ctx) {
 // ES module initialization
 int js_node_process_init(JSContext* ctx, JSModuleDef* m) {
   JSValue process = JSRT_InitNodeProcess(ctx);
-  JS_SetModuleExport(ctx, m, "default", process);
+  JS_SetModuleExport(ctx, m, "default", JS_DupValue(ctx, process));
+  JS_FreeValue(ctx, process);
   return 0;
 }

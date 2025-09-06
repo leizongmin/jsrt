@@ -378,6 +378,25 @@ JSValue JSRT_InitNodeQueryString(JSContext* ctx) {
 // ES module initialization
 int js_node_querystring_init(JSContext* ctx, JSModuleDef* m) {
   JSValue querystring = JSRT_InitNodeQueryString(ctx);
-  JS_SetModuleExport(ctx, m, "default", querystring);
+  JS_SetModuleExport(ctx, m, "default", JS_DupValue(ctx, querystring));
+
+  // Export individual functions
+  JSValue parse = JS_GetPropertyStr(ctx, querystring, "parse");
+  JS_SetModuleExport(ctx, m, "parse", JS_DupValue(ctx, parse));
+  JS_FreeValue(ctx, parse);
+
+  JSValue stringify = JS_GetPropertyStr(ctx, querystring, "stringify");
+  JS_SetModuleExport(ctx, m, "stringify", JS_DupValue(ctx, stringify));
+  JS_FreeValue(ctx, stringify);
+
+  JSValue escape = JS_GetPropertyStr(ctx, querystring, "escape");
+  JS_SetModuleExport(ctx, m, "escape", JS_DupValue(ctx, escape));
+  JS_FreeValue(ctx, escape);
+
+  JSValue unescape = JS_GetPropertyStr(ctx, querystring, "unescape");
+  JS_SetModuleExport(ctx, m, "unescape", JS_DupValue(ctx, unescape));
+  JS_FreeValue(ctx, unescape);
+
+  JS_FreeValue(ctx, querystring);
   return 0;
 }

@@ -1,9 +1,11 @@
 <div align="center">
   <h1>🚀 JSRT</h1>
   <p><strong>A lightweight, fast JavaScript runtime built on QuickJS and libuv</strong></p>
+  <p><em>Version 0.1.0 • WinterCG Compatible • 21.9% WPT Pass Rate</em></p>
 
   [![CI](https://github.com/leizongmin/jsrt/actions/workflows/ci.yml/badge.svg)](https://github.com/leizongmin/jsrt/actions/workflows/ci.yml)
   [![Coverage](https://img.shields.io/badge/coverage-70.8%25-yellow)](https://github.com/leizongmin/jsrt/actions/workflows/coverage.yml)
+  [![WPT](https://img.shields.io/badge/WPT-21.9%25_pass-orange)](docs/WPT.md)
   [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](https://opensource.org/licenses/MIT)
 </div>
 
@@ -12,13 +14,15 @@
 ## ✨ Features
 
 - **🏃‍♂️ Fast & Lightweight**: Minimal footprint JavaScript runtime
-- **🌐 Web Standards**: Support for Fetch API, WebCrypto, Streams, and more
+- **🌐 Web Standards**: WinterCG Minimum Common API compliant
 - **⚡ Async Support**: Full async/await and Promise support with libuv event loop
 - **📦 Module System**: CommonJS and ES modules support
-- **🔧 Built-in APIs**: Console, timers, process information, and encoding utilities
-- **🧪 Testing Ready**: Built-in assertion module for testing
-- **🔒 Security**: WebCrypto API with RSA, AES, HMAC, and digest support
+- **🔧 Rich APIs**: Console, Fetch, WebCrypto, Streams, Timers, URL, and more
+- **🧪 Testing Ready**: Web Platform Tests (WPT) integration with 32 test categories
+- **🔒 Security**: Complete WebCrypto API with RSA, AES, HMAC, and digest support
 - **🌍 Cross-platform**: Builds on Linux, macOS, and Windows
+- **🛠️ Developer Tools**: REPL, bytecode compilation, and Docker dev environment
+- **🧩 Extensible**: FFI support for native library integration
 
 ## 🚀 Quick Start
 
@@ -44,6 +48,15 @@ echo 'console.log("Hello from JSRT! 🎉");' > hello.js
 
 # Run it
 ./bin/jsrt hello.js
+
+# Or use REPL for interactive development
+./bin/jsrt repl
+
+# Run from URL
+./bin/jsrt https://example.com/script.js
+
+# Compile to standalone binary
+./bin/jsrt build hello.js hello-binary
 ```
 
 ## 📖 Usage Examples
@@ -94,6 +107,17 @@ const uuid = crypto.randomUUID();
 console.log('UUID:', uuid);
 ```
 
+### WebAssembly Support
+```javascript
+// Load and execute WebAssembly modules
+const wasmModule = new WebAssembly.Module(wasmBytes);
+const wasmInstance = new WebAssembly.Instance(wasmModule);
+
+// Call exported WASM functions
+const result = wasmInstance.exports.add(5, 3);
+console.log('WASM result:', result);
+```
+
 ### Native Library Access (FFI)
 ```javascript
 // Load and call native C library functions
@@ -113,26 +137,52 @@ console.log('Available functions:', Object.keys(libc));
 
 ### Standard Modules
 
-| Module | Description | Usage |
-|--------|-------------|-------|
-| `console` | Enhanced console logging | Global `console` object |
-| `jsrt:process` | Process information and control | `import process from 'jsrt:process'` |
-| `jsrt:assert` | Testing assertions | `const assert = require('jsrt:assert')` |
-| `jsrt:ffi` | Foreign Function Interface for native libraries | `const ffi = require('jsrt:ffi')` |
-| `crypto` | Cryptographic functions | Global `crypto` object |
-| `fetch` | HTTP client (Fetch API) | Global `fetch` function |
-| `encoding` | Text encoding/decoding | Global `TextEncoder`, `TextDecoder`, `btoa`, `atob` |
-| `timer` | Timer functions | Global `setTimeout`, `setInterval` |
+| Module | Description | Usage | WPT Status |
+|--------|-------------|-------|------------|
+| `console` | Enhanced console logging | Global `console` object | ✅ 67% pass |
+| `jsrt:process` | Process information and control | `import process from 'jsrt:process'` | - |
+| `jsrt:assert` | Testing assertions | `const assert = require('jsrt:assert')` | - |
+| `jsrt:ffi` | Foreign Function Interface | `const ffi = require('jsrt:ffi')` | - |
+| `crypto` | WebCrypto API | Global `crypto` object | ❌ 0% pass |
+| `fetch` | HTTP client (Fetch API) | Global `fetch` function | ⚠️ Skipped |
+| `encoding` | Text encoding/decoding | Global `TextEncoder`, `TextDecoder` | ❌ 0% pass |
+| `timer` | Timer functions | Global `setTimeout`, `setInterval` | ⚠️ 25% pass |
+| `url` | URL and URLSearchParams | Global `URL`, `URLSearchParams` | ⚠️ 20% pass |
+| `streams` | Streams API | Global `ReadableStream`, etc. | ❌ 0% pass |
+| `performance` | Performance timing | Global `performance` | ✅ 100% pass |
+| `abort` | AbortController/AbortSignal | Global `AbortController` | ❌ 0% pass |
+| `webassembly` | WebAssembly runtime | Global `WebAssembly` | - |
+| `base64` | Base64 utilities | Global `btoa`, `atob` | ❌ 0% pass |
+| `formdata` | FormData API | Global `FormData` | - |
+| `blob` | Blob API | Global `Blob` | - |
+| `dom` | Basic DOM utilities | Limited DOM support | - |
 
-### Available APIs
+### API Implementation Status
 
-- **Console**: `log`, `error`, `warn`, `info`, `debug`, `assert`, `time`, `timeEnd`
-- **WebCrypto**: `getRandomValues`, `randomUUID`, `subtle.*`
-- **Fetch**: Full Fetch API with `Request`, `Response`, `Headers`
+#### ✅ Well-Implemented (High WPT Pass Rate)
+- **Console**: `log`, `error`, `warn`, `info`, `debug`, `assert`, `time`, `timeEnd` (67% WPT pass)
+- **Performance**: `performance.now()`, `performance.timeOrigin` (100% WPT pass)
+- **HR-Time**: High-resolution timing APIs (100% WPT pass)
+
+#### ⚠️ Partially Implemented (Basic Functionality Works)
+- **Timers**: `setTimeout`, `setInterval`, `clearTimeout`, `clearInterval` (25% WPT pass)
+- **URL**: `URL` constructor, `url.origin`, `url.href` (20% WPT pass, URLSearchParams issues)
 - **Process**: `argv`, `pid`, `ppid`, `platform`, `arch`, `version`, `uptime`
+
+#### ❌ Needs Improvement (0% WPT Pass)
+- **WebCrypto**: `getRandomValues`, `randomUUID`, `subtle.*` (basic failures)
+- **Encoding**: `TextEncoder`, `TextDecoder`, `btoa`, `atob` (missing test fixtures)
+- **Streams**: `ReadableStream`, `WritableStream`, `TransformStream` 
+- **Base64**: `btoa`, `atob` utilities
+- **AbortController**: `AbortController`, `AbortSignal`
+
+#### ⚠️ Browser-Dependent (Skipped in WPT)
+- **Fetch**: `fetch`, `Request`, `Response`, `Headers` (needs jsrt-specific variants)
+
+#### 🔧 jsrt-Specific Extensions
 - **FFI**: `Library` function for loading native libraries and calling C functions
-- **Streams**: `ReadableStream`, `WritableStream`, `TransformStream`
-- **Encoding**: `TextEncoder`, `TextDecoder`, `btoa`, `atob`
+- **WebAssembly**: `WebAssembly.Module`, `WebAssembly.Instance`
+- **Build System**: Bytecode compilation and standalone binary creation
 
 ## 🏗️ Development
 
@@ -210,12 +260,15 @@ make jsrt_cov  # Coverage instrumentation build
 # Run all tests
 make test
 
-# Run Web Platform Tests for standards compliance
-make wpt
+# Run Web Platform Tests for WinterCG compliance
+make wpt                    # Full WPT suite (32 tests, 21.9% pass rate)
+make wpt-quick             # Essential tests only
+make wpt-list              # List available test categories
 
 # Generate coverage report
-make coverage
-# Report available at: target/coverage/html/index.html
+make coverage              # Regular test coverage
+make coverage-merged       # Combined regular + WPT coverage
+# Reports available at: target/coverage/html/index.html
 ```
 
 JSRT includes [Web Platform Tests (WPT)](docs/WPT.md) integration to validate compliance with web standards and the WinterCG Minimum Common API. See [docs/WPT.md](docs/WPT.md) for details.
@@ -277,6 +330,21 @@ JSRT is built on proven technologies:
 └─────────────────┘
 ```
 
+## 📊 Web Standards Compliance
+
+JSRT aims for full [WinterCG Minimum Common API](https://wintercg.org/work/minimum-common-api/) compliance. Current status:
+
+**Overall Progress: 21.9% WPT Pass Rate (7/32 tests)**
+
+| Priority | Status | Focus Areas |
+|----------|--------|-----------|
+| **High** | ✅ Complete | Console API, Performance timing, HR-Time |
+| **High** | ⚠️ Partial | URL API (basic), Timer functions (basic) |
+| **Medium** | ❌ Failing | WebCrypto, Encoding APIs, Streams |
+| **Low** | ⚠️ Skipped | Fetch API (browser-dependent) |
+
+See [docs/WPT.md](docs/WPT.md) for detailed WPT integration and compliance status.
+
 ## 🤝 Contributing
 
 We welcome contributions! Here's how to get started:
@@ -284,17 +352,28 @@ We welcome contributions! Here's how to get started:
 1. **Fork** the repository
 2. **Create** a feature branch: `git checkout -b feature/amazing-feature`
 3. **Make** your changes and ensure tests pass: `make test`
-4. **Format** your code: `make clang-format`
-5. **Commit** with a clear message: `git commit -m "Add amazing feature"`
-6. **Push** to your branch: `git push origin feature/amazing-feature`
-7. **Open** a Pull Request
+4. **Run WPT tests**: `make wpt` to check web standards compliance
+5. **Format** your code: `make clang-format && make prettier`
+6. **Commit** with a clear message: `git commit -m "Add amazing feature"`
+7. **Push** to your branch: `git push origin feature/amazing-feature`
+8. **Open** a Pull Request
+
+### Development Priorities
+
+**High Impact Improvements:**
+1. Fix URLSearchParams implementation (currently 0/10 tests passing)
+2. Improve WebCrypto basic functionality (digest, etc.)
+3. Complete TextEncoder/TextDecoder APIs
+4. Enhance Timer precision and edge cases
 
 ### Development Guidelines
 
 - Follow existing code style and conventions
-- Add tests for new features
+- Add tests for new features (prefer WPT-compatible tests)
 - Update documentation as needed
-- Ensure `make test` and `make clang-format` pass
+- Ensure `make test`, `make wpt`, and `make clang-format` pass
+- Check WPT compliance for web standard APIs
+- See [CLAUDE.md](CLAUDE.md) for detailed development setup
 
 ## 📄 License
 

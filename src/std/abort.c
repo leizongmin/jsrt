@@ -322,14 +322,24 @@ static void JSRT_AbortSignal_DoAbort(JSContext* ctx, JSValue signal_val, JSValue
   signal->reason = JS_DupValue(ctx, reason);
   signal->aborted = true;
 
-  // Create and dispatch abort event
+  // Create abort event with proper target
   JSValue event_ctor = JS_GetPropertyStr(ctx, JS_GetGlobalObject(ctx), "Event");
   JSValue abort_event = JS_CallConstructor(ctx, event_ctor, 1, (JSValueConst[]){JS_NewString(ctx, "abort")});
   JS_FreeValue(ctx, event_ctor);
 
-  // Dispatch the event
-  JSValue dispatchEvent = JS_GetPropertyStr(ctx, signal->event_target, "dispatchEvent");
-  JSValue result = JS_Call(ctx, dispatchEvent, signal->event_target, 1, &abort_event);
+  // Target will be set automatically by dispatchEvent
+
+  // Call onabort handler if it exists
+  JSValue onabort = JS_GetPropertyStr(ctx, signal_val, "onabort");
+  if (!JS_IsUndefined(onabort) && !JS_IsNull(onabort)) {
+    JSValue onabort_result = JS_Call(ctx, onabort, signal_val, 1, &abort_event);
+    JS_FreeValue(ctx, onabort_result);
+  }
+  JS_FreeValue(ctx, onabort);
+
+  // Dispatch the event through the signal itself (not the underlying EventTarget)
+  JSValue dispatchEvent = JS_GetPropertyStr(ctx, signal_val, "dispatchEvent");
+  JSValue result = JS_Call(ctx, dispatchEvent, signal_val, 1, &abort_event);
   JS_FreeValue(ctx, dispatchEvent);
   JS_FreeValue(ctx, result);
   JS_FreeValue(ctx, abort_event);
@@ -392,28 +402,21 @@ static JSValue JSRT_AbortControllerAbort(JSContext* ctx, JSValueConst this_val, 
   }
 
   // Set reason
-  JSValue reason = JS_UNDEFINED;
+  JSValue reason;
   if (argc > 0) {
     reason = argv[0];
   } else {
-    reason = JS_NewString(ctx, "AbortError");
+    // Create default DOMException for AbortError
+    JSValue dom_exception_ctor = JS_GetPropertyStr(ctx, JS_GetGlobalObject(ctx), "DOMException");
+    JSValue args[2] = {JS_NewString(ctx, "The operation was aborted."), JS_NewString(ctx, "AbortError")};
+    reason = JS_CallConstructor(ctx, dom_exception_ctor, 2, args);
+    JS_FreeValue(ctx, dom_exception_ctor);
+    JS_FreeValue(ctx, args[0]);
+    JS_FreeValue(ctx, args[1]);
   }
 
-  JS_FreeValue(ctx, signal->reason);
-  signal->reason = JS_DupValue(ctx, reason);
-  signal->aborted = true;
-
-  // Create and dispatch abort event
-  JSValue event_ctor = JS_GetPropertyStr(ctx, JS_GetGlobalObject(ctx), "Event");
-  JSValue abort_event = JS_CallConstructor(ctx, event_ctor, 1, (JSValueConst[]){JS_NewString(ctx, "abort")});
-  JS_FreeValue(ctx, event_ctor);
-
-  // Dispatch the event
-  JSValue dispatchEvent = JS_GetPropertyStr(ctx, signal->event_target, "dispatchEvent");
-  JSValue result = JS_Call(ctx, dispatchEvent, signal->event_target, 1, &abort_event);
-  JS_FreeValue(ctx, dispatchEvent);
-  JS_FreeValue(ctx, result);
-  JS_FreeValue(ctx, abort_event);
+  // Use the centralized abort function to ensure consistent behavior
+  JSRT_AbortSignal_DoAbort(ctx, controller->signal, reason);
 
   return JS_UNDEFINED;
 }

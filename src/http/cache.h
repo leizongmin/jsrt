@@ -1,9 +1,9 @@
 #ifndef __JSRT_HTTP_CACHE_H__
 #define __JSRT_HTTP_CACHE_H__
 
+#include <stdbool.h>
 #include <stddef.h>
 #include <time.h>
-#include <stdbool.h>
 
 // HTTP cache entry
 typedef struct {
@@ -26,8 +26,8 @@ JSRT_HttpCache* jsrt_http_cache_create(size_t max_entries);
 JSRT_HttpCacheEntry* jsrt_http_cache_get(JSRT_HttpCache* cache, const char* url);
 
 // Put an entry in the cache
-void jsrt_http_cache_put(JSRT_HttpCache* cache, const char* url, const char* data, 
-                         size_t size, const char* etag, const char* last_modified);
+void jsrt_http_cache_put(JSRT_HttpCache* cache, const char* url, const char* data, size_t size, const char* etag,
+                         const char* last_modified);
 
 // Check if a cache entry is expired
 bool jsrt_http_cache_is_expired(JSRT_HttpCacheEntry* entry);

@@ -22,11 +22,11 @@ struct JSRT_HttpCache {
   size_t total_size_bytes;
   size_t hits;
   size_t misses;
-  
+
   // LRU list pointers
   CacheNode* lru_head;
   CacheNode* lru_tail;
-  
+
   time_t default_ttl;  // Default time to live in seconds
 };
 
@@ -67,11 +67,11 @@ static void move_to_front(JSRT_HttpCache* cache, CacheNode* node) {
     cache->lru_head->prev = node;
   }
   cache->lru_head = node;
-  
+
   if (!cache->lru_tail) {
     cache->lru_tail = node;
   }
-  
+
   node->last_accessed = time(NULL);
 }
 
@@ -82,7 +82,7 @@ static void evict_lru(JSRT_HttpCache* cache) {
   }
 
   CacheNode* lru_node = cache->lru_tail;
-  
+
   // Remove from LRU list
   if (lru_node->prev) {
     lru_node->prev->next = NULL;
@@ -94,7 +94,7 @@ static void evict_lru(JSRT_HttpCache* cache) {
   // Remove from hash table
   size_t bucket = hash_url(lru_node->entry.url, cache->bucket_count);
   CacheNode** current = &cache->buckets[bucket];
-  
+
   while (*current) {
     if (*current == lru_node) {
       *current = lru_node->next;
@@ -106,7 +106,7 @@ static void evict_lru(JSRT_HttpCache* cache) {
   // Free memory
   cache->total_size_bytes -= lru_node->entry.size;
   cache->current_entries--;
-  
+
   free(lru_node->entry.url);
   free(lru_node->entry.data);
   free(lru_node->entry.etag);
@@ -139,11 +139,11 @@ JSRT_HttpCache* jsrt_http_cache_create(size_t max_entries) {
   cache->misses = 0;
   cache->lru_head = NULL;
   cache->lru_tail = NULL;
-  
+
   // Get default TTL from config
   JSRT_HttpConfig* config = jsrt_http_config_init();
   cache->default_ttl = config ? 3600 : 3600;  // 1 hour default
-  
+
   const char* ttl_env = getenv("JSRT_HTTP_MODULES_CACHE_TTL");
   if (ttl_env) {
     cache->default_ttl = (time_t)atol(ttl_env);
@@ -168,7 +168,7 @@ JSRT_HttpCacheEntry* jsrt_http_cache_get(JSRT_HttpCache* cache, const char* url)
         cache->misses++;
         return NULL;
       }
-      
+
       // Move to front of LRU list
       move_to_front(cache, current);
       cache->hits++;
@@ -181,8 +181,8 @@ JSRT_HttpCacheEntry* jsrt_http_cache_get(JSRT_HttpCache* cache, const char* url)
   return NULL;
 }
 
-void jsrt_http_cache_put(JSRT_HttpCache* cache, const char* url, const char* data, 
-                         size_t size, const char* etag, const char* last_modified) {
+void jsrt_http_cache_put(JSRT_HttpCache* cache, const char* url, const char* data, size_t size, const char* etag,
+                         const char* last_modified) {
   if (!cache || !url || !data) {
     return;
   }
@@ -194,19 +194,19 @@ void jsrt_http_cache_put(JSRT_HttpCache* cache, const char* url, const char* dat
     free(existing->data);
     free(existing->etag);
     free(existing->last_modified);
-    
+
     existing->data = malloc(size + 1);
     if (existing->data) {
       memcpy(existing->data, data, size);
       existing->data[size] = '\0';
       existing->size = size;
     }
-    
+
     existing->etag = etag ? strdup(etag) : NULL;
     existing->last_modified = last_modified ? strdup(last_modified) : NULL;
     existing->cached_at = time(NULL);
     existing->expires_at = existing->cached_at + cache->default_ttl;
-    
+
     return;
   }
 
@@ -229,7 +229,7 @@ void jsrt_http_cache_put(JSRT_HttpCache* cache, const char* url, const char* dat
     free(node);
     return;
   }
-  
+
   memcpy(node->entry.data, data, size);
   node->entry.data[size] = '\0';
   node->entry.size = size;
@@ -237,7 +237,7 @@ void jsrt_http_cache_put(JSRT_HttpCache* cache, const char* url, const char* dat
   node->entry.last_modified = last_modified ? strdup(last_modified) : NULL;
   node->entry.cached_at = time(NULL);
   node->entry.expires_at = node->entry.cached_at + cache->default_ttl;
-  
+
   node->last_accessed = node->entry.cached_at;
 
   // Insert into hash table
@@ -280,17 +280,17 @@ void jsrt_http_cache_remove(JSRT_HttpCache* cache, const char* url) {
   while (*current) {
     if (strcmp((*current)->entry.url, url) == 0) {
       CacheNode* to_remove = *current;
-      
+
       // Remove from hash table
       *current = to_remove->next;
-      
+
       // Remove from LRU list
       if (to_remove->prev) {
         to_remove->prev->next = to_remove->next;
       } else {
         cache->lru_head = to_remove->next;
       }
-      
+
       if (to_remove->next) {
         to_remove->next->prev = to_remove->prev;
       } else {
@@ -300,13 +300,13 @@ void jsrt_http_cache_remove(JSRT_HttpCache* cache, const char* url) {
       // Free memory
       cache->total_size_bytes -= to_remove->entry.size;
       cache->current_entries--;
-      
+
       free(to_remove->entry.url);
       free(to_remove->entry.data);
       free(to_remove->entry.etag);
       free(to_remove->entry.last_modified);
       free(to_remove);
-      
+
       return;
     }
     current = &(*current)->next;
@@ -322,13 +322,13 @@ void jsrt_http_cache_clear(JSRT_HttpCache* cache) {
     CacheNode* current = cache->buckets[i];
     while (current) {
       CacheNode* next = current->next;
-      
+
       free(current->entry.url);
       free(current->entry.data);
       free(current->entry.etag);
       free(current->entry.last_modified);
       free(current);
-      
+
       current = next;
     }
     cache->buckets[i] = NULL;
@@ -352,7 +352,7 @@ void jsrt_http_cache_free(JSRT_HttpCache* cache) {
 
 JSRT_HttpCacheStats jsrt_http_cache_get_stats(JSRT_HttpCache* cache) {
   JSRT_HttpCacheStats stats = {0};
-  
+
   if (cache) {
     stats.total_entries = cache->current_entries;
     stats.max_entries = cache->max_entries;
@@ -360,6 +360,6 @@ JSRT_HttpCacheStats jsrt_http_cache_get_stats(JSRT_HttpCache* cache) {
     stats.hits = cache->hits;
     stats.misses = cache->misses;
   }
-  
+
   return stats;
 }

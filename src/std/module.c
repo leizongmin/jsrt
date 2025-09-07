@@ -28,12 +28,12 @@ static char* jsrt_realpath(const char* path, char* resolved_path) {
 #define jsrt_realpath(path, resolved) realpath(path, resolved)
 #endif
 
+#include "../http/module_loader.h"
+#include "../http/security.h"
 #include "../util/debug.h"
 #include "../util/file.h"
 #include "../util/json.h"
 #include "../util/path.h"
-#include "../http/module_loader.h"
-#include "../http/security.h"
 #include "assert.h"
 #include "ffi.h"
 #include "process.h"
@@ -596,9 +596,8 @@ char* JSRT_ModuleNormalize(JSContext* ctx, const char* module_base_name, const c
   }
 
   // Handle relative imports from HTTP modules
-  if (jsrt_is_http_url(module_base_name) && 
-      module_name[0] == '.' && (module_name[1] == '/' || 
-      (module_name[1] == '.' && module_name[2] == '/'))) {
+  if (jsrt_is_http_url(module_base_name) && module_name[0] == '.' &&
+      (module_name[1] == '/' || (module_name[1] == '.' && module_name[2] == '/'))) {
     char* resolved = jsrt_resolve_http_relative_import(module_base_name, module_name);
     if (resolved) {
       JSRT_HttpSecurityResult security_result = jsrt_http_validate_url(resolved);
@@ -608,8 +607,8 @@ char* JSRT_ModuleNormalize(JSContext* ctx, const char* module_base_name, const c
       }
       free(resolved);
     }
-    JSRT_Debug("JSRT_ModuleNormalize: failed to resolve HTTP relative import '%s' from '%s'", 
-               module_name, module_base_name);
+    JSRT_Debug("JSRT_ModuleNormalize: failed to resolve HTTP relative import '%s' from '%s'", module_name,
+               module_base_name);
     return NULL;
   }
 

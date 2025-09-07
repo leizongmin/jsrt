@@ -5,14 +5,8 @@
 #include <string.h>
 
 // Default allowed domains
-static const char* DEFAULT_ALLOWED_DOMAINS[] = {
-  "esm.run",
-  "esm.sh", 
-  "cdn.skypack.dev",
-  "cdn.jsdelivr.net",
-  "unpkg.com",
-  NULL
-};
+static const char* DEFAULT_ALLOWED_DOMAINS[] = {"esm.run",          "esm.sh",    "cdn.skypack.dev",
+                                                "cdn.jsdelivr.net", "unpkg.com", NULL};
 
 // Global configuration instance
 static JSRT_HttpConfig* g_http_config = NULL;
@@ -26,11 +20,13 @@ static char** parse_domains_string(const char* domains_str, size_t* count) {
   // Count commas to estimate array size
   size_t estimated_count = 1;
   for (const char* p = domains_str; *p; p++) {
-    if (*p == ',') estimated_count++;
+    if (*p == ',')
+      estimated_count++;
   }
 
   char** domains = malloc(estimated_count * sizeof(char*));
-  if (!domains) return NULL;
+  if (!domains)
+    return NULL;
 
   *count = 0;
   char* str_copy = strdup(domains_str);
@@ -42,15 +38,16 @@ static char** parse_domains_string(const char* domains_str, size_t* count) {
   char* token = strtok(str_copy, ",");
   while (token && *count < estimated_count) {
     // Skip whitespace
-    while (*token == ' ' || *token == '\t') token++;
-    
+    while (*token == ' ' || *token == '\t')
+      token++;
+
     // Remove trailing whitespace
     char* end = token + strlen(token) - 1;
     while (end > token && (*end == ' ' || *end == '\t')) {
       *end = '\0';
       end--;
     }
-    
+
     if (*token) {  // Only add non-empty tokens
       domains[*count] = strdup(token);
       if (domains[*count]) {
@@ -75,12 +72,12 @@ JSRT_HttpConfig* jsrt_http_config_init(void) {
   }
 
   // Initialize with defaults
-  g_http_config->enabled = false;
+  g_http_config->enabled = true;
   g_http_config->https_only = true;
   g_http_config->allowed_domains = NULL;
   g_http_config->allowed_domains_count = 0;
   g_http_config->max_module_size = 10 * 1024 * 1024;  // 10MB default
-  g_http_config->timeout_ms = 30000;  // 30 seconds
+  g_http_config->timeout_ms = 30000;                  // 30 seconds
   g_http_config->user_agent = "jsrt/1.0";
 
   // Read configuration from environment variables
@@ -101,8 +98,9 @@ JSRT_HttpConfig* jsrt_http_config_init(void) {
   } else {
     // Use default domains
     size_t default_count = 0;
-    while (DEFAULT_ALLOWED_DOMAINS[default_count]) default_count++;
-    
+    while (DEFAULT_ALLOWED_DOMAINS[default_count])
+      default_count++;
+
     g_http_config->allowed_domains = malloc(default_count * sizeof(char*));
     if (g_http_config->allowed_domains) {
       for (size_t i = 0; i < default_count; i++) {
@@ -132,7 +130,8 @@ JSRT_HttpConfig* jsrt_http_config_init(void) {
 }
 
 void jsrt_http_config_free(JSRT_HttpConfig* config) {
-  if (!config) return;
+  if (!config)
+    return;
 
   if (config->allowed_domains) {
     for (size_t i = 0; i < config->allowed_domains_count; i++) {
@@ -146,7 +145,7 @@ void jsrt_http_config_free(JSRT_HttpConfig* config) {
   }
 
   free(config);
-  
+
   if (config == g_http_config) {
     g_http_config = NULL;
   }
@@ -158,7 +157,8 @@ bool jsrt_http_is_enabled(void) {
 }
 
 bool jsrt_is_http_url(const char* url) {
-  if (!url) return false;
+  if (!url)
+    return false;
   return strncmp(url, "http://", 7) == 0 || strncmp(url, "https://", 8) == 0;
 }
 
@@ -186,7 +186,8 @@ char* jsrt_http_extract_domain(const char* url) {
   }
 
   char* domain = malloc(domain_len + 1);
-  if (!domain) return NULL;
+  if (!domain)
+    return NULL;
 
   strncpy(domain, start, domain_len);
   domain[domain_len] = '\0';
@@ -195,7 +196,8 @@ char* jsrt_http_extract_domain(const char* url) {
 }
 
 bool jsrt_http_is_domain_allowed(const char* domain) {
-  if (!domain) return false;
+  if (!domain)
+    return false;
 
   JSRT_HttpConfig* config = jsrt_http_config_init();
   if (!config || !config->allowed_domains) {
@@ -259,10 +261,8 @@ JSRT_HttpSecurityResult jsrt_http_validate_response_content(const char* content_
 
   // Check content type for JavaScript
   if (content_type) {
-    if (strstr(content_type, "application/javascript") ||
-        strstr(content_type, "text/javascript") ||
-        strstr(content_type, "application/ecmascript") ||
-        strstr(content_type, "text/ecmascript") ||
+    if (strstr(content_type, "application/javascript") || strstr(content_type, "text/javascript") ||
+        strstr(content_type, "application/ecmascript") || strstr(content_type, "text/ecmascript") ||
         strstr(content_type, "text/plain")) {
       return JSRT_HTTP_SECURITY_OK;
     }

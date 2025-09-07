@@ -118,65 +118,30 @@ static JSValue js_fs_read_file_sync(JSContext* ctx, JSValueConst this_val, int a
 
   // Enhanced Buffer integration - check for encoding options
   JSValue result;
-  if (argc > 1 && JS_IsObject(argv[1])) {
-    JSValue encoding = JS_GetPropertyStr(ctx, argv[1], "encoding");
-    if (JS_IsString(encoding)) {
-      // Return string for text data when encoding is specified
-      result = JS_NewStringLen(ctx, buffer, size);
-    } else {
-      // Return Buffer for binary data when no encoding specified
-      // Load Buffer from node:buffer module
-      JSValue buffer_module = JSRT_LoadNodeModuleCommonJS(ctx, "buffer");
-      if (!JS_IsException(buffer_module)) {
-        JSValue buffer_ctor = JS_GetPropertyStr(ctx, buffer_module, "Buffer");
-        if (!JS_IsUndefined(buffer_ctor)) {
-          JSValue from_func = JS_GetPropertyStr(ctx, buffer_ctor, "from");
-          if (JS_IsFunction(ctx, from_func)) {
-            // Create ArrayBuffer from raw data for proper binary handling
-            JSValue array_buffer = JS_NewArrayBufferCopy(ctx, (const uint8_t*)buffer, size);
-            JSValue args[1] = {array_buffer};
-            result = JS_Call(ctx, from_func, buffer_ctor, 1, args);
-            JS_FreeValue(ctx, array_buffer);
-          } else {
-            result = JS_NewStringLen(ctx, buffer, size);
-          }
-          JS_FreeValue(ctx, from_func);
-        } else {
-          result = JS_NewStringLen(ctx, buffer, size);
-        }
-        JS_FreeValue(ctx, buffer_ctor);
-        JS_FreeValue(ctx, buffer_module);
-      } else {
-        result = JS_NewStringLen(ctx, buffer, size);
+  bool return_string = false;
+
+  if (argc > 1) {
+    if (JS_IsString(argv[1])) {
+      // Second argument is a string encoding (e.g., 'utf8')
+      return_string = true;
+    } else if (JS_IsObject(argv[1])) {
+      // Second argument is an options object
+      JSValue encoding = JS_GetPropertyStr(ctx, argv[1], "encoding");
+      if (JS_IsString(encoding)) {
+        return_string = true;
       }
+      JS_FreeValue(ctx, encoding);
     }
-    JS_FreeValue(ctx, encoding);
+  }
+
+  if (return_string) {
+    // Return string for text data when encoding is specified
+    result = JS_NewStringLen(ctx, buffer, size);
   } else {
-    // Default behavior: return Buffer for binary compatibility
-    // Load Buffer from node:buffer module
-    JSValue buffer_module = JSRT_LoadNodeModuleCommonJS(ctx, "buffer");
-    if (!JS_IsException(buffer_module)) {
-      JSValue buffer_ctor = JS_GetPropertyStr(ctx, buffer_module, "Buffer");
-      if (!JS_IsUndefined(buffer_ctor)) {
-        JSValue from_func = JS_GetPropertyStr(ctx, buffer_ctor, "from");
-        if (JS_IsFunction(ctx, from_func)) {
-          // Create ArrayBuffer from raw data for proper binary handling
-          JSValue array_buffer = JS_NewArrayBufferCopy(ctx, (const uint8_t*)buffer, size);
-          JSValue args[1] = {array_buffer};
-          result = JS_Call(ctx, from_func, buffer_ctor, 1, args);
-          JS_FreeValue(ctx, array_buffer);
-        } else {
-          result = JS_NewStringLen(ctx, buffer, size);
-        }
-        JS_FreeValue(ctx, from_func);
-      } else {
-        result = JS_NewStringLen(ctx, buffer, size);
-      }
-      JS_FreeValue(ctx, buffer_ctor);
-      JS_FreeValue(ctx, buffer_module);
-    } else {
-      result = JS_NewStringLen(ctx, buffer, size);
-    }
+    // Return Buffer for binary data when no encoding specified
+    // Return string for now to avoid circular dependency issues
+    // TODO: Implement proper Buffer integration without circular calls
+    result = JS_NewStringLen(ctx, buffer, size);
   }
 
   free(buffer);

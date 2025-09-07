@@ -39,14 +39,18 @@ typedef struct {
   JSValue headers;
 } JSHttpResponse;
 
-// Helper function to add EventEmitter methods
-static void add_event_emitter_methods(JSContext* ctx, JSValue obj) {
+// Helper function to add EventEmitter methods and proper inheritance
+static void setup_event_emitter_inheritance(JSContext* ctx, JSValue obj) {
   JSValue events_module = JSRT_LoadNodeModuleCommonJS(ctx, "events");
   if (!JS_IsException(events_module)) {
     JSValue event_emitter = JS_GetPropertyStr(ctx, events_module, "EventEmitter");
     if (!JS_IsException(event_emitter)) {
       JSValue prototype = JS_GetPropertyStr(ctx, event_emitter, "prototype");
       if (!JS_IsException(prototype)) {
+        // Set up proper prototype chain
+        JS_SetPrototype(ctx, obj, prototype);
+
+        // Copy EventEmitter methods
         const char* methods[] = {"on", "emit", "once", "removeListener", "removeAllListeners", "listenerCount", NULL};
         for (int i = 0; methods[i]; i++) {
           JSValue method = JS_GetPropertyStr(ctx, prototype, methods[i]);
@@ -55,7 +59,11 @@ static void add_event_emitter_methods(JSContext* ctx, JSValue obj) {
           }
           JS_FreeValue(ctx, method);
         }
+
+        // Initialize EventEmitter state
         JS_SetPropertyStr(ctx, obj, "_events", JS_NewObject(ctx));
+        JS_SetPropertyStr(ctx, obj, "_eventsCount", JS_NewInt32(ctx, 0));
+        JS_SetPropertyStr(ctx, obj, "_maxListeners", JS_NewInt32(ctx, 10));
       }
       JS_FreeValue(ctx, prototype);
     }
@@ -293,7 +301,7 @@ static JSValue js_http_server_constructor(JSContext* ctx, JSValueConst new_targe
   JS_SetPropertyStr(ctx, obj, "close", JS_NewCFunction(ctx, js_http_server_close, "close", 0));
 
   // Add EventEmitter functionality
-  add_event_emitter_methods(ctx, obj);
+  setup_event_emitter_inheritance(ctx, obj);
 
   return obj;
 }

@@ -38,8 +38,8 @@ static char* url_decode(const char* str) {
   return decoded;
 }
 
-// URL encode helper function
-static char* url_encode(const char* str) {
+// URL encode helper function for querystring formatting (uses + for spaces)
+static char* url_encode_form(const char* str) {
   if (!str)
     return NULL;
 
@@ -55,6 +55,30 @@ static char* url_encode(const char* str) {
       encoded[j++] = c;
     } else if (c == ' ') {
       encoded[j++] = '+';
+    } else {
+      sprintf(&encoded[j], "%%%02X", c);
+      j += 3;
+    }
+  }
+  encoded[j] = '\0';
+  return encoded;
+}
+
+// URL encode helper function for escape() (uses %20 for spaces like encodeURIComponent)
+static char* url_encode(const char* str) {
+  if (!str)
+    return NULL;
+
+  size_t len = strlen(str);
+  char* encoded = malloc(len * 3 + 1);  // Worst case: every char becomes %XX
+  if (!encoded)
+    return NULL;
+
+  size_t j = 0;
+  for (size_t i = 0; i < len; i++) {
+    unsigned char c = (unsigned char)str[i];
+    if (isalnum(c) || c == '-' || c == '_' || c == '.' || c == '~') {
+      encoded[j++] = c;
     } else {
       sprintf(&encoded[j], "%%%02X", c);
       j += 3;
@@ -233,8 +257,8 @@ static JSValue js_querystring_stringify(JSContext* ctx, JSValueConst this_val, i
               const char* value_str = JS_ToCString(ctx, item);
 
               if (value_str) {
-                char* encoded_key = url_encode(key);
-                char* encoded_value = url_encode(value_str);
+                char* encoded_key = url_encode_form(key);
+                char* encoded_value = url_encode_form(value_str);
 
                 if (encoded_key && encoded_value) {
                   size_t needed =
@@ -265,8 +289,8 @@ static JSValue js_querystring_stringify(JSContext* ctx, JSValueConst this_val, i
           // Handle single value
           const char* value_str = JS_ToCString(ctx, value_val);
           if (value_str) {
-            char* encoded_key = url_encode(key);
-            char* encoded_value = url_encode(value_str);
+            char* encoded_key = url_encode_form(key);
+            char* encoded_value = url_encode_form(value_str);
 
             if (encoded_key && encoded_value) {
               size_t needed = result_len + strlen(encoded_key) + strlen(eq) + strlen(encoded_value) + strlen(sep) + 1;

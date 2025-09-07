@@ -334,7 +334,7 @@ static JSValue js_querystring_stringify(JSContext* ctx, JSValueConst this_val, i
   return result;
 }
 
-// querystring.escape(str) - alias for encodeURIComponent
+// querystring.escape(str) - uses form encoding (+ for spaces)
 static JSValue js_querystring_escape(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
   if (argc < 1) {
     return JS_ThrowTypeError(ctx, "escape() requires a string argument");
@@ -345,7 +345,7 @@ static JSValue js_querystring_escape(JSContext* ctx, JSValueConst this_val, int 
     return JS_ThrowTypeError(ctx, "Argument must be a string");
   }
 
-  char* encoded = url_encode(str);
+  char* encoded = url_encode_form(str);
   JS_FreeCString(ctx, str);
 
   if (!encoded) {

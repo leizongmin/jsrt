@@ -12,9 +12,13 @@ console.log('📋 Testing Core Node.js Modules:\n');
 // 1. Path operations
 console.log('1. node:path - Path manipulation:');
 const path = require('node:path');
-console.log(`   ✅ path.join('/users', 'john', '../jane') = ${path.join('/users', 'john', '../jane')}`);
+console.log(
+  `   ✅ path.join('/users', 'john', '../jane') = ${path.join('/users', 'john', '../jane')}`
+);
 console.log(`   ✅ path.resolve('foo', 'bar') = ${path.resolve('foo', 'bar')}`);
-console.log(`   ✅ path.basename('/path/to/file.txt') = ${path.basename('/path/to/file.txt')}`);
+console.log(
+  `   ✅ path.basename('/path/to/file.txt') = ${path.basename('/path/to/file.txt')}`
+);
 
 // 2. OS information
 console.log('\n2. node:os - Operating system info:');
@@ -22,13 +26,17 @@ const os = require('node:os');
 console.log(`   ✅ os.platform() = ${os.platform()}`);
 console.log(`   ✅ os.arch() = ${os.arch()}`);
 console.log(`   ✅ os.hostname() = ${os.hostname()}`);
-console.log(`   ✅ os.totalmem() = ${(os.totalmem() / 1024 / 1024 / 1024).toFixed(1)} GB`);
+console.log(
+  `   ✅ os.totalmem() = ${(os.totalmem() / 1024 / 1024 / 1024).toFixed(1)} GB`
+);
 
 // 3. Utilities
 console.log('\n3. node:util - Utility functions:');
 const util = require('node:util');
-console.log(`   ✅ util.format('Hello %s, number: %d', 'world', 42) = ${util.format('Hello %s, number: %d', 'world', 42)}`);
-console.log(`   ✅ util.isArray([1,2,3]) = ${util.isArray([1,2,3])}`);
+console.log(
+  `   ✅ util.format('Hello %s, number: %d', 'world', 42) = ${util.format('Hello %s, number: %d', 'world', 42)}`
+);
+console.log(`   ✅ util.isArray([1,2,3]) = ${util.isArray([1, 2, 3])}`);
 console.log(`   ✅ util.isObject({}) = ${util.isObject({})}`);
 
 // 4. Events
@@ -59,7 +67,9 @@ const qs = require('node:querystring');
 const parsed = qs.parse('name=John&age=30&city=New%20York');
 const stringified = qs.stringify({ hello: 'world', test: 'data' });
 console.log(`   ✅ qs.parse('name=John&age=30&city=New%20York') =`, parsed);
-console.log(`   ✅ qs.stringify({hello: 'world', test: 'data'}) = ${stringified}`);
+console.log(
+  `   ✅ qs.stringify({hello: 'world', test: 'data'}) = ${stringified}`
+);
 console.log(`   ✅ qs.escape('hello world') = ${qs.escape('hello world')}`);
 
 // 8. HTTP Server
@@ -70,14 +80,18 @@ const server = http.createServer((req, res) => {
   res.end('Hello from jsrt HTTP server!');
 });
 console.log(`   ✅ HTTP server created successfully`);
-console.log(`   ✅ server instanceof EventEmitter = ${server instanceof EventEmitter}`);
+console.log(
+  `   ✅ server instanceof EventEmitter = ${server instanceof EventEmitter}`
+);
 server.close();
 
 // 9. HTTPS Support
 console.log('\n9. node:https - HTTPS support:');
 const https = require('node:https');
 console.log(`   ✅ HTTPS module loaded successfully`);
-console.log(`   ✅ HTTPS constants available: ${https.METHODS.length} HTTP methods`);
+console.log(
+  `   ✅ HTTPS constants available: ${https.METHODS.length} HTTP methods`
+);
 
 // 10. TCP Networking
 console.log('\n10. node:net - TCP networking:');

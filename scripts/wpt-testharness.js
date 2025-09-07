@@ -383,6 +383,21 @@ function async_test(func, name) {
             };
         },
         
+        step_func_done: function(stepFunc, context) {
+            return (...args) => {
+                return t.step(() => {
+                    try {
+                        const result = stepFunc.apply(context || this, args);
+                        t.done();  // Automatically call done after step function
+                        return result;
+                    } catch (e) {
+                        t.done();  // Call done even if there's an error
+                        throw e;
+                    }
+                });
+            };
+        },
+        
         done: function() {
             if (completed) return;
             completed = true;

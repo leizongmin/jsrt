@@ -181,12 +181,16 @@ static JSValue js_path_join(JSContext* ctx, JSValueConst this_val, int argc, JSV
     strcpy(result, ".");
   }
 
-  // Normalize separators
-  char* normalized = normalize_separators(result);
+  // Normalize separators and resolve . and .. segments
+  char* temp_normalized = normalize_separators(result);
   free(result);
 
-  JSValue ret = JS_NewString(ctx, normalized);
-  free(normalized);
+  // Then apply full normalization to handle . and .. segments
+  char* fully_normalized = normalize_path(temp_normalized);
+  free(temp_normalized);
+
+  JSValue ret = JS_NewString(ctx, fully_normalized);
+  free(fully_normalized);
   return ret;
 }
 

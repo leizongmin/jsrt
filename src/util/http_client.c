@@ -297,6 +297,14 @@ cleanup:
   return response;
 }
 
+// Enhanced HTTP GET with custom user agent and timeout
+JSRT_HttpResponse JSRT_HttpGetWithOptions(const char* url, const char* user_agent, int timeout_ms) {
+  // For now, just use the existing JSRT_HttpGet function
+  // TODO: Implement proper timeout and user agent support
+  // This is a minimal implementation to get HTTP module loading working
+  return JSRT_HttpGet(url);
+}
+
 void JSRT_HttpResponseFree(JSRT_HttpResponse* response) {
   if (!response)
     return;
@@ -309,6 +317,21 @@ void JSRT_HttpResponseFree(JSRT_HttpResponse* response) {
   if (response->body) {
     free(response->body);
     response->body = NULL;
+  }
+
+  if (response->content_type) {
+    free(response->content_type);
+    response->content_type = NULL;
+  }
+
+  if (response->etag) {
+    free(response->etag);
+    response->etag = NULL;
+  }
+
+  if (response->last_modified) {
+    free(response->last_modified);
+    response->last_modified = NULL;
   }
 
   response->body_size = 0;

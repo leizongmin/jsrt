@@ -397,7 +397,7 @@ static JSRT_URL* JSRT_ParseURL(const char* url, const char* base) {
       free(cleaned_url);
       return NULL;
     }
-    snprintf(full_url, full_url_len, "%s:%s", base_url->protocol, cleaned_url);
+    snprintf(full_url, full_url_len, "%s%s", base_url->protocol, cleaned_url);
     JSRT_FreeURL(base_url);
     free(cleaned_url);
 
@@ -533,8 +533,30 @@ static JSRT_URL* JSRT_ParseURL(const char* url, const char* base) {
     char* authority = ptr;
 
     if (credentials_end) {
-      // Skip credentials for hostname/port parsing - authority is after @
-      authority = credentials_end + 1;
+      // Extract and parse credentials (user:pass)
+      size_t creds_len = credentials_end - ptr;
+      char* credentials = malloc(creds_len + 1);
+      strncpy(credentials, ptr, creds_len);
+      credentials[creds_len] = '\0';
+
+      // Split credentials by ':' to get username and password
+      char* colon_pos = strchr(credentials, ':');
+      if (colon_pos) {
+        *colon_pos = '\0';
+        free(parsed->username);
+        parsed->username = strdup(credentials);  // Before colon
+        free(parsed->password);
+        parsed->password = strdup(colon_pos + 1);  // After colon
+      } else {
+        // Only username provided
+        free(parsed->username);
+        parsed->username = strdup(credentials);
+        free(parsed->password);
+        parsed->password = strdup("");
+      }
+
+      free(credentials);
+      authority = credentials_end + 1;  // Authority is after @
     }
 
     // Now parse the authority part (hostname:port, possibly IPv6)

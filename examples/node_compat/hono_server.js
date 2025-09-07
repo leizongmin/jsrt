@@ -68,14 +68,17 @@ app.post('/api/hello', async (c) => {
       message: 'Hello from Hono API!',
       received: body,
       timestamp: new Date().toISOString(),
-      server: 'Hono on Node.js (jsrt)'
+      server: 'Hono on Node.js (jsrt)',
     });
   } catch (error) {
-    return c.json({
-      success: false,
-      error: 'Invalid JSON body',
-      message: 'Please send valid JSON data'
-    }, 400);
+    return c.json(
+      {
+        success: false,
+        error: 'Invalid JSON body',
+        message: 'Please send valid JSON data',
+      },
+      400
+    );
   }
 });
 
@@ -97,7 +100,7 @@ console.log(`📍 Open http://localhost:${port} in your browser`);
 
 serve({
   fetch: app.fetch,
-  port: port
+  port: port,
 });
 
 console.log(`✅ Server is running on http://localhost:${port}`);

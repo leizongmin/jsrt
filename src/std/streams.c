@@ -249,7 +249,7 @@ static JSClassDef JSRT_ReadableStreamClass = {
 static JSValue JSRT_ReadableStreamConstructor(JSContext* ctx, JSValueConst new_target, int argc, JSValueConst* argv) {
   JSRT_ReadableStream* stream = malloc(sizeof(JSRT_ReadableStream));
   stream->locked = false;
-  
+
   // Store the underlying source if provided (first argument)
   if (argc > 0) {
     stream->underlying_source = JS_DupValue(ctx, argv[0]);
@@ -586,7 +586,7 @@ static JSValue JSRT_ReadableStreamDefaultReaderCancel(JSContext* ctx, JSValueCon
     JSValue error = JS_ThrowTypeError(ctx, "This readable stream reader has been released");
     JSValue reject_args[] = {error};
     JSValue rejected_promise = JS_Call(ctx, reject_method, promise_ctor, 1, reject_args);
-    
+
     JS_FreeValue(ctx, promise_ctor);
     JS_FreeValue(ctx, reject_method);
     JS_FreeValue(ctx, error);
@@ -613,12 +613,12 @@ static JSValue JSRT_ReadableStreamDefaultReaderCancel(JSContext* ctx, JSValueCon
       JSValue cancel_args[] = {reason};
       JSValue cancel_result = JS_Call(ctx, cancel_method, stream->underlying_source, 1, cancel_args);
       JS_FreeValue(ctx, cancel_method);
-      
+
       // Check if cancel returned a promise or threw an exception
       if (JS_IsException(cancel_result)) {
         return cancel_result;
       }
-      
+
       // If cancel method returns a promise, return it; otherwise wrap result in resolved promise
       JSValue then_method = JS_GetPropertyStr(ctx, cancel_result, "then");
       if (!JS_IsUndefined(then_method) && JS_IsFunction(ctx, then_method)) {

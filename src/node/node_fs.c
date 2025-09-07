@@ -56,7 +56,7 @@ static JSValue create_buffer_from_data(JSContext* ctx, const uint8_t* data, size
   JSValue global = JS_GetGlobalObject(ctx);
   JSValue uint8_array_ctor = JS_GetPropertyStr(ctx, global, "Uint8Array");
   JSValue uint8_array = JS_CallConstructor(ctx, uint8_array_ctor, 1, &array_buffer);
-  
+
   JS_FreeValue(ctx, array_buffer);
   JS_FreeValue(ctx, uint8_array_ctor);
   JS_FreeValue(ctx, global);
@@ -64,16 +64,17 @@ static JSValue create_buffer_from_data(JSContext* ctx, const uint8_t* data, size
   // Add a toString method that converts bytes to string (like Buffer does)
   if (!JS_IsException(uint8_array)) {
     // Create a simple toString function that converts the byte array to string
-    const char* toString_code = 
-      "(function() {"
-      "  let str = '';"
-      "  for (let i = 0; i < this.length; i++) {"
-      "    str += String.fromCharCode(this[i]);"
-      "  }"
-      "  return str;"
-      "})";
-    
-    JSValue toString_func = JS_Eval(ctx, toString_code, strlen(toString_code), "<buffer_toString>", JS_EVAL_TYPE_GLOBAL);
+    const char* toString_code =
+        "(function() {"
+        "  let str = '';"
+        "  for (let i = 0; i < this.length; i++) {"
+        "    str += String.fromCharCode(this[i]);"
+        "  }"
+        "  return str;"
+        "})";
+
+    JSValue toString_func =
+        JS_Eval(ctx, toString_code, strlen(toString_code), "<buffer_toString>", JS_EVAL_TYPE_GLOBAL);
     if (!JS_IsException(toString_func)) {
       JS_SetPropertyStr(ctx, uint8_array, "toString", toString_func);
     } else {

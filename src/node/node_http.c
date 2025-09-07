@@ -3,6 +3,10 @@
 #include <uv.h>
 #include "../../deps/llhttp/build/llhttp.h"
 #include "node_modules.h"
+#include "../std/url.h"
+
+// Forward declarations for URL and querystring parsing
+extern JSValue JSRT_InitNodeQueryString(JSContext* ctx);
 
 // Class IDs for HTTP classes
 static JSClassID js_http_server_class_id;
@@ -503,7 +507,7 @@ static int on_message_complete(llhttp_t* parser) {
 }
 
 // Forward declaration
-static void parse_simple_http_request(const char* data, char* method, char* url, char* version);
+static void parse_enhanced_http_request(JSContext* ctx, const char* data, char* method, char* url, char* version, JSValue request);
 
 // Simple HTTP data handler
 static JSValue js_http_simple_data_handler(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
@@ -530,9 +534,9 @@ static JSValue js_http_simple_data_handler(JSContext* ctx, JSValueConst this_val
   char url[1024] = "/";
   char version[16] = "HTTP/1.1";
 
-  parse_simple_http_request(request_data, method, url, version);
+  parse_enhanced_http_request(ctx, request_data, method, url, version, data->request);
 
-  // Update request object with parsed data
+  // Update request object with parsed data (pathname, query, search already set in parser)
   JS_SetPropertyStr(ctx, data->request, "method", JS_NewString(ctx, method));
   JS_SetPropertyStr(ctx, data->request, "url", JS_NewString(ctx, url));
   JS_SetPropertyStr(ctx, data->request, "httpVersion", JS_NewString(ctx, version));
@@ -552,8 +556,8 @@ static JSValue js_http_simple_data_handler(JSContext* ctx, JSValueConst this_val
   return JS_UNDEFINED;
 }
 
-// Simple HTTP request line parser
-static void parse_simple_http_request(const char* data, char* method, char* url, char* version) {
+// Enhanced HTTP request line parser with URL parsing
+static void parse_enhanced_http_request(JSContext* ctx, const char* data, char* method, char* url, char* version, JSValue request) {
   // Simple parser for "METHOD /path HTTP/1.1"
   const char* start = data;
   const char* space1 = strchr(start, ' ');
@@ -587,6 +591,45 @@ static void parse_simple_http_request(const char* data, char* method, char* url,
     if (version_len < 16) {
       strncpy(version, start, version_len);
       version[version_len] = '\0';
+    }
+  }
+
+  // Parse URL using standard URL parser if it contains more than just a path
+  if (url[0] == '/') {
+    // This is a path-only URL, parse it properly
+    char* path_part = url;
+    char* query_part = strchr(url, '?');
+    
+    if (query_part) {
+      *query_part = '\0';  // Temporarily null-terminate the path
+      query_part++;  // Move to start of query string
+      
+      // Set pathname
+      JS_SetPropertyStr(ctx, request, "pathname", JS_NewString(ctx, path_part));
+      
+      // Parse query string using node:querystring
+      JSValue querystring_module = JSRT_InitNodeQueryString(ctx);
+      JSValue parse_func = JS_GetPropertyStr(ctx, querystring_module, "parse");
+      
+      if (!JS_IsUndefined(parse_func)) {
+        JSValue query_str_val = JS_NewString(ctx, query_part);
+        JSValue parsed_query = JS_Call(ctx, parse_func, JS_UNDEFINED, 1, &query_str_val);
+        JS_SetPropertyStr(ctx, request, "query", parsed_query);
+        JS_SetPropertyStr(ctx, request, "search", JS_NewString(ctx, query_part));
+        JS_FreeValue(ctx, query_str_val);
+        JS_FreeValue(ctx, parsed_query);
+      }
+      
+      JS_FreeValue(ctx, parse_func);
+      JS_FreeValue(ctx, querystring_module);
+      
+      // Restore the '?' character
+      *(query_part - 1) = '?';
+    } else {
+      // No query string, just set pathname
+      JS_SetPropertyStr(ctx, request, "pathname", JS_NewString(ctx, path_part));
+      JS_SetPropertyStr(ctx, request, "query", JS_NewObject(ctx));
+      JS_SetPropertyStr(ctx, request, "search", JS_NewString(ctx, ""));
     }
   }
 }

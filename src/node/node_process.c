@@ -188,6 +188,7 @@ JSValue JSRT_InitNodeProcess(JSContext* ctx) {
     JSValue versions = JS_NewObject(ctx);
     JS_SetPropertyStr(ctx, versions, "jsrt", JS_NewString(ctx, "1.0.0"));
     JS_SetPropertyStr(ctx, versions, "node", JS_NewString(ctx, "20.0.0"));  // Node.js API compatibility version
+    JS_SetPropertyStr(ctx, versions, "quickjs", JS_NewString(ctx, "2024-01-13"));
     JS_SetPropertyStr(ctx, jsrt_process, "versions", versions);
   } else {
     // Add Node.js compatibility version to the existing process object

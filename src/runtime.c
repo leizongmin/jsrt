@@ -24,6 +24,7 @@
 #include "std/formdata.h"
 #include "std/microtask.h"
 #include "std/module.h"
+#include "std/navigator.h"
 #include "std/performance.h"
 #include "std/process.h"
 #include "std/streams.h"
@@ -72,6 +73,7 @@ JSRT_Runtime* JSRT_RuntimeNew() {
   JSRT_RuntimeSetupStdDOM(rt);
   JSRT_RuntimeSetupStdClone(rt);
   JSRT_RuntimeSetupStdMicrotask(rt);  // Add queueMicrotask for WinterCG compliance
+  JSRT_RuntimeSetupNavigator(rt);     // Add navigator for WinterTC compliance
   JSRT_RuntimeSetupStdStreams(rt);
   JSRT_RuntimeSetupStdBlob(rt);
   JSRT_RuntimeSetupStdFormData(rt);

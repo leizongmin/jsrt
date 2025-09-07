@@ -18,6 +18,13 @@ JSClassID JSRT_WritableStreamDefaultControllerClassID;
 JSClassID JSRT_WritableStreamDefaultWriterClassID;
 JSClassID JSRT_TransformStreamClassID;
 
+// Structure for pending read promise
+typedef struct PendingRead {
+  JSValue promise_resolve;
+  JSValue promise_reject;
+  struct PendingRead* next;
+} PendingRead;
+
 // ReadableStreamDefaultController implementation
 typedef struct {
   JSValue stream;
@@ -25,8 +32,9 @@ typedef struct {
   size_t queue_size;
   size_t queue_capacity;
   bool closed;
-  bool errored;         // Whether the controller is in error state
-  JSValue error_value;  // The error value (if errored)
+  bool errored;                     // Whether the controller is in error state
+  JSValue error_value;              // The error value (if errored)
+  PendingRead* pending_reads_head;  // Linked list of pending read promises
 } JSRT_ReadableStreamDefaultController;
 
 static void JSRT_ReadableStreamDefaultControllerFinalize(JSRuntime* rt, JSValue val) {
@@ -43,6 +51,21 @@ static void JSRT_ReadableStreamDefaultControllerFinalize(JSRuntime* rt, JSValue 
       free(controller->queue[i]);
     }
     free(controller->queue);
+
+    // Free pending reads
+    PendingRead* current = controller->pending_reads_head;
+    while (current) {
+      PendingRead* next = current->next;
+      if (!JS_IsUndefined(current->promise_resolve)) {
+        JS_FreeValueRT(rt, current->promise_resolve);
+      }
+      if (!JS_IsUndefined(current->promise_reject)) {
+        JS_FreeValueRT(rt, current->promise_reject);
+      }
+      free(current);
+      current = next;
+    }
+
     free(controller);
   }
 }
@@ -68,20 +91,46 @@ static JSValue JSRT_ReadableStreamDefaultControllerEnqueue(JSContext* ctx, JSVal
     // Convert chunk to string for simplicity
     const char* chunk_str = JS_ToCString(ctx, argv[0]);
     if (chunk_str) {
-      // Expand queue if needed
-      if (controller->queue_size >= controller->queue_capacity) {
-        size_t new_capacity = controller->queue_capacity * 2 + 1;
-        char** new_queue = realloc(controller->queue, new_capacity * sizeof(char*));
-        if (new_queue) {
-          controller->queue = new_queue;
-          controller->queue_capacity = new_capacity;
-        }
-      }
+      // Check if there are pending reads to resolve
+      if (controller->pending_reads_head) {
+        // Resolve the first pending read directly with the chunk
+        PendingRead* pending = controller->pending_reads_head;
+        controller->pending_reads_head = pending->next;
 
-      // Add chunk to queue
-      if (controller->queue_size < controller->queue_capacity) {
-        controller->queue[controller->queue_size] = strdup(chunk_str);
-        controller->queue_size++;
+        // Create result object
+        JSValue result = JS_NewObject(ctx);
+        JS_SetPropertyStr(ctx, result, "value", JS_NewString(ctx, chunk_str));
+        JS_SetPropertyStr(ctx, result, "done", JS_NewBool(ctx, false));
+
+        // Resolve the promise
+        if (!JS_IsUndefined(pending->promise_resolve)) {
+          JSValue resolve_args[] = {result};
+          JS_Call(ctx, pending->promise_resolve, JS_UNDEFINED, 1, resolve_args);
+          JS_FreeValue(ctx, pending->promise_resolve);
+        }
+        if (!JS_IsUndefined(pending->promise_reject)) {
+          JS_FreeValue(ctx, pending->promise_reject);
+        }
+
+        JS_FreeValue(ctx, result);
+        free(pending);
+      } else {
+        // No pending reads, add chunk to queue
+        // Expand queue if needed
+        if (controller->queue_size >= controller->queue_capacity) {
+          size_t new_capacity = controller->queue_capacity * 2 + 1;
+          char** new_queue = realloc(controller->queue, new_capacity * sizeof(char*));
+          if (new_queue) {
+            controller->queue = new_queue;
+            controller->queue_capacity = new_capacity;
+          }
+        }
+
+        // Add chunk to queue
+        if (controller->queue_size < controller->queue_capacity) {
+          controller->queue[controller->queue_size] = strdup(chunk_str);
+          controller->queue_size++;
+        }
       }
 
       JS_FreeCString(ctx, chunk_str);
@@ -100,6 +149,35 @@ static JSValue JSRT_ReadableStreamDefaultControllerClose(JSContext* ctx, JSValue
   }
 
   controller->closed = true;
+
+  // Resolve any pending reads with {done: true}
+  PendingRead* current = controller->pending_reads_head;
+  while (current) {
+    PendingRead* next = current->next;
+
+    if (!JS_IsUndefined(current->promise_resolve)) {
+      // Create result object for closed stream
+      JSValue result = JS_NewObject(ctx);
+      JS_SetPropertyStr(ctx, result, "value", JS_UNDEFINED);
+      JS_SetPropertyStr(ctx, result, "done", JS_NewBool(ctx, true));
+
+      // Resolve the promise
+      JSValue resolve_args[] = {result};
+      JS_Call(ctx, current->promise_resolve, JS_UNDEFINED, 1, resolve_args);
+      JS_FreeValue(ctx, result);
+      JS_FreeValue(ctx, current->promise_resolve);
+    }
+    if (!JS_IsUndefined(current->promise_reject)) {
+      JS_FreeValue(ctx, current->promise_reject);
+    }
+
+    free(current);
+    current = next;
+  }
+
+  // Clear the pending reads list
+  controller->pending_reads_head = NULL;
+
   return JS_UNDEFINED;
 }
 
@@ -117,6 +195,28 @@ static JSValue JSRT_ReadableStreamDefaultControllerError(JSContext* ctx, JSValue
   // Store the error value (undefined if no argument provided)
   JSValue error_value = (argc > 0) ? argv[0] : JS_UNDEFINED;
   controller->error_value = JS_DupValue(ctx, error_value);
+
+  // Reject any pending reads with the error
+  PendingRead* current = controller->pending_reads_head;
+  while (current) {
+    PendingRead* next = current->next;
+
+    if (!JS_IsUndefined(current->promise_reject)) {
+      // Reject the promise with the error
+      JSValue reject_args[] = {error_value};
+      JS_Call(ctx, current->promise_reject, JS_UNDEFINED, 1, reject_args);
+      JS_FreeValue(ctx, current->promise_reject);
+    }
+    if (!JS_IsUndefined(current->promise_resolve)) {
+      JS_FreeValue(ctx, current->promise_resolve);
+    }
+
+    free(current);
+    current = next;
+  }
+
+  // Clear the pending reads list
+  controller->pending_reads_head = NULL;
 
   return JS_UNDEFINED;
 }
@@ -158,6 +258,7 @@ static JSValue JSRT_ReadableStreamConstructor(JSContext* ctx, JSValueConst new_t
   controller_data->closed = false;
   controller_data->errored = false;
   controller_data->error_value = JS_UNDEFINED;
+  controller_data->pending_reads_head = NULL;
 
   JSValue controller = JS_NewObjectClass(ctx, JSRT_ReadableStreamDefaultControllerClassID);
   JS_SetOpaque(controller, controller_data);
@@ -391,12 +492,11 @@ static JSValue JSRT_ReadableStreamDefaultReaderRead(JSContext* ctx, JSValueConst
     return JS_EXCEPTION;
   }
 
-  JSValue result = JS_NewObject(ctx);
-
   // Check if there are chunks in the queue
   if (controller->queue_size > 0) {
     // Return the first chunk from the queue
     char* chunk = controller->queue[0];
+    JSValue result = JS_NewObject(ctx);
     JS_SetPropertyStr(ctx, result, "value", JS_NewString(ctx, chunk));
     JS_SetPropertyStr(ctx, result, "done", JS_NewBool(ctx, false));
 
@@ -406,28 +506,59 @@ static JSValue JSRT_ReadableStreamDefaultReaderRead(JSContext* ctx, JSValueConst
       controller->queue[i - 1] = controller->queue[i];
     }
     controller->queue_size--;
+
+    // Return a resolved promise with the result
+    JSValue promise_ctor = JS_GetPropertyStr(ctx, JS_GetGlobalObject(ctx), "Promise");
+    JSValue resolve_method = JS_GetPropertyStr(ctx, promise_ctor, "resolve");
+    JSValue resolve_args[] = {result};
+    JSValue promise = JS_Call(ctx, resolve_method, promise_ctor, 1, resolve_args);
+
+    JS_FreeValue(ctx, promise_ctor);
+    JS_FreeValue(ctx, resolve_method);
+    JS_FreeValue(ctx, result);
+
+    return promise;
   } else if (controller->closed) {
     // Stream is closed and no more chunks
+    JSValue result = JS_NewObject(ctx);
     JS_SetPropertyStr(ctx, result, "value", JS_UNDEFINED);
     JS_SetPropertyStr(ctx, result, "done", JS_NewBool(ctx, true));
+
+    // Return a resolved promise with the result
+    JSValue promise_ctor = JS_GetPropertyStr(ctx, JS_GetGlobalObject(ctx), "Promise");
+    JSValue resolve_method = JS_GetPropertyStr(ctx, promise_ctor, "resolve");
+    JSValue resolve_args[] = {result};
+    JSValue promise = JS_Call(ctx, resolve_method, promise_ctor, 1, resolve_args);
+
+    JS_FreeValue(ctx, promise_ctor);
+    JS_FreeValue(ctx, resolve_method);
+    JS_FreeValue(ctx, result);
+
+    return promise;
   } else {
-    // Stream is still open but no chunks yet - return undefined for now
-    // In a full implementation, this would return a pending promise
-    JS_SetPropertyStr(ctx, result, "value", JS_UNDEFINED);
-    JS_SetPropertyStr(ctx, result, "done", JS_NewBool(ctx, false));
+    // Stream is still open but no chunks yet - create a pending promise
+    // Create a new pending read entry
+    PendingRead* pending = malloc(sizeof(PendingRead));
+    pending->next = NULL;
+
+    // Create the promise with resolve/reject callbacks
+    JSValue resolving_funcs[2];
+    JSValue promise = JS_NewPromiseCapability(ctx, resolving_funcs);
+
+    if (JS_IsException(promise)) {
+      free(pending);
+      return promise;
+    }
+
+    pending->promise_resolve = resolving_funcs[0];
+    pending->promise_reject = resolving_funcs[1];
+
+    // Add to the linked list of pending reads
+    pending->next = controller->pending_reads_head;
+    controller->pending_reads_head = pending;
+
+    return promise;
   }
-
-  // Return a resolved promise with the result
-  JSValue promise_ctor = JS_GetPropertyStr(ctx, JS_GetGlobalObject(ctx), "Promise");
-  JSValue resolve_method = JS_GetPropertyStr(ctx, promise_ctor, "resolve");
-  JSValue resolve_args[] = {result};
-  JSValue promise = JS_Call(ctx, resolve_method, promise_ctor, 1, resolve_args);
-
-  JS_FreeValue(ctx, promise_ctor);
-  JS_FreeValue(ctx, resolve_method);
-  JS_FreeValue(ctx, result);
-
-  return promise;
 }
 
 static JSValue JSRT_ReadableStreamDefaultReaderCancel(JSContext* ctx, JSValueConst this_val, int argc,

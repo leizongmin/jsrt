@@ -22,6 +22,7 @@
 #include "std/fetch.h"
 #include "std/ffi.h"
 #include "std/formdata.h"
+#include "std/microtask.h"
 #include "std/module.h"
 #include "std/performance.h"
 #include "std/process.h"
@@ -70,6 +71,7 @@ JSRT_Runtime* JSRT_RuntimeNew() {
   JSRT_RuntimeSetupStdURL(rt);
   JSRT_RuntimeSetupStdDOM(rt);
   JSRT_RuntimeSetupStdClone(rt);
+  JSRT_RuntimeSetupStdMicrotask(rt);  // Add queueMicrotask for WinterCG compliance
   JSRT_RuntimeSetupStdStreams(rt);
   JSRT_RuntimeSetupStdBlob(rt);
   JSRT_RuntimeSetupStdFormData(rt);

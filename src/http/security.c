@@ -82,8 +82,12 @@ JSRT_HttpConfig* jsrt_http_config_init(void) {
 
   // Read configuration from environment variables
   const char* enabled = getenv("JSRT_HTTP_MODULES_ENABLED");
-  if (enabled && (strcmp(enabled, "1") == 0 || strcmp(enabled, "true") == 0)) {
-    g_http_config->enabled = true;
+  if (enabled) {
+    if (strcmp(enabled, "1") == 0 || strcmp(enabled, "true") == 0) {
+      g_http_config->enabled = true;
+    } else if (strcmp(enabled, "0") == 0 || strcmp(enabled, "false") == 0) {
+      g_http_config->enabled = false;
+    }
   }
 
   const char* https_only = getenv("JSRT_HTTP_MODULES_HTTPS_ONLY");

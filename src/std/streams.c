@@ -1150,6 +1150,9 @@ void JSRT_RuntimeSetupStdStreams(JSRT_Runtime* rt) {
   JSValue reader_ctor = JS_NewCFunction2(ctx, JSRT_ReadableStreamDefaultReaderConstructor,
                                          "ReadableStreamDefaultReader", 1, JS_CFUNC_constructor, 0);
 
+  // Set prototype property on constructor function
+  JS_SetPropertyStr(ctx, reader_ctor, "prototype", JS_DupValue(ctx, reader_proto));
+
   // Set constructor property on prototype
   JS_SetPropertyStr(ctx, reader_proto, "constructor", JS_DupValue(ctx, reader_ctor));
 
@@ -1217,6 +1220,9 @@ void JSRT_RuntimeSetupStdStreams(JSRT_Runtime* rt) {
 
   JSValue writer_ctor = JS_NewCFunction2(ctx, JSRT_WritableStreamDefaultWriterConstructor,
                                          "WritableStreamDefaultWriter", 1, JS_CFUNC_constructor, 0);
+
+  // Set prototype property on constructor function
+  JS_SetPropertyStr(ctx, writer_ctor, "prototype", JS_DupValue(ctx, writer_proto));
 
   // Set constructor property on prototype
   JS_SetPropertyStr(ctx, writer_proto, "constructor", JS_DupValue(ctx, writer_ctor));

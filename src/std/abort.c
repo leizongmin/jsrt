@@ -14,6 +14,16 @@
 static JSClassID JSRT_AbortControllerClassID;
 static JSClassID JSRT_AbortSignalClassID;
 
+// Forward declare event listener function
+static JSValue JSRT_AbortAnyEventListener(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv,
+                                          int magic, JSValue* func_data);
+
+// Structure to hold data for abort event listeners
+typedef struct {
+  JSContext* ctx;
+  JSValue result_signal;
+} JSRT_AbortAnyListenerData;
+
 // AbortSignal implementation (extends EventTarget)
 typedef struct {
   JSValue event_target;  // EventTarget object this extends
@@ -223,14 +233,38 @@ static JSValue JSRT_AbortSignalAny(JSContext* ctx, JSValueConst this_val, int ar
       return JS_ThrowTypeError(ctx, "All elements must be AbortSignal objects");
     }
 
-    // Simplified implementation - for now just continue without setting up event listeners
-    // A complete implementation would set up proper event coordination
+    // Create listener data structure
+    JSRT_AbortAnyListenerData* listener_data = malloc(sizeof(JSRT_AbortAnyListenerData));
+    listener_data->ctx = ctx;
+    listener_data->result_signal = JS_DupValue(ctx, result_signal);
+
+    // Create event listener function with bound data
+    JSValue listener_func = JS_NewCFunctionData(ctx, JSRT_AbortAnyEventListener, 1, 0, 1,
+                                                (JSValueConst[]){JS_NewInt64(ctx, (int64_t)listener_data)});
+
+    // Add event listener to input signal (call addEventListener directly on the AbortSignal)
+    JSValue addEventListener = JS_GetPropertyStr(ctx, item, "addEventListener");
+    if (JS_IsException(addEventListener)) {
+      free(listener_data);
+      JS_FreeValue(ctx, listener_func);
+      continue;  // Skip this signal if addEventListener failed
+    }
+
+    JSValue args[] = {JS_NewString(ctx, "abort"), listener_func};
+    JSValue add_result = JS_Call(ctx, addEventListener, item, 2, args);
+
+    if (JS_IsException(add_result)) {
+      // addEventListener call failed - this is the problem!
+      free(listener_data);
+    }
+
+    // Clean up
+    JS_FreeValue(ctx, addEventListener);
+    JS_FreeValue(ctx, args[0]);
+    JS_FreeValue(ctx, listener_func);
+    JS_FreeValue(ctx, add_result);
     JS_FreeValue(ctx, item);
   }
-
-  // Store a reference to result signal for later use in event handlers
-  // For simplicity, we'll implement a polling approach for now
-  // A complete implementation would use proper event listeners
 
   return result_signal;
 }
@@ -258,6 +292,46 @@ static void JSRT_AbortSignal_DoAbort(JSContext* ctx, JSValue signal_val, JSValue
   JS_FreeValue(ctx, dispatchEvent);
   JS_FreeValue(ctx, result);
   JS_FreeValue(ctx, abort_event);
+}
+
+// Event listener callback for AbortSignal.any()
+static JSValue JSRT_AbortAnyEventListener(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv,
+                                          int magic, JSValue* func_data) {
+  // Get the result signal from the function data
+  if (!func_data) {
+    return JS_UNDEFINED;
+  }
+
+  // Extract result signal from function data (first data element)
+  int64_t result_signal_ptr;
+  if (JS_ToInt64(ctx, &result_signal_ptr, func_data[0])) {
+    return JS_UNDEFINED;
+  }
+
+  JSRT_AbortAnyListenerData* listener_data = (JSRT_AbortAnyListenerData*)result_signal_ptr;
+  if (!listener_data) {
+    return JS_UNDEFINED;
+  }
+
+  JSValue event = argv[0];
+
+  // Get the source signal from event.target
+  JSValue target = JS_GetPropertyStr(ctx, event, "target");
+  if (JS_IsException(target)) {
+    return JS_UNDEFINED;
+  }
+
+  JSRT_AbortSignal* source_signal = JS_GetOpaque2(ctx, target, JSRT_AbortSignalClassID);
+  if (!source_signal) {
+    JS_FreeValue(ctx, target);
+    return JS_UNDEFINED;
+  }
+
+  // Abort the result signal with the same reason as the source signal
+  JSRT_AbortSignal_DoAbort(ctx, listener_data->result_signal, source_signal->reason);
+
+  JS_FreeValue(ctx, target);
+  return JS_UNDEFINED;
 }
 
 // AbortController implementation

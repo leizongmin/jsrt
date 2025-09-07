@@ -41,6 +41,8 @@ typedef struct JSRT_URLSearchParams {
 typedef struct JSRT_URL {
   char* href;
   char* protocol;
+  char* username;
+  char* password;
   char* host;
   char* hostname;
   char* port;
@@ -149,6 +151,8 @@ static JSRT_URL* resolve_relative_url(const char* url, const char* base) {
 
   // Initialize result with base URL components
   result->protocol = strdup(base_url->protocol);
+  result->username = strdup(base_url->username ? base_url->username : "");
+  result->password = strdup(base_url->password ? base_url->password : "");
   result->host = strdup(base_url->host);
   result->hostname = strdup(base_url->hostname);
   result->port = strdup(base_url->port);
@@ -277,6 +281,28 @@ static char* remove_all_ascii_whitespace(const char* url) {
   return result;
 }
 
+// Convert backslashes to forward slashes in URL strings according to WHATWG URL spec
+// This applies to special URL schemes and certain URL contexts
+static char* normalize_url_backslashes(const char* url) {
+  if (!url)
+    return NULL;
+
+  size_t len = strlen(url);
+  char* result = malloc(len + 1);
+  if (!result)
+    return NULL;
+
+  for (size_t i = 0; i < len; i++) {
+    if (url[i] == '\\') {
+      result[i] = '/';
+    } else {
+      result[i] = url[i];
+    }
+  }
+  result[len] = '\0';
+  return result;
+}
+
 static JSRT_URL* JSRT_ParseURL(const char* url, const char* base) {
   // Strip leading and trailing ASCII whitespace, then remove all internal ASCII whitespace per WHATWG URL spec
   char* trimmed_url = strip_url_whitespace(url);
@@ -288,6 +314,15 @@ static JSRT_URL* JSRT_ParseURL(const char* url, const char* base) {
   free(trimmed_url);  // Free the intermediate result
   if (!cleaned_url)
     return NULL;
+
+  // Normalize backslashes to forward slashes according to WHATWG URL spec
+  char* normalized_url = normalize_url_backslashes(cleaned_url);
+  free(cleaned_url);  // Free the intermediate result
+  if (!normalized_url)
+    return NULL;
+
+  // Update cleaned_url to point to the normalized URL
+  cleaned_url = normalized_url;
 
   // Handle empty URL string - per WHATWG URL spec, empty string should resolve to base
   if (strlen(cleaned_url) == 0) {
@@ -345,7 +380,34 @@ static JSRT_URL* JSRT_ParseURL(const char* url, const char* base) {
     }
   }
 
-  // Handle relative URLs with base
+  // Handle protocol-relative URLs (starting with "//")
+  if (base && strncmp(cleaned_url, "//", 2) == 0) {
+    // Protocol-relative URL: inherit protocol from base, parse authority from URL
+    JSRT_URL* base_url = JSRT_ParseURL(base, NULL);
+    if (!base_url) {
+      free(cleaned_url);
+      return NULL;
+    }
+
+    // Create a full URL by combining base protocol with the protocol-relative URL
+    size_t full_url_len = strlen(base_url->protocol) + strlen(cleaned_url) + 2;
+    char* full_url = malloc(full_url_len);
+    if (!full_url) {
+      JSRT_FreeURL(base_url);
+      free(cleaned_url);
+      return NULL;
+    }
+    snprintf(full_url, full_url_len, "%s:%s", base_url->protocol, cleaned_url);
+    JSRT_FreeURL(base_url);
+    free(cleaned_url);
+
+    // Parse the full URL recursively (without base to avoid infinite recursion)
+    JSRT_URL* result = JSRT_ParseURL(full_url, NULL);
+    free(full_url);
+    return result;
+  }
+
+  // Handle other relative URLs with base
   if (base && (cleaned_url[0] == '/' || (!has_scheme && cleaned_url[0] != '\0'))) {
     JSRT_URL* result = resolve_relative_url(cleaned_url, base);
     free(cleaned_url);
@@ -358,6 +420,8 @@ static JSRT_URL* JSRT_ParseURL(const char* url, const char* base) {
   // Initialize with empty strings to prevent NULL dereference
   parsed->href = strdup(cleaned_url);
   parsed->protocol = strdup("");
+  parsed->username = strdup("");
+  parsed->password = strdup("");
   parsed->host = strdup("");
   parsed->hostname = strdup("");
   parsed->port = strdup("");
@@ -602,6 +666,8 @@ static void JSRT_FreeURL(JSRT_URL* url) {
     }
     free(url->href);
     free(url->protocol);
+    free(url->username);
+    free(url->password);
     free(url->host);
     free(url->hostname);
     free(url->port);
@@ -716,6 +782,20 @@ static JSValue JSRT_URLGetProtocol(JSContext* ctx, JSValueConst this_val, int ar
   if (!url)
     return JS_EXCEPTION;
   return JS_NewString(ctx, url->protocol);
+}
+
+static JSValue JSRT_URLGetUsername(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
+  JSRT_URL* url = JS_GetOpaque2(ctx, this_val, JSRT_URLClassID);
+  if (!url)
+    return JS_EXCEPTION;
+  return JS_NewString(ctx, url->username ? url->username : "");
+}
+
+static JSValue JSRT_URLGetPassword(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
+  JSRT_URL* url = JS_GetOpaque2(ctx, this_val, JSRT_URLClassID);
+  if (!url)
+    return JS_EXCEPTION;
+  return JS_NewString(ctx, url->password ? url->password : "");
 }
 
 static JSValue JSRT_URLGetHost(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
@@ -2169,6 +2249,8 @@ void JSRT_RuntimeSetupStdURL(JSRT_Runtime* rt) {
   // Properties with getters
   JSValue get_href = JS_NewCFunction(ctx, JSRT_URLGetHref, "get href", 0);
   JSValue get_protocol = JS_NewCFunction(ctx, JSRT_URLGetProtocol, "get protocol", 0);
+  JSValue get_username = JS_NewCFunction(ctx, JSRT_URLGetUsername, "get username", 0);
+  JSValue get_password = JS_NewCFunction(ctx, JSRT_URLGetPassword, "get password", 0);
   JSValue get_host = JS_NewCFunction(ctx, JSRT_URLGetHost, "get host", 0);
   JSValue get_hostname = JS_NewCFunction(ctx, JSRT_URLGetHostname, "get hostname", 0);
   JSValue get_port = JS_NewCFunction(ctx, JSRT_URLGetPort, "get port", 0);
@@ -2181,6 +2263,8 @@ void JSRT_RuntimeSetupStdURL(JSRT_Runtime* rt) {
 
   JSAtom href_atom = JS_NewAtom(ctx, "href");
   JSAtom protocol_atom = JS_NewAtom(ctx, "protocol");
+  JSAtom username_atom = JS_NewAtom(ctx, "username");
+  JSAtom password_atom = JS_NewAtom(ctx, "password");
   JSAtom host_atom = JS_NewAtom(ctx, "host");
   JSAtom hostname_atom = JS_NewAtom(ctx, "hostname");
   JSAtom port_atom = JS_NewAtom(ctx, "port");
@@ -2192,6 +2276,8 @@ void JSRT_RuntimeSetupStdURL(JSRT_Runtime* rt) {
 
   JS_DefinePropertyGetSet(ctx, url_proto, href_atom, get_href, JS_UNDEFINED, JS_PROP_CONFIGURABLE);
   JS_DefinePropertyGetSet(ctx, url_proto, protocol_atom, get_protocol, JS_UNDEFINED, JS_PROP_CONFIGURABLE);
+  JS_DefinePropertyGetSet(ctx, url_proto, username_atom, get_username, JS_UNDEFINED, JS_PROP_CONFIGURABLE);
+  JS_DefinePropertyGetSet(ctx, url_proto, password_atom, get_password, JS_UNDEFINED, JS_PROP_CONFIGURABLE);
   JS_DefinePropertyGetSet(ctx, url_proto, host_atom, get_host, JS_UNDEFINED, JS_PROP_CONFIGURABLE);
   JS_DefinePropertyGetSet(ctx, url_proto, hostname_atom, get_hostname, JS_UNDEFINED, JS_PROP_CONFIGURABLE);
   JS_DefinePropertyGetSet(ctx, url_proto, port_atom, get_port, JS_UNDEFINED, JS_PROP_CONFIGURABLE);
@@ -2203,6 +2289,8 @@ void JSRT_RuntimeSetupStdURL(JSRT_Runtime* rt) {
 
   JS_FreeAtom(ctx, href_atom);
   JS_FreeAtom(ctx, protocol_atom);
+  JS_FreeAtom(ctx, username_atom);
+  JS_FreeAtom(ctx, password_atom);
   JS_FreeAtom(ctx, host_atom);
   JS_FreeAtom(ctx, hostname_atom);
   JS_FreeAtom(ctx, port_atom);

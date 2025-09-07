@@ -7,6 +7,7 @@
 #include <string.h>
 #include <uv.h>
 
+#include "../jsrt.h"
 #include "../util/debug.h"
 #include "event.h"
 
@@ -14,7 +15,35 @@
 static JSClassID JSRT_AbortControllerClassID;
 static JSClassID JSRT_AbortSignalClassID;
 
-// No forward declaration needed - using JavaScript closures
+// Forward declare internal functions
+static void JSRT_AbortSignal_DoAbort(JSContext* ctx, JSValue signal_val, JSValue reason);
+
+// Timeout callback structures and functions
+typedef struct {
+  JSContext* ctx;
+  JSValue signal;
+  JSValue reason;
+  uv_timer_t* timer;
+} JSRT_TimeoutData;
+
+static void jsrt_timeout_close_callback(uv_handle_t* handle) {
+  JSRT_TimeoutData* data = (JSRT_TimeoutData*)handle->data;
+  free(data);
+  free(handle);
+}
+
+static void jsrt_timeout_callback(uv_timer_t* timer) {
+  JSRT_TimeoutData* data = (JSRT_TimeoutData*)timer->data;
+
+  // Abort the signal with TimeoutError
+  JSRT_AbortSignal_DoAbort(data->ctx, data->signal, data->reason);
+
+  // Cleanup
+  JS_FreeValue(data->ctx, data->signal);
+  JS_FreeValue(data->ctx, data->reason);
+  uv_timer_stop(timer);
+  uv_close((uv_handle_t*)timer, jsrt_timeout_close_callback);
+}
 
 // AbortSignal.any() now uses JavaScript closures instead of C structures
 
@@ -113,6 +142,31 @@ static JSValue JSRT_AbortSignalDispatchEvent(JSContext* ctx, JSValueConst this_v
     return JS_EXCEPTION;
   }
 
+  // Set the event's internal target field to this AbortSignal before dispatching
+  if (argc > 0 && !JS_IsUndefined(argv[0])) {
+    extern JSClassID JSRT_EventClassID;
+
+    typedef struct {
+      char* type;
+      JSValue target;
+      JSValue currentTarget;
+      bool bubbles;
+      bool cancelable;
+      bool defaultPrevented;
+      bool stopPropagationFlag;
+      bool stopImmediatePropagationFlag;
+    } JSRT_Event_Internal;
+
+    JSRT_Event_Internal* event_struct = JS_GetOpaque(argv[0], JSRT_EventClassID);
+    if (event_struct) {
+      // Free any existing target and set new one
+      if (!JS_IsUndefined(event_struct->target)) {
+        JS_FreeValue(ctx, event_struct->target);
+      }
+      event_struct->target = JS_DupValue(ctx, this_val);
+    }
+  }
+
   // Delegate to EventTarget
   JSValue dispatchEvent = JS_GetPropertyStr(ctx, signal->event_target, "dispatchEvent");
   JSValue result = JS_Call(ctx, dispatchEvent, signal->event_target, argc, argv);
@@ -150,8 +204,38 @@ static JSValue JSRT_AbortSignalTimeout(JSContext* ctx, JSValueConst this_val, in
 
   JSValue signal = JSRT_CreateAbortSignal(ctx, false, JS_UNDEFINED);
 
-  // TODO: Implement actual timeout using libuv timer
-  // For now, just return a non-aborted signal
+  // Create TimeoutError DOMException for the abort reason
+  JSValue dom_exception_ctor = JS_GetPropertyStr(ctx, JS_GetGlobalObject(ctx), "DOMException");
+  JSValue args[2] = {JS_NewString(ctx, "The operation timed out."), JS_NewString(ctx, "TimeoutError")};
+  JSValue timeout_reason = JS_CallConstructor(ctx, dom_exception_ctor, 2, args);
+  JS_FreeValue(ctx, dom_exception_ctor);
+  JS_FreeValue(ctx, args[0]);
+  JS_FreeValue(ctx, args[1]);
+
+  // Set up libuv timer for the timeout
+  if (delay > 0) {
+    // Get the runtime for libuv loop access
+    JSRuntime* rt = JS_GetRuntime(ctx);
+    JSRT_Runtime* jsrt_rt = JS_GetRuntimeOpaque(rt);
+
+    if (jsrt_rt && jsrt_rt->uv_loop) {
+      uv_timer_t* timer = malloc(sizeof(uv_timer_t));
+      uv_timer_init(jsrt_rt->uv_loop, timer);
+
+      // Store signal and reason in timer data for callback
+      JSRT_TimeoutData* timeout_data = malloc(sizeof(JSRT_TimeoutData));
+      timeout_data->ctx = ctx;
+      timeout_data->signal = JS_DupValue(ctx, signal);
+      timeout_data->reason = JS_DupValue(ctx, timeout_reason);
+      timeout_data->timer = timer;
+      timer->data = timeout_data;
+
+      // Start the timer - callback will abort the signal when timeout occurs
+      uv_timer_start(timer, jsrt_timeout_callback, delay, 0);
+    }
+  }
+
+  JS_FreeValue(ctx, timeout_reason);
 
   return signal;
 }
@@ -327,7 +411,30 @@ static void JSRT_AbortSignal_DoAbort(JSContext* ctx, JSValue signal_val, JSValue
   JSValue abort_event = JS_CallConstructor(ctx, event_ctor, 1, (JSValueConst[]){JS_NewString(ctx, "abort")});
   JS_FreeValue(ctx, event_ctor);
 
-  // Target will be set automatically by dispatchEvent
+  // Set the event's internal target field to this signal
+  // We need to access the Event structure directly since target is read-only
+  extern JSClassID JSRT_EventClassID;  // Declare the class ID from event.c
+
+  // Get the Event structure and set its target field
+  typedef struct {
+    char* type;
+    JSValue target;
+    JSValue currentTarget;
+    bool bubbles;
+    bool cancelable;
+    bool defaultPrevented;
+    bool stopPropagationFlag;
+    bool stopImmediatePropagationFlag;
+  } JSRT_Event_Internal;
+
+  JSRT_Event_Internal* event_struct = JS_GetOpaque(abort_event, JSRT_EventClassID);
+  if (event_struct) {
+    // Free any existing target and set new one
+    if (!JS_IsUndefined(event_struct->target)) {
+      JS_FreeValue(ctx, event_struct->target);
+    }
+    event_struct->target = JS_DupValue(ctx, signal_val);
+  }
 
   // Call onabort handler if it exists
   JSValue onabort = JS_GetPropertyStr(ctx, signal_val, "onabort");

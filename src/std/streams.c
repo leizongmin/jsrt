@@ -25,6 +25,8 @@ typedef struct {
   size_t queue_size;
   size_t queue_capacity;
   bool closed;
+  bool errored;         // Whether the controller is in error state
+  JSValue error_value;  // The error value (if errored)
 } JSRT_ReadableStreamDefaultController;
 
 static void JSRT_ReadableStreamDefaultControllerFinalize(JSRuntime* rt, JSValue val) {
@@ -32,6 +34,9 @@ static void JSRT_ReadableStreamDefaultControllerFinalize(JSRuntime* rt, JSValue 
   if (controller) {
     if (!JS_IsUndefined(controller->stream)) {
       JS_FreeValueRT(rt, controller->stream);
+    }
+    if (!JS_IsUndefined(controller->error_value)) {
+      JS_FreeValueRT(rt, controller->error_value);
     }
     // Free queue
     for (size_t i = 0; i < controller->queue_size; i++) {
@@ -106,7 +111,13 @@ static JSValue JSRT_ReadableStreamDefaultControllerError(JSContext* ctx, JSValue
     return JS_EXCEPTION;
   }
 
-  controller->closed = true;  // Error also closes the stream
+  controller->closed = true;   // Error also closes the stream
+  controller->errored = true;  // Mark as errored
+
+  // Store the error value (undefined if no argument provided)
+  JSValue error_value = (argc > 0) ? argv[0] : JS_UNDEFINED;
+  controller->error_value = JS_DupValue(ctx, error_value);
+
   return JS_UNDEFINED;
 }
 
@@ -145,6 +156,8 @@ static JSValue JSRT_ReadableStreamConstructor(JSContext* ctx, JSValueConst new_t
   controller_data->queue_size = 0;
   controller_data->queue_capacity = 0;
   controller_data->closed = false;
+  controller_data->errored = false;
+  controller_data->error_value = JS_UNDEFINED;
 
   JSValue controller = JS_NewObjectClass(ctx, JSRT_ReadableStreamDefaultControllerClassID);
   JS_SetOpaque(controller, controller_data);
@@ -285,16 +298,36 @@ static JSValue JSRT_ReadableStreamDefaultReaderGetClosed(JSContext* ctx, JSValue
     return JS_EXCEPTION;
   }
 
-  // Return the same cached promise instance
+  // Return the same cached promise instance if available
   if (!JS_IsUninitialized(reader->closed_promise)) {
     return JS_DupValue(ctx, reader->closed_promise);
+  }
+
+  // Get the stream and its controller to check error state
+  JSRT_ReadableStream* stream = JS_GetOpaque(reader->stream, JSRT_ReadableStreamClassID);
+  if (!stream) {
+    return JS_EXCEPTION;
+  }
+
+  JSRT_ReadableStreamDefaultController* controller =
+      JS_GetOpaque(stream->controller, JSRT_ReadableStreamDefaultControllerClassID);
+  if (!controller) {
+    return JS_EXCEPTION;
   }
 
   // Create and cache the promise
   JSValue promise_ctor = JS_GetPropertyStr(ctx, JS_GetGlobalObject(ctx), "Promise");
 
-  if (reader->closed) {
-    // Reader is closed, return a resolved promise
+  if (controller->errored) {
+    // Stream is errored, return a rejected promise with the error value
+    JSValue reject_method = JS_GetPropertyStr(ctx, promise_ctor, "reject");
+    JSValue promise = JS_Call(ctx, reject_method, promise_ctor, 1, &controller->error_value);
+    JS_FreeValue(ctx, reject_method);
+    reader->closed_promise = JS_DupValue(ctx, promise);
+    JS_FreeValue(ctx, promise_ctor);
+    return promise;
+  } else if (reader->closed) {
+    // Reader is closed normally, return a resolved promise
     JSValue resolve_method = JS_GetPropertyStr(ctx, promise_ctor, "resolve");
     JSValue undefined_val = JS_UNDEFINED;
     JSValue promise = JS_Call(ctx, resolve_method, promise_ctor, 1, &undefined_val);
@@ -303,8 +336,8 @@ static JSValue JSRT_ReadableStreamDefaultReaderGetClosed(JSContext* ctx, JSValue
     JS_FreeValue(ctx, promise_ctor);
     return promise;
   } else {
-    // Reader is not closed, return a pending promise that will resolve when closed
-    // For now, return a resolved promise (simplified implementation)
+    // Reader is not closed and not errored, return a pending promise (resolved for now)
+    // In a complete implementation, this would be a truly pending promise
     JSValue resolve_method = JS_GetPropertyStr(ctx, promise_ctor, "resolve");
     JSValue undefined_val = JS_UNDEFINED;
     JSValue promise = JS_Call(ctx, resolve_method, promise_ctor, 1, &undefined_val);
@@ -1114,10 +1147,13 @@ void JSRT_RuntimeSetupStdStreams(JSRT_Runtime* rt) {
   JS_SetPropertyStr(ctx, reader_proto, "releaseLock",
                     JS_NewCFunction(ctx, JSRT_ReadableStreamDefaultReaderReleaseLock, "releaseLock", 0));
 
-  JS_SetClassProto(ctx, JSRT_ReadableStreamDefaultReaderClassID, reader_proto);
-
   JSValue reader_ctor = JS_NewCFunction2(ctx, JSRT_ReadableStreamDefaultReaderConstructor,
                                          "ReadableStreamDefaultReader", 1, JS_CFUNC_constructor, 0);
+
+  // Set constructor property on prototype
+  JS_SetPropertyStr(ctx, reader_proto, "constructor", JS_DupValue(ctx, reader_ctor));
+
+  JS_SetClassProto(ctx, JSRT_ReadableStreamDefaultReaderClassID, reader_proto);
   JS_SetPropertyStr(ctx, rt->global, "ReadableStreamDefaultReader", reader_ctor);
 
   // Register WritableStream class
@@ -1179,10 +1215,13 @@ void JSRT_RuntimeSetupStdStreams(JSRT_Runtime* rt) {
   JS_SetPropertyStr(ctx, writer_proto, "abort",
                     JS_NewCFunction(ctx, JSRT_WritableStreamDefaultWriterAbort, "abort", 1));
 
-  JS_SetClassProto(ctx, JSRT_WritableStreamDefaultWriterClassID, writer_proto);
-
   JSValue writer_ctor = JS_NewCFunction2(ctx, JSRT_WritableStreamDefaultWriterConstructor,
                                          "WritableStreamDefaultWriter", 1, JS_CFUNC_constructor, 0);
+
+  // Set constructor property on prototype
+  JS_SetPropertyStr(ctx, writer_proto, "constructor", JS_DupValue(ctx, writer_ctor));
+
+  JS_SetClassProto(ctx, JSRT_WritableStreamDefaultWriterClassID, writer_proto);
   JS_SetPropertyStr(ctx, rt->global, "WritableStreamDefaultWriter", writer_ctor);
 
   // Register TransformStream class

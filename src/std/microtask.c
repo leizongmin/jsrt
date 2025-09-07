@@ -16,7 +16,7 @@ static JSValue microtask_job_func(JSContext* ctx, int argc, JSValueConst* argv) 
       JSRT_Debug("Microtask threw an exception");
     }
     JS_FreeValue(ctx, result);
-    JS_FreeValue(ctx, argv[0]); // Free the callback function
+    JS_FreeValue(ctx, argv[0]);  // Free the callback function
   }
   return JS_UNDEFINED;
 }
@@ -32,7 +32,7 @@ static JSValue js_queue_microtask(JSContext* ctx, JSValueConst this_val, int arg
 
   // Use JS_EnqueueJob with a wrapper function
   JSValue job_callback = JS_DupValue(ctx, argv[0]);
-  JSValueConst job_args[] = { job_callback };
+  JSValueConst job_args[] = {job_callback};
   int result = JS_EnqueueJob(ctx, microtask_job_func, 1, job_args);
 
   if (result < 0) {

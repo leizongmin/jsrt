@@ -19,6 +19,10 @@
 #define JSRT_GETPID() getpid()
 #define JSRT_GETPPID() getppid()
 #define JSRT_GETHOSTNAME(buf, size) gethostname(buf, size)
+#ifdef __APPLE__
+#include <mach/mach.h>
+#include <mach/vm_statistics.h>
+#endif
 #endif
 
 // node:os.arch implementation
@@ -230,6 +234,160 @@ static JSValue js_os_endianness(JSContext* ctx, JSValueConst this_val, int argc,
   }
 }
 
+// node:os.cpus implementation
+static JSValue js_os_cpus(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
+  JSValue cpus_array = JS_NewArray(ctx);
+
+#ifdef _WIN32
+  SYSTEM_INFO si;
+  GetSystemInfo(&si);
+  int num_cpus = si.dwNumberOfProcessors;
+
+  for (int i = 0; i < num_cpus; i++) {
+    JSValue cpu_obj = JS_NewObject(ctx);
+    JS_SetPropertyStr(ctx, cpu_obj, "model", JS_NewString(ctx, "Unknown CPU"));
+    JS_SetPropertyStr(ctx, cpu_obj, "speed", JS_NewInt32(ctx, 0));
+
+    JSValue times_obj = JS_NewObject(ctx);
+    JS_SetPropertyStr(ctx, times_obj, "user", JS_NewInt32(ctx, 0));
+    JS_SetPropertyStr(ctx, times_obj, "nice", JS_NewInt32(ctx, 0));
+    JS_SetPropertyStr(ctx, times_obj, "sys", JS_NewInt32(ctx, 0));
+    JS_SetPropertyStr(ctx, times_obj, "idle", JS_NewInt32(ctx, 0));
+    JS_SetPropertyStr(ctx, times_obj, "irq", JS_NewInt32(ctx, 0));
+    JS_SetPropertyStr(ctx, cpu_obj, "times", times_obj);
+
+    JS_SetPropertyUint32(ctx, cpus_array, i, cpu_obj);
+  }
+#else
+  // For Unix-like systems, we'll provide a basic implementation
+  // In a full implementation, you'd read from /proc/cpuinfo on Linux
+  long num_cpus = sysconf(_SC_NPROCESSORS_ONLN);
+  if (num_cpus <= 0)
+    num_cpus = 1;
+
+  for (long i = 0; i < num_cpus; i++) {
+    JSValue cpu_obj = JS_NewObject(ctx);
+    JS_SetPropertyStr(ctx, cpu_obj, "model", JS_NewString(ctx, "Unknown CPU"));
+    JS_SetPropertyStr(ctx, cpu_obj, "speed", JS_NewInt32(ctx, 0));
+
+    JSValue times_obj = JS_NewObject(ctx);
+    JS_SetPropertyStr(ctx, times_obj, "user", JS_NewInt32(ctx, 0));
+    JS_SetPropertyStr(ctx, times_obj, "nice", JS_NewInt32(ctx, 0));
+    JS_SetPropertyStr(ctx, times_obj, "sys", JS_NewInt32(ctx, 0));
+    JS_SetPropertyStr(ctx, times_obj, "idle", JS_NewInt32(ctx, 0));
+    JS_SetPropertyStr(ctx, times_obj, "irq", JS_NewInt32(ctx, 0));
+    JS_SetPropertyStr(ctx, cpu_obj, "times", times_obj);
+
+    JS_SetPropertyUint32(ctx, cpus_array, i, cpu_obj);
+  }
+#endif
+
+  return cpus_array;
+}
+
+// node:os.loadavg implementation
+static JSValue js_os_loadavg(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
+  JSValue loadavg_array = JS_NewArray(ctx);
+
+#ifdef _WIN32
+  // Windows doesn't have load average, return zeros
+  JS_SetPropertyUint32(ctx, loadavg_array, 0, JS_NewFloat64(ctx, 0.0));
+  JS_SetPropertyUint32(ctx, loadavg_array, 1, JS_NewFloat64(ctx, 0.0));
+  JS_SetPropertyUint32(ctx, loadavg_array, 2, JS_NewFloat64(ctx, 0.0));
+#else
+  double loadavg[3];
+  if (getloadavg(loadavg, 3) == 3) {
+    JS_SetPropertyUint32(ctx, loadavg_array, 0, JS_NewFloat64(ctx, loadavg[0]));
+    JS_SetPropertyUint32(ctx, loadavg_array, 1, JS_NewFloat64(ctx, loadavg[1]));
+    JS_SetPropertyUint32(ctx, loadavg_array, 2, JS_NewFloat64(ctx, loadavg[2]));
+  } else {
+    // Fallback to zeros if getloadavg fails
+    JS_SetPropertyUint32(ctx, loadavg_array, 0, JS_NewFloat64(ctx, 0.0));
+    JS_SetPropertyUint32(ctx, loadavg_array, 1, JS_NewFloat64(ctx, 0.0));
+    JS_SetPropertyUint32(ctx, loadavg_array, 2, JS_NewFloat64(ctx, 0.0));
+  }
+#endif
+
+  return loadavg_array;
+}
+
+// node:os.uptime implementation
+static JSValue js_os_uptime(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
+#ifdef _WIN32
+  // Windows implementation
+  ULONGLONG uptime_ms = GetTickCount64();
+  double uptime_seconds = uptime_ms / 1000.0;
+  return JS_NewFloat64(ctx, uptime_seconds);
+#else
+  // Unix implementation - read from /proc/uptime on Linux, or use sysctl on other Unix
+  FILE* f = fopen("/proc/uptime", "r");
+  if (f) {
+    double uptime;
+    if (fscanf(f, "%lf", &uptime) == 1) {
+      fclose(f);
+      return JS_NewFloat64(ctx, uptime);
+    }
+    fclose(f);
+  }
+
+  // Fallback: return 0 if we can't determine uptime
+  return JS_NewFloat64(ctx, 0.0);
+#endif
+}
+
+// node:os.totalmem implementation
+static JSValue js_os_totalmem(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
+#ifdef _WIN32
+  MEMORYSTATUSEX mem_status;
+  mem_status.dwLength = sizeof(mem_status);
+  if (GlobalMemoryStatusEx(&mem_status)) {
+    return JS_NewFloat64(ctx, (double)mem_status.ullTotalPhys);
+  }
+  return JS_NewFloat64(ctx, 0);
+#else
+  long pages = sysconf(_SC_PHYS_PAGES);
+  long page_size = sysconf(_SC_PAGESIZE);
+  if (pages > 0 && page_size > 0) {
+    return JS_NewFloat64(ctx, (double)pages * page_size);
+  }
+  return JS_NewFloat64(ctx, 0);
+#endif
+}
+
+// node:os.freemem implementation
+static JSValue js_os_freemem(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
+#ifdef _WIN32
+  MEMORYSTATUSEX mem_status;
+  mem_status.dwLength = sizeof(mem_status);
+  if (GlobalMemoryStatusEx(&mem_status)) {
+    return JS_NewFloat64(ctx, (double)mem_status.ullAvailPhys);
+  }
+  return JS_NewFloat64(ctx, 0);
+#elif defined(__APPLE__)
+  // macOS-specific implementation using vm_statistics64
+  vm_size_t page_size;
+  vm_statistics64_data_t vm_stat;
+  mach_msg_type_number_t host_count = sizeof(vm_stat) / sizeof(natural_t);
+
+  if (host_page_size(mach_host_self(), &page_size) == KERN_SUCCESS &&
+      host_statistics64(mach_host_self(), HOST_VM_INFO64, (host_info64_t)&vm_stat, &host_count) == KERN_SUCCESS) {
+    // Free memory = free pages + inactive pages + speculative pages
+    uint64_t free_memory =
+        (uint64_t)(vm_stat.free_count + vm_stat.inactive_count + vm_stat.speculative_count) * page_size;
+    return JS_NewFloat64(ctx, (double)free_memory);
+  }
+  return JS_NewFloat64(ctx, 0);
+#else
+  // Linux and other Unix systems
+  long pages = sysconf(_SC_AVPHYS_PAGES);
+  long page_size = sysconf(_SC_PAGESIZE);
+  if (pages > 0 && page_size > 0) {
+    return JS_NewFloat64(ctx, (double)pages * page_size);
+  }
+  return JS_NewFloat64(ctx, 0);
+#endif
+}
+
 // Initialize node:os module for CommonJS
 JSValue JSRT_InitNodeOs(JSContext* ctx) {
   JSValue os_obj = JS_NewObject(ctx);
@@ -244,6 +402,13 @@ JSValue JSRT_InitNodeOs(JSContext* ctx) {
   JS_SetPropertyStr(ctx, os_obj, "homedir", JS_NewCFunction(ctx, js_os_homedir, "homedir", 0));
   JS_SetPropertyStr(ctx, os_obj, "userInfo", JS_NewCFunction(ctx, js_os_userInfo, "userInfo", 0));
   JS_SetPropertyStr(ctx, os_obj, "endianness", JS_NewCFunction(ctx, js_os_endianness, "endianness", 0));
+
+  // Add system information methods
+  JS_SetPropertyStr(ctx, os_obj, "cpus", JS_NewCFunction(ctx, js_os_cpus, "cpus", 0));
+  JS_SetPropertyStr(ctx, os_obj, "loadavg", JS_NewCFunction(ctx, js_os_loadavg, "loadavg", 0));
+  JS_SetPropertyStr(ctx, os_obj, "uptime", JS_NewCFunction(ctx, js_os_uptime, "uptime", 0));
+  JS_SetPropertyStr(ctx, os_obj, "totalmem", JS_NewCFunction(ctx, js_os_totalmem, "totalmem", 0));
+  JS_SetPropertyStr(ctx, os_obj, "freemem", JS_NewCFunction(ctx, js_os_freemem, "freemem", 0));
 
   // Add constants
   JS_SetPropertyStr(ctx, os_obj, "EOL",

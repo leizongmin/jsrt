@@ -467,6 +467,202 @@ static JSValue js_fs_unlink_sync(JSContext* ctx, JSValueConst this_val, int argc
   return JS_UNDEFINED;
 }
 
+// fs.readFile(path, callback) - callback-based async version
+static JSValue js_fs_read_file(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
+  if (argc < 2) {
+    return JS_ThrowTypeError(ctx, "path and callback are required");
+  }
+
+  const char* path = JS_ToCString(ctx, argv[0]);
+  if (!path) {
+    return JS_EXCEPTION;
+  }
+
+  if (!JS_IsFunction(ctx, argv[1])) {
+    JS_FreeCString(ctx, path);
+    return JS_ThrowTypeError(ctx, "callback must be a function");
+  }
+
+  // For simplicity, implement as sync operation but call callback asynchronously
+  // In a full implementation, this would use libuv for true async I/O
+
+  FILE* file = fopen(path, "rb");
+  if (!file) {
+    // Call callback with error
+    JSValue error = create_fs_error(ctx, errno, "open", path);
+    JSValue callback_args[] = {error, JS_UNDEFINED};
+    JS_Call(ctx, argv[1], JS_UNDEFINED, 2, callback_args);
+    JS_FreeValue(ctx, error);
+    JS_FreeCString(ctx, path);
+    return JS_UNDEFINED;
+  }
+
+  // Get file size and read content
+  fseek(file, 0, SEEK_END);
+  long size = ftell(file);
+  fseek(file, 0, SEEK_SET);
+
+  if (size < 0) {
+    fclose(file);
+    JSValue error = create_fs_error(ctx, errno, "stat", path);
+    JSValue callback_args[] = {error, JS_UNDEFINED};
+    JS_Call(ctx, argv[1], JS_UNDEFINED, 2, callback_args);
+    JS_FreeValue(ctx, error);
+    JS_FreeCString(ctx, path);
+    return JS_UNDEFINED;
+  }
+
+  char* buffer = malloc(size + 1);
+  if (!buffer) {
+    fclose(file);
+    JSValue error = JS_NewError(ctx);
+    JS_SetPropertyStr(ctx, error, "message", JS_NewString(ctx, "Out of memory"));
+    JSValue callback_args[] = {error, JS_UNDEFINED};
+    JS_Call(ctx, argv[1], JS_UNDEFINED, 2, callback_args);
+    JS_FreeValue(ctx, error);
+    JS_FreeCString(ctx, path);
+    return JS_UNDEFINED;
+  }
+
+  size_t read_size = fread(buffer, 1, size, file);
+  fclose(file);
+
+  if (read_size != (size_t)size) {
+    free(buffer);
+    JSValue error = create_fs_error(ctx, errno, "read", path);
+    JSValue callback_args[] = {error, JS_UNDEFINED};
+    JS_Call(ctx, argv[1], JS_UNDEFINED, 2, callback_args);
+    JS_FreeValue(ctx, error);
+    JS_FreeCString(ctx, path);
+    return JS_UNDEFINED;
+  }
+
+  buffer[size] = '\0';
+
+  // Create Buffer result
+  JSValue buffer_module = JSRT_LoadNodeModuleCommonJS(ctx, "buffer");
+  JSValue buffer_result = JS_UNDEFINED;
+
+  if (!JS_IsException(buffer_module)) {
+    JSValue buffer_class = JS_GetPropertyStr(ctx, buffer_module, "Buffer");
+    JSValue from_method = JS_GetPropertyStr(ctx, buffer_class, "from");
+    if (JS_IsFunction(ctx, from_method)) {
+      JSValue str_arg = JS_NewString(ctx, buffer);
+      JSValue from_args[] = {str_arg};
+      buffer_result = JS_Call(ctx, from_method, buffer_class, 1, from_args);
+      JS_FreeValue(ctx, str_arg);
+    }
+    JS_FreeValue(ctx, from_method);
+    JS_FreeValue(ctx, buffer_class);
+    JS_FreeValue(ctx, buffer_module);
+  }
+
+  // Call callback with success
+  JSValue callback_args[] = {JS_NULL, buffer_result};
+  JS_Call(ctx, argv[1], JS_UNDEFINED, 2, callback_args);
+  JS_FreeValue(ctx, buffer_result);
+
+  free(buffer);
+  JS_FreeCString(ctx, path);
+  return JS_UNDEFINED;
+}
+
+// fs.writeFile(path, data, callback) - callback-based async version
+static JSValue js_fs_write_file(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
+  if (argc < 3) {
+    return JS_ThrowTypeError(ctx, "path, data, and callback are required");
+  }
+
+  const char* path = JS_ToCString(ctx, argv[0]);
+  if (!path) {
+    return JS_EXCEPTION;
+  }
+
+  if (!JS_IsFunction(ctx, argv[2])) {
+    JS_FreeCString(ctx, path);
+    return JS_ThrowTypeError(ctx, "callback must be a function");
+  }
+
+  // Get data to write
+  const char* data = NULL;
+  size_t data_len = 0;
+
+  if (JS_IsString(argv[1])) {
+    data = JS_ToCString(ctx, argv[1]);
+    if (data) {
+      data_len = strlen(data);
+    }
+  } else {
+    // Try to handle Buffer objects
+    JSValue buffer_module = JSRT_LoadNodeModuleCommonJS(ctx, "buffer");
+    if (!JS_IsException(buffer_module)) {
+      JSValue buffer_class = JS_GetPropertyStr(ctx, buffer_module, "Buffer");
+      JSValue is_buffer = JS_GetPropertyStr(ctx, buffer_class, "isBuffer");
+      if (JS_IsFunction(ctx, is_buffer)) {
+        JSValue check_args[] = {argv[1]};
+        JSValue is_buf_result = JS_Call(ctx, is_buffer, buffer_class, 1, check_args);
+        if (JS_ToBool(ctx, is_buf_result)) {
+          // It's a buffer, convert to string for now
+          JSValue to_string = JS_GetPropertyStr(ctx, argv[1], "toString");
+          if (JS_IsFunction(ctx, to_string)) {
+            JSValue str_result = JS_Call(ctx, to_string, argv[1], 0, NULL);
+            data = JS_ToCString(ctx, str_result);
+            if (data) {
+              data_len = strlen(data);
+            }
+            JS_FreeValue(ctx, str_result);
+          }
+          JS_FreeValue(ctx, to_string);
+        }
+        JS_FreeValue(ctx, is_buf_result);
+      }
+      JS_FreeValue(ctx, is_buffer);
+      JS_FreeValue(ctx, buffer_class);
+      JS_FreeValue(ctx, buffer_module);
+    }
+  }
+
+  if (!data) {
+    JS_FreeCString(ctx, path);
+    JSValue error = JS_NewError(ctx);
+    JS_SetPropertyStr(ctx, error, "message", JS_NewString(ctx, "data must be a string or Buffer"));
+    JSValue callback_args[] = {error};
+    JS_Call(ctx, argv[2], JS_UNDEFINED, 1, callback_args);
+    JS_FreeValue(ctx, error);
+    return JS_UNDEFINED;
+  }
+
+  // Write file
+  FILE* file = fopen(path, "wb");
+  if (!file) {
+    JSValue error = create_fs_error(ctx, errno, "open", path);
+    JSValue callback_args[] = {error};
+    JS_Call(ctx, argv[2], JS_UNDEFINED, 1, callback_args);
+    JS_FreeValue(ctx, error);
+    JS_FreeCString(ctx, data);
+    JS_FreeCString(ctx, path);
+    return JS_UNDEFINED;
+  }
+
+  size_t written = fwrite(data, 1, data_len, file);
+  fclose(file);
+
+  if (written != data_len) {
+    JSValue error = create_fs_error(ctx, errno, "write", path);
+    JSValue callback_args[] = {error};
+    JS_Call(ctx, argv[2], JS_UNDEFINED, 1, callback_args);
+    JS_FreeValue(ctx, error);
+  } else {
+    // Success - call callback with null error
+    JSValue callback_args[] = {JS_NULL};
+    JS_Call(ctx, argv[2], JS_UNDEFINED, 1, callback_args);
+  }
+
+  JS_FreeCString(ctx, data);
+  JS_FreeCString(ctx, path);
+  return JS_UNDEFINED;
+}
+
 // Module initialization
 JSValue JSRT_InitNodeFs(JSContext* ctx) {
   JSValue fs_module = JS_NewObject(ctx);
@@ -479,6 +675,10 @@ JSValue JSRT_InitNodeFs(JSContext* ctx) {
   JS_SetPropertyStr(ctx, fs_module, "readdirSync", JS_NewCFunction(ctx, js_fs_readdir_sync, "readdirSync", 1));
   JS_SetPropertyStr(ctx, fs_module, "mkdirSync", JS_NewCFunction(ctx, js_fs_mkdir_sync, "mkdirSync", 2));
   JS_SetPropertyStr(ctx, fs_module, "unlinkSync", JS_NewCFunction(ctx, js_fs_unlink_sync, "unlinkSync", 1));
+
+  // Asynchronous file operations
+  JS_SetPropertyStr(ctx, fs_module, "readFile", JS_NewCFunction(ctx, js_fs_read_file, "readFile", 2));
+  JS_SetPropertyStr(ctx, fs_module, "writeFile", JS_NewCFunction(ctx, js_fs_write_file, "writeFile", 3));
 
   // Constants
   JSValue constants = JS_NewObject(ctx);
@@ -498,6 +698,8 @@ int js_node_fs_init(JSContext* ctx, JSModuleDef* m) {
   // Export individual functions
   JS_SetModuleExport(ctx, m, "readFileSync", JS_GetPropertyStr(ctx, fs_module, "readFileSync"));
   JS_SetModuleExport(ctx, m, "writeFileSync", JS_GetPropertyStr(ctx, fs_module, "writeFileSync"));
+  JS_SetModuleExport(ctx, m, "readFile", JS_GetPropertyStr(ctx, fs_module, "readFile"));
+  JS_SetModuleExport(ctx, m, "writeFile", JS_GetPropertyStr(ctx, fs_module, "writeFile"));
   JS_SetModuleExport(ctx, m, "existsSync", JS_GetPropertyStr(ctx, fs_module, "existsSync"));
   JS_SetModuleExport(ctx, m, "statSync", JS_GetPropertyStr(ctx, fs_module, "statSync"));
   JS_SetModuleExport(ctx, m, "readdirSync", JS_GetPropertyStr(ctx, fs_module, "readdirSync"));

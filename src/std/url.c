@@ -271,8 +271,8 @@ static char* normalize_port(const char* port_str, const char* protocol) {
   return result;
 }
 
-// Remove all ASCII whitespace characters from URL string per WHATWG spec
-// ASCII whitespace: space (0x20), tab (0x09), LF (0x0A), CR (0x0D), FF (0x0C)
+// Remove tab, newline, and carriage return from URL string per WHATWG spec
+// Only remove: tab (0x09), LF (0x0A), CR (0x0D) - preserve space (0x20) and form feed (0x0C)
 static char* remove_all_ascii_whitespace(const char* url) {
   if (!url)
     return NULL;
@@ -285,8 +285,8 @@ static char* remove_all_ascii_whitespace(const char* url) {
   size_t j = 0;
   for (size_t i = 0; i < len; i++) {
     char c = url[i];
-    // Skip ASCII whitespace characters
-    if (c != 0x20 && c != 0x09 && c != 0x0A && c != 0x0D && c != 0x0C) {
+    // Skip only tab, line feed, and carriage return - preserve space
+    if (c != 0x09 && c != 0x0A && c != 0x0D) {
       result[j++] = c;
     }
   }
@@ -361,20 +361,30 @@ static JSRT_URL* JSRT_ParseURL(const char* url, const char* base) {
 
   // Check if URL has a scheme (protocol)
   // A URL has a scheme if it contains ':' before any '/', '?', or '#'
-  // AND there is at least one character before the colon
+  // AND the first character is a letter (per WHATWG URL Standard)
   // However, special schemes (http, https, ftp, ws, wss) are only absolute if followed by "//"
   int has_scheme = 0;
   char* colon_pos = NULL;
-  for (const char* p = cleaned_url; *p; p++) {
-    if (*p == ':') {
-      // Only consider it a scheme if there's at least one character before the colon
-      if (p > cleaned_url) {
-        colon_pos = (char*)p;
-        has_scheme = 1;
+  
+  // First character must be a letter for valid scheme
+  if (cleaned_url[0] && ((cleaned_url[0] >= 'a' && cleaned_url[0] <= 'z') || (cleaned_url[0] >= 'A' && cleaned_url[0] <= 'Z'))) {
+    for (const char* p = cleaned_url; *p; p++) {
+      if (*p == ':') {
+        // Found colon - extract scheme and validate it
+        size_t scheme_len = p - cleaned_url;
+        char* scheme = malloc(scheme_len + 1);
+        strncpy(scheme, cleaned_url, scheme_len);
+        scheme[scheme_len] = '\0';
+        
+        if (is_valid_scheme(scheme)) {
+          colon_pos = (char*)p;
+          has_scheme = 1;
+        }
+        free(scheme);
+        break;
+      } else if (*p == '/' || *p == '?' || *p == '#') {
+        break;  // No colon found before path/query/fragment
       }
-      break;
-    } else if (*p == '/' || *p == '?' || *p == '#') {
-      break;  // No colon found before path/query/fragment
     }
   }
 

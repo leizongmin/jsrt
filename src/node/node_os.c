@@ -19,6 +19,10 @@
 #define JSRT_GETPID() getpid()
 #define JSRT_GETPPID() getppid()
 #define JSRT_GETHOSTNAME(buf, size) gethostname(buf, size)
+#ifdef __APPLE__
+#include <mach/mach.h>
+#include <mach/vm_statistics.h>
+#endif
 #endif
 
 // node:os.arch implementation
@@ -359,7 +363,22 @@ static JSValue js_os_freemem(JSContext* ctx, JSValueConst this_val, int argc, JS
     return JS_NewFloat64(ctx, (double)mem_status.ullAvailPhys);
   }
   return JS_NewFloat64(ctx, 0);
+#elif defined(__APPLE__)
+  // macOS-specific implementation using vm_statistics64
+  vm_size_t page_size;
+  vm_statistics64_data_t vm_stat;
+  mach_msg_type_number_t host_count = sizeof(vm_stat) / sizeof(natural_t);
+
+  if (host_page_size(mach_host_self(), &page_size) == KERN_SUCCESS &&
+      host_statistics64(mach_host_self(), HOST_VM_INFO64, (host_info64_t)&vm_stat, &host_count) == KERN_SUCCESS) {
+    // Free memory = free pages + inactive pages + speculative pages
+    uint64_t free_memory =
+        (uint64_t)(vm_stat.free_count + vm_stat.inactive_count + vm_stat.speculative_count) * page_size;
+    return JS_NewFloat64(ctx, (double)free_memory);
+  }
+  return JS_NewFloat64(ctx, 0);
 #else
+  // Linux and other Unix systems
   long pages = sysconf(_SC_AVPHYS_PAGES);
   long page_size = sysconf(_SC_PAGESIZE);
   if (pages > 0 && page_size > 0) {

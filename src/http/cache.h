@@ -3,6 +3,7 @@
 
 #include <stddef.h>
 #include <time.h>
+#include <stdbool.h>
 
 // HTTP cache entry
 typedef struct {

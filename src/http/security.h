@@ -2,6 +2,7 @@
 #define __JSRT_HTTP_SECURITY_H__
 
 #include <stdbool.h>
+#include <stddef.h>
 
 // Security validation results
 typedef enum {

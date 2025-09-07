@@ -217,6 +217,14 @@ static int validate_url_characters(const char* url) {
     if (*p == 0x09 || *p == 0x0A || *p == 0x0D) {
       return 0;  // Invalid character found
     }
+    // Check for backslash at start of URL (invalid per WHATWG URL Standard)
+    if (p == url && *p == '\\') {
+      return 0;  // Leading backslash is invalid
+    }
+    // Check for consecutive backslashes (often invalid pattern)
+    if (*p == '\\' && p > url && *(p-1) == '\\') {
+      return 0;  // Consecutive backslashes are invalid
+    }
     // Optionally check for other control characters
     if (*p < 0x20 && *p != 0x09 && *p != 0x0A && *p != 0x0D) {
       return 0;  // Other control characters

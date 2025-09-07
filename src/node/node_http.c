@@ -456,9 +456,13 @@ static int on_message_begin(llhttp_t* parser) {
 static int on_url(llhttp_t* parser, const char* at, size_t length) {
   JSHttpConnection* conn = (JSHttpConnection*)parser->data;
   if (!JS_IsUndefined(conn->current_request)) {
-    char* url = strndup(at, length);
-    JS_SetPropertyStr(conn->ctx, conn->current_request, "url", JS_NewString(conn->ctx, url));
-    free(url);
+    char* url = malloc(length + 1);
+    if (url) {
+      memcpy(url, at, length);
+      url[length] = '\0';
+      JS_SetPropertyStr(conn->ctx, conn->current_request, "url", JS_NewString(conn->ctx, url));
+      free(url);
+    }
   }
   return 0;
 }

@@ -224,6 +224,7 @@ static JSValue JSRT_ReadableStreamDefaultControllerError(JSContext* ctx, JSValue
 // ReadableStream implementation
 typedef struct {
   JSValue controller;
+  JSValue underlying_source;  // Store the underlying source object
   bool locked;
 } JSRT_ReadableStream;
 
@@ -232,6 +233,9 @@ static void JSRT_ReadableStreamFinalize(JSRuntime* rt, JSValue val) {
   if (stream) {
     if (!JS_IsUndefined(stream->controller)) {
       JS_FreeValueRT(rt, stream->controller);
+    }
+    if (!JS_IsUndefined(stream->underlying_source)) {
+      JS_FreeValueRT(rt, stream->underlying_source);
     }
     free(stream);
   }
@@ -245,6 +249,13 @@ static JSClassDef JSRT_ReadableStreamClass = {
 static JSValue JSRT_ReadableStreamConstructor(JSContext* ctx, JSValueConst new_target, int argc, JSValueConst* argv) {
   JSRT_ReadableStream* stream = malloc(sizeof(JSRT_ReadableStream));
   stream->locked = false;
+  
+  // Store the underlying source if provided (first argument)
+  if (argc > 0) {
+    stream->underlying_source = JS_DupValue(ctx, argv[0]);
+  } else {
+    stream->underlying_source = JS_UNDEFINED;
+  }
 
   JSValue obj = JS_NewObjectClass(ctx, JSRT_ReadableStreamClassID);
   JS_SetOpaque(obj, stream);
@@ -568,17 +579,64 @@ static JSValue JSRT_ReadableStreamDefaultReaderCancel(JSContext* ctx, JSValueCon
     return JS_EXCEPTION;
   }
 
-  // Get the stream and mark it as cancelled
+  // If the reader has been released (is closed), return a rejected promise
+  if (reader->closed) {
+    JSValue promise_ctor = JS_GetPropertyStr(ctx, JS_GetGlobalObject(ctx), "Promise");
+    JSValue reject_method = JS_GetPropertyStr(ctx, promise_ctor, "reject");
+    JSValue error = JS_ThrowTypeError(ctx, "This readable stream reader has been released");
+    JSValue reject_args[] = {error};
+    JSValue rejected_promise = JS_Call(ctx, reject_method, promise_ctor, 1, reject_args);
+    
+    JS_FreeValue(ctx, promise_ctor);
+    JS_FreeValue(ctx, reject_method);
+    JS_FreeValue(ctx, error);
+    return rejected_promise;
+  }
+
+  // Get the stream
   JSRT_ReadableStream* stream = JS_GetOpaque(reader->stream, JSRT_ReadableStreamClassID);
   if (!stream) {
     return JS_EXCEPTION;
   }
 
-  // Cancel the stream - unlock it and close it
-  stream->locked = false;
-  reader->closed = true;
+  // Get the cancellation reason (first argument, default to undefined)
+  JSValue reason = (argc > 0) ? argv[0] : JS_UNDEFINED;
 
-  // Get the controller and close it
+  // The stream should REMAIN LOCKED during cancel operation (per WPT test expectation)
+  // Do NOT unlock it here: stream->locked should stay true
+
+  // Get the underlying source and call its cancel method if it exists
+  if (!JS_IsUndefined(stream->underlying_source)) {
+    JSValue cancel_method = JS_GetPropertyStr(ctx, stream->underlying_source, "cancel");
+    if (!JS_IsUndefined(cancel_method) && JS_IsFunction(ctx, cancel_method)) {
+      // Call the underlying source's cancel method with the reason
+      JSValue cancel_args[] = {reason};
+      JSValue cancel_result = JS_Call(ctx, cancel_method, stream->underlying_source, 1, cancel_args);
+      JS_FreeValue(ctx, cancel_method);
+      
+      // Check if cancel returned a promise or threw an exception
+      if (JS_IsException(cancel_result)) {
+        return cancel_result;
+      }
+      
+      // If cancel method returns a promise, return it; otherwise wrap result in resolved promise
+      JSValue then_method = JS_GetPropertyStr(ctx, cancel_result, "then");
+      if (!JS_IsUndefined(then_method) && JS_IsFunction(ctx, then_method)) {
+        // It's a promise, return it directly
+        JS_FreeValue(ctx, then_method);
+        return cancel_result;
+      } else {
+        // Not a promise, wrap in resolved promise
+        JS_FreeValue(ctx, then_method);
+        JS_FreeValue(ctx, cancel_result);
+      }
+    } else {
+      JS_FreeValue(ctx, cancel_method);
+    }
+  }
+
+  // Close the reader and controller after calling cancel
+  reader->closed = true;
   if (!JS_IsUndefined(stream->controller)) {
     JSRT_ReadableStreamDefaultController* controller =
         JS_GetOpaque(stream->controller, JSRT_ReadableStreamDefaultControllerClassID);
@@ -587,7 +645,7 @@ static JSValue JSRT_ReadableStreamDefaultReaderCancel(JSContext* ctx, JSValueCon
     }
   }
 
-  // Return a resolved promise (simplified implementation)
+  // Return a resolved promise
   JSValue promise_ctor = JS_GetPropertyStr(ctx, JS_GetGlobalObject(ctx), "Promise");
   JSValue resolve_method = JS_GetPropertyStr(ctx, promise_ctor, "resolve");
   JSValue undefined_val = JS_UNDEFINED;

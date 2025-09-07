@@ -281,6 +281,11 @@ claude-shell: docker-build
 		--entrypoint /bin/bash \
 		$(DOCKER_IMAGE_NAME):$(DOCKER_TAG)
 
+.PHONY: claude-shell-attach
+claude-shell-attach:
+	@echo "Attaching to existing Claude shell session..."
+	docker exec -it claude-shell-$(shell basename $(CURDIR)) /bin/bash
+
 .PHONY: docker-clean
 docker-clean:
 	@echo "Cleaning up Docker images and containers..."

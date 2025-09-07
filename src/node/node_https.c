@@ -811,21 +811,34 @@ int js_node_https_init(JSContext* ctx, JSModuleDef* m) {
   // Export as default
   JS_SetModuleExport(ctx, m, "default", JS_DupValue(ctx, https_module));
 
-  // Export individual functions and classes
+  // Export individual functions and classes with proper memory management
   JSValue createServer = JS_GetPropertyStr(ctx, https_module, "createServer");
-  JS_SetModuleExport(ctx, m, "createServer", createServer);
+  JS_SetModuleExport(ctx, m, "createServer", JS_DupValue(ctx, createServer));
+  JS_FreeValue(ctx, createServer);
 
   JSValue request = JS_GetPropertyStr(ctx, https_module, "request");
-  JS_SetModuleExport(ctx, m, "request", request);
+  JS_SetModuleExport(ctx, m, "request", JS_DupValue(ctx, request));
+  JS_FreeValue(ctx, request);
 
   JSValue get = JS_GetPropertyStr(ctx, https_module, "get");
-  JS_SetModuleExport(ctx, m, "get", get);
+  JS_SetModuleExport(ctx, m, "get", JS_DupValue(ctx, get));
+  JS_FreeValue(ctx, get);
 
   JSValue Agent = JS_GetPropertyStr(ctx, https_module, "Agent");
-  JS_SetModuleExport(ctx, m, "Agent", Agent);
+  JS_SetModuleExport(ctx, m, "Agent", JS_DupValue(ctx, Agent));
+  JS_FreeValue(ctx, Agent);
+
+  JSValue METHODS = JS_GetPropertyStr(ctx, https_module, "METHODS");
+  JS_SetModuleExport(ctx, m, "METHODS", JS_DupValue(ctx, METHODS));
+  JS_FreeValue(ctx, METHODS);
+
+  JSValue STATUS_CODES = JS_GetPropertyStr(ctx, https_module, "STATUS_CODES");
+  JS_SetModuleExport(ctx, m, "STATUS_CODES", JS_DupValue(ctx, STATUS_CODES));
+  JS_FreeValue(ctx, STATUS_CODES);
 
   JSValue globalAgent = JS_GetPropertyStr(ctx, https_module, "globalAgent");
-  JS_SetModuleExport(ctx, m, "globalAgent", globalAgent);
+  JS_SetModuleExport(ctx, m, "globalAgent", JS_DupValue(ctx, globalAgent));
+  JS_FreeValue(ctx, globalAgent);
 
   JS_FreeValue(ctx, https_module);
 

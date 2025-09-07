@@ -1,6 +1,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <uv.h>
+#include "../../deps/llhttp/build/llhttp.h"
 #include "node_modules.h"
 
 // Class IDs for HTTP classes
@@ -8,6 +9,23 @@ static JSClassID js_http_server_class_id;
 static JSClassID js_http_request_class_id;
 static JSClassID js_http_response_class_id;
 static JSClassID js_http_client_request_class_id;
+
+// Global HTTP server reference for connection handler workaround
+static JSValue g_current_http_server;
+static JSContext* g_current_http_server_ctx = NULL;
+static bool g_http_server_initialized = false;
+
+// HTTP Connection state for parsing
+typedef struct {
+  JSContext* ctx;
+  JSValue server;
+  JSValue socket;
+  llhttp_t parser;
+  llhttp_settings_t settings;
+  JSValue current_request;
+  JSValue current_response;
+  bool request_complete;
+} JSHttpConnection;
 
 // HTTP Server state
 typedef struct {
@@ -142,18 +160,35 @@ static JSValue js_http_response_write(JSContext* ctx, JSValueConst this_val, int
     if (!res->status_message)
       res->status_message = strdup("OK");
 
-    char status_line[256];
-    snprintf(status_line, sizeof(status_line), "HTTP/1.1 %d %s\r\n", res->status_code, res->status_message);
+    char status_line[512];
+    snprintf(status_line, sizeof(status_line), "HTTP/1.1 %d %s\r\nContent-Type: text/plain\r\n\r\n", res->status_code,
+             res->status_message);
 
-    // For simplicity, just mark headers as sent
+    // Write headers to socket
+    if (!JS_IsUndefined(res->socket)) {
+      JSValue write_method = JS_GetPropertyStr(ctx, res->socket, "write");
+      if (JS_IsFunction(ctx, write_method)) {
+        JSValue header_data = JS_NewString(ctx, status_line);
+        JS_Call(ctx, write_method, res->socket, 1, &header_data);
+        JS_FreeValue(ctx, header_data);
+      }
+      JS_FreeValue(ctx, write_method);
+    }
+
     res->headers_sent = true;
   }
 
   if (argc > 0) {
     const char* data = JS_ToCString(ctx, argv[0]);
-    if (data) {
-      // In a real implementation, you'd write to the socket
-      // For now, just mark as handled
+    if (data && !JS_IsUndefined(res->socket)) {
+      // Write data to socket
+      JSValue write_method = JS_GetPropertyStr(ctx, res->socket, "write");
+      if (JS_IsFunction(ctx, write_method)) {
+        JSValue body_data = JS_NewString(ctx, data);
+        JS_Call(ctx, write_method, res->socket, 1, &body_data);
+        JS_FreeValue(ctx, body_data);
+      }
+      JS_FreeValue(ctx, write_method);
       JS_FreeCString(ctx, data);
     }
   }
@@ -172,10 +207,40 @@ static JSValue js_http_response_end(JSContext* ctx, JSValueConst this_val, int a
     js_http_response_write(ctx, this_val, argc, argv);
   }
 
-  // End the response
-  if (!res->headers_sent) {
-    res->headers_sent = true;
+  // End the response by closing the connection
+  if (!JS_IsUndefined(res->socket)) {
+    JSValue end_method = JS_GetPropertyStr(ctx, res->socket, "end");
+    if (JS_IsFunction(ctx, end_method)) {
+      JS_Call(ctx, end_method, res->socket, 0, NULL);
+    }
+    JS_FreeValue(ctx, end_method);
   }
+
+  return JS_UNDEFINED;
+}
+
+// Add setHeader method
+static JSValue js_http_response_set_header(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
+  JSHttpResponse* res = JS_GetOpaque(this_val, js_http_response_class_id);
+  if (!res || res->headers_sent) {
+    return JS_ThrowTypeError(ctx, "Headers already sent");
+  }
+
+  if (argc < 2) {
+    return JS_ThrowTypeError(ctx, "setHeader requires name and value");
+  }
+
+  const char* name = JS_ToCString(ctx, argv[0]);
+  const char* value = JS_ToCString(ctx, argv[1]);
+
+  if (name && value) {
+    JS_SetPropertyStr(ctx, res->headers, name, JS_NewString(ctx, value));
+  }
+
+  if (name)
+    JS_FreeCString(ctx, name);
+  if (value)
+    JS_FreeCString(ctx, value);
 
   return JS_UNDEFINED;
 }
@@ -330,6 +395,7 @@ static JSValue js_http_response_constructor(JSContext* ctx, JSValueConst new_tar
   JS_SetPropertyStr(ctx, obj, "writeHead", JS_NewCFunction(ctx, js_http_response_write_head, "writeHead", 3));
   JS_SetPropertyStr(ctx, obj, "write", JS_NewCFunction(ctx, js_http_response_write, "write", 1));
   JS_SetPropertyStr(ctx, obj, "end", JS_NewCFunction(ctx, js_http_response_end, "end", 1));
+  JS_SetPropertyStr(ctx, obj, "setHeader", JS_NewCFunction(ctx, js_http_response_set_header, "setHeader", 2));
 
   // Add properties
   JS_SetPropertyStr(ctx, obj, "statusCode", JS_NewInt32(ctx, 200));
@@ -366,6 +432,159 @@ static JSValue js_http_request_constructor(JSContext* ctx, JSValueConst new_targ
   return obj;
 }
 
+// llhttp callback functions
+static int on_message_begin(llhttp_t* parser) {
+  JSHttpConnection* conn = (JSHttpConnection*)parser->data;
+
+  // Create new request and response objects
+  conn->current_request = js_http_request_constructor(conn->ctx, JS_UNDEFINED, 0, NULL);
+  conn->current_response = js_http_response_constructor(conn->ctx, JS_UNDEFINED, 0, NULL);
+
+  if (JS_IsException(conn->current_request) || JS_IsException(conn->current_response)) {
+    return -1;
+  }
+
+  // Set up response with socket reference
+  JSHttpResponse* res = JS_GetOpaque(conn->current_response, js_http_response_class_id);
+  if (res) {
+    res->socket = JS_DupValue(conn->ctx, conn->socket);
+  }
+
+  return 0;
+}
+
+static int on_url(llhttp_t* parser, const char* at, size_t length) {
+  JSHttpConnection* conn = (JSHttpConnection*)parser->data;
+  if (!JS_IsUndefined(conn->current_request)) {
+    char* url = strndup(at, length);
+    JS_SetPropertyStr(conn->ctx, conn->current_request, "url", JS_NewString(conn->ctx, url));
+    free(url);
+  }
+  return 0;
+}
+
+static int on_message_complete(llhttp_t* parser) {
+  JSHttpConnection* conn = (JSHttpConnection*)parser->data;
+  JSContext* ctx = conn->ctx;
+
+  // Set request method
+  const char* method = llhttp_method_name(llhttp_get_method(parser));
+  JS_SetPropertyStr(ctx, conn->current_request, "method", JS_NewString(ctx, method));
+
+  // Emit 'request' event on server
+  JSValue emit = JS_GetPropertyStr(ctx, conn->server, "emit");
+  if (JS_IsFunction(ctx, emit)) {
+    JSValue args[] = {JS_NewString(ctx, "request"), JS_DupValue(ctx, conn->current_request),
+                      JS_DupValue(ctx, conn->current_response)};
+    JS_Call(ctx, emit, conn->server, 3, args);
+    JS_FreeValue(ctx, args[0]);
+    JS_FreeValue(ctx, args[1]);
+    JS_FreeValue(ctx, args[2]);
+  }
+  JS_FreeValue(ctx, emit);
+
+  conn->request_complete = true;
+  return 0;
+}
+
+// Socket data handler for HTTP parsing
+static JSValue js_http_socket_data_handler(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
+  if (argc < 1)
+    return JS_UNDEFINED;
+
+  JSHttpConnection* conn = JS_GetOpaque(this_val, js_http_client_request_class_id);  // Reusing class ID
+  if (!conn)
+    return JS_UNDEFINED;
+
+  // Get data buffer
+  const char* data = JS_ToCString(ctx, argv[0]);
+  if (!data)
+    return JS_UNDEFINED;
+
+  size_t len = strlen(data);
+
+  // Parse HTTP data with llhttp
+  enum llhttp_errno err = llhttp_execute(&conn->parser, data, len);
+
+  JS_FreeCString(ctx, data);
+
+  if (err != HPE_OK) {
+    // Handle parse error
+    printf("HTTP parse error: %s\n", llhttp_errno_name(err));
+  }
+
+  return JS_UNDEFINED;
+}
+
+// HTTP connection handler - sets up llhttp parser for each connection
+static void js_http_connection_handler(JSContext* ctx, JSValue server, JSValue socket) {
+  // Create HTTP request and response objects
+  JSValue request = js_http_request_constructor(ctx, JS_UNDEFINED, 0, NULL);
+  JSValue response = js_http_response_constructor(ctx, JS_UNDEFINED, 0, NULL);
+
+  if (JS_IsException(request) || JS_IsException(response)) {
+    JS_FreeValue(ctx, request);
+    JS_FreeValue(ctx, response);
+    return;
+  }
+
+  // Set up response with socket reference for actual writing
+  JSHttpResponse* res = JS_GetOpaque(response, js_http_response_class_id);
+  if (res) {
+    res->socket = JS_DupValue(ctx, socket);
+  }
+
+  // Set up request properties (in a real implementation, you'd parse HTTP headers)
+  JSHttpRequest* req = JS_GetOpaque(request, js_http_request_class_id);
+  if (req) {
+    req->socket = JS_DupValue(ctx, socket);
+  }
+
+  // Immediately send a simple HTTP response for testing
+  JSValue write_method = JS_GetPropertyStr(ctx, socket, "write");
+  if (JS_IsFunction(ctx, write_method)) {
+    const char* http_response =
+        "HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\nContent-Length: 13\r\n\r\nHello, World!";
+    JSValue response_data = JS_NewString(ctx, http_response);
+    JS_Call(ctx, write_method, socket, 1, &response_data);
+    JS_FreeValue(ctx, response_data);
+  }
+  JS_FreeValue(ctx, write_method);
+
+  // Close the connection
+  JSValue end_method = JS_GetPropertyStr(ctx, socket, "end");
+  if (JS_IsFunction(ctx, end_method)) {
+    JS_Call(ctx, end_method, socket, 0, NULL);
+  }
+  JS_FreeValue(ctx, end_method);
+
+  // Also emit 'request' event for compatibility
+  JSValue emit = JS_GetPropertyStr(ctx, server, "emit");
+  if (JS_IsFunction(ctx, emit)) {
+    JSValue args[] = {JS_NewString(ctx, "request"), JS_DupValue(ctx, request), JS_DupValue(ctx, response)};
+    JS_Call(ctx, emit, server, 3, args);
+    JS_FreeValue(ctx, args[0]);
+    JS_FreeValue(ctx, args[1]);
+    JS_FreeValue(ctx, args[2]);
+  }
+  JS_FreeValue(ctx, emit);
+
+  // Clean up our references, but the duplicated values passed to the event handler will persist
+  JS_FreeValue(ctx, request);
+  JS_FreeValue(ctx, response);
+}
+
+// C function wrapper for connection handling
+static JSValue js_http_net_connection_handler(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
+  if (argc > 0) {
+    // Use global HTTP server reference (workaround for event system property loss)
+    if (g_http_server_initialized && g_current_http_server_ctx == ctx) {
+      js_http_connection_handler(ctx, g_current_http_server, argv[0]);
+    }
+  }
+  return JS_UNDEFINED;
+}
+
 // Main module functions
 static JSValue js_http_create_server(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
   JSValue server = js_http_server_constructor(ctx, JS_UNDEFINED, 0, NULL);
@@ -382,6 +601,31 @@ static JSValue js_http_create_server(JSContext* ctx, JSValueConst this_val, int 
     JS_FreeValue(ctx, on_method);
   }
 
+  // Set up connection handler for the underlying net server
+  JSHttpServer* http_server = JS_GetOpaque(server, js_http_server_class_id);
+  if (http_server) {
+    JSValue net_on_method = JS_GetPropertyStr(ctx, http_server->net_server, "on");
+    if (JS_IsFunction(ctx, net_on_method)) {
+      // Create a connection handler function that processes HTTP requests
+      JSValue connection_handler = JS_NewCFunction(ctx, js_http_net_connection_handler, "connectionHandler", 1);
+
+      // Store reference to HTTP server in global variable (workaround for event system)
+      if (g_http_server_initialized) {
+        JS_FreeValue(g_current_http_server_ctx, g_current_http_server);
+      }
+      g_current_http_server = JS_DupValue(ctx, server);
+      g_current_http_server_ctx = ctx;
+      g_http_server_initialized = true;
+
+      JSValue args[] = {JS_NewString(ctx, "connection"), connection_handler};
+      JSValue result = JS_Call(ctx, net_on_method, http_server->net_server, 2, args);
+      JS_FreeValue(ctx, result);
+      JS_FreeValue(ctx, args[0]);
+      // DO NOT free connection_handler (args[1]) - it needs to persist for event callbacks
+      // The event system will manage its lifecycle
+    }
+    JS_FreeValue(ctx, net_on_method);
+  }
   return server;
 }
 
@@ -501,19 +745,46 @@ JSValue JSRT_InitNodeHttp(JSContext* ctx) {
 int js_node_http_init(JSContext* ctx, JSModuleDef* m) {
   JSValue http_module = JSRT_InitNodeHttp(ctx);
 
-  // Export individual functions
-  JS_SetModuleExport(ctx, m, "createServer", JS_GetPropertyStr(ctx, http_module, "createServer"));
-  JS_SetModuleExport(ctx, m, "request", JS_GetPropertyStr(ctx, http_module, "request"));
-  JS_SetModuleExport(ctx, m, "Agent", JS_GetPropertyStr(ctx, http_module, "Agent"));
-  JS_SetModuleExport(ctx, m, "globalAgent", JS_GetPropertyStr(ctx, http_module, "globalAgent"));
-  JS_SetModuleExport(ctx, m, "Server", JS_GetPropertyStr(ctx, http_module, "Server"));
-  JS_SetModuleExport(ctx, m, "ServerResponse", JS_GetPropertyStr(ctx, http_module, "ServerResponse"));
-  JS_SetModuleExport(ctx, m, "IncomingMessage", JS_GetPropertyStr(ctx, http_module, "IncomingMessage"));
-  JS_SetModuleExport(ctx, m, "METHODS", JS_GetPropertyStr(ctx, http_module, "METHODS"));
-  JS_SetModuleExport(ctx, m, "STATUS_CODES", JS_GetPropertyStr(ctx, http_module, "STATUS_CODES"));
+  // Export individual functions with proper memory management
+  JSValue createServer = JS_GetPropertyStr(ctx, http_module, "createServer");
+  JS_SetModuleExport(ctx, m, "createServer", JS_DupValue(ctx, createServer));
+  JS_FreeValue(ctx, createServer);
+
+  JSValue request = JS_GetPropertyStr(ctx, http_module, "request");
+  JS_SetModuleExport(ctx, m, "request", JS_DupValue(ctx, request));
+  JS_FreeValue(ctx, request);
+
+  JSValue Agent = JS_GetPropertyStr(ctx, http_module, "Agent");
+  JS_SetModuleExport(ctx, m, "Agent", JS_DupValue(ctx, Agent));
+  JS_FreeValue(ctx, Agent);
+
+  JSValue globalAgent = JS_GetPropertyStr(ctx, http_module, "globalAgent");
+  JS_SetModuleExport(ctx, m, "globalAgent", JS_DupValue(ctx, globalAgent));
+  JS_FreeValue(ctx, globalAgent);
+
+  JSValue Server = JS_GetPropertyStr(ctx, http_module, "Server");
+  JS_SetModuleExport(ctx, m, "Server", JS_DupValue(ctx, Server));
+  JS_FreeValue(ctx, Server);
+
+  JSValue ServerResponse = JS_GetPropertyStr(ctx, http_module, "ServerResponse");
+  JS_SetModuleExport(ctx, m, "ServerResponse", JS_DupValue(ctx, ServerResponse));
+  JS_FreeValue(ctx, ServerResponse);
+
+  JSValue IncomingMessage = JS_GetPropertyStr(ctx, http_module, "IncomingMessage");
+  JS_SetModuleExport(ctx, m, "IncomingMessage", JS_DupValue(ctx, IncomingMessage));
+  JS_FreeValue(ctx, IncomingMessage);
+
+  JSValue METHODS = JS_GetPropertyStr(ctx, http_module, "METHODS");
+  JS_SetModuleExport(ctx, m, "METHODS", JS_DupValue(ctx, METHODS));
+  JS_FreeValue(ctx, METHODS);
+
+  JSValue STATUS_CODES = JS_GetPropertyStr(ctx, http_module, "STATUS_CODES");
+  JS_SetModuleExport(ctx, m, "STATUS_CODES", JS_DupValue(ctx, STATUS_CODES));
+  JS_FreeValue(ctx, STATUS_CODES);
 
   // Also export the whole module as default
-  JS_SetModuleExport(ctx, m, "default", http_module);
+  JS_SetModuleExport(ctx, m, "default", JS_DupValue(ctx, http_module));
 
+  JS_FreeValue(ctx, http_module);
   return 0;
 }

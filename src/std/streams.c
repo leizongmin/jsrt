@@ -204,6 +204,30 @@ static JSValue JSRT_ReadableStreamGetLocked(JSContext* ctx, JSValueConst this_va
 }
 
 static JSValue JSRT_ReadableStreamGetReader(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
+  // Validate the optional options parameter
+  if (argc > 0 && !JS_IsUndefined(argv[0]) && !JS_IsNull(argv[0])) {
+    // Check if it's an object
+    if (!JS_IsObject(argv[0])) {
+      return JS_ThrowTypeError(ctx, "getReader() options must be an object");
+    }
+
+    // Check for mode property
+    JSValue mode = JS_GetPropertyStr(ctx, argv[0], "mode");
+    if (!JS_IsException(mode) && !JS_IsUndefined(mode)) {
+      const char* mode_str = JS_ToCString(ctx, mode);
+      if (mode_str) {
+        // Only allow "byob" as a valid mode (besides undefined)
+        if (strcmp(mode_str, "byob") != 0) {
+          JS_FreeCString(ctx, mode_str);
+          JS_FreeValue(ctx, mode);
+          return JS_ThrowRangeError(ctx, "getReader() mode must be \"byob\" or undefined");
+        }
+        JS_FreeCString(ctx, mode_str);
+      }
+    }
+    JS_FreeValue(ctx, mode);
+  }
+
   // Call the ReadableStreamDefaultReader constructor with this stream
   JSValue reader_ctor = JS_GetPropertyStr(ctx, JS_GetGlobalObject(ctx), "ReadableStreamDefaultReader");
   JSValue reader = JS_CallConstructor(ctx, reader_ctor, 1, &this_val);

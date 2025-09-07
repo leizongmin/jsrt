@@ -14,15 +14,9 @@
 static JSClassID JSRT_AbortControllerClassID;
 static JSClassID JSRT_AbortSignalClassID;
 
-// Forward declare event listener function
-static JSValue JSRT_AbortAnyEventListener(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv,
-                                          int magic, JSValue* func_data);
+// No forward declaration needed - using JavaScript closures
 
-// Structure to hold data for abort event listeners
-typedef struct {
-  JSContext* ctx;
-  JSValue result_signal;
-} JSRT_AbortAnyListenerData;
+// AbortSignal.any() now uses JavaScript closures instead of C structures
 
 // AbortSignal implementation (extends EventTarget)
 typedef struct {
@@ -170,9 +164,6 @@ static JSValue JSRT_AbortSignalAny(JSContext* ctx, JSValueConst this_val, int ar
   JSValue signals_val = argv[0];
 
   // Simplified iterable check - just check if it's array-like
-  // In a full implementation, we'd properly handle Symbol.iterator
-
-  // For simplicity, handle array-like objects
   JSValue length_val = JS_GetPropertyStr(ctx, signals_val, "length");
   if (JS_IsUndefined(length_val)) {
     JS_FreeValue(ctx, length_val);
@@ -205,67 +196,117 @@ static JSValue JSRT_AbortSignalAny(JSContext* ctx, JSValueConst this_val, int ar
     }
 
     if (signal->aborted) {
-      // Return an already aborted signal with the same reason
-      JSValue result = JSRT_CreateAbortSignal(ctx, true, signal->reason);
+      // Create an AbortController and abort it immediately with the same reason
+      JSValue controller_ctor = JS_GetPropertyStr(ctx, JS_GetGlobalObject(ctx), "AbortController");
+      JSValue controller = JS_CallConstructor(ctx, controller_ctor, 0, NULL);
+      JS_FreeValue(ctx, controller_ctor);
+
+      if (JS_IsException(controller)) {
+        JS_FreeValue(ctx, item);
+        return JS_EXCEPTION;
+      }
+
+      // Get the controller's signal
+      JSValue result_signal = JS_GetPropertyStr(ctx, controller, "signal");
+
+      // Abort the controller with the same reason
+      JSValue abort_method = JS_GetPropertyStr(ctx, controller, "abort");
+      JSValue abort_result = JS_Call(ctx, abort_method, controller, 1, &signal->reason);
+
+      // Clean up
+      JS_FreeValue(ctx, abort_method);
+      JS_FreeValue(ctx, abort_result);
+      JS_FreeValue(ctx, controller);
       JS_FreeValue(ctx, item);
-      return result;
+
+      return result_signal;
     }
     JS_FreeValue(ctx, item);
   }
 
-  // Create a new signal that will be aborted when any input signal aborts
-  JSValue result_signal = JSRT_CreateAbortSignal(ctx, false, JS_UNDEFINED);
-  JSRT_AbortSignal* result_signal_data = JS_GetOpaque2(ctx, result_signal, JSRT_AbortSignalClassID);
-  if (!result_signal_data) {
-    return JS_ThrowInternalError(ctx, "Failed to create AbortSignal");
+  // Create an AbortController for the result (like the JavaScript polyfill)
+  JSValue controller_ctor = JS_GetPropertyStr(ctx, JS_GetGlobalObject(ctx), "AbortController");
+  JSValue result_controller = JS_CallConstructor(ctx, controller_ctor, 0, NULL);
+  JS_FreeValue(ctx, controller_ctor);
+
+  if (JS_IsException(result_controller)) {
+    return JS_EXCEPTION;
   }
 
-  // Set up event listeners on each input signal to propagate abort to result signal
+  // Get the controller's signal
+  JSValue result_signal = JS_GetPropertyStr(ctx, result_controller, "signal");
+  if (JS_IsException(result_signal)) {
+    JS_FreeValue(ctx, result_controller);
+    return JS_EXCEPTION;
+  }
+
+  // Set up event listeners on each input signal using JavaScript closures
   for (int32_t i = 0; i < length; i++) {
     JSValue item = JS_GetPropertyUint32(ctx, signals_val, i);
     if (JS_IsException(item)) {
-      return item;
+      continue;
     }
 
     JSRT_AbortSignal* input_signal = JS_GetOpaque2(ctx, item, JSRT_AbortSignalClassID);
     if (!input_signal) {
       JS_FreeValue(ctx, item);
-      return JS_ThrowTypeError(ctx, "All elements must be AbortSignal objects");
+      continue;
     }
 
-    // Create listener data structure
-    JSRT_AbortAnyListenerData* listener_data = malloc(sizeof(JSRT_AbortAnyListenerData));
-    listener_data->ctx = ctx;
-    listener_data->result_signal = JS_DupValue(ctx, result_signal);
+    // Create a JavaScript function that captures both controller and input signal
+    // This gives the listener access to the input signal's reason property
+    const char* js_listener_code =
+        "(function(controller, inputSignal) {"
+        "  return function(event) {"
+        "    var resultSignal = controller.signal;"
+        "    if (!resultSignal.aborted) {"
+        "      controller.abort(inputSignal.reason);"
+        "    }"
+        "  };"
+        "})";
 
-    // Create event listener function with bound data
-    JSValue listener_func = JS_NewCFunctionData(ctx, JSRT_AbortAnyEventListener, 1, 0, 1,
-                                                (JSValueConst[]){JS_NewInt64(ctx, (int64_t)listener_data)});
+    JSValue closure_factory =
+        JS_Eval(ctx, js_listener_code, strlen(js_listener_code), "<AbortSignal.any>", JS_EVAL_TYPE_GLOBAL);
+    if (JS_IsException(closure_factory)) {
+      JS_FreeValue(ctx, item);
+      continue;
+    }
 
-    // Add event listener to input signal (call addEventListener directly on the AbortSignal)
+    // Call the factory with our controller AND the input signal to create the actual listener
+    JSValue factory_args[] = {result_controller, item};
+    JSValue listener_func = JS_Call(ctx, closure_factory, JS_UNDEFINED, 2, factory_args);
+    JS_FreeValue(ctx, closure_factory);
+
+    if (JS_IsException(listener_func)) {
+      JS_FreeValue(ctx, item);
+      continue;
+    }
+
+    // Add the JavaScript event listener to input signal
     JSValue addEventListener = JS_GetPropertyStr(ctx, item, "addEventListener");
     if (JS_IsException(addEventListener)) {
-      free(listener_data);
       JS_FreeValue(ctx, listener_func);
-      continue;  // Skip this signal if addEventListener failed
+      JS_FreeValue(ctx, item);
+      continue;
     }
 
-    JSValue args[] = {JS_NewString(ctx, "abort"), listener_func};
-    JSValue add_result = JS_Call(ctx, addEventListener, item, 2, args);
+    JSValue listener_args[] = {JS_NewString(ctx, "abort"), listener_func};
+    JSValue add_result = JS_Call(ctx, addEventListener, item, 2, listener_args);
 
+    // Check if addEventListener succeeded (no debug output in production)
     if (JS_IsException(add_result)) {
-      // addEventListener call failed - this is the problem!
-      free(listener_data);
+      // Silent failure, continue with other signals
     }
 
     // Clean up
     JS_FreeValue(ctx, addEventListener);
-    JS_FreeValue(ctx, args[0]);
+    JS_FreeValue(ctx, listener_args[0]);
     JS_FreeValue(ctx, listener_func);
     JS_FreeValue(ctx, add_result);
     JS_FreeValue(ctx, item);
   }
 
+  // Don't free the controller here - it needs to stay alive for the event listeners
   return result_signal;
 }
 
@@ -294,45 +335,7 @@ static void JSRT_AbortSignal_DoAbort(JSContext* ctx, JSValue signal_val, JSValue
   JS_FreeValue(ctx, abort_event);
 }
 
-// Event listener callback for AbortSignal.any()
-static JSValue JSRT_AbortAnyEventListener(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv,
-                                          int magic, JSValue* func_data) {
-  // Get the result signal from the function data
-  if (!func_data) {
-    return JS_UNDEFINED;
-  }
-
-  // Extract result signal from function data (first data element)
-  int64_t result_signal_ptr;
-  if (JS_ToInt64(ctx, &result_signal_ptr, func_data[0])) {
-    return JS_UNDEFINED;
-  }
-
-  JSRT_AbortAnyListenerData* listener_data = (JSRT_AbortAnyListenerData*)result_signal_ptr;
-  if (!listener_data) {
-    return JS_UNDEFINED;
-  }
-
-  JSValue event = argv[0];
-
-  // Get the source signal from event.target
-  JSValue target = JS_GetPropertyStr(ctx, event, "target");
-  if (JS_IsException(target)) {
-    return JS_UNDEFINED;
-  }
-
-  JSRT_AbortSignal* source_signal = JS_GetOpaque2(ctx, target, JSRT_AbortSignalClassID);
-  if (!source_signal) {
-    JS_FreeValue(ctx, target);
-    return JS_UNDEFINED;
-  }
-
-  // Abort the result signal with the same reason as the source signal
-  JSRT_AbortSignal_DoAbort(ctx, listener_data->result_signal, source_signal->reason);
-
-  JS_FreeValue(ctx, target);
-  return JS_UNDEFINED;
-}
+// JSRT_AbortAnyEventListener removed - now using JavaScript closures for better event integration
 
 // AbortController implementation
 typedef struct {

@@ -469,36 +469,64 @@ static JSRT_URL* JSRT_ParseURL(const char* url, const char* base) {
     char* authority = ptr;
 
     if (credentials_end) {
-      // Skip credentials for hostname/port parsing
+      // Skip credentials for hostname/port parsing - authority is after @
       authority = credentials_end + 1;
     }
 
-    free(parsed->host);
-    parsed->host = strdup(ptr);
+    // Now parse the authority part (hostname:port, possibly IPv6)
+    char* hostname_part;
+    char* port_part = NULL;
 
-    // Check for port in the authority part (after @)
-    char* port_start = strchr(authority, ':');
-    if (port_start) {
-      *port_start = '\0';
-      free(parsed->hostname);
-      parsed->hostname = strdup(authority);
-      free(parsed->port);
-      parsed->port = normalize_port(port_start + 1, parsed->protocol);
-      *port_start = ':';  // Restore
+    // Check for IPv6 address notation [::1] or [::1]:port
+    if (authority[0] == '[') {
+      char* ipv6_end = strchr(authority, ']');
+      if (ipv6_end) {
+        // Extract IPv6 address including brackets
+        size_t ipv6_len = ipv6_end - authority + 1;
+        hostname_part = malloc(ipv6_len + 1);
+        strncpy(hostname_part, authority, ipv6_len);
+        hostname_part[ipv6_len] = '\0';
 
-      // Reconstruct host field with normalized port
-      free(parsed->host);
-      if (strlen(parsed->port) > 0) {
-        parsed->host = malloc(strlen(parsed->hostname) + strlen(parsed->port) + 2);
-        sprintf(parsed->host, "%s:%s", parsed->hostname, parsed->port);
+        // Check for port after IPv6 address
+        if (ipv6_end[1] == ':') {
+          port_part = ipv6_end + 2;
+        }
       } else {
-        parsed->host = strdup(parsed->hostname);
+        // Malformed IPv6, treat as regular hostname
+        hostname_part = strdup(authority);
       }
     } else {
-      free(parsed->hostname);
-      parsed->hostname = strdup(authority);
-      free(parsed->host);
-      parsed->host = strdup(authority);
+      // Regular hostname, check for port
+      char* port_start = strchr(authority, ':');
+      if (port_start) {
+        *port_start = '\0';
+        hostname_part = strdup(authority);
+        port_part = port_start + 1;
+        *port_start = ':';  // Restore for later use
+      } else {
+        hostname_part = strdup(authority);
+      }
+    }
+
+    // Set hostname
+    free(parsed->hostname);
+    parsed->hostname = hostname_part;
+
+    // Set port
+    free(parsed->port);
+    if (port_part && strlen(port_part) > 0) {
+      parsed->port = normalize_port(port_part, parsed->protocol);
+    } else {
+      parsed->port = strdup("");
+    }
+
+    // Set host field (hostname:port format, excluding credentials)
+    free(parsed->host);
+    if (strlen(parsed->port) > 0) {
+      parsed->host = malloc(strlen(parsed->hostname) + strlen(parsed->port) + 2);
+      sprintf(parsed->host, "%s:%s", parsed->hostname, parsed->port);
+    } else {
+      parsed->host = strdup(parsed->hostname);
     }
   }
 

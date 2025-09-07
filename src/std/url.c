@@ -60,6 +60,7 @@ static int validate_url_characters(const char* url);
 static void JSRT_FreeURL(JSRT_URL* url);
 static JSValue JSRT_URLSearchParamsToString(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv);
 static char* url_encode_with_len(const char* str, size_t len);
+static char* url_component_encode(const char* str);
 static JSRT_URLSearchParams* JSRT_ParseSearchParams(const char* search_string, size_t string_len);
 static JSRT_URLSearchParams* JSRT_ParseSearchParamsFromFormData(JSContext* ctx, JSValueConst formdata_val);
 static void JSRT_FreeSearchParams(JSRT_URLSearchParams* search_params);
@@ -191,9 +192,18 @@ static JSRT_URL* resolve_relative_url(const char* url, const char* base) {
   result->origin = malloc(strlen(result->protocol) + strlen(result->host) + 4);
   sprintf(result->origin, "%s//%s", result->protocol, result->host);
 
+  // Encode pathname, search, and hash for href generation
+  char* encoded_pathname = url_component_encode(result->pathname);
+  char* encoded_search = url_component_encode(result->search);
+  char* encoded_hash = url_component_encode(result->hash);
+
   result->href =
-      malloc(strlen(result->origin) + strlen(result->pathname) + strlen(result->search) + strlen(result->hash) + 1);
-  sprintf(result->href, "%s%s%s%s", result->origin, result->pathname, result->search, result->hash);
+      malloc(strlen(result->origin) + strlen(encoded_pathname) + strlen(encoded_search) + strlen(encoded_hash) + 1);
+  sprintf(result->href, "%s%s%s%s", result->origin, encoded_pathname, encoded_search, encoded_hash);
+
+  free(encoded_pathname);
+  free(encoded_search);
+  free(encoded_hash);
 
   JSRT_FreeURL(base_url);
   return result;
@@ -365,9 +375,10 @@ static JSRT_URL* JSRT_ParseURL(const char* url, const char* base) {
   // However, special schemes (http, https, ftp, ws, wss) are only absolute if followed by "//"
   int has_scheme = 0;
   char* colon_pos = NULL;
-  
+
   // First character must be a letter for valid scheme
-  if (cleaned_url[0] && ((cleaned_url[0] >= 'a' && cleaned_url[0] <= 'z') || (cleaned_url[0] >= 'A' && cleaned_url[0] <= 'Z'))) {
+  if (cleaned_url[0] &&
+      ((cleaned_url[0] >= 'a' && cleaned_url[0] <= 'z') || (cleaned_url[0] >= 'A' && cleaned_url[0] <= 'Z'))) {
     for (const char* p = cleaned_url; *p; p++) {
       if (*p == ':') {
         // Found colon - extract scheme and validate it
@@ -375,7 +386,7 @@ static JSRT_URL* JSRT_ParseURL(const char* url, const char* base) {
         char* scheme = malloc(scheme_len + 1);
         strncpy(scheme, cleaned_url, scheme_len);
         scheme[scheme_len] = '\0';
-        
+
         if (is_valid_scheme(scheme)) {
           colon_pos = (char*)p;
           has_scheme = 1;
@@ -720,9 +731,15 @@ static JSRT_URL* JSRT_ParseURL(const char* url, const char* base) {
     return NULL;
   }
 
-  // Rebuild href from parsed components
+  // Rebuild href from parsed components with proper encoding
   free(parsed->href);
-  size_t href_len = strlen(parsed->protocol) + 2 + strlen(parsed->host) + strlen(parsed->pathname);
+
+  // Encode pathname, search, and hash for href generation
+  char* encoded_pathname = url_component_encode(parsed->pathname);
+  char* encoded_search = url_component_encode(parsed->search);
+  char* encoded_hash = url_component_encode(parsed->hash);
+
+  size_t href_len = strlen(parsed->protocol) + 2 + strlen(parsed->host) + strlen(encoded_pathname);
 
   // Add space for username:password@ if present
   if (parsed->username && strlen(parsed->username) > 0) {
@@ -733,11 +750,11 @@ static JSRT_URL* JSRT_ParseURL(const char* url, const char* base) {
     href_len += 1;  // +1 for @ symbol
   }
 
-  if (parsed->search && strlen(parsed->search) > 0) {
-    href_len += strlen(parsed->search);
+  if (encoded_search && strlen(encoded_search) > 0) {
+    href_len += strlen(encoded_search);
   }
-  if (parsed->hash && strlen(parsed->hash) > 0) {
-    href_len += strlen(parsed->hash);
+  if (encoded_hash && strlen(encoded_hash) > 0) {
+    href_len += strlen(encoded_hash);
   }
 
   parsed->href = malloc(href_len + 1);
@@ -759,14 +776,18 @@ static JSRT_URL* JSRT_ParseURL(const char* url, const char* base) {
   }
 
   strcat(parsed->href, parsed->host);
-  strcat(parsed->href, parsed->pathname);
+  strcat(parsed->href, encoded_pathname);
 
-  if (parsed->search && strlen(parsed->search) > 0) {
-    strcat(parsed->href, parsed->search);
+  if (encoded_search && strlen(encoded_search) > 0) {
+    strcat(parsed->href, encoded_search);
   }
-  if (parsed->hash && strlen(parsed->hash) > 0) {
-    strcat(parsed->href, parsed->hash);
+  if (encoded_hash && strlen(encoded_hash) > 0) {
+    strcat(parsed->href, encoded_hash);
   }
+
+  free(encoded_pathname);
+  free(encoded_search);
+  free(encoded_hash);
 
   free(cleaned_url);
   if (relative_part) {
@@ -2183,6 +2204,49 @@ static char* url_encode_with_len(const char* str, size_t len) {
       encoded[j++] = '%';
       encoded[j++] = hex_chars[c >> 4];
       encoded[j++] = hex_chars[c & 15];
+    }
+  }
+  encoded[j] = '\0';
+  return encoded;
+}
+
+// URL component encoding for href generation (space -> %20, not +)
+static char* url_component_encode(const char* str) {
+  if (!str)
+    return NULL;
+
+  static const char hex_chars[] = "0123456789ABCDEF";
+  size_t len = strlen(str);
+  size_t encoded_len = 0;
+
+  // Calculate encoded length
+  for (size_t i = 0; i < len; i++) {
+    unsigned char c = (unsigned char)str[i];
+    // For URL components, we need to encode space as %20
+    if (c == ' ') {
+      encoded_len += 3;  // %20
+    } else if (c < 32 || c > 126 || c == '%') {
+      encoded_len += 3;  // %XX
+    } else {
+      encoded_len++;
+    }
+  }
+
+  char* encoded = malloc(encoded_len + 1);
+  size_t j = 0;
+
+  for (size_t i = 0; i < len; i++) {
+    unsigned char c = (unsigned char)str[i];
+    if (c == ' ') {
+      encoded[j++] = '%';
+      encoded[j++] = '2';
+      encoded[j++] = '0';
+    } else if (c < 32 || c > 126 || c == '%') {
+      encoded[j++] = '%';
+      encoded[j++] = hex_chars[c >> 4];
+      encoded[j++] = hex_chars[c & 15];
+    } else {
+      encoded[j++] = c;
     }
   }
   encoded[j] = '\0';

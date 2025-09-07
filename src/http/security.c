@@ -73,7 +73,7 @@ JSRT_HttpConfig* jsrt_http_config_init(void) {
 
   // Initialize with defaults
   g_http_config->enabled = true;
-  g_http_config->https_only = true;
+  g_http_config->https_only = false;
   g_http_config->allowed_domains = NULL;
   g_http_config->allowed_domains_count = 0;
   g_http_config->max_module_size = 10 * 1024 * 1024;  // 10MB default

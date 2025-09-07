@@ -6,13 +6,18 @@ console.log('=== HTTP Module Loading Tests with Real Imports ===');
 console.log('\n--- Test 1: HTTP Module Loading Enabled by Default ---');
 console.log('Testing that HTTP module loading is now enabled by default...');
 
+// Note: For testing purposes, we need to allow HTTP URLs since the basic HTTP client
+// doesn't support HTTPS yet. In production, HTTPS-only is recommended.
+// This can be controlled via JSRT_HTTP_MODULES_HTTPS_ONLY environment variable.
+
 // Check if HTTP module loading functionality is available and working
 let canRunHttpTests = false;
 let skipReason = '';
 
 try {
   // First, do a basic test to see if HTTP modules are enabled at all
-  const testResult = require('https://cdn.skypack.dev/lodash');
+  // Note: Using HTTP URL since the basic client doesn't support HTTPS yet
+  const testResult = require('http://cdn.skypack.dev/lodash');
   // If we get here, HTTP modules are working and network is available
   canRunHttpTests = true;
   console.log('✅ HTTP module loading is fully functional with network access');
@@ -27,18 +32,13 @@ try {
     // Feature is completely disabled - skip tests
     skipReason = 'HTTP module loading functionality is disabled';
     canRunHttpTests = false;
-  } else if (errorMsg.includes('HTTP 0') || 
-             errorMsg.includes('HTTP 4') || 
-             errorMsg.includes('HTTP 5') ||
-             errorMsg.includes('Network') ||
-             errorMsg.includes('Connection')) {
-    // Network issues - skip tests gracefully 
-    skipReason = 'Network access is not available in this environment';
-    canRunHttpTests = false;
   } else {
-    // Unknown error - treat as functionality problem and fail
-    console.log('❌ CRITICAL: Unknown HTTP module loading error');
+    // All other errors (including HTTP 0, HTTP 4xx, HTTP 5xx, network errors) 
+    // should cause the test to FAIL, not skip, because if HTTP module loading
+    // is enabled but not working, that's a genuine test failure
+    console.log('❌ CRITICAL: HTTP module loading enabled but not working');
     console.log('   Error:', errorMsg);
+    console.log('   This indicates a problem with the HTTP module loading implementation');
     throw error;
   }
 }

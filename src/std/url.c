@@ -575,7 +575,8 @@ static JSRT_URL* JSRT_ParseURL(const char* url, const char* base) {
   // What's left is the host (authority part)
   if (strlen(ptr) > 0) {
     // First, handle credentials (user:pass@host:port)
-    char* credentials_end = strchr(ptr, '@');
+    // Use strrchr to find the LAST @ symbol (per WHATWG URL spec)
+    char* credentials_end = strrchr(ptr, '@');
     char* authority = ptr;
 
     if (credentials_end) {
@@ -592,7 +593,9 @@ static JSRT_URL* JSRT_ParseURL(const char* url, const char* base) {
         free(parsed->username);
         parsed->username = strdup(credentials);  // Before colon
         free(parsed->password);
-        parsed->password = strdup(colon_pos + 1);  // After colon
+        // URL-encode the password as per WHATWG URL spec
+        char* raw_password = colon_pos + 1;
+        parsed->password = url_encode_with_len(raw_password, strlen(raw_password));
       } else {
         // Only username provided
         free(parsed->username);
@@ -731,9 +734,13 @@ static JSRT_URL* JSRT_ParseURL(const char* url, const char* base) {
   strcpy(parsed->href, parsed->protocol);
   strcat(parsed->href, "//");
 
-  // Add username:password@ if present
-  if (parsed->username && strlen(parsed->username) > 0) {
-    strcat(parsed->href, parsed->username);
+  // Add username:password@ if present (include if either username or password is present)
+  if ((parsed->username && strlen(parsed->username) > 0) || (parsed->password && strlen(parsed->password) > 0)) {
+    // Add username (empty if not present)
+    if (parsed->username && strlen(parsed->username) > 0) {
+      strcat(parsed->href, parsed->username);
+    }
+    // Add password if present
     if (parsed->password && strlen(parsed->password) > 0) {
       strcat(parsed->href, ":");
       strcat(parsed->href, parsed->password);

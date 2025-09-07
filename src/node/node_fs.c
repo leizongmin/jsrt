@@ -44,6 +44,46 @@ static const char* errno_to_node_code(int err) {
   }
 }
 
+// Helper to create a Buffer-like object without circular dependencies
+static JSValue create_buffer_from_data(JSContext* ctx, const uint8_t* data, size_t size) {
+  // Create an ArrayBuffer with the data
+  JSValue array_buffer = JS_NewArrayBufferCopy(ctx, data, size);
+  if (JS_IsException(array_buffer)) {
+    return JS_EXCEPTION;
+  }
+
+  // Create a Uint8Array from the ArrayBuffer
+  JSValue global = JS_GetGlobalObject(ctx);
+  JSValue uint8_array_ctor = JS_GetPropertyStr(ctx, global, "Uint8Array");
+  JSValue uint8_array = JS_CallConstructor(ctx, uint8_array_ctor, 1, &array_buffer);
+  
+  JS_FreeValue(ctx, array_buffer);
+  JS_FreeValue(ctx, uint8_array_ctor);
+  JS_FreeValue(ctx, global);
+
+  // Add a toString method that converts bytes to string (like Buffer does)
+  if (!JS_IsException(uint8_array)) {
+    // Create a simple toString function that converts the byte array to string
+    const char* toString_code = 
+      "(function() {"
+      "  let str = '';"
+      "  for (let i = 0; i < this.length; i++) {"
+      "    str += String.fromCharCode(this[i]);"
+      "  }"
+      "  return str;"
+      "})";
+    
+    JSValue toString_func = JS_Eval(ctx, toString_code, strlen(toString_code), "<buffer_toString>", JS_EVAL_TYPE_GLOBAL);
+    if (!JS_IsException(toString_func)) {
+      JS_SetPropertyStr(ctx, uint8_array, "toString", toString_func);
+    } else {
+      JS_FreeValue(ctx, toString_func);
+    }
+  }
+
+  return uint8_array;
+}
+
 // Helper to create Node.js fs error
 static JSValue create_fs_error(JSContext* ctx, int err, const char* syscall, const char* path) {
   JSValue error = JS_NewError(ctx);
@@ -139,9 +179,7 @@ static JSValue js_fs_read_file_sync(JSContext* ctx, JSValueConst this_val, int a
     result = JS_NewStringLen(ctx, buffer, size);
   } else {
     // Return Buffer for binary data when no encoding specified
-    // Return string for now to avoid circular dependency issues
-    // TODO: Implement proper Buffer integration without circular calls
-    result = JS_NewStringLen(ctx, buffer, size);
+    result = create_buffer_from_data(ctx, (const uint8_t*)buffer, size);
   }
 
   free(buffer);

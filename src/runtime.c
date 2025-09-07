@@ -200,11 +200,22 @@ JSRT_EvalResult JSRT_RuntimeEval(JSRT_Runtime* rt, const char* filename, const c
 
   result.value = JS_Eval(rt->ctx, code, length, filename, eval_flags);
 
-  // Set up import.meta for modules loaded directly (not through import)
-  // Note: For modules, we need a different approach since JS_Eval behavior differs
+  // For ES modules, we need to ensure the module code executes properly
   if (is_module && !JS_IsException(result.value)) {
-    // For now, we'll implement this when we support import() or explicit module loading
-    // The challenge is that directly evaluated modules don't expose their JSModuleDef easily
+    // ES modules are evaluated asynchronously - we need to run pending jobs
+    // to ensure the module body executes
+    JSRT_Debug("ES module evaluation - running pending jobs to execute module code");
+    
+    // Run pending jobs multiple times to ensure module execution
+    for (int i = 0; i < 10; i++) {
+      if (!JS_IsJobPending(rt->rt)) break;
+      int job_result = JS_ExecutePendingJob(rt->rt, &rt->ctx);
+      JSRT_Debug("ES module job execution cycle %d: result=%d", i, job_result);
+      if (job_result < 0) {
+        JSRT_Debug("ES module job execution failed");
+        break;
+      }
+    }
   }
 
   if (JS_IsException(result.value)) {
@@ -227,7 +238,8 @@ JSRT_EvalResult JSRT_RuntimeAwaitEvalResult(JSRT_Runtime* rt, JSRT_EvalResult* r
   JSRT_Debug("await eval result: skipping Promise state checks to avoid blocking");
 
   // Run event loops to process any pending operations
-  for (int i = 0; i < 10; i++) {
+  // Give more cycles for server setup and don't break too early
+  for (int i = 0; i < 50; i++) {
     int uv_ret = uv_run(rt->uv_loop, UV_RUN_NOWAIT);
     bool has_js_jobs = JS_IsJobPending(rt->rt);
     bool js_ret = JSRT_RuntimeRunTicket(rt);
@@ -238,10 +250,13 @@ JSRT_EvalResult JSRT_RuntimeAwaitEvalResult(JSRT_Runtime* rt, JSRT_EvalResult* r
       break;
     }
 
-    // If no more work, break early
+    // Only break if we've had several cycles with no work
+    // This gives time for async operations like server.listen() to set up
     if (uv_ret == 0 && !JS_IsJobPending(rt->rt)) {
-      JSRT_Debug("No more pending work, breaking early");
-      break;
+      if (i > 5) {  // Allow at least a few cycles for setup
+        JSRT_Debug("No more pending work after %d cycles, breaking", i);
+        break;
+      }
     }
   }
 

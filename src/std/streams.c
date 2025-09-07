@@ -434,12 +434,7 @@ static JSValue JSRT_ReadableStreamDefaultReaderGetClosed(JSContext* ctx, JSValue
     return JS_EXCEPTION;
   }
 
-  // Return the same cached promise instance if available
-  if (!JS_IsUninitialized(reader->closed_promise)) {
-    return JS_DupValue(ctx, reader->closed_promise);
-  }
-
-  // Get the stream and its controller to check error state
+  // Get the stream and its controller to check current error state
   JSRT_ReadableStream* stream = JS_GetOpaque(reader->stream, JSRT_ReadableStreamClassID);
   if (!stream) {
     return JS_EXCEPTION;
@@ -451,37 +446,57 @@ static JSValue JSRT_ReadableStreamDefaultReaderGetClosed(JSContext* ctx, JSValue
     return JS_EXCEPTION;
   }
 
-  // Create and cache the promise
-  JSValue promise_ctor = JS_GetPropertyStr(ctx, JS_GetGlobalObject(ctx), "Promise");
-
-  if (controller->errored) {
-    // Stream is errored, return a rejected promise with the error value
-    JSValue reject_method = JS_GetPropertyStr(ctx, promise_ctor, "reject");
-    JSValue promise = JS_Call(ctx, reject_method, promise_ctor, 1, &controller->error_value);
-    JS_FreeValue(ctx, reject_method);
-    reader->closed_promise = JS_DupValue(ctx, promise);
-    JS_FreeValue(ctx, promise_ctor);
-    return promise;
-  } else if (reader->closed) {
-    // Reader is closed normally, return a resolved promise
-    JSValue resolve_method = JS_GetPropertyStr(ctx, promise_ctor, "resolve");
-    JSValue undefined_val = JS_UNDEFINED;
-    JSValue promise = JS_Call(ctx, resolve_method, promise_ctor, 1, &undefined_val);
-    JS_FreeValue(ctx, resolve_method);
-    reader->closed_promise = JS_DupValue(ctx, promise);
-    JS_FreeValue(ctx, promise_ctor);
-    return promise;
-  } else {
-    // Reader is not closed and not errored, return a pending promise (resolved for now)
-    // In a complete implementation, this would be a truly pending promise
-    JSValue resolve_method = JS_GetPropertyStr(ctx, promise_ctor, "resolve");
-    JSValue undefined_val = JS_UNDEFINED;
-    JSValue promise = JS_Call(ctx, resolve_method, promise_ctor, 1, &undefined_val);
-    JS_FreeValue(ctx, resolve_method);
-    reader->closed_promise = JS_DupValue(ctx, promise);
-    JS_FreeValue(ctx, promise_ctor);
-    return promise;
+  // Check if we need to update cached promise due to state change
+  bool need_new_promise = false;
+  if (JS_IsUninitialized(reader->closed_promise)) {
+    need_new_promise = true;
+  } else if (controller->errored) {
+    // Controller errored after promise was cached - need new rejected promise
+    need_new_promise = true;
   }
+
+  if (need_new_promise) {
+    // Clear existing promise if any
+    if (!JS_IsUninitialized(reader->closed_promise)) {
+      JS_FreeValue(ctx, reader->closed_promise);
+      reader->closed_promise = JS_UNINITIALIZED;
+    }
+
+    // Create and cache the new promise
+    JSValue promise_ctor = JS_GetPropertyStr(ctx, JS_GetGlobalObject(ctx), "Promise");
+
+    if (controller->errored) {
+      // Stream is errored, return a rejected promise with the error value
+      JSValue reject_method = JS_GetPropertyStr(ctx, promise_ctor, "reject");
+      JSValue promise = JS_Call(ctx, reject_method, promise_ctor, 1, &controller->error_value);
+      JS_FreeValue(ctx, reject_method);
+      reader->closed_promise = JS_DupValue(ctx, promise);
+      JS_FreeValue(ctx, promise_ctor);
+      return promise;
+    } else if (reader->closed) {
+      // Reader is closed normally, return a resolved promise
+      JSValue resolve_method = JS_GetPropertyStr(ctx, promise_ctor, "resolve");
+      JSValue undefined_val = JS_UNDEFINED;
+      JSValue promise = JS_Call(ctx, resolve_method, promise_ctor, 1, &undefined_val);
+      JS_FreeValue(ctx, resolve_method);
+      reader->closed_promise = JS_DupValue(ctx, promise);
+      JS_FreeValue(ctx, promise_ctor);
+      return promise;
+    } else {
+      // Reader is not closed and not errored, return a pending promise (resolved for now)
+      // In a complete implementation, this would be a truly pending promise
+      JSValue resolve_method = JS_GetPropertyStr(ctx, promise_ctor, "resolve");
+      JSValue undefined_val = JS_UNDEFINED;
+      JSValue promise = JS_Call(ctx, resolve_method, promise_ctor, 1, &undefined_val);
+      JS_FreeValue(ctx, resolve_method);
+      reader->closed_promise = JS_DupValue(ctx, promise);
+      JS_FreeValue(ctx, promise_ctor);
+      return promise;
+    }
+  }
+
+  // Return cached promise
+  return JS_DupValue(ctx, reader->closed_promise);
 }
 
 static JSValue JSRT_ReadableStreamDefaultReaderRead(JSContext* ctx, JSValueConst this_val, int argc,
@@ -643,6 +658,13 @@ static JSValue JSRT_ReadableStreamDefaultReaderCancel(JSContext* ctx, JSValueCon
     if (controller) {
       controller->closed = true;
     }
+  }
+
+  // Update the reader's closed promise to reflect the cancel operation
+  // If cancel reason is undefined, the closed promise should be rejected
+  if (!JS_IsUninitialized(reader->closed_promise)) {
+    JS_FreeValue(ctx, reader->closed_promise);
+    reader->closed_promise = JS_UNINITIALIZED;
   }
 
   // Return a resolved promise

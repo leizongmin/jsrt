@@ -160,9 +160,10 @@ static JSValue js_http_response_write(JSContext* ctx, JSValueConst this_val, int
     if (!res->status_message)
       res->status_message = strdup("OK");
 
-    char status_line[512];
-    snprintf(status_line, sizeof(status_line), "HTTP/1.1 %d %s\r\nContent-Type: text/plain\r\n\r\n", res->status_code,
-             res->status_message);
+    char status_line[1024];
+    snprintf(status_line, sizeof(status_line),
+             "HTTP/1.1 %d %s\r\nContent-Type: text/plain\r\nConnection: close\r\nServer: jsrt/1.0\r\n\r\n",
+             res->status_code, res->status_message);
 
     // Write headers to socket
     if (!JS_IsUndefined(res->socket)) {
@@ -205,6 +206,11 @@ static JSValue js_http_response_end(JSContext* ctx, JSValueConst this_val, int a
   if (argc > 0) {
     // Write final data
     js_http_response_write(ctx, this_val, argc, argv);
+  }
+
+  // Ensure headers are sent even for empty response
+  if (!res->headers_sent) {
+    js_http_response_write(ctx, this_val, 0, NULL);
   }
 
   // End the response by closing the connection
@@ -475,6 +481,11 @@ static int on_message_complete(llhttp_t* parser) {
   const char* method = llhttp_method_name(llhttp_get_method(parser));
   JS_SetPropertyStr(ctx, conn->current_request, "method", JS_NewString(ctx, method));
 
+  // Set HTTP version
+  char version[8];
+  snprintf(version, sizeof(version), "%d.%d", parser->http_major, parser->http_minor);
+  JS_SetPropertyStr(ctx, conn->current_request, "httpVersion", JS_NewString(ctx, version));
+
   // Emit 'request' event on server
   JSValue emit = JS_GetPropertyStr(ctx, conn->server, "emit");
   if (JS_IsFunction(ctx, emit)) {
@@ -491,36 +502,96 @@ static int on_message_complete(llhttp_t* parser) {
   return 0;
 }
 
-// Socket data handler for HTTP parsing
-static JSValue js_http_socket_data_handler(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
+// Forward declaration
+static void parse_simple_http_request(const char* data, char* method, char* url, char* version);
+
+// Simple HTTP data handler
+static JSValue js_http_simple_data_handler(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
   if (argc < 1)
     return JS_UNDEFINED;
 
-  JSHttpConnection* conn = JS_GetOpaque(this_val, js_http_client_request_class_id);  // Reusing class ID
-  if (!conn)
-    return JS_UNDEFINED;
+  typedef struct {
+    JSValue server;
+    JSValue request;
+    JSValue response;
+    JSContext* ctx;
+  } HTTPHandlerData;
 
-  // Get data buffer
-  const char* data = JS_ToCString(ctx, argv[0]);
+  HTTPHandlerData* data = JS_GetOpaque(this_val, 0);
   if (!data)
     return JS_UNDEFINED;
 
-  size_t len = strlen(data);
+  const char* request_data = JS_ToCString(ctx, argv[0]);
+  if (!request_data)
+    return JS_UNDEFINED;
 
-  // Parse HTTP data with llhttp
-  enum llhttp_errno err = llhttp_execute(&conn->parser, data, len);
+  // Parse HTTP request line
+  char method[16] = "GET";
+  char url[1024] = "/";
+  char version[16] = "HTTP/1.1";
 
-  JS_FreeCString(ctx, data);
+  parse_simple_http_request(request_data, method, url, version);
 
-  if (err != HPE_OK) {
-    // Handle parse error
-    printf("HTTP parse error: %s\n", llhttp_errno_name(err));
+  // Update request object with parsed data
+  JS_SetPropertyStr(ctx, data->request, "method", JS_NewString(ctx, method));
+  JS_SetPropertyStr(ctx, data->request, "url", JS_NewString(ctx, url));
+  JS_SetPropertyStr(ctx, data->request, "httpVersion", JS_NewString(ctx, version));
+
+  // Emit 'request' event on server
+  JSValue emit = JS_GetPropertyStr(ctx, data->server, "emit");
+  if (JS_IsFunction(ctx, emit)) {
+    JSValue args[] = {JS_NewString(ctx, "request"), JS_DupValue(ctx, data->request), JS_DupValue(ctx, data->response)};
+    JS_Call(ctx, emit, data->server, 3, args);
+    JS_FreeValue(ctx, args[0]);
+    JS_FreeValue(ctx, args[1]);
+    JS_FreeValue(ctx, args[2]);
   }
+  JS_FreeValue(ctx, emit);
 
+  JS_FreeCString(ctx, request_data);
   return JS_UNDEFINED;
 }
 
-// HTTP connection handler - sets up llhttp parser for each connection
+// Simple HTTP request line parser
+static void parse_simple_http_request(const char* data, char* method, char* url, char* version) {
+  // Simple parser for "METHOD /path HTTP/1.1"
+  const char* start = data;
+  const char* space1 = strchr(start, ' ');
+  if (!space1)
+    return;
+
+  // Extract method
+  int method_len = space1 - start;
+  if (method_len < 16) {
+    strncpy(method, start, method_len);
+    method[method_len] = '\0';
+  }
+
+  // Extract URL
+  start = space1 + 1;
+  const char* space2 = strchr(start, ' ');
+  if (!space2)
+    return;
+
+  int url_len = space2 - start;
+  if (url_len < 1024) {
+    strncpy(url, start, url_len);
+    url[url_len] = '\0';
+  }
+
+  // Extract version
+  start = space2 + 1;
+  const char* crlf = strstr(start, "\r\n");
+  if (crlf) {
+    int version_len = crlf - start;
+    if (version_len < 16) {
+      strncpy(version, start, version_len);
+      version[version_len] = '\0';
+    }
+  }
+}
+
+// Simple HTTP connection handler
 static void js_http_connection_handler(JSContext* ctx, JSValue server, JSValue socket) {
   // Create HTTP request and response objects
   JSValue request = js_http_request_constructor(ctx, JS_UNDEFINED, 0, NULL);
@@ -538,42 +609,43 @@ static void js_http_connection_handler(JSContext* ctx, JSValue server, JSValue s
     res->socket = JS_DupValue(ctx, socket);
   }
 
-  // Set up request properties (in a real implementation, you'd parse HTTP headers)
+  // Set up request properties
   JSHttpRequest* req = JS_GetOpaque(request, js_http_request_class_id);
   if (req) {
     req->socket = JS_DupValue(ctx, socket);
   }
 
-  // Immediately send a simple HTTP response for testing
-  JSValue write_method = JS_GetPropertyStr(ctx, socket, "write");
-  if (JS_IsFunction(ctx, write_method)) {
-    const char* http_response =
-        "HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\nContent-Length: 13\r\n\r\nHello, World!";
-    JSValue response_data = JS_NewString(ctx, http_response);
-    JS_Call(ctx, write_method, socket, 1, &response_data);
-    JS_FreeValue(ctx, response_data);
-  }
-  JS_FreeValue(ctx, write_method);
+  // Set up simple data handler that parses HTTP and emits request event
+  JSValue on_method = JS_GetPropertyStr(ctx, socket, "on");
+  if (JS_IsFunction(ctx, on_method)) {
+    // Create a closure that captures request, response, and server
+    JSValue data_handler = JS_NewCFunction(ctx, js_http_simple_data_handler, "httpDataHandler", 1);
 
-  // Close the connection
-  JSValue end_method = JS_GetPropertyStr(ctx, socket, "end");
-  if (JS_IsFunction(ctx, end_method)) {
-    JS_Call(ctx, end_method, socket, 0, NULL);
-  }
-  JS_FreeValue(ctx, end_method);
+    // Store the HTTP objects for the handler - use a simple struct
+    typedef struct {
+      JSValue server;
+      JSValue request;
+      JSValue response;
+      JSContext* ctx;
+    } HTTPHandlerData;
 
-  // Also emit 'request' event for compatibility
-  JSValue emit = JS_GetPropertyStr(ctx, server, "emit");
-  if (JS_IsFunction(ctx, emit)) {
-    JSValue args[] = {JS_NewString(ctx, "request"), JS_DupValue(ctx, request), JS_DupValue(ctx, response)};
-    JS_Call(ctx, emit, server, 3, args);
+    HTTPHandlerData* handler_data = malloc(sizeof(HTTPHandlerData));
+    if (handler_data) {
+      handler_data->server = JS_DupValue(ctx, server);
+      handler_data->request = JS_DupValue(ctx, request);
+      handler_data->response = JS_DupValue(ctx, response);
+      handler_data->ctx = ctx;
+      JS_SetOpaque(data_handler, handler_data);
+    }
+
+    JSValue args[] = {JS_NewString(ctx, "data"), data_handler};
+    JS_Call(ctx, on_method, socket, 2, args);
     JS_FreeValue(ctx, args[0]);
-    JS_FreeValue(ctx, args[1]);
-    JS_FreeValue(ctx, args[2]);
+    // Don't free data_handler - stored in event system
   }
-  JS_FreeValue(ctx, emit);
+  JS_FreeValue(ctx, on_method);
 
-  // Clean up our references, but the duplicated values passed to the event handler will persist
+  // Clean up our references (duplicates are stored in the handler)
   JS_FreeValue(ctx, request);
   JS_FreeValue(ctx, response);
 }

@@ -2,6 +2,12 @@ name: Format Code
 
 on:
   workflow_dispatch:
+    inputs:
+      check_only:
+        description: 'Only check formatting without creating PR'
+        required: false
+        default: false
+        type: boolean
   schedule:
     # Run weekly on Sundays at 2 AM UTC
     - cron: '0 2 * * 0'
@@ -38,12 +44,19 @@ jobs:
       run: |
         if git diff --quiet; then
           echo "formatted=false" >> $GITHUB_OUTPUT
+          echo "✓ Code is already properly formatted"
         else
           echo "formatted=true" >> $GITHUB_OUTPUT
+          echo "⚠ Code formatting changes needed"
+          if [ "${{ github.event.inputs.check_only }}" = "true" ]; then
+            echo "Check-only mode: Formatting issues found"
+            git diff --name-only
+            exit 1
+          fi
         fi
     
     - name: Create Pull Request
-      if: steps.changes.outputs.formatted == 'true'
+      if: steps.changes.outputs.formatted == 'true' && github.event.inputs.check_only != 'true'
       uses: peter-evans/create-pull-request@v5
       with:
         token: ${{ secrets.GITHUB_TOKEN }}

@@ -1,6 +1,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <uv.h>
+#include "../runtime.h"
 #include "node_modules.h"
 
 // Helper function to add EventEmitter methods to an object
@@ -71,7 +72,6 @@ static JSValue js_server_constructor(JSContext* ctx, JSValueConst new_target, in
 static void on_connection(uv_stream_t* server, int status) {
   JSNetServer* server_data = (JSNetServer*)server->data;
   if (status < 0) {
-    // TODO: Emit error event
     return;
   }
 
@@ -89,8 +89,9 @@ static void on_connection(uv_stream_t* server, int status) {
     return;
   }
 
-  // Accept the connection
-  uv_tcp_init(uv_default_loop(), &conn->handle);
+  // Accept the connection - use the same event loop as the server
+  JSRT_Runtime* rt = JS_GetContextOpaque(ctx);
+  uv_tcp_init(rt->uv_loop, &conn->handle);
   conn->handle.data = conn;
 
   if (uv_accept(server, (uv_stream_t*)&conn->handle) == 0) {
@@ -100,7 +101,8 @@ static void on_connection(uv_stream_t* server, int status) {
     JSValue emit = JS_GetPropertyStr(ctx, server_data->server_obj, "emit");
     if (JS_IsFunction(ctx, emit)) {
       JSValue args[] = {JS_NewString(ctx, "connection"), socket};
-      JS_Call(ctx, emit, server_data->server_obj, 2, args);
+      JSValue result = JS_Call(ctx, emit, server_data->server_obj, 2, args);
+      JS_FreeValue(ctx, result);
       JS_FreeValue(ctx, args[0]);
     }
     JS_FreeValue(ctx, emit);
@@ -154,8 +156,8 @@ static JSValue js_socket_connect(JSContext* ctx, JSValueConst this_val, int argc
 
   int port = 0;
   JS_ToInt32(ctx, &port, argv[0]);
-  if (port <= 0 || port > 65535) {
-    return JS_ThrowRangeError(ctx, "Port must be between 1 and 65535");
+  if (port < 0 || port > 65535) {
+    return JS_ThrowRangeError(ctx, "Port must be between 0 and 65535");
   }
 
   const char* host = JS_ToCString(ctx, argv[1]);
@@ -266,8 +268,8 @@ static JSValue js_server_listen(JSContext* ctx, JSValueConst this_val, int argc,
 
   int port = 0;
   JS_ToInt32(ctx, &port, argv[0]);
-  if (port <= 0 || port > 65535) {
-    return JS_ThrowRangeError(ctx, "Port must be between 1 and 65535");
+  if (port < 0 || port > 65535) {
+    return JS_ThrowRangeError(ctx, "Port must be between 0 and 65535");
   }
 
   const char* host = "0.0.0.0";
@@ -284,8 +286,9 @@ static JSValue js_server_listen(JSContext* ctx, JSValueConst this_val, int argc,
     JS_FreeCString(ctx, host);
   }
 
-  // Initialize TCP server
-  uv_tcp_init(uv_default_loop(), &server->handle);
+  // Initialize TCP server with the correct event loop
+  JSRT_Runtime* rt = JS_GetContextOpaque(ctx);
+  uv_tcp_init(rt->uv_loop, &server->handle);
   server->handle.data = server;
 
   // Bind and listen
@@ -304,7 +307,7 @@ static JSValue js_server_listen(JSContext* ctx, JSValueConst this_val, int argc,
 
   server->listening = true;
 
-  // Emit 'listening' event
+  // Emit 'listening' event and call callback if provided
   JSValue emit = JS_GetPropertyStr(ctx, server->server_obj, "emit");
   if (JS_IsFunction(ctx, emit)) {
     JSValue args[] = {JS_NewString(ctx, "listening")};
@@ -312,6 +315,11 @@ static JSValue js_server_listen(JSContext* ctx, JSValueConst this_val, int argc,
     JS_FreeValue(ctx, args[0]);
   }
   JS_FreeValue(ctx, emit);
+
+  // Call the callback if provided
+  if (argc > 2 && JS_IsFunction(ctx, argv[2])) {
+    JS_Call(ctx, argv[2], JS_UNDEFINED, 0, NULL);
+  }
 
   return this_val;
 }
@@ -483,14 +491,26 @@ JSValue JSRT_InitNodeNet(JSContext* ctx) {
 int js_node_net_init(JSContext* ctx, JSModuleDef* m) {
   JSValue net_module = JSRT_InitNodeNet(ctx);
 
-  // Export individual functions
-  JS_SetModuleExport(ctx, m, "createServer", JS_GetPropertyStr(ctx, net_module, "createServer"));
-  JS_SetModuleExport(ctx, m, "connect", JS_GetPropertyStr(ctx, net_module, "connect"));
-  JS_SetModuleExport(ctx, m, "Socket", JS_GetPropertyStr(ctx, net_module, "Socket"));
-  JS_SetModuleExport(ctx, m, "Server", JS_GetPropertyStr(ctx, net_module, "Server"));
+  // Export individual functions with proper memory management
+  JSValue createServer = JS_GetPropertyStr(ctx, net_module, "createServer");
+  JS_SetModuleExport(ctx, m, "createServer", JS_DupValue(ctx, createServer));
+  JS_FreeValue(ctx, createServer);
+
+  JSValue connect = JS_GetPropertyStr(ctx, net_module, "connect");
+  JS_SetModuleExport(ctx, m, "connect", JS_DupValue(ctx, connect));
+  JS_FreeValue(ctx, connect);
+
+  JSValue Socket = JS_GetPropertyStr(ctx, net_module, "Socket");
+  JS_SetModuleExport(ctx, m, "Socket", JS_DupValue(ctx, Socket));
+  JS_FreeValue(ctx, Socket);
+
+  JSValue Server = JS_GetPropertyStr(ctx, net_module, "Server");
+  JS_SetModuleExport(ctx, m, "Server", JS_DupValue(ctx, Server));
+  JS_FreeValue(ctx, Server);
 
   // Also export the whole module as default
-  JS_SetModuleExport(ctx, m, "default", net_module);
+  JS_SetModuleExport(ctx, m, "default", JS_DupValue(ctx, net_module));
 
+  JS_FreeValue(ctx, net_module);
   return 0;
 }

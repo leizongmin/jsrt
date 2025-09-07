@@ -193,24 +193,30 @@ int js_node_dns_init(JSContext* ctx, JSModuleDef* m) {
   // Export as default
   JS_SetModuleExport(ctx, m, "default", JS_DupValue(ctx, dns_module));
 
-  // Export individual functions
+  // Export individual functions with proper memory management
   JSValue lookup = JS_GetPropertyStr(ctx, dns_module, "lookup");
-  JS_SetModuleExport(ctx, m, "lookup", lookup);
+  JS_SetModuleExport(ctx, m, "lookup", JS_DupValue(ctx, lookup));
+  JS_FreeValue(ctx, lookup);
 
   JSValue resolve = JS_GetPropertyStr(ctx, dns_module, "resolve");
-  JS_SetModuleExport(ctx, m, "resolve", resolve);
+  JS_SetModuleExport(ctx, m, "resolve", JS_DupValue(ctx, resolve));
+  JS_FreeValue(ctx, resolve);
 
   JSValue resolve4 = JS_GetPropertyStr(ctx, dns_module, "resolve4");
-  JS_SetModuleExport(ctx, m, "resolve4", resolve4);
+  JS_SetModuleExport(ctx, m, "resolve4", JS_DupValue(ctx, resolve4));
+  JS_FreeValue(ctx, resolve4);
 
   JSValue resolve6 = JS_GetPropertyStr(ctx, dns_module, "resolve6");
-  JS_SetModuleExport(ctx, m, "resolve6", resolve6);
+  JS_SetModuleExport(ctx, m, "resolve6", JS_DupValue(ctx, resolve6));
+  JS_FreeValue(ctx, resolve6);
 
   JSValue reverse = JS_GetPropertyStr(ctx, dns_module, "reverse");
-  JS_SetModuleExport(ctx, m, "reverse", reverse);
+  JS_SetModuleExport(ctx, m, "reverse", JS_DupValue(ctx, reverse));
+  JS_FreeValue(ctx, reverse);
 
   JSValue RRTYPE = JS_GetPropertyStr(ctx, dns_module, "RRTYPE");
-  JS_SetModuleExport(ctx, m, "RRTYPE", RRTYPE);
+  JS_SetModuleExport(ctx, m, "RRTYPE", JS_DupValue(ctx, RRTYPE));
+  JS_FreeValue(ctx, RRTYPE);
 
   JS_FreeValue(ctx, dns_module);
 

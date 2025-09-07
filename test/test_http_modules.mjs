@@ -13,15 +13,20 @@ async function runTests() {
     let testResult;
     try {
       testResult = require('http://cdn.jsdelivr.net/npm/lodash@4.17.21/lodash.min.js');
+      console.log(testResult);
     } catch (httpError) {
       const httpErrorMsg = httpError.message || '';
-      if (httpErrorMsg.includes('HTTP 0') || httpErrorMsg.includes('redirect')) {
+      if (
+        httpErrorMsg.includes('HTTP 0') ||
+        httpErrorMsg.includes('redirect')
+      ) {
         // HTTP failed, possibly due to HTTPS redirect. Try HTTPS to see if that's supported.
         console.log(
           '⚠️  HTTP request failed (likely HTTPS redirect), testing HTTPS support...'
         );
         try {
           testResult = require('https://cdn.jsdelivr.net/npm/lodash@4.17.21/lodash.min.js');
+          console.log(testResult);
         } catch (httpsError) {
           const httpsErrorMsg = httpsError.message || '';
           if (
@@ -48,9 +53,16 @@ async function runTests() {
         throw httpError; // Re-throw if it's not a redirect/connection issue
       }
     }
-    console.log('Module loaded:', testResult && testResult.VERSION ? `Lodash v${testResult.VERSION}` : 'module loaded');
+    console.log(
+      'Module loaded:',
+      testResult && testResult.VERSION
+        ? `Lodash v${testResult.VERSION}`
+        : 'module loaded'
+    );
     // If we get here, HTTP modules are working and network is available
-    console.log('✅ HTTP module loading is fully functional with network access');
+    console.log(
+      '✅ HTTP module loading is fully functional with network access'
+    );
   } catch (error) {
     const errorMsg = error.message || '';
 
@@ -88,6 +100,7 @@ async function runTests() {
   console.log('\n--- Test 2a: Loading lodash from cdn.skypack.dev ---');
   try {
     const lodashModule = await import('https://cdn.skypack.dev/lodash');
+    console.log(lodashModule);
     const _ = lodashModule.default;
     console.log('✅ Successfully loaded lodash from Skypack');
     console.log('Lodash version:', _.VERSION);
@@ -97,16 +110,20 @@ async function runTests() {
     );
     assert.ok(_, 'Lodash should be loaded');
     assert.ok(_.VERSION, 'Lodash should have version');
-    assert.ok(typeof _.chunk === 'function', 'Lodash chunk function should exist');
+    assert.ok(
+      typeof _.chunk === 'function',
+      'Lodash chunk function should exist'
+    );
   } catch (error) {
     console.log('⚠️  Skypack ES module failed (this is known):', error.message);
     console.log('   ES module compilation issues with current implementation');
   }
 
-  // Test React from esm.sh (ES modules - may have compatibility issues) 
+  // Test React from esm.sh (ES modules - may have compatibility issues)
   console.log('\n--- Test 2b: Loading React from esm.sh ---');
   try {
     const ReactModule = await import('https://esm.sh/react@18');
+    console.log(ReactModule);
     const React = ReactModule.default;
     console.log('✅ Successfully loaded React from esm.sh');
     console.log('React version:', React.version);
@@ -131,6 +148,7 @@ async function runTests() {
   // Test lodash from jsDelivr (CommonJS format - use require)
   console.log('\n--- Test 2c: Loading lodash from cdn.jsdelivr.net ---');
   const lodashJsd = require('https://cdn.jsdelivr.net/npm/lodash@4.17.21/lodash.min.js');
+  console.log(lodashJsd);
   console.log('✅ Successfully loaded lodash from jsDelivr');
   console.log('Lodash version:', lodashJsd.VERSION);
   console.log(
@@ -146,6 +164,7 @@ async function runTests() {
   // Test lodash from unpkg (CommonJS format - use require)
   console.log('\n--- Test 2d: Loading lodash from unpkg.com ---');
   const lodashUnpkg = require('https://unpkg.com/lodash@4.17.21/lodash.min.js');
+  console.log(lodashUnpkg);
   console.log('✅ Successfully loaded lodash from unpkg');
   console.log('Lodash version:', lodashUnpkg.VERSION);
   console.log(
@@ -162,6 +181,7 @@ async function runTests() {
   console.log('\n--- Test 2e: Loading React from esm.run ---');
   try {
     const ReactRunModule = await import('https://esm.run/react@18');
+    console.log(ReactRunModule);
     const ReactRun = ReactRunModule.default;
     console.log('✅ Successfully loaded React from esm.run');
     console.log('React version:', ReactRun.version);
@@ -214,7 +234,10 @@ async function runTests() {
         '✅ Security validation working - blocked non-whitelisted domain'
       );
     } else {
-      console.log('⚠️  Got different error (this is acceptable):', error.message);
+      console.log(
+        '⚠️  Got different error (this is acceptable):',
+        error.message
+      );
     }
   }
 
@@ -234,7 +257,7 @@ async function runTests() {
 }
 
 // Run the tests
-runTests().catch(error => {
+runTests().catch((error) => {
   console.error('Test failed:', error.message);
   process.exit(1);
 });

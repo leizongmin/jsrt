@@ -167,7 +167,8 @@ static int init_ssl_functions(void) {
   ssl_funcs.SSL_load_error_strings = (void (*)(void))GetProcAddress(openssl_handle, "SSL_load_error_strings");
   ssl_funcs.ERR_get_error = (unsigned long (*)(void))GetProcAddress(openssl_handle, "ERR_get_error");
   ssl_funcs.ERR_error_string = (char* (*)(unsigned long, char*))GetProcAddress(openssl_handle, "ERR_error_string");
-  ssl_funcs.SSL_CTX_set_cipher_list = (int (*)(void*, const char*))GetProcAddress(openssl_handle, "SSL_CTX_set_cipher_list");
+  ssl_funcs.SSL_CTX_set_cipher_list =
+      (int (*)(void*, const char*))GetProcAddress(openssl_handle, "SSL_CTX_set_cipher_list");
 #else
   ssl_funcs.TLS_client_method = (void* (*)(void))dlsym(openssl_handle, "TLS_client_method");
   ssl_funcs.SSL_CTX_new = (void* (*)(const void*))dlsym(openssl_handle, "SSL_CTX_new");
@@ -363,12 +364,11 @@ static JSRT_HttpResponse try_curl_fallback(const char* url) {
 
   // Build curl command with redirects, silence progress, and write to temp file
   char curl_cmd[2048];
-  snprintf(curl_cmd, sizeof(curl_cmd), 
-    "curl -s -L --max-time 30 --connect-timeout 10 -o '%s' '%s' 2>/dev/null", 
-    temp_file, url);
+  snprintf(curl_cmd, sizeof(curl_cmd), "curl -s -L --max-time 30 --connect-timeout 10 -o '%s' '%s' 2>/dev/null",
+           temp_file, url);
 
   JSRT_Debug("HTTP Client: curl fallback - executing curl command");
-  
+
   int curl_result = system(curl_cmd);
   if (curl_result != 0) {
     JSRT_Debug("HTTP Client: curl fallback - curl command failed with exit code %d", curl_result);
@@ -420,7 +420,7 @@ static JSRT_HttpResponse try_curl_fallback(const char* url) {
   response.body_size = file_size;
   response.status = 200;  // Assume success if curl succeeded
   response.error = JSRT_HTTP_OK;
-  
+
   JSRT_Debug("HTTP Client: curl fallback - successfully read %zu bytes", response.body_size);
   return response;
 }
@@ -525,7 +525,7 @@ static JSRT_HttpResponse http_request_internal(const char* url, int redirect_cou
       // SSL_CTRL_SET_MIN_PROTO_VERSION = 123, TLS 1.2 = 0x0303
       ssl_funcs.SSL_CTX_ctrl(ssl_ctx, 123, 0x0303, NULL);  // TLS 1.2 minimum
       JSRT_Debug("HTTP Client: Set minimum TLS version to 1.2");
-      
+
       // SSL_CTRL_SET_MAX_PROTO_VERSION = 124, TLS 1.3 = 0x0304
       ssl_funcs.SSL_CTX_ctrl(ssl_ctx, 124, 0x0304, NULL);  // TLS 1.3 maximum
       JSRT_Debug("HTTP Client: Set maximum TLS version to 1.3");
@@ -614,23 +614,27 @@ static JSRT_HttpResponse http_request_internal(const char* url, int redirect_cou
           char err_buf[256];
           ssl_funcs.ERR_error_string(err, err_buf);
           JSRT_Debug("HTTP Client: SSL detailed error: %s", err_buf);
-          
+
           // Special handling for handshake failure - try curl fallback
           if (strstr(err_buf, "handshake failure")) {
             JSRT_Debug("HTTP Client: TLS handshake failure detected - trying curl fallback");
-            
+
             // Try using curl as a fallback
             JSRT_HttpResponse curl_response = try_curl_fallback(url);
             if (curl_response.error == JSRT_HTTP_OK) {
               JSRT_Debug("HTTP Client: curl fallback succeeded");
               // Clean up current SSL resources first
-              if (ssl) ssl_funcs.SSL_free(ssl);
-              if (ssl_ctx) ssl_funcs.SSL_CTX_free(ssl_ctx);
+              if (ssl)
+                ssl_funcs.SSL_free(ssl);
+              if (ssl_ctx)
+                ssl_funcs.SSL_CTX_free(ssl_ctx);
 #ifdef _WIN32
-              if (sockfd != INVALID_SOCKET) closesocket(sockfd);
+              if (sockfd != INVALID_SOCKET)
+                closesocket(sockfd);
               WSACleanup();
 #else
-              if (sockfd >= 0) close(sockfd);
+              if (sockfd >= 0)
+                close(sockfd);
 #endif
               free(host);
               free(path);

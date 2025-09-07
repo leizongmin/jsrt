@@ -4,7 +4,7 @@
 #include <string.h>
 #include "node_modules.h"
 
-// util.format() implementation - similar to printf-style formatting
+// util.format() implementation - Node.js-compatible formatting with %s, %d, %j placeholders
 static JSValue js_util_format(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
   if (argc < 1) {
     return JS_NewString(ctx, "");
@@ -14,37 +14,149 @@ static JSValue js_util_format(JSContext* ctx, JSValueConst this_val, int argc, J
   if (!format)
     return JS_EXCEPTION;
 
-  // Simple implementation - for now just concatenate arguments with spaces
-  // TODO: Implement proper printf-style formatting with %s, %d, %j placeholders
-  size_t total_len = strlen(format) + 1;
-
-  // Calculate total length needed
-  for (int i = 1; i < argc; i++) {
-    const char* arg_str = JS_ToCString(ctx, argv[i]);
-    if (arg_str) {
-      total_len += strlen(arg_str) + 1;  // +1 for space
-      JS_FreeCString(ctx, arg_str);
-    }
-  }
-
-  char* result = malloc(total_len);
+  size_t format_len = strlen(format);
+  size_t result_capacity = format_len * 2 + 1024;  // Start with generous buffer
+  char* result = malloc(result_capacity);
   if (!result) {
     JS_FreeCString(ctx, format);
     JS_ThrowOutOfMemory(ctx);
     return JS_EXCEPTION;
   }
 
-  strcpy(result, format);
+  size_t result_pos = 0;
+  int arg_index = 1;
 
-  // Append remaining arguments with spaces
-  for (int i = 1; i < argc; i++) {
+  for (size_t i = 0; i < format_len; i++) {
+    if (format[i] == '%' && i + 1 < format_len && arg_index < argc) {
+      char placeholder = format[i + 1];
+      const char* replacement = NULL;
+      char* temp_str = NULL;
+      bool should_free = false;
+
+      switch (placeholder) {
+        case 's': {  // String placeholder
+          replacement = JS_ToCString(ctx, argv[arg_index]);
+          should_free = true;
+          break;
+        }
+        case 'd': {  // Number placeholder
+          double num;
+          if (JS_ToFloat64(ctx, &num, argv[arg_index]) == 0) {
+            temp_str = malloc(32);
+            snprintf(temp_str, 32, "%.0f", num);
+            replacement = temp_str;
+            should_free = true;
+          } else {
+            replacement = "NaN";
+          }
+          break;
+        }
+        case 'j': {  // JSON placeholder
+          JSValue json_global = JS_GetGlobalObject(ctx);
+          JSValue json_obj = JS_GetPropertyStr(ctx, json_global, "JSON");
+          JSValue stringify_fn = JS_GetPropertyStr(ctx, json_obj, "stringify");
+
+          if (JS_IsFunction(ctx, stringify_fn)) {
+            JSValue json_result = JS_Call(ctx, stringify_fn, json_obj, 1, &argv[arg_index]);
+            if (!JS_IsException(json_result)) {
+              replacement = JS_ToCString(ctx, json_result);
+              should_free = true;
+            }
+            JS_FreeValue(ctx, json_result);
+          }
+
+          JS_FreeValue(ctx, json_global);
+          JS_FreeValue(ctx, json_obj);
+          JS_FreeValue(ctx, stringify_fn);
+          break;
+        }
+        case '%': {  // Escaped %
+          replacement = "%";
+          arg_index--;  // Don't consume an argument
+          break;
+        }
+        default: {
+          // Unknown placeholder, treat as literal
+          result[result_pos++] = '%';
+          result[result_pos++] = placeholder;
+          i++;  // Skip the placeholder char
+          continue;
+        }
+      }
+
+      if (replacement) {
+        size_t repl_len = strlen(replacement);
+        // Ensure we have enough space
+        while (result_pos + repl_len >= result_capacity) {
+          result_capacity *= 2;
+          result = realloc(result, result_capacity);
+          if (!result) {
+            if (should_free) {
+              if (temp_str)
+                free(temp_str);
+              else
+                JS_FreeCString(ctx, replacement);
+            }
+            JS_FreeCString(ctx, format);
+            JS_ThrowOutOfMemory(ctx);
+            return JS_EXCEPTION;
+          }
+        }
+
+        strcpy(result + result_pos, replacement);
+        result_pos += repl_len;
+
+        if (should_free) {
+          if (temp_str) {
+            free(temp_str);
+          } else {
+            JS_FreeCString(ctx, replacement);
+          }
+        }
+      }
+
+      i++;  // Skip the placeholder character
+      arg_index++;
+    } else {
+      // Regular character
+      if (result_pos >= result_capacity - 1) {
+        result_capacity *= 2;
+        result = realloc(result, result_capacity);
+        if (!result) {
+          JS_FreeCString(ctx, format);
+          JS_ThrowOutOfMemory(ctx);
+          return JS_EXCEPTION;
+        }
+      }
+      result[result_pos++] = format[i];
+    }
+  }
+
+  // Append any remaining arguments with spaces (Node.js behavior)
+  for (int i = arg_index; i < argc; i++) {
     const char* arg_str = JS_ToCString(ctx, argv[i]);
     if (arg_str) {
-      strcat(result, " ");
-      strcat(result, arg_str);
+      size_t arg_len = strlen(arg_str);
+      // Ensure space for " " + arg + null terminator
+      while (result_pos + arg_len + 2 >= result_capacity) {
+        result_capacity *= 2;
+        result = realloc(result, result_capacity);
+        if (!result) {
+          JS_FreeCString(ctx, arg_str);
+          JS_FreeCString(ctx, format);
+          JS_ThrowOutOfMemory(ctx);
+          return JS_EXCEPTION;
+        }
+      }
+
+      result[result_pos++] = ' ';
+      strcpy(result + result_pos, arg_str);
+      result_pos += arg_len;
       JS_FreeCString(ctx, arg_str);
     }
   }
+
+  result[result_pos] = '\0';
 
   JSValue ret = JS_NewString(ctx, result);
   free(result);

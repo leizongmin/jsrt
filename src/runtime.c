@@ -42,6 +42,23 @@ static void JSRT_RuntimeCloseWalkCallback(uv_handle_t* handle, void* arg) {
   }
 }
 
+// Cleanup walk callback to free net module memory after handles are closed
+static void JSRT_RuntimeCleanupWalkCallback(uv_handle_t* handle, void* arg) {
+  if (handle->data && handle->type == UV_TCP) {
+    // This could be a JSNetConnection or JSNetServer - check the structure
+    // Free the memory that was allocated for these structures
+    void* data = handle->data;
+    handle->data = NULL;  // Prevent double-free
+
+    // Free the host string if it exists (both structures have host as first string member)
+    char** host_ptr = (char**)((char*)data + sizeof(JSContext*) + sizeof(JSValue) * 2);  // Skip ctx and JS values
+    if (*host_ptr) {
+      free(*host_ptr);
+    }
+    free(data);
+  }
+}
+
 JSRT_Runtime* JSRT_RuntimeNew() {
   JSRT_Runtime* rt = malloc(sizeof(JSRT_Runtime));
   rt->rt = JS_NewRuntime();
@@ -99,6 +116,8 @@ void JSRT_RuntimeFree(JSRT_Runtime* rt) {
   int result = uv_loop_close(rt->uv_loop);
   if (result != 0) {
     JSRT_Debug("uv_loop_close failed: %s", uv_strerror(result));
+    // Clean up net module memory even if loop close failed
+    uv_walk(rt->uv_loop, JSRT_RuntimeCleanupWalkCallback, NULL);
   }
   free(rt->uv_loop);
 
@@ -208,8 +227,9 @@ JSRT_EvalResult JSRT_RuntimeAwaitEvalResult(JSRT_Runtime* rt, JSRT_EvalResult* r
   JSRT_Debug("await eval result: skipping Promise state checks to avoid blocking");
 
   // Run event loops to process any pending operations
-  for (int i = 0; i < 3; i++) {
+  for (int i = 0; i < 10; i++) {
     int uv_ret = uv_run(rt->uv_loop, UV_RUN_NOWAIT);
+    bool has_js_jobs = JS_IsJobPending(rt->rt);
     bool js_ret = JSRT_RuntimeRunTicket(rt);
     JSRT_Debug("await eval result: cycle %d, uv_ret=%d, js_ret=%d", i, uv_ret, js_ret);
 
@@ -235,12 +255,20 @@ bool JSRT_RuntimeRun(JSRT_Runtime* rt) {
   uint64_t counter = 0;
   for (;; counter++) {
     // JSRT_Debug("runtime run loop: counter=%d", counter);
-    int ret = uv_run(rt->uv_loop, UV_RUN_NOWAIT);
+
+    // Check if we have pending JavaScript jobs
+    bool has_js_jobs = JS_IsJobPending(rt->rt);
+
+    // If we have JavaScript jobs, use NOWAIT to process them quickly
+    // If we only have async I/O, use DEFAULT to block and wait efficiently
+    uv_run_mode mode = has_js_jobs ? UV_RUN_NOWAIT : UV_RUN_DEFAULT;
+
+    int ret = uv_run(rt->uv_loop, mode);
     if (ret < 0) {
       JSRT_Debug("uv_run error: ret=%d", ret);
       return false;
     }
-    // JSRT_Debug("runtime run loop: uv_run ret=%d", ret);
+    // JSRT_Debug("runtime run loop: uv_run ret=%d, mode=%s", ret, has_js_jobs ? "NOWAIT" : "DEFAULT");
 
     if (!JSRT_RuntimeRunTicket(rt)) {
       return false;
@@ -250,14 +278,20 @@ bool JSRT_RuntimeRun(JSRT_Runtime* rt) {
       return false;
     }
 
+    // Check if we still have work to do
     if (JS_IsJobPending(rt->rt)) {
       // JSRT_Debug("runtime run loop: js has pending job, counter=%d", counter);
       continue;
     }
+
     if (uv_loop_alive(rt->uv_loop)) {
       // JSRT_Debug("runtime run loop: async tasks are not completed, counter=%d", counter);
+      // If we used DEFAULT mode and there are still active handles,
+      // it means we processed some events, continue the loop
       continue;
     }
+
+    // No more work to do
     break;
   }
   return true;

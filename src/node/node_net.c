@@ -60,6 +60,8 @@ typedef struct {
   bool destroyed;
   char* host;
   int port;
+  JSValue listen_callback;    // Store callback for async execution
+  uv_timer_t callback_timer;  // Timer for async callback
 } JSNetServer;
 
 // Forward declarations
@@ -67,6 +69,70 @@ static JSValue js_net_create_server(JSContext* ctx, JSValueConst this_val, int a
 static JSValue js_net_connect(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv);
 static JSValue js_socket_constructor(JSContext* ctx, JSValueConst new_target, int argc, JSValueConst* argv);
 static JSValue js_server_constructor(JSContext* ctx, JSValueConst new_target, int argc, JSValueConst* argv);
+static void on_listen_callback_timer(uv_timer_t* timer);
+
+// Data read callback
+static void on_socket_read(uv_stream_t* stream, ssize_t nread, const uv_buf_t* buf) {
+  JSNetConnection* conn = (JSNetConnection*)stream->data;
+  if (!conn || !conn->ctx) {
+    goto cleanup;
+  }
+
+  JSContext* ctx = conn->ctx;
+
+  // Check if socket object is still valid (not freed by GC)
+  if (JS_IsUndefined(conn->socket_obj) || JS_IsNull(conn->socket_obj)) {
+    goto cleanup;
+  }
+
+  if (nread < 0) {
+    if (nread != UV_EOF) {
+      // Emit error event
+      JSValue emit = JS_GetPropertyStr(ctx, conn->socket_obj, "emit");
+      if (JS_IsFunction(ctx, emit)) {
+        JSValue error = JS_NewError(ctx);
+        JS_SetPropertyStr(ctx, error, "message", JS_NewString(ctx, uv_strerror(nread)));
+        JS_SetPropertyStr(ctx, error, "code", JS_NewString(ctx, uv_err_name(nread)));
+
+        JSValue args[] = {JS_NewString(ctx, "error"), error};
+        JS_Call(ctx, emit, conn->socket_obj, 2, args);
+        JS_FreeValue(ctx, args[0]);
+        JS_FreeValue(ctx, args[1]);
+      }
+      JS_FreeValue(ctx, emit);
+    }
+
+    // Close the connection
+    uv_close((uv_handle_t*)stream, NULL);
+    conn->connected = false;
+  } else if (nread > 0) {
+    // Emit 'data' event with the buffer content
+    JSValue emit = JS_GetPropertyStr(ctx, conn->socket_obj, "emit");
+    if (JS_IsFunction(ctx, emit)) {
+      // Create a string from the buffer data
+      JSValue data = JS_NewStringLen(ctx, buf->base, nread);
+      JSValue args[] = {JS_NewString(ctx, "data"), data};
+      JSValue result = JS_Call(ctx, emit, conn->socket_obj, 2, args);
+      JS_FreeValue(ctx, result);
+      JS_FreeValue(ctx, args[0]);
+      JS_FreeValue(ctx, args[1]);
+    }
+    JS_FreeValue(ctx, emit);
+  }
+
+cleanup:
+
+  // Always free the buffer allocated in on_socket_alloc
+  if (buf->base) {
+    free(buf->base);
+  }
+}
+
+// Allocation callback for socket reads
+static void on_socket_alloc(uv_handle_t* handle, size_t suggested_size, uv_buf_t* buf) {
+  buf->base = malloc(suggested_size);
+  buf->len = suggested_size;
+}
 
 // Connection callbacks
 static void on_connection(uv_stream_t* server, int status) {
@@ -97,6 +163,9 @@ static void on_connection(uv_stream_t* server, int status) {
   if (uv_accept(server, (uv_stream_t*)&conn->handle) == 0) {
     conn->connected = true;
 
+    // Start reading from the socket to enable data events
+    uv_read_start((uv_stream_t*)&conn->handle, on_socket_alloc, on_socket_read);
+
     // Emit 'connection' event on server
     JSValue emit = JS_GetPropertyStr(ctx, server_data->server_obj, "emit");
     if (JS_IsFunction(ctx, emit)) {
@@ -113,7 +182,16 @@ static void on_connection(uv_stream_t* server, int status) {
 
 static void on_connect(uv_connect_t* req, int status) {
   JSNetConnection* conn = (JSNetConnection*)req->data;
+  if (!conn || !conn->ctx) {
+    return;
+  }
+
   JSContext* ctx = conn->ctx;
+
+  // Check if socket object is still valid (not freed by GC)
+  if (JS_IsUndefined(conn->socket_obj) || JS_IsNull(conn->socket_obj)) {
+    return;
+  }
 
   if (status == 0) {
     conn->connected = true;
@@ -141,6 +219,31 @@ static void on_connect(uv_connect_t* req, int status) {
     }
     JS_FreeValue(ctx, emit);
   }
+}
+
+// Async callback timer for listen() callback
+static void on_listen_callback_timer(uv_timer_t* timer) {
+  JSNetServer* server = (JSNetServer*)timer->data;
+  if (!server || JS_IsUndefined(server->listen_callback)) {
+    return;
+  }
+
+  JSContext* ctx = server->ctx;
+  JSValue callback = server->listen_callback;
+
+  // Call the callback asynchronously
+  JSValue result = JS_Call(ctx, callback, JS_UNDEFINED, 0, NULL);
+  if (JS_IsException(result)) {
+    // Handle exception but don't crash
+    JSValue exception = JS_GetException(ctx);
+    JS_FreeValue(ctx, exception);
+  }
+  JS_FreeValue(ctx, result);
+
+  // Clean up callback and timer
+  JS_FreeValue(ctx, server->listen_callback);
+  server->listen_callback = JS_UNDEFINED;
+  uv_timer_stop(&server->callback_timer);
 }
 
 // Socket methods
@@ -171,8 +274,9 @@ static JSValue js_socket_connect(JSContext* ctx, JSValueConst this_val, int argc
   conn->host = strdup(host);
   JS_FreeCString(ctx, host);
 
-  // Initialize TCP handle
-  uv_tcp_init(uv_default_loop(), &conn->handle);
+  // Initialize TCP handle with the correct event loop
+  JSRT_Runtime* rt = JS_GetContextOpaque(ctx);
+  uv_tcp_init(rt->uv_loop, &conn->handle);
   conn->handle.data = conn;
   conn->connect_req.data = conn;
 
@@ -187,6 +291,15 @@ static JSValue js_socket_connect(JSContext* ctx, JSValueConst this_val, int argc
   }
 
   return this_val;  // Return this for chaining
+}
+
+// Async write completion callback
+static void on_socket_write_complete(uv_write_t* req, int status) {
+  // Free the write request and buffer data
+  if (req->data) {
+    free(req->data);  // Free the buffer data
+  }
+  free(req);
 }
 
 static JSValue js_socket_write(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
@@ -205,18 +318,25 @@ static JSValue js_socket_write(JSContext* ctx, JSValueConst this_val, int argc, 
     return JS_EXCEPTION;
   }
 
+  size_t len = strlen(data);
+
+  // Allocate buffer that will persist during async write
+  char* buffer = malloc(len);
+  memcpy(buffer, data, len);
+  JS_FreeCString(ctx, data);
+
   // Create write request
   uv_write_t* write_req = malloc(sizeof(uv_write_t));
-  uv_buf_t buf = uv_buf_init((char*)data, strlen(data));
+  write_req->data = buffer;  // Store buffer for cleanup
 
-  // For simplicity, not implementing full async write handling yet
-  // This is a basic synchronous write
-  int result = uv_try_write((uv_stream_t*)&conn->handle, &buf, 1);
+  uv_buf_t buf = uv_buf_init(buffer, len);
 
-  JS_FreeCString(ctx, data);
-  free(write_req);
+  // Perform async write
+  int result = uv_write(write_req, (uv_stream_t*)&conn->handle, &buf, 1, on_socket_write_complete);
 
   if (result < 0) {
+    free(buffer);
+    free(write_req);
     return JS_ThrowInternalError(ctx, "Write failed: %s", uv_strerror(result));
   }
 
@@ -307,7 +427,7 @@ static JSValue js_server_listen(JSContext* ctx, JSValueConst this_val, int argc,
 
   server->listening = true;
 
-  // Emit 'listening' event and call callback if provided
+  // Emit 'listening' event
   JSValue emit = JS_GetPropertyStr(ctx, server->server_obj, "emit");
   if (JS_IsFunction(ctx, emit)) {
     JSValue args[] = {JS_NewString(ctx, "listening")};
@@ -316,9 +436,20 @@ static JSValue js_server_listen(JSContext* ctx, JSValueConst this_val, int argc,
   }
   JS_FreeValue(ctx, emit);
 
-  // Call the callback if provided
+  // Schedule callback for async execution if provided
   if (argc > 2 && JS_IsFunction(ctx, argv[2])) {
-    JS_Call(ctx, argv[2], JS_UNDEFINED, 0, NULL);
+    // Store callback for async execution
+    server->listen_callback = JS_DupValue(ctx, argv[2]);
+
+    // Initialize timer for next tick callback execution
+    JSRT_Runtime* rt = JS_GetContextOpaque(ctx);
+    uv_timer_init(rt->uv_loop, &server->callback_timer);
+    server->callback_timer.data = server;
+
+    // Start timer with 0 delay for next tick execution
+    uv_timer_start(&server->callback_timer, on_listen_callback_timer, 0, 0);
+  } else {
+    server->listen_callback = JS_UNDEFINED;
   }
 
   return this_val;
@@ -340,26 +471,49 @@ static JSValue js_server_close(JSContext* ctx, JSValueConst this_val, int argc, 
   return JS_UNDEFINED;
 }
 
+// Close callback for socket cleanup
+static void socket_close_callback(uv_handle_t* handle) {
+  // Do not free memory here to avoid race conditions with uv_walk
+  // Memory will be freed during runtime cleanup
+  (void)handle;
+}
+
 // Class finalizers
 static void js_socket_finalizer(JSRuntime* rt, JSValue val) {
   JSNetConnection* conn = JS_GetOpaque(val, js_socket_class_id);
   if (conn) {
-    if (conn->connected) {
-      uv_close((uv_handle_t*)&conn->handle, NULL);
+    // Mark socket object as invalid to prevent use-after-free in callbacks
+    conn->socket_obj = JS_UNDEFINED;
+
+    // Only close if not already closing - memory will be freed during runtime cleanup
+    if (!uv_is_closing((uv_handle_t*)&conn->handle)) {
+      uv_close((uv_handle_t*)&conn->handle, socket_close_callback);
     }
-    free(conn->host);
-    free(conn);
+    // Do not free memory here - it will be freed during runtime cleanup
   }
+}
+
+// Close callback for server cleanup
+static void server_close_callback(uv_handle_t* handle) {
+  // Do not free memory here to avoid race conditions with uv_walk
+  // Memory will be freed during runtime cleanup
+  (void)handle;
 }
 
 static void js_server_finalizer(JSRuntime* rt, JSValue val) {
   JSNetServer* server = JS_GetOpaque(val, js_server_class_id);
   if (server) {
-    if (server->listening) {
-      uv_close((uv_handle_t*)&server->handle, NULL);
+    // Clean up callback if it exists
+    if (!JS_IsUndefined(server->listen_callback)) {
+      JS_FreeValueRT(rt, server->listen_callback);
+      uv_timer_stop(&server->callback_timer);
     }
-    free(server->host);
-    free(server);
+
+    if (server->listening && !uv_is_closing((uv_handle_t*)&server->handle)) {
+      // Use proper close callback - memory will be freed during runtime cleanup
+      uv_close((uv_handle_t*)&server->handle, server_close_callback);
+    }
+    // Do not free memory here - it will be freed during runtime cleanup
   }
 }
 
@@ -392,6 +546,11 @@ static JSValue js_socket_constructor(JSContext* ctx, JSValueConst new_target, in
   conn->connected = false;
   conn->destroyed = false;
 
+  // Initialize libuv handle - CRITICAL for memory safety
+  JSRT_Runtime* rt = JS_GetContextOpaque(ctx);
+  uv_tcp_init(rt->uv_loop, &conn->handle);
+  conn->handle.data = conn;
+
   JS_SetOpaque(obj, conn);
 
   // Add EventEmitter methods (simplified)
@@ -422,6 +581,7 @@ static JSValue js_server_constructor(JSContext* ctx, JSValueConst new_target, in
   server->server_obj = JS_DupValue(ctx, obj);
   server->listening = false;
   server->destroyed = false;
+  server->listen_callback = JS_UNDEFINED;
 
   JS_SetOpaque(obj, server);
 

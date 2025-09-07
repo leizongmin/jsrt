@@ -255,6 +255,55 @@ static JSValue js_http_response_set_header(JSContext* ctx, JSValueConst this_val
   return JS_UNDEFINED;
 }
 
+// Structure for async HTTP listen operation
+typedef struct {
+  JSContext* ctx;
+  JSValue http_server;
+  JSValue net_server;
+  JSValue* argv_copy;  // Dynamically allocated copy of arguments
+  int argc;
+  uv_timer_t timer;
+} JSHttpListenAsync;
+
+static void http_listen_async_cleanup(JSHttpListenAsync* async_op) {
+  if (async_op) {
+    if (async_op->ctx) {
+      JS_FreeValue(async_op->ctx, async_op->http_server);
+      JS_FreeValue(async_op->ctx, async_op->net_server);
+
+      // Free copied arguments
+      if (async_op->argv_copy) {
+        for (int i = 0; i < async_op->argc; i++) {
+          JS_FreeValue(async_op->ctx, async_op->argv_copy[i]);
+        }
+        free(async_op->argv_copy);
+      }
+    }
+    uv_timer_stop(&async_op->timer);
+    free(async_op);
+  }
+}
+
+static void http_listen_timer_callback(uv_timer_t* timer) {
+  JSHttpListenAsync* async_op = (JSHttpListenAsync*)timer->data;
+  if (!async_op || !async_op->ctx) {
+    return;
+  }
+
+  JSContext* ctx = async_op->ctx;
+
+  // Call the net server's listen method asynchronously
+  JSValue listen_method = JS_GetPropertyStr(ctx, async_op->net_server, "listen");
+  if (JS_IsFunction(ctx, listen_method)) {
+    JSValue result = JS_Call(ctx, listen_method, async_op->net_server, async_op->argc, async_op->argv_copy);
+    JS_FreeValue(ctx, result);
+  }
+  JS_FreeValue(ctx, listen_method);
+
+  // Cleanup
+  http_listen_async_cleanup(async_op);
+}
+
 // HTTP Server methods
 static JSValue js_http_server_listen(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
   JSHttpServer* server = JS_GetOpaque(this_val, js_http_server_class_id);
@@ -262,12 +311,40 @@ static JSValue js_http_server_listen(JSContext* ctx, JSValueConst this_val, int 
     return JS_ThrowTypeError(ctx, "Invalid server object");
   }
 
-  // Delegate to the underlying net.Server
-  JSValue listen_method = JS_GetPropertyStr(ctx, server->net_server, "listen");
-  JSValue result = JS_Call(ctx, listen_method, server->net_server, argc, argv);
-  JS_FreeValue(ctx, listen_method);
+  // Create async operation to prevent blocking
+  JSHttpListenAsync* async_op = calloc(1, sizeof(JSHttpListenAsync));
+  if (!async_op) {
+    return JS_ThrowOutOfMemory(ctx);
+  }
 
-  return result;
+  // Store operation data
+  async_op->ctx = ctx;
+  async_op->http_server = JS_DupValue(ctx, this_val);
+  async_op->net_server = JS_DupValue(ctx, server->net_server);
+  async_op->argc = argc;
+
+  // Copy arguments to avoid stack reference issues
+  if (argc > 0) {
+    async_op->argv_copy = malloc(sizeof(JSValue) * argc);
+    if (!async_op->argv_copy) {
+      http_listen_async_cleanup(async_op);
+      return JS_ThrowOutOfMemory(ctx);
+    }
+    for (int i = 0; i < argc; i++) {
+      async_op->argv_copy[i] = JS_DupValue(ctx, argv[i]);
+    }
+  }
+
+  // Initialize timer for immediate async execution (next tick)
+  JSRT_Runtime* rt = JS_GetContextOpaque(ctx);
+  uv_timer_init(rt->uv_loop, &async_op->timer);
+  async_op->timer.data = async_op;
+
+  // Start timer with 0 delay for next tick execution
+  uv_timer_start(&async_op->timer, http_listen_timer_callback, 0, 0);
+
+  // Return the server object immediately for chaining (like Node.js does)
+  return JS_DupValue(ctx, this_val);
 }
 
 static JSValue js_http_server_close(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
@@ -510,17 +587,18 @@ static int on_message_complete(llhttp_t* parser) {
 static void parse_enhanced_http_request(JSContext* ctx, const char* data, char* method, char* url, char* version,
                                         JSValue request);
 
+// HTTP handler data structure
+typedef struct {
+  JSValue server;
+  JSValue request;
+  JSValue response;
+  JSContext* ctx;
+} HTTPHandlerData;
+
 // Simple HTTP data handler
 static JSValue js_http_simple_data_handler(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
   if (argc < 1)
     return JS_UNDEFINED;
-
-  typedef struct {
-    JSValue server;
-    JSValue request;
-    JSValue response;
-    JSContext* ctx;
-  } HTTPHandlerData;
 
   HTTPHandlerData* data = JS_GetOpaque(this_val, 0);
   if (!data)
@@ -546,7 +624,8 @@ static JSValue js_http_simple_data_handler(JSContext* ctx, JSValueConst this_val
   JSValue emit = JS_GetPropertyStr(ctx, data->server, "emit");
   if (JS_IsFunction(ctx, emit)) {
     JSValue args[] = {JS_NewString(ctx, "request"), JS_DupValue(ctx, data->request), JS_DupValue(ctx, data->response)};
-    JS_Call(ctx, emit, data->server, 3, args);
+    JSValue result = JS_Call(ctx, emit, data->server, 3, args);
+    JS_FreeValue(ctx, result);
     JS_FreeValue(ctx, args[0]);
     JS_FreeValue(ctx, args[1]);
     JS_FreeValue(ctx, args[2]);
@@ -666,14 +745,7 @@ static void js_http_connection_handler(JSContext* ctx, JSValue server, JSValue s
     // Create a closure that captures request, response, and server
     JSValue data_handler = JS_NewCFunction(ctx, js_http_simple_data_handler, "httpDataHandler", 1);
 
-    // Store the HTTP objects for the handler - use a simple struct
-    typedef struct {
-      JSValue server;
-      JSValue request;
-      JSValue response;
-      JSContext* ctx;
-    } HTTPHandlerData;
-
+    // Store the HTTP objects for the handler (simplified approach - no finalizer)
     HTTPHandlerData* handler_data = malloc(sizeof(HTTPHandlerData));
     if (handler_data) {
       handler_data->server = JS_DupValue(ctx, server);
@@ -684,9 +756,10 @@ static void js_http_connection_handler(JSContext* ctx, JSValue server, JSValue s
     }
 
     JSValue args[] = {JS_NewString(ctx, "data"), data_handler};
-    JS_Call(ctx, on_method, socket, 2, args);
+    JSValue result = JS_Call(ctx, on_method, socket, 2, args);
+    JS_FreeValue(ctx, result);
     JS_FreeValue(ctx, args[0]);
-    // Don't free data_handler - stored in event system
+    // Note: data_handler is kept alive by the event system
   }
   JS_FreeValue(ctx, on_method);
 

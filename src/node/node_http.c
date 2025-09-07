@@ -2,8 +2,8 @@
 #include <string.h>
 #include <uv.h>
 #include "../../deps/llhttp/build/llhttp.h"
-#include "node_modules.h"
 #include "../std/url.h"
+#include "node_modules.h"
 
 // Forward declarations for URL and querystring parsing
 extern JSValue JSRT_InitNodeQueryString(JSContext* ctx);
@@ -507,7 +507,8 @@ static int on_message_complete(llhttp_t* parser) {
 }
 
 // Forward declaration
-static void parse_enhanced_http_request(JSContext* ctx, const char* data, char* method, char* url, char* version, JSValue request);
+static void parse_enhanced_http_request(JSContext* ctx, const char* data, char* method, char* url, char* version,
+                                        JSValue request);
 
 // Simple HTTP data handler
 static JSValue js_http_simple_data_handler(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
@@ -557,7 +558,8 @@ static JSValue js_http_simple_data_handler(JSContext* ctx, JSValueConst this_val
 }
 
 // Enhanced HTTP request line parser with URL parsing
-static void parse_enhanced_http_request(JSContext* ctx, const char* data, char* method, char* url, char* version, JSValue request) {
+static void parse_enhanced_http_request(JSContext* ctx, const char* data, char* method, char* url, char* version,
+                                        JSValue request) {
   // Simple parser for "METHOD /path HTTP/1.1"
   const char* start = data;
   const char* space1 = strchr(start, ' ');
@@ -599,18 +601,18 @@ static void parse_enhanced_http_request(JSContext* ctx, const char* data, char* 
     // This is a path-only URL, parse it properly
     char* path_part = url;
     char* query_part = strchr(url, '?');
-    
+
     if (query_part) {
       *query_part = '\0';  // Temporarily null-terminate the path
-      query_part++;  // Move to start of query string
-      
+      query_part++;        // Move to start of query string
+
       // Set pathname
       JS_SetPropertyStr(ctx, request, "pathname", JS_NewString(ctx, path_part));
-      
+
       // Parse query string using node:querystring
       JSValue querystring_module = JSRT_InitNodeQueryString(ctx);
       JSValue parse_func = JS_GetPropertyStr(ctx, querystring_module, "parse");
-      
+
       if (!JS_IsUndefined(parse_func)) {
         JSValue query_str_val = JS_NewString(ctx, query_part);
         JSValue parsed_query = JS_Call(ctx, parse_func, JS_UNDEFINED, 1, &query_str_val);
@@ -619,10 +621,10 @@ static void parse_enhanced_http_request(JSContext* ctx, const char* data, char* 
         JS_FreeValue(ctx, query_str_val);
         JS_FreeValue(ctx, parsed_query);
       }
-      
+
       JS_FreeValue(ctx, parse_func);
       JS_FreeValue(ctx, querystring_module);
-      
+
       // Restore the '?' character
       *(query_part - 1) = '?';
     } else {

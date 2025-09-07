@@ -95,6 +95,35 @@ function assert_array_equals(actual, expected, description) {
     }
 }
 
+function assert_object_equals(actual, expected, description) {
+    try {
+        if (typeof actual !== 'object' || actual === null) {
+            throw new Error('actual is not an object');
+        }
+        if (typeof expected !== 'object' || expected === null) {
+            throw new Error('expected is not an object');
+        }
+        
+        const actualKeys = Object.keys(actual);
+        const expectedKeys = Object.keys(expected);
+        
+        if (actualKeys.length !== expectedKeys.length) {
+            throw new Error(`Object key count differs: expected ${expectedKeys.length}, got ${actualKeys.length}`);
+        }
+        
+        for (const key of expectedKeys) {
+            if (!(key in actual)) {
+                throw new Error(`Missing key "${key}" in actual object`);
+            }
+            if (actual[key] !== expected[key]) {
+                throw new Error(`Value for key "${key}" differs: expected ${expected[key]}, got ${actual[key]}`);
+            }
+        }
+    } catch (e) {
+        throw new Error(description || e.message);
+    }
+}
+
 function assert_throws(errorType, func, description) {
     try {
         if (typeof errorType === 'string') {
@@ -285,6 +314,12 @@ function test(func, name) {
             return (...args) => {
                 return t.step(() => stepFunc.apply(context || this, args));
             };
+        },
+        
+        unreached_func: function(description) {
+            return function() {
+                throw new Error(description || 'Unreachable code was reached');
+            };
         }
     };
     
@@ -342,6 +377,12 @@ function async_test(func, name) {
             }, timeout);
         },
         
+        unreached_func: function(description) {
+            return function() {
+                throw new Error(description || 'Unreachable code was reached');
+            };
+        },
+        
         done: function() {
             if (completed) return;
             completed = true;
@@ -385,6 +426,12 @@ function promise_test(func, name) {
         step_func: function(stepFunc, context) {
             return function(...args) {
                 return stepFunc.call(context, ...args);
+            };
+        },
+        
+        unreached_func: function(description) {
+            return function() {
+                throw new Error(description || 'Unreachable code was reached');
             };
         }
     };
@@ -537,7 +584,9 @@ globalThis.assert_false = assert_false;
 globalThis.assert_equals = assert_equals;
 globalThis.assert_not_equals = assert_not_equals;
 globalThis.assert_array_equals = assert_array_equals;
+globalThis.assert_object_equals = assert_object_equals;
 globalThis.assert_throws = assert_throws;
+globalThis.assert_throws_js = assert_throws_js;
 globalThis.assert_throws_dom = assert_throws_dom;
 globalThis.assert_unreached = assert_unreached;
 globalThis.promise_rejects_exactly = promise_rejects_exactly;

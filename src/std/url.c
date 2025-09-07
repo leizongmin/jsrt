@@ -165,10 +165,24 @@ static JSRT_URL* resolve_relative_url(const char* url, const char* base) {
     result->search = strdup("");
     result->hash = strdup("");
   } else {
-    // Relative path - for now, just use the relative path as pathname
-    // A full implementation would resolve . and .. components
-    result->pathname = malloc(strlen(base_url->pathname) + strlen(url) + 2);
-    sprintf(result->pathname, "%s/%s", base_url->pathname, url);
+    // Relative path - resolve against base directory
+    // First find the directory part of the base pathname
+    const char* base_pathname = base_url->pathname;
+    char* last_slash = strrchr(base_pathname, '/');
+
+    if (last_slash == NULL || last_slash == base_pathname) {
+      // No directory or root directory
+      result->pathname = malloc(strlen(url) + 2);
+      sprintf(result->pathname, "/%s", url);
+    } else {
+      // Copy base directory and append relative path
+      size_t dir_len = last_slash - base_pathname;           // Length up to but not including last slash
+      result->pathname = malloc(dir_len + strlen(url) + 3);  // dir + '/' + url + '\0'
+      strncpy(result->pathname, base_pathname, dir_len);
+      result->pathname[dir_len] = '/';
+      strcpy(result->pathname + dir_len + 1, url);
+    }
+
     result->search = strdup("");
     result->hash = strdup("");
   }
@@ -365,6 +379,7 @@ static JSRT_URL* JSRT_ParseURL(const char* url, const char* base) {
   }
 
   // Special schemes require "://" to be absolute
+  char* relative_part = NULL;  // For storing the part after scheme: when treating as relative
   if (has_scheme && colon_pos) {
     int scheme_len = colon_pos - cleaned_url;
     const char* special_schemes[] = {"http", "https", "ftp", "ws", "wss", "file", NULL};
@@ -374,6 +389,8 @@ static JSRT_URL* JSRT_ParseURL(const char* url, const char* base) {
         // This is a special scheme - only absolute if followed by "//"
         if (strncmp(colon_pos, "://", 3) != 0) {
           has_scheme = 0;  // Treat as relative
+          // Store the part after "scheme:" to use as relative path
+          relative_part = strdup(colon_pos + 1);
         }
         break;
       }
@@ -409,8 +426,13 @@ static JSRT_URL* JSRT_ParseURL(const char* url, const char* base) {
 
   // Handle other relative URLs with base
   if (base && (cleaned_url[0] == '/' || (!has_scheme && cleaned_url[0] != '\0'))) {
-    JSRT_URL* result = resolve_relative_url(cleaned_url, base);
+    // Use relative_part if available (for special schemes treated as relative), otherwise use full URL
+    const char* relative_url = relative_part ? relative_part : cleaned_url;
+    JSRT_URL* result = resolve_relative_url(relative_url, base);
     free(cleaned_url);
+    if (relative_part) {
+      free(relative_part);
+    }
     return result;
   }
 
@@ -522,8 +544,32 @@ static JSRT_URL* JSRT_ParseURL(const char* url, const char* base) {
     parsed->pathname = strdup(path_start);
     *path_start = '\0';
   } else {
+    // For non-special schemes with empty authority, pathname should be empty
+    // Check if this is a non-special scheme
+    char* scheme_without_colon = strdup(parsed->protocol);
+    if (strlen(scheme_without_colon) > 0 && scheme_without_colon[strlen(scheme_without_colon) - 1] == ':') {
+      scheme_without_colon[strlen(scheme_without_colon) - 1] = '\0';
+    }
+
+    const char* special_schemes[] = {"http", "https", "ftp", "ws", "wss", "file", NULL};
+    int is_special = 0;
+    for (int i = 0; special_schemes[i]; i++) {
+      if (strcmp(scheme_without_colon, special_schemes[i]) == 0) {
+        is_special = 1;
+        break;
+      }
+    }
+
     free(parsed->pathname);
-    parsed->pathname = strdup("/");
+    if (is_special) {
+      // Special schemes default to "/" when no path
+      parsed->pathname = strdup("/");
+    } else {
+      // Non-special schemes can have empty pathname
+      parsed->pathname = strdup("");
+    }
+
+    free(scheme_without_colon);
   }
 
   // What's left is the host (authority part)
@@ -636,15 +682,22 @@ static JSRT_URL* JSRT_ParseURL(const char* url, const char* base) {
       return NULL;  // Invalid scheme
     }
 
-    // Some schemes don't require hosts (file:, data:, etc.)
-    if (strcmp(scheme, "file") != 0 && strcmp(scheme, "data") != 0 && strcmp(scheme, "javascript") != 0 &&
-        strcmp(scheme, "blob") != 0) {
-      // These schemes require a host
-      if (strlen(parsed->host) == 0) {
-        free(scheme);
-        JSRT_FreeURL(parsed);
-        return NULL;  // Missing required host
+    // Check if this is a special scheme that requires a host
+    const char* special_schemes[] = {"http", "https", "ftp", "ws", "wss", NULL};
+    int is_special = 0;
+    for (int i = 0; special_schemes[i]; i++) {
+      if (strcmp(scheme, special_schemes[i]) == 0) {
+        is_special = 1;
+        break;
       }
+    }
+
+    // Special schemes require a host (except file:// which is handled separately)
+    // Non-special schemes (like foo://) can have empty hosts
+    if (is_special && strlen(parsed->host) == 0) {
+      free(scheme);
+      JSRT_FreeURL(parsed);
+      return NULL;  // Special schemes require a host
     }
 
     free(scheme);
@@ -657,6 +710,16 @@ static JSRT_URL* JSRT_ParseURL(const char* url, const char* base) {
   // Rebuild href from parsed components
   free(parsed->href);
   size_t href_len = strlen(parsed->protocol) + 2 + strlen(parsed->host) + strlen(parsed->pathname);
+
+  // Add space for username:password@ if present
+  if (parsed->username && strlen(parsed->username) > 0) {
+    href_len += strlen(parsed->username);
+    if (parsed->password && strlen(parsed->password) > 0) {
+      href_len += 1 + strlen(parsed->password);  // +1 for colon
+    }
+    href_len += 1;  // +1 for @ symbol
+  }
+
   if (parsed->search && strlen(parsed->search) > 0) {
     href_len += strlen(parsed->search);
   }
@@ -667,6 +730,17 @@ static JSRT_URL* JSRT_ParseURL(const char* url, const char* base) {
   parsed->href = malloc(href_len + 1);
   strcpy(parsed->href, parsed->protocol);
   strcat(parsed->href, "//");
+
+  // Add username:password@ if present
+  if (parsed->username && strlen(parsed->username) > 0) {
+    strcat(parsed->href, parsed->username);
+    if (parsed->password && strlen(parsed->password) > 0) {
+      strcat(parsed->href, ":");
+      strcat(parsed->href, parsed->password);
+    }
+    strcat(parsed->href, "@");
+  }
+
   strcat(parsed->href, parsed->host);
   strcat(parsed->href, parsed->pathname);
 
@@ -678,6 +752,9 @@ static JSRT_URL* JSRT_ParseURL(const char* url, const char* base) {
   }
 
   free(cleaned_url);
+  if (relative_part) {
+    free(relative_part);
+  }
   return parsed;
 }
 

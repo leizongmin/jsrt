@@ -220,7 +220,7 @@ static JSValue JSRT_ReadableStreamGetReader(JSContext* ctx, JSValueConst this_va
         if (strcmp(mode_str, "byob") != 0) {
           JS_FreeCString(ctx, mode_str);
           JS_FreeValue(ctx, mode);
-          return JS_ThrowRangeError(ctx, "getReader() mode must be \"byob\" or undefined");
+          return JS_ThrowTypeError(ctx, "getReader() mode must be \"byob\" or undefined");
         }
         JS_FreeCString(ctx, mode_str);
       }
@@ -1062,6 +1062,28 @@ static JSValue JSRT_WritableStreamDefaultWriterWrite(JSContext* ctx, JSValueCons
   return promise;
 }
 
+static JSValue JSRT_WritableStreamDefaultWriterReleaseLock(JSContext* ctx, JSValueConst this_val, int argc,
+                                                           JSValueConst* argv) {
+  JSRT_WritableStreamDefaultWriter* writer = JS_GetOpaque(this_val, JSRT_WritableStreamDefaultWriterClassID);
+  if (!writer) {
+    return JS_EXCEPTION;
+  }
+
+  // Get the associated stream
+  JSRT_WritableStream* stream = JS_GetOpaque(writer->stream, JSRT_WritableStreamClassID);
+  if (!stream) {
+    return JS_EXCEPTION;
+  }
+
+  // Release the lock on the stream
+  stream->locked = false;
+
+  // Mark the writer as closed
+  writer->closed = true;
+
+  return JS_UNDEFINED;
+}
+
 // TransformStream implementation
 typedef struct {
   JSValue readable;
@@ -1241,6 +1263,8 @@ void JSRT_RuntimeSetupStdStreams(JSRT_Runtime* rt) {
                     JS_NewCFunction(ctx, JSRT_WritableStreamDefaultWriterClose, "close", 0));
   JS_SetPropertyStr(ctx, writer_proto, "abort",
                     JS_NewCFunction(ctx, JSRT_WritableStreamDefaultWriterAbort, "abort", 1));
+  JS_SetPropertyStr(ctx, writer_proto, "releaseLock",
+                    JS_NewCFunction(ctx, JSRT_WritableStreamDefaultWriterReleaseLock, "releaseLock", 0));
 
   JSValue writer_ctor = JS_NewCFunction2(ctx, JSRT_WritableStreamDefaultWriterConstructor,
                                          "WritableStreamDefaultWriter", 1, JS_CFUNC_constructor, 0);

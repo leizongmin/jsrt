@@ -235,14 +235,37 @@ JSValue jsrt_require_http_module(JSContext* ctx, const char* url) {
   if (cached && !jsrt_http_cache_is_expired(cached)) {
     JSRT_Debug("jsrt_require_http_module: loading from cache for '%s'", url);
 
-    // For CommonJS, wrap the cached content and evaluate it
-    char* wrapped = wrap_as_commonjs_module(cached->data);
-    if (!wrapped) {
-      return JS_ThrowOutOfMemory(ctx);
+    // For CommonJS, execute the cached code directly and return module.exports
+    JSValue global = JS_GetGlobalObject(ctx);
+    JSValue module_obj = JS_NewObject(ctx);
+    JSValue exports_obj = JS_NewObject(ctx);
+    
+    // Set up the CommonJS environment
+    JS_SetPropertyStr(ctx, module_obj, "exports", JS_DupValue(ctx, exports_obj));
+    JS_SetPropertyStr(ctx, global, "module", JS_DupValue(ctx, module_obj));
+    JS_SetPropertyStr(ctx, global, "exports", JS_DupValue(ctx, exports_obj));
+    
+    // Execute the cached CommonJS code
+    JSValue eval_result = JS_Eval(ctx, cached->data, cached->size, url, JS_EVAL_TYPE_GLOBAL);
+    
+    if (JS_IsException(eval_result)) {
+      JSRT_Debug("jsrt_require_http_module: failed to evaluate cached module from '%s'", url);
+      JS_FreeValue(ctx, global);
+      JS_FreeValue(ctx, module_obj);
+      JS_FreeValue(ctx, exports_obj);
+      return eval_result;
     }
+    
+    // Get the final exports
+    JSValue result = JS_GetPropertyStr(ctx, module_obj, "exports");
+    
+    // Clean up
+    JS_FreeValue(ctx, eval_result);
+    JS_FreeValue(ctx, global);
+    JS_FreeValue(ctx, module_obj);
+    JS_FreeValue(ctx, exports_obj);
 
-    JSValue result = JS_Eval(ctx, wrapped, strlen(wrapped), url, JS_EVAL_TYPE_MODULE);
-    free(wrapped);
+    JSRT_Debug("jsrt_require_http_module: successfully loaded cached CommonJS module from '%s'", url);
     return result;
   }
 
@@ -272,22 +295,37 @@ JSValue jsrt_require_http_module(JSContext* ctx, const char* url) {
   // Cache the response
   jsrt_http_cache_put(g_http_cache, url, response.body, response.body_size, response.etag, response.last_modified);
 
-  // For CommonJS, wrap the content and evaluate it
-  char* wrapped = wrap_as_commonjs_module(response.body);
-  if (!wrapped) {
-    JSRT_HttpResponseFree(&response);
-    return JS_ThrowOutOfMemory(ctx);
-  }
-
-  JSValue result = JS_Eval(ctx, wrapped, strlen(wrapped), url, JS_EVAL_TYPE_MODULE);
-
-  free(wrapped);
+  // For CommonJS, execute the code directly and return module.exports
+  JSValue global = JS_GetGlobalObject(ctx);
+  JSValue module_obj = JS_NewObject(ctx);
+  JSValue exports_obj = JS_NewObject(ctx);
+  
+  // Set up the CommonJS environment
+  JS_SetPropertyStr(ctx, module_obj, "exports", JS_DupValue(ctx, exports_obj));
+  JS_SetPropertyStr(ctx, global, "module", JS_DupValue(ctx, module_obj));
+  JS_SetPropertyStr(ctx, global, "exports", JS_DupValue(ctx, exports_obj));
+  
+  // Execute the CommonJS code
+  JSValue eval_result = JS_Eval(ctx, response.body, response.body_size, url, JS_EVAL_TYPE_GLOBAL);
+  
   JSRT_HttpResponseFree(&response);
-
-  if (JS_IsException(result)) {
+  
+  if (JS_IsException(eval_result)) {
     JSRT_Debug("jsrt_require_http_module: failed to evaluate module from '%s'", url);
-    return result;
+    JS_FreeValue(ctx, global);
+    JS_FreeValue(ctx, module_obj);
+    JS_FreeValue(ctx, exports_obj);
+    return eval_result;
   }
+  
+  // Get the final exports
+  JSValue result = JS_GetPropertyStr(ctx, module_obj, "exports");
+  
+  // Clean up
+  JS_FreeValue(ctx, eval_result);
+  JS_FreeValue(ctx, global);
+  JS_FreeValue(ctx, module_obj);
+  JS_FreeValue(ctx, exports_obj);
 
   JSRT_Debug("jsrt_require_http_module: successfully loaded CommonJS module from '%s'", url);
   return result;

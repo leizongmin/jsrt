@@ -144,7 +144,7 @@ void jsrt_http_config_free(JSRT_HttpConfig* config) {
     free(config->allowed_domains);
   }
 
-  if (config->user_agent && config->user_agent != "jsrt/1.0") {
+  if (config->user_agent && strcmp(config->user_agent, "jsrt/1.0") != 0) {
     free((char*)config->user_agent);
   }
 

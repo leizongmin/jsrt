@@ -46,11 +46,18 @@ static bool load_openssl() {
   // Try different OpenSSL library names based on platform
   const char* openssl_names[] = {
 #ifdef _WIN32
+      // MSYS2/MinGW library names (most common in CI environments)
+      "libssl-3.dll",        // MSYS2 OpenSSL 3.x (most common)
+      "libssl-1_1.dll",      // MSYS2 OpenSSL 1.1.x 
+      "msys-ssl-3.dll",      // Alternative MSYS2 naming
+      "msys-ssl-1.1.dll",    // Alternative MSYS2 naming
+      // Windows native OpenSSL names  
       "libssl-3-x64.dll",    // Windows OpenSSL 3.x 64-bit
       "libssl-1_1-x64.dll",  // Windows OpenSSL 1.1.x 64-bit
-      "libssl-3.dll",        // Windows OpenSSL 3.x
-      "libssl-1_1.dll",      // Windows OpenSSL 1.1.x
       "ssleay32.dll",        // Windows legacy OpenSSL
+      // Additional fallback names
+      "ssl.dll",             // Generic SSL library name
+      "openssl.dll",         // Alternative naming
 #elif __APPLE__
       "/opt/homebrew/lib/libssl.3.dylib",  // macOS Homebrew OpenSSL 3.x (full path)
       "/opt/homebrew/lib/libssl.dylib",    // macOS Homebrew OpenSSL (full path)
@@ -67,10 +74,18 @@ static bool load_openssl() {
       NULL};
 
   for (int i = 0; openssl_names[i] != NULL; i++) {
+    JSRT_Debug("JSRT_Crypto: Attempting to load OpenSSL library: %s", openssl_names[i]);
 #ifdef _WIN32
     openssl_handle = LoadLibraryA(openssl_names[i]);
+    if (openssl_handle == NULL) {
+      DWORD error = GetLastError();
+      JSRT_Debug("JSRT_Crypto: Failed to load %s: Error %lu", openssl_names[i], error);
+    }
 #else
     openssl_handle = dlopen(openssl_names[i], RTLD_LAZY);
+    if (openssl_handle == NULL) {
+      JSRT_Debug("JSRT_Crypto: Failed to load %s: %s", openssl_names[i], dlerror());
+    }
 #endif
     if (openssl_handle != NULL) {
       JSRT_Debug("JSRT_Crypto: Successfully loaded OpenSSL from %s", openssl_names[i]);
@@ -80,11 +95,47 @@ static bool load_openssl() {
 
   if (openssl_handle == NULL) {
 #ifdef _WIN32
-    JSRT_Debug("JSRT_Crypto: Failed to load OpenSSL library: Error %lu", GetLastError());
-#else
-    JSRT_Debug("JSRT_Crypto: Failed to load OpenSSL library: %s", dlerror());
+    // Try MSYS2/MinGW specific paths if standard loading failed
+    const char* msys2_paths[] = {
+        "C:/msys64/ucrt64/bin/libssl-3.dll",
+        "C:/msys64/ucrt64/bin/libssl-1_1.dll", 
+        "C:/msys64/mingw64/bin/libssl-3.dll",
+        "C:/msys64/mingw64/bin/libssl-1_1.dll",
+        // Relative paths for portable installations
+        "./libssl-3.dll",
+        "./libssl-1_1.dll",
+        "../bin/libssl-3.dll",
+        "../bin/libssl-1_1.dll",
+        NULL
+    };
+    
+    JSRT_Debug("JSRT_Crypto: Standard library loading failed, trying MSYS2 specific paths...");
+    for (int i = 0; msys2_paths[i] != NULL; i++) {
+      JSRT_Debug("JSRT_Crypto: Attempting to load from path: %s", msys2_paths[i]);
+      openssl_handle = LoadLibraryA(msys2_paths[i]);
+      if (openssl_handle != NULL) {
+        JSRT_Debug("JSRT_Crypto: Successfully loaded OpenSSL from %s", msys2_paths[i]);
+        break;
+      } else {
+        DWORD error = GetLastError();
+        JSRT_Debug("JSRT_Crypto: Failed to load %s: Error %lu", msys2_paths[i], error);
+      }
+    }
 #endif
-    return false;
+    
+    if (openssl_handle == NULL) {
+      JSRT_Debug("JSRT_Crypto: Failed to load OpenSSL library from all attempted paths");
+#ifdef _WIN32
+      JSRT_Debug("JSRT_Crypto: Final error code: %lu", GetLastError());
+      // For debugging Windows CI issues, also output to stderr in release builds
+      fprintf(stderr, "JSRT: Failed to load OpenSSL library on Windows. Tried standard names and MSYS2 paths.\n");
+      fprintf(stderr, "JSRT: This is likely due to missing OpenSSL installation or incorrect library paths.\n");
+      fprintf(stderr, "JSRT: Make sure OpenSSL is installed and accessible in the PATH or current directory.\n");
+#else  
+      JSRT_Debug("JSRT_Crypto: Final error: %s", dlerror());
+#endif
+      return false;
+    }
   }
 
   // Load required functions
@@ -351,6 +402,8 @@ void JSRT_RuntimeSetupStdCrypto(JSRT_Runtime* rt) {
 
   if (!openssl_loaded) {
     JSRT_Debug("JSRT_RuntimeSetupStdCrypto: OpenSSL not available, crypto API not registered");
+    // For debugging Windows issues, output to console even in release builds
+    fprintf(stderr, "JSRT: OpenSSL library not found - WebCrypto API unavailable\n");
     return;
   }
 

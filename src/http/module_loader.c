@@ -239,15 +239,15 @@ JSValue jsrt_require_http_module(JSContext* ctx, const char* url) {
     JSValue global = JS_GetGlobalObject(ctx);
     JSValue module_obj = JS_NewObject(ctx);
     JSValue exports_obj = JS_NewObject(ctx);
-    
+
     // Set up the CommonJS environment
     JS_SetPropertyStr(ctx, module_obj, "exports", JS_DupValue(ctx, exports_obj));
     JS_SetPropertyStr(ctx, global, "module", JS_DupValue(ctx, module_obj));
     JS_SetPropertyStr(ctx, global, "exports", JS_DupValue(ctx, exports_obj));
-    
+
     // Execute the cached CommonJS code
     JSValue eval_result = JS_Eval(ctx, cached->data, cached->size, url, JS_EVAL_TYPE_GLOBAL);
-    
+
     if (JS_IsException(eval_result)) {
       JSRT_Debug("jsrt_require_http_module: failed to evaluate cached module from '%s'", url);
       JS_FreeValue(ctx, global);
@@ -255,10 +255,10 @@ JSValue jsrt_require_http_module(JSContext* ctx, const char* url) {
       JS_FreeValue(ctx, exports_obj);
       return eval_result;
     }
-    
+
     // Get the final exports
     JSValue result = JS_GetPropertyStr(ctx, module_obj, "exports");
-    
+
     // Clean up
     JS_FreeValue(ctx, eval_result);
     JS_FreeValue(ctx, global);
@@ -299,17 +299,17 @@ JSValue jsrt_require_http_module(JSContext* ctx, const char* url) {
   JSValue global = JS_GetGlobalObject(ctx);
   JSValue module_obj = JS_NewObject(ctx);
   JSValue exports_obj = JS_NewObject(ctx);
-  
+
   // Set up the CommonJS environment
   JS_SetPropertyStr(ctx, module_obj, "exports", JS_DupValue(ctx, exports_obj));
   JS_SetPropertyStr(ctx, global, "module", JS_DupValue(ctx, module_obj));
   JS_SetPropertyStr(ctx, global, "exports", JS_DupValue(ctx, exports_obj));
-  
+
   // Execute the CommonJS code
   JSValue eval_result = JS_Eval(ctx, response.body, response.body_size, url, JS_EVAL_TYPE_GLOBAL);
-  
+
   JSRT_HttpResponseFree(&response);
-  
+
   if (JS_IsException(eval_result)) {
     JSRT_Debug("jsrt_require_http_module: failed to evaluate module from '%s'", url);
     JS_FreeValue(ctx, global);
@@ -317,10 +317,10 @@ JSValue jsrt_require_http_module(JSContext* ctx, const char* url) {
     JS_FreeValue(ctx, exports_obj);
     return eval_result;
   }
-  
+
   // Get the final exports
   JSValue result = JS_GetPropertyStr(ctx, module_obj, "exports");
-  
+
   // Clean up
   JS_FreeValue(ctx, eval_result);
   JS_FreeValue(ctx, global);

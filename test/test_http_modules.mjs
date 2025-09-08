@@ -16,7 +16,9 @@ function runTests() {
         ? `Lodash v${testResult.VERSION}`
         : 'module loaded'
     );
-    console.log('✅ HTTP module loading is fully functional with network access');
+    console.log(
+      '✅ HTTP module loading is fully functional with network access'
+    );
   } catch (error) {
     const errorMsg = error.message || '';
     if (
@@ -33,7 +35,9 @@ function runTests() {
     }
   }
 
-  console.log('✅ HTTP module loading functionality is enabled and network is available');
+  console.log(
+    '✅ HTTP module loading functionality is enabled and network is available'
+  );
 
   // Test 2: Test actual module loading from supported CDNs
   console.log('\n--- Test 2: Real Module Loading from CDNs ---');
@@ -43,18 +47,30 @@ function runTests() {
   const lodashJsd = require('https://cdn.jsdelivr.net/npm/lodash@4.17.21/lodash.min.js');
   console.log('✅ Successfully loaded lodash from jsDelivr');
   console.log('Lodash version:', lodashJsd.VERSION);
-  console.log('Testing lodashJsd.uniq([1,2,2,3]):', JSON.stringify(lodashJsd.uniq([1, 2, 2, 3])));
+  console.log(
+    'Testing lodashJsd.uniq([1,2,2,3]):',
+    JSON.stringify(lodashJsd.uniq([1, 2, 2, 3]))
+  );
   assert.ok(lodashJsd, 'Lodash from jsDelivr should be loaded');
-  assert.ok(typeof lodashJsd.uniq === 'function', 'Lodash uniq function should exist');
+  assert.ok(
+    typeof lodashJsd.uniq === 'function',
+    'Lodash uniq function should exist'
+  );
 
   // Test 2b: unpkg (CommonJS format)
   console.log('\n--- Test 2b: Loading lodash from unpkg.com ---');
   const lodashUnpkg = require('https://unpkg.com/lodash@4.17.21/lodash.min.js');
   console.log('✅ Successfully loaded lodash from unpkg');
   console.log('Lodash version:', lodashUnpkg.VERSION);
-  console.log('Testing lodashUnpkg.range(1, 5):', JSON.stringify(lodashUnpkg.range(1, 5)));
+  console.log(
+    'Testing lodashUnpkg.range(1, 5):',
+    JSON.stringify(lodashUnpkg.range(1, 5))
+  );
   assert.ok(lodashUnpkg, 'Lodash from unpkg should be loaded');
-  assert.ok(typeof lodashUnpkg.range === 'function', 'Lodash range function should exist');
+  assert.ok(
+    typeof lodashUnpkg.range === 'function',
+    'Lodash range function should exist'
+  );
 
   // Test 3: Mixed module systems
   console.log('\n--- Test 3: Mixed Module System Integration ---');

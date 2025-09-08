@@ -236,13 +236,41 @@ try {
 console.log('\n--- Cleanup ---');
 try {
   // Close all servers, handling already-closed servers gracefully
-  try { server1.close(); } catch (e) { /* already closed */ }
-  try { server2.close(); } catch (e) { /* already closed */ }
-  try { server3.close(); } catch (e) { /* already closed */ }
-  try { server4.close(); } catch (e) { /* already closed */ }
-  try { server5a.close(); } catch (e) { /* already closed */ }
-  try { server5b.close(); } catch (e) { /* already closed */ }
-  try { server6.close(); } catch (e) { /* already closed */ }
+  try {
+    server1.close();
+  } catch (e) {
+    /* already closed */
+  }
+  try {
+    server2.close();
+  } catch (e) {
+    /* already closed */
+  }
+  try {
+    server3.close();
+  } catch (e) {
+    /* already closed */
+  }
+  try {
+    server4.close();
+  } catch (e) {
+    /* already closed */
+  }
+  try {
+    server5a.close();
+  } catch (e) {
+    /* already closed */
+  }
+  try {
+    server5b.close();
+  } catch (e) {
+    /* already closed */
+  }
+  try {
+    server6.close();
+  } catch (e) {
+    /* already closed */
+  }
   console.log('✓ All test servers closed');
 } catch (e) {
   console.log('⚠ Cleanup warning:', e.message);

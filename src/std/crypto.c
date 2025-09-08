@@ -40,13 +40,13 @@ static OpenSSL_version_func openssl_OpenSSL_version = NULL;
 #ifdef _WIN32
 // Windows-specific helper function for better OpenSSL library loading
 static HMODULE try_load_openssl_windows_enhanced() {
-  // MSYS2 OpenSSL library names (what the package actually installs)
+  // MSYS2 OpenSSL crypto library names (RAND_bytes is in libcrypto, not libssl)
   const char* dll_names[] = {
-    "libssl-3-x64.dll",  // OpenSSL 3.x x64 from MSYS2 (prioritized)
-    "libssl-3.dll",      // OpenSSL 3.x from MSYS2 (most common)
-    "libssl-1_1.dll",    // OpenSSL 1.1.x from MSYS2  
-    "ssleay32.dll",      // Legacy OpenSSL
-    "libssl.dll",        // Generic naming
+    "libcrypto-3-x64.dll",  // OpenSSL 3.x x64 crypto from MSYS2 (prioritized)
+    "libcrypto-3.dll",      // OpenSSL 3.x crypto from MSYS2 (most common)
+    "libcrypto-1_1.dll",    // OpenSSL 1.1.x crypto from MSYS2  
+    "libeay32.dll",         // Legacy OpenSSL crypto
+    "libcrypto.dll",        // Generic crypto naming
     NULL
   };
   
@@ -133,9 +133,9 @@ static bool load_openssl() {
 #ifdef _WIN32
       // For Windows, we'll use the enhanced loading function
       // These names are here for reference but won't be used in the loop
-      "libssl-3.dll",        // MSYS2 OpenSSL 3.x (most common)
-      "libssl-1_1.dll",      // MSYS2 OpenSSL 1.1.x
-      "ssleay32.dll",        // Windows legacy OpenSSL
+      "libcrypto-3.dll",     // MSYS2 OpenSSL 3.x crypto (most common)
+      "libcrypto-1_1.dll",   // MSYS2 OpenSSL 1.1.x crypto
+      "libeay32.dll",        // Windows legacy OpenSSL crypto
 #elif __APPLE__
       "/opt/homebrew/lib/libssl.3.dylib",  // macOS Homebrew OpenSSL 3.x (full path)
       "/opt/homebrew/lib/libssl.dylib",    // macOS Homebrew OpenSSL (full path)
@@ -171,7 +171,7 @@ static bool load_openssl() {
     JSRT_Debug("JSRT_Crypto: Failed to load OpenSSL library: Error %lu", error);
     // Enhanced error reporting for Windows
     fprintf(stderr, "JSRT: OpenSSL library not found on Windows.\n");
-    fprintf(stderr, "JSRT: Searched for: libssl-3-x64.dll, libssl-3.dll, libssl-1_1.dll, ssleay32.dll\n");
+    fprintf(stderr, "JSRT: Searched for: libcrypto-3-x64.dll, libcrypto-3.dll, libcrypto-1_1.dll, libeay32.dll\n");
     fprintf(stderr, "JSRT: Searched in: system PATH, C:\\msys64\\ucrt64\\bin\\, C:\\msys64\\mingw64\\bin\\\n");
     fprintf(stderr, "JSRT: Install with: pacman -S mingw-w64-ucrt-x86_64-openssl\n");
     fprintf(stderr, "JSRT: Or ensure OpenSSL DLLs are in PATH or application directory\n");

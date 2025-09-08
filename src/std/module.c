@@ -28,6 +28,8 @@ static char* jsrt_realpath(const char* path, char* resolved_path) {
 #define jsrt_realpath(path, resolved) realpath(path, resolved)
 #endif
 
+#include "../http/module_loader.h"
+#include "../http/security.h"
 #include "../util/debug.h"
 #include "../util/file.h"
 #include "../util/json.h"
@@ -582,6 +584,34 @@ char* JSRT_ModuleNormalize(JSContext* ctx, const char* module_base_name, const c
   JSRT_Debug("JSRT_ModuleNormalize: module_name='%s', module_base_name='%s'", module_name,
              module_base_name ? module_base_name : "null");
 
+  // Handle HTTP/HTTPS URLs - validate and return as-is if valid
+  if (jsrt_is_http_url(module_name)) {
+    JSRT_HttpSecurityResult security_result = jsrt_http_validate_url(module_name);
+    if (security_result == JSRT_HTTP_SECURITY_OK) {
+      JSRT_Debug("JSRT_ModuleNormalize: validated HTTP URL '%s'", module_name);
+      return strdup(module_name);
+    }
+    JSRT_Debug("JSRT_ModuleNormalize: HTTP URL security validation failed for '%s'", module_name);
+    return NULL;  // Security validation failed
+  }
+
+  // Handle relative imports from HTTP modules
+  if (jsrt_is_http_url(module_base_name) && module_name[0] == '.' &&
+      (module_name[1] == '/' || (module_name[1] == '.' && module_name[2] == '/'))) {
+    char* resolved = jsrt_resolve_http_relative_import(module_base_name, module_name);
+    if (resolved) {
+      JSRT_HttpSecurityResult security_result = jsrt_http_validate_url(resolved);
+      if (security_result == JSRT_HTTP_SECURITY_OK) {
+        JSRT_Debug("JSRT_ModuleNormalize: resolved HTTP relative import to '%s'", resolved);
+        return resolved;
+      }
+      free(resolved);
+    }
+    JSRT_Debug("JSRT_ModuleNormalize: failed to resolve HTTP relative import '%s' from '%s'", module_name,
+               module_base_name);
+    return NULL;
+  }
+
   // Handle jsrt: modules specially - don't try to resolve them as files
   if (strncmp(module_name, "jsrt:", 5) == 0) {
     return strdup(module_name);
@@ -678,6 +708,11 @@ JSModuleDef* JSRT_ModuleLoader(JSContext* ctx, const char* module_name, void* op
     return JSRT_LoadNodeModule(ctx, node_module);
   }
 #endif
+
+  // Handle HTTP/HTTPS modules
+  if (jsrt_is_http_url(module_name)) {
+    return jsrt_load_http_module(ctx, module_name);
+  }
 
   // Load the file
   JSRT_ReadFileResult file_result = JSRT_ReadFile(module_name);
@@ -914,6 +949,14 @@ static JSValue js_require(JSContext* ctx, JSValueConst this_val, int argc, JSVal
     return result;
   }
 #endif
+
+  // Handle HTTP/HTTPS modules
+  if (jsrt_is_http_url(module_name)) {
+    JSValue result = jsrt_require_http_module(ctx, module_name);
+    JS_FreeCString(ctx, module_name);
+    free(esm_context_path);
+    return result;
+  }
 
   // Check if this is a bare module name (npm package)
   char* resolved_path;

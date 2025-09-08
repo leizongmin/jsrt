@@ -205,10 +205,11 @@ JSRT_EvalResult JSRT_RuntimeEval(JSRT_Runtime* rt, const char* filename, const c
     // ES modules are evaluated asynchronously - we need to run pending jobs
     // to ensure the module body executes
     JSRT_Debug("ES module evaluation - running pending jobs to execute module code");
-    
+
     // Run pending jobs multiple times to ensure module execution
     for (int i = 0; i < 10; i++) {
-      if (!JS_IsJobPending(rt->rt)) break;
+      if (!JS_IsJobPending(rt->rt))
+        break;
       int job_result = JS_ExecutePendingJob(rt->rt, &rt->ctx);
       JSRT_Debug("ES module job execution cycle %d: result=%d", i, job_result);
       if (job_result < 0) {

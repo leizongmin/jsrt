@@ -42,6 +42,7 @@ static OpenSSL_version_func openssl_OpenSSL_version = NULL;
 static HMODULE try_load_openssl_windows_enhanced() {
   // MSYS2 OpenSSL library names (what the package actually installs)
   const char* dll_names[] = {
+    "libssl-3-x64.dll",  // OpenSSL 3.x x64 from MSYS2 (prioritized)
     "libssl-3.dll",      // OpenSSL 3.x from MSYS2 (most common)
     "libssl-1_1.dll",    // OpenSSL 1.1.x from MSYS2  
     "ssleay32.dll",      // Legacy OpenSSL
@@ -63,7 +64,7 @@ static HMODULE try_load_openssl_windows_enhanced() {
     JSRT_Debug("JSRT_Crypto: Failed to load %s: Error %lu", dll_names[i], error);
   }
   
-  // Method 2: Try specific MSYS2 paths
+  // Method 2: Try specific MSYS2 paths (DLL files are in bin directories)
   const char* msys2_paths[] = {
     "C:\\msys64\\ucrt64\\bin\\",
     "C:\\msys64\\mingw64\\bin\\", 
@@ -170,8 +171,8 @@ static bool load_openssl() {
     JSRT_Debug("JSRT_Crypto: Failed to load OpenSSL library: Error %lu", error);
     // Enhanced error reporting for Windows
     fprintf(stderr, "JSRT: OpenSSL library not found on Windows.\n");
-    fprintf(stderr, "JSRT: Searched for: libssl-3.dll, libssl-1_1.dll, ssleay32.dll\n");
-    fprintf(stderr, "JSRT: Searched in: system PATH, MSYS2 directories\n");
+    fprintf(stderr, "JSRT: Searched for: libssl-3-x64.dll, libssl-3.dll, libssl-1_1.dll, ssleay32.dll\n");
+    fprintf(stderr, "JSRT: Searched in: system PATH, C:\\msys64\\ucrt64\\bin\\, C:\\msys64\\mingw64\\bin\\\n");
     fprintf(stderr, "JSRT: Install with: pacman -S mingw-w64-ucrt-x86_64-openssl\n");
     fprintf(stderr, "JSRT: Or ensure OpenSSL DLLs are in PATH or application directory\n");
 #else

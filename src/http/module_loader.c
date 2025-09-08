@@ -12,9 +12,70 @@
 // Global HTTP module cache
 static JSRT_HttpCache* g_http_cache = NULL;
 
+// Helper function to clean HTTP response content for JavaScript parsing
+static char* clean_js_content(const char* source, size_t source_len, size_t* cleaned_len) {
+  if (!source || source_len == 0) {
+    *cleaned_len = 0;
+    return NULL;
+  }
+
+  const char* start = source;
+  size_t len = source_len;
+
+  // Skip UTF-8 BOM if present (0xEF 0xBB 0xBF)
+  if (len >= 3 && (unsigned char)start[0] == 0xEF && (unsigned char)start[1] == 0xBB &&
+      (unsigned char)start[2] == 0xBF) {
+    start += 3;
+    len -= 3;
+  }
+
+  // Allocate cleaned content
+  char* cleaned = malloc(len + 1);
+  if (!cleaned) {
+    *cleaned_len = 0;
+    return NULL;
+  }
+
+  // Copy content, normalizing line endings and removing potential problematic characters
+  size_t write_pos = 0;
+  for (size_t i = 0; i < len; i++) {
+    unsigned char c = (unsigned char)start[i];
+
+    // Skip null bytes and other control characters except valid whitespace
+    if (c == 0) {
+      continue;
+    }
+
+    // Normalize Windows line endings to Unix
+    if (c == '\r' && i + 1 < len && start[i + 1] == '\n') {
+      cleaned[write_pos++] = '\n';
+      i++;  // skip the \n
+    } else if (c == '\r') {
+      cleaned[write_pos++] = '\n';
+    } else {
+      cleaned[write_pos++] = c;
+    }
+  }
+
+  cleaned[write_pos] = '\0';
+  *cleaned_len = write_pos;
+  return cleaned;
+}
+
 // Helper function to compile module from string
 static JSModuleDef* compile_module_from_string(JSContext* ctx, const char* url, const char* source, size_t source_len) {
-  JSValue func_val = JS_Eval(ctx, source, source_len, url, JS_EVAL_TYPE_MODULE | JS_EVAL_FLAG_COMPILE_ONLY);
+  // Clean the source content first
+  size_t cleaned_len;
+  char* cleaned_source = clean_js_content(source, source_len, &cleaned_len);
+
+  if (!cleaned_source) {
+    JSRT_Debug("jsrt_load_http_module: failed to clean source from %s", url);
+    return NULL;
+  }
+
+  JSValue func_val = JS_Eval(ctx, cleaned_source, cleaned_len, url, JS_EVAL_TYPE_MODULE | JS_EVAL_FLAG_COMPILE_ONLY);
+
+  free(cleaned_source);
 
   if (JS_IsException(func_val)) {
     JSRT_Debug("jsrt_load_http_module: failed to compile module from %s", url);
@@ -245,8 +306,20 @@ JSValue jsrt_require_http_module(JSContext* ctx, const char* url) {
     JS_SetPropertyStr(ctx, global, "module", JS_DupValue(ctx, module_obj));
     JS_SetPropertyStr(ctx, global, "exports", JS_DupValue(ctx, exports_obj));
 
-    // Execute the cached CommonJS code
-    JSValue eval_result = JS_Eval(ctx, cached->data, cached->size, url, JS_EVAL_TYPE_GLOBAL);
+    // Clean and execute the cached CommonJS code
+    size_t cleaned_len;
+    char* cleaned_source = clean_js_content(cached->data, cached->size, &cleaned_len);
+
+    if (!cleaned_source) {
+      JSRT_Debug("jsrt_require_http_module: failed to clean cached source from '%s'", url);
+      JS_FreeValue(ctx, global);
+      JS_FreeValue(ctx, module_obj);
+      JS_FreeValue(ctx, exports_obj);
+      return JS_ThrowInternalError(ctx, "Failed to clean cached module content");
+    }
+
+    JSValue eval_result = JS_Eval(ctx, cleaned_source, cleaned_len, url, JS_EVAL_TYPE_GLOBAL);
+    free(cleaned_source);
 
     if (JS_IsException(eval_result)) {
       JSRT_Debug("jsrt_require_http_module: failed to evaluate cached module from '%s'", url);
@@ -305,10 +378,22 @@ JSValue jsrt_require_http_module(JSContext* ctx, const char* url) {
   JS_SetPropertyStr(ctx, global, "module", JS_DupValue(ctx, module_obj));
   JS_SetPropertyStr(ctx, global, "exports", JS_DupValue(ctx, exports_obj));
 
-  // Execute the CommonJS code
-  JSValue eval_result = JS_Eval(ctx, response.body, response.body_size, url, JS_EVAL_TYPE_GLOBAL);
+  // Clean and execute the CommonJS code
+  size_t cleaned_len;
+  char* cleaned_source = clean_js_content(response.body, response.body_size, &cleaned_len);
 
   JSRT_HttpResponseFree(&response);
+
+  if (!cleaned_source) {
+    JSRT_Debug("jsrt_require_http_module: failed to clean source from '%s'", url);
+    JS_FreeValue(ctx, global);
+    JS_FreeValue(ctx, module_obj);
+    JS_FreeValue(ctx, exports_obj);
+    return JS_ThrowInternalError(ctx, "Failed to clean module content");
+  }
+
+  JSValue eval_result = JS_Eval(ctx, cleaned_source, cleaned_len, url, JS_EVAL_TYPE_GLOBAL);
+  free(cleaned_source);
 
   if (JS_IsException(eval_result)) {
     JSRT_Debug("jsrt_require_http_module: failed to evaluate module from '%s'", url);

@@ -668,11 +668,11 @@ if(JSRT_STATIC_OPENSSL)
         "${CMAKE_SOURCE_DIR}/src/http/fetch.c")
     list(REMOVE_ITEM JSRT_UTIL_FILES 
         "${CMAKE_SOURCE_DIR}/src/util/http_client.c")
-    # Add minimal static implementations
+    # Add full static implementations
     list(APPEND JSRT_STD_FILES "${CMAKE_SOURCE_DIR}/src/std/crypto_subtle_static.c")
     list(APPEND JSRT_HTTP_FILES "${CMAKE_SOURCE_DIR}/src/http/fetch_static.c")
     list(APPEND JSRT_UTIL_FILES "${CMAKE_SOURCE_DIR}/src/util/http_client_static.c")
-    message(STATUS "Static OpenSSL: Using minimal static implementations")
+    message(STATUS "Static OpenSSL: Using full static implementations")
 endif()
 
 # Add Node.js compatibility sources

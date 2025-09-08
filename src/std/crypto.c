@@ -1,5 +1,49 @@
 #include "crypto.h"
 
+#ifdef JSRT_STATIC_OPENSSL
+// Static OpenSSL mode - use statically linked OpenSSL functions
+#include <openssl/opensslv.h>
+#include <openssl/rand.h>
+#include <quickjs.h>
+#include <stdbool.h>
+#include <stdint.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <time.h>
+
+#include "../util/debug.h"
+#include "crypto_subtle.h"
+
+static char* openssl_version = NULL;
+
+// Static linking initialization
+static bool load_openssl(void) {
+  // For static linking, OpenSSL is always available
+  if (openssl_version == NULL) {
+    openssl_version = strdup(OPENSSL_VERSION_TEXT);
+    JSRT_Debug("JSRT_Crypto: OpenSSL version (static): %s", openssl_version);
+  }
+  return true;
+}
+
+// Fallback random bytes using system random (not cryptographically secure)
+static bool fallback_random_bytes(unsigned char* buf, int num) {
+  static bool seeded = false;
+  if (!seeded) {
+    srand((unsigned int)time(NULL));
+    seeded = true;
+  }
+
+  for (int i = 0; i < num; i++) {
+    buf[i] = (unsigned char)(rand() % 256);
+  }
+  return true;
+}
+
+#else
+// Dynamic OpenSSL mode - use dynamically loaded OpenSSL functions
+
 // Platform-specific includes for dynamic loading
 #ifdef _WIN32
 #include <windows.h>
@@ -379,9 +423,15 @@ static JSValue jsrt_crypto_getRandomValues(JSContext* ctx, JSValueConst this_val
   }
 
   bool success = false;
+#ifdef JSRT_STATIC_OPENSSL
+  // Use statically linked RAND_bytes
+  success = (RAND_bytes(random_data, (int)byte_length) == 1);
+#else
+  // Use dynamically loaded RAND_bytes
   if (openssl_RAND_bytes != NULL) {
     success = (openssl_RAND_bytes(random_data, (int)byte_length) == 1);
   }
+#endif
 
   if (!success) {
     // Use fallback random (warn that it's not cryptographically secure)
@@ -405,9 +455,15 @@ static JSValue jsrt_crypto_randomUUID(JSContext* ctx, JSValueConst this_val, int
   bool success = false;
 
   // Generate 16 random bytes for UUID
+#ifdef JSRT_STATIC_OPENSSL
+  // Use statically linked RAND_bytes
+  success = (RAND_bytes(random_bytes, 16) == 1);
+#else
+  // Use dynamically loaded RAND_bytes
   if (openssl_RAND_bytes != NULL) {
     success = (openssl_RAND_bytes(random_bytes, 16) == 1);
   }
+#endif
 
   if (!success) {
     // Use fallback random
@@ -471,3 +527,5 @@ void JSRT_RuntimeSetupStdCrypto(JSRT_Runtime* rt) {
 
   JSRT_Debug("JSRT_RuntimeSetupStdCrypto: initialized WebCrypto API with OpenSSL support");
 }
+
+#endif

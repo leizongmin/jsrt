@@ -399,7 +399,34 @@ if(JSRT_STATIC_OPENSSL)
     find_package(OpenSSL QUIET)
     if(OpenSSL_FOUND)
         message(STATUS "OpenSSL found for static linking: ${OPENSSL_VERSION}")
-        set(OPENSSL_LIBRARIES OpenSSL::Crypto OpenSSL::SSL)
+        
+        # For true static linking, we need to find the .a files instead of using imported targets
+        get_target_property(OPENSSL_CRYPTO_LIB OpenSSL::Crypto IMPORTED_LOCATION)
+        get_target_property(OPENSSL_SSL_LIB OpenSSL::SSL IMPORTED_LOCATION)
+        
+        # Convert .dylib paths to .a paths for static linking
+        if(OPENSSL_CRYPTO_LIB)
+            string(REPLACE ".dylib" ".a" OPENSSL_CRYPTO_STATIC ${OPENSSL_CRYPTO_LIB})
+            string(REPLACE ".so" ".a" OPENSSL_CRYPTO_STATIC ${OPENSSL_CRYPTO_STATIC})
+        endif()
+        if(OPENSSL_SSL_LIB) 
+            string(REPLACE ".dylib" ".a" OPENSSL_SSL_STATIC ${OPENSSL_SSL_LIB})
+            string(REPLACE ".so" ".a" OPENSSL_SSL_STATIC ${OPENSSL_SSL_STATIC})
+        endif()
+        
+        # Check if static libraries exist
+        if(EXISTS "${OPENSSL_CRYPTO_STATIC}" AND EXISTS "${OPENSSL_SSL_STATIC}")
+            set(OPENSSL_LIBRARIES ${OPENSSL_SSL_STATIC} ${OPENSSL_CRYPTO_STATIC})
+            message(STATUS "Using OpenSSL static libraries:")
+            message(STATUS "  SSL: ${OPENSSL_SSL_STATIC}")
+            message(STATUS "  Crypto: ${OPENSSL_CRYPTO_STATIC}")
+        else()
+            message(WARNING "OpenSSL static libraries not found, using dynamic linking")
+            message(STATUS "  Looked for: ${OPENSSL_SSL_STATIC}")
+            message(STATUS "  Looked for: ${OPENSSL_CRYPTO_STATIC}")
+            set(OPENSSL_LIBRARIES OpenSSL::Crypto OpenSSL::SSL)
+        endif()
+        
         set(OPENSSL_INCLUDE_DIRS ${OPENSSL_INCLUDE_DIR})
     else()
         # Try pkg-config as fallback

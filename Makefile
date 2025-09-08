@@ -34,6 +34,13 @@ jsrt_cov:
 	ls -alh target/coverage/jsrt
 	@cd deps/wamr && git restore core/version.h 2>/dev/null || true
 
+.PHONY: jsrt_static
+jsrt_static:
+	mkdir -p target/static
+	cd target/static && cmake -G "Unix Makefiles" -DCMAKE_BUILD_TYPE=Release -DBUILD_SHARED_LIBS=OFF $(CURDIR) && make -j$(cpu_count)
+	ls -alh target/static/jsrt
+	@cd deps/wamr && git restore core/version.h 2>/dev/null || true
+
 .PHONY: jsrt_s
 jsrt_s: jsrt
 	cp -f target/release/jsrt target/release/jsrt_s
@@ -302,6 +309,7 @@ help:
 	@echo "  make jsrt_g        - Build debug version"
 	@echo "  make jsrt_m        - Build with AddressSanitizer"
 	@echo "  make jsrt_cov      - Build with coverage"
+	@echo "  make jsrt_static   - Build with static linking"
 	@echo "  make clean         - Clean build artifacts"
 	@echo ""
 	@echo "Code Quality:"

@@ -47,7 +47,17 @@ if(PkgConfig_FOUND)
 endif()
 
 # Optional: Enable libffi integration
+# Note: On macOS, libffi will be dynamically linked even in static builds since static libffi is not available
+# On Linux, static libffi is available through libffi-dev/libffi-devel packages
 option(ENABLE_LIBFFI "Enable libffi integration for robust FFI calling conventions" ${LIBFFI_FOUND})
+
+if(JSRT_STATIC_OPENSSL AND ENABLE_LIBFFI AND LIBFFI_FOUND)
+    if(APPLE)
+        message(STATUS "libffi will be dynamically linked in static builds (static libffi not available on macOS)")
+    else()
+        message(STATUS "libffi can be statically linked in static builds on this platform")
+    endif()
+endif()
 
 if(ENABLE_LIBFFI AND LIBFFI_FOUND)
     message(STATUS "libffi support enabled")

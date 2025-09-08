@@ -1,5 +1,6 @@
 #include "crypto_digest.h"
 
+#ifndef JSRT_STATIC_OPENSSL
 // Platform-specific includes for dynamic loading
 #ifdef _WIN32
 #include <windows.h>
@@ -193,3 +194,16 @@ int jsrt_crypto_digest_data(jsrt_crypto_algorithm_t alg, const uint8_t* input, s
              *output_len);
   return 0;
 }
+
+#else
+// Static OpenSSL mode - disable digest functions for now
+int jsrt_crypto_digest(jsrt_crypto_algorithm_t alg, const unsigned char* input, size_t input_len, unsigned char* output,
+                       size_t* output_len) {
+  (void)alg;
+  (void)input;
+  (void)input_len;
+  (void)output;
+  (void)output_len;
+  return -1;  // Not implemented in static mode
+}
+#endif

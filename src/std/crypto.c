@@ -1,12 +1,5 @@
 #include "crypto.h"
 
-// Platform-specific includes for dynamic loading
-#ifdef _WIN32
-#include <windows.h>
-#else
-#include <dlfcn.h>
-#endif
-
 #include <quickjs.h>
 #include <stdbool.h>
 #include <stdint.h>
@@ -18,14 +11,30 @@
 #include "../util/debug.h"
 #include "crypto_subtle.h"
 
+#ifdef JSRT_STATIC_OPENSSL
+// Static OpenSSL linking
+#include <openssl/opensslv.h>
+#include <openssl/rand.h>
+#else
+// Platform-specific includes for dynamic loading
+#ifdef _WIN32
+#include <windows.h>
+#else
+#include <dlfcn.h>
+#endif
+#endif
+
+#ifndef JSRT_STATIC_OPENSSL
 // OpenSSL function pointers - make openssl_handle accessible to other modules
 #ifdef _WIN32
 HMODULE openssl_handle = NULL;
 #else
 void* openssl_handle = NULL;
 #endif
+#endif
 static char* openssl_version = NULL;
 
+#ifndef JSRT_STATIC_OPENSSL
 // Function pointer types for OpenSSL functions we need
 typedef int (*RAND_bytes_func)(unsigned char* buf, int num);
 typedef const char* (*OpenSSL_version_func)(int type);
@@ -33,10 +42,12 @@ typedef const char* (*OpenSSL_version_func)(int type);
 // Function pointers
 static RAND_bytes_func openssl_RAND_bytes = NULL;
 static OpenSSL_version_func openssl_OpenSSL_version = NULL;
+#endif
 
 // OpenSSL version constants
 #define OPENSSL_VERSION 0
 
+#ifndef JSRT_STATIC_OPENSSL
 #ifdef _WIN32
 // Helper function to check if a file exists
 static bool file_exists(const char* path) {
@@ -137,9 +148,21 @@ static void diagnose_openssl_paths() {
   }
 }
 #endif
+#endif
 
-// Try to load OpenSSL dynamically
+// Try to load OpenSSL (static or dynamic)
 static bool load_openssl() {
+#ifdef JSRT_STATIC_OPENSSL
+  // Static OpenSSL - always available
+  if (openssl_version == NULL) {
+    const char* version_str = OpenSSL_version(OPENSSL_VERSION);
+    if (version_str) {
+      openssl_version = strdup(version_str);
+      JSRT_Debug("JSRT_Crypto: Using static OpenSSL version: %s", openssl_version);
+    }
+  }
+  return true;
+#else
   if (openssl_handle != NULL) {
     return true;  // Already loaded
   }
@@ -154,11 +177,11 @@ static bool load_openssl() {
       "libssl-1_1.dll",      // MSYS2 OpenSSL 1.1.x 
       "msys-ssl-3.dll",      // Alternative MSYS2 naming
       "msys-ssl-1.1.dll",    // Alternative MSYS2 naming
-      // Windows native OpenSSL names  
+      // Windows native OpenSSL names
       "ssleay32.dll",        // Windows legacy OpenSSL
       // Additional fallback names
-      "ssl.dll",             // Generic SSL library name
-      "openssl.dll",         // Alternative naming
+      "ssl.dll",      // Generic SSL library name
+      "openssl.dll",  // Alternative naming
 #elif __APPLE__
       "/opt/homebrew/lib/libssl.3.dylib",  // macOS Homebrew OpenSSL 3.x (full path)
       "/opt/homebrew/lib/libssl.dylib",    // macOS Homebrew OpenSSL (full path)
@@ -232,7 +255,7 @@ static bool load_openssl() {
       }
     }
 #endif
-    
+
     if (openssl_handle == NULL) {
       JSRT_Debug("JSRT_Crypto: Failed to load OpenSSL library from all attempted paths");
 #ifdef _WIN32
@@ -246,7 +269,7 @@ static bool load_openssl() {
       fprintf(stderr, "JSRT: This indicates OpenSSL is not properly installed or accessible.\n");
       // Run diagnostics to see what's actually available
       diagnose_openssl_paths();
-#else  
+#else
       JSRT_Debug("JSRT_Crypto: Final error: %s", dlerror());
 #endif
       return false;
@@ -282,6 +305,7 @@ static bool load_openssl() {
   }
 
   return true;
+#endif
 }
 
 // Fallback random bytes using system random (not cryptographically secure)
@@ -451,9 +475,13 @@ static JSValue jsrt_crypto_getRandomValues(JSContext* ctx, JSValueConst this_val
   }
 
   bool success = false;
+#ifdef JSRT_STATIC_OPENSSL
+  success = (RAND_bytes(random_data, (int)byte_length) == 1);
+#else
   if (openssl_RAND_bytes != NULL) {
     success = (openssl_RAND_bytes(random_data, (int)byte_length) == 1);
   }
+#endif
 
   if (!success) {
     // Use fallback random (warn that it's not cryptographically secure)
@@ -477,9 +505,13 @@ static JSValue jsrt_crypto_randomUUID(JSContext* ctx, JSValueConst this_val, int
   bool success = false;
 
   // Generate 16 random bytes for UUID
+#ifdef JSRT_STATIC_OPENSSL
+  success = (RAND_bytes(random_bytes, 16) == 1);
+#else
   if (openssl_RAND_bytes != NULL) {
     success = (openssl_RAND_bytes(random_bytes, 16) == 1);
   }
+#endif
 
   if (!success) {
     // Use fallback random

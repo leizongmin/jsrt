@@ -389,6 +389,37 @@ target_compile_definitions(llhttp PRIVATE _GNU_SOURCE)
 # Add option for Node.js compatibility
 option(JSRT_NODE_COMPAT "Enable Node.js compatibility layer" ON)
 
+# Add option for static OpenSSL linking
+option(JSRT_STATIC_OPENSSL "Enable static OpenSSL linking instead of runtime loading" OFF)
+
+# Find OpenSSL for static linking when enabled
+set(OPENSSL_LIBRARIES "")
+set(OPENSSL_INCLUDE_DIRS "")
+if(JSRT_STATIC_OPENSSL)
+    find_package(OpenSSL QUIET)
+    if(OpenSSL_FOUND)
+        message(STATUS "OpenSSL found for static linking: ${OPENSSL_VERSION}")
+        set(OPENSSL_LIBRARIES OpenSSL::Crypto OpenSSL::SSL)
+        set(OPENSSL_INCLUDE_DIRS ${OPENSSL_INCLUDE_DIR})
+    else()
+        # Try pkg-config as fallback
+        find_package(PkgConfig QUIET)
+        if(PkgConfig_FOUND)
+            pkg_check_modules(OPENSSL_PKG QUIET openssl)
+            if(OPENSSL_PKG_FOUND)
+                message(STATUS "OpenSSL found via pkg-config for static linking")
+                set(OPENSSL_LIBRARIES ${OPENSSL_PKG_LIBRARIES})
+                set(OPENSSL_INCLUDE_DIRS ${OPENSSL_PKG_INCLUDE_DIRS})
+            endif()
+        endif()
+        
+        if(NOT OPENSSL_LIBRARIES)
+            message(WARNING "JSRT_STATIC_OPENSSL enabled but OpenSSL not found - falling back to dynamic loading")
+            set(JSRT_STATIC_OPENSSL OFF)
+        endif()
+    endif()
+endif()
+
 # Try to find system readline with robust detection
 set(READLINE_WORKING FALSE)
 
@@ -486,6 +517,27 @@ file(GLOB_RECURSE JSRT_UTIL_FILES "src/util/*.c")
 file(GLOB_RECURSE JSRT_HTTP_FILES "src/http/*.c")
 file(GLOB_RECURSE JSRT_WASM_FILES "src/wasm/*.c")
 
+# For static OpenSSL builds, exclude modules that need runtime loading
+if(JSRT_STATIC_OPENSSL)
+    list(REMOVE_ITEM JSRT_STD_FILES 
+        "${CMAKE_SOURCE_DIR}/src/std/crypto_digest.c"
+        "${CMAKE_SOURCE_DIR}/src/std/crypto_hmac.c" 
+        "${CMAKE_SOURCE_DIR}/src/std/crypto_kdf.c"
+        "${CMAKE_SOURCE_DIR}/src/std/crypto_rsa.c"
+        "${CMAKE_SOURCE_DIR}/src/std/crypto_subtle.c"
+        "${CMAKE_SOURCE_DIR}/src/std/crypto_symmetric.c"
+        "${CMAKE_SOURCE_DIR}/src/std/crypto_ec.c")
+    list(REMOVE_ITEM JSRT_HTTP_FILES 
+        "${CMAKE_SOURCE_DIR}/src/http/fetch.c")
+    list(REMOVE_ITEM JSRT_UTIL_FILES 
+        "${CMAKE_SOURCE_DIR}/src/util/http_client.c")
+    # Add minimal static implementations
+    list(APPEND JSRT_STD_FILES "${CMAKE_SOURCE_DIR}/src/std/crypto_subtle_static.c")
+    list(APPEND JSRT_HTTP_FILES "${CMAKE_SOURCE_DIR}/src/http/fetch_static.c")
+    list(APPEND JSRT_UTIL_FILES "${CMAKE_SOURCE_DIR}/src/util/http_client_static.c")
+    message(STATUS "Static OpenSSL: Using minimal static implementations")
+endif()
+
 # Add Node.js compatibility sources
 set(NODE_SOURCES "")
 if(JSRT_NODE_COMPAT)
@@ -509,11 +561,16 @@ set(JSRT_LINK_LIBS
     readline
     vmlib
     ${JSRT_PLATFORM_LIBS}
-    ${FFI_LIBRARIES})
+    ${FFI_LIBRARIES}
+    ${OPENSSL_LIBRARIES})
 add_library(jsrtcore STATIC ${JSRT_LIB_FILES})
 target_compile_definitions(jsrtcore PRIVATE JSRT_VERSION="${JSRT_VERSION}")
 if(JSRT_NODE_COMPAT)
     target_compile_definitions(jsrtcore PRIVATE JSRT_NODE_COMPAT)
+endif()
+if(JSRT_STATIC_OPENSSL)
+    target_compile_definitions(jsrtcore PRIVATE JSRT_STATIC_OPENSSL)
+    target_include_directories(jsrtcore PRIVATE ${OPENSSL_INCLUDE_DIRS})
 endif()
 target_link_libraries(jsrtcore PRIVATE readline)
 add_executable(jsrt src/main.c src/build.c)

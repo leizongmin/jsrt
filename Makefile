@@ -37,7 +37,7 @@ jsrt_cov:
 .PHONY: jsrt_static
 jsrt_static:
 	mkdir -p target/static
-	cd target/static && cmake -G "Unix Makefiles" -DCMAKE_BUILD_TYPE=Release -DBUILD_SHARED_LIBS=OFF $(CURDIR) && make -j$(cpu_count)
+	cd target/static && cmake -G "Unix Makefiles" -DCMAKE_BUILD_TYPE=Release -DBUILD_SHARED_LIBS=OFF -DJSRT_STATIC_OPENSSL=ON $(CURDIR) && make -j$(cpu_count)
 	ls -alh target/static/jsrt
 	@cd deps/wamr && git restore core/version.h 2>/dev/null || true
 

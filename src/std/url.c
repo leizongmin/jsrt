@@ -222,7 +222,7 @@ static int validate_url_characters(const char* url) {
       return 0;  // Leading backslash is invalid
     }
     // Check for consecutive backslashes (often invalid pattern)
-    if (*p == '\\' && p > url && *(p-1) == '\\') {
+    if (*p == '\\' && p > url && *(p - 1) == '\\') {
       return 0;  // Consecutive backslashes are invalid
     }
     // Optionally check for other control characters

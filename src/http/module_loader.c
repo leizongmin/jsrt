@@ -41,8 +41,8 @@ static char* clean_js_content(const char* source, size_t source_len, size_t* cle
   for (size_t i = 0; i < len; i++) {
     unsigned char c = (unsigned char)start[i];
 
-    // Skip null bytes and other control characters except valid whitespace
-    if (c == 0) {
+    // Skip null bytes and other problematic control characters
+    if (c == 0 || (c < 32 && c != '\t' && c != '\n' && c != '\r')) {
       continue;
     }
 
@@ -52,7 +52,8 @@ static char* clean_js_content(const char* source, size_t source_len, size_t* cle
       i++;  // skip the \n
     } else if (c == '\r') {
       cleaned[write_pos++] = '\n';
-    } else {
+    } else if (c >= 32 || c == '\t' || c == '\n') {
+      // Only allow printable characters, tabs, and newlines
       cleaned[write_pos++] = c;
     }
   }

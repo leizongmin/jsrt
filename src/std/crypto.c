@@ -85,17 +85,15 @@ static OpenSSL_version_func openssl_OpenSSL_version = NULL;
 // Windows-specific helper function for better OpenSSL library loading
 static HMODULE try_load_openssl_windows_enhanced() {
   // MSYS2 OpenSSL crypto library names (RAND_bytes is in libcrypto, not libssl)
-  const char* dll_names[] = {
-    "libcrypto-3-x64.dll",  // OpenSSL 3.x x64 crypto from MSYS2 (prioritized)
-    "libcrypto-3.dll",      // OpenSSL 3.x crypto from MSYS2 (most common)
-    "libcrypto-1_1.dll",    // OpenSSL 1.1.x crypto from MSYS2  
-    "libeay32.dll",         // Legacy OpenSSL crypto
-    "libcrypto.dll",        // Generic crypto naming
-    NULL
-  };
-  
+  const char* dll_names[] = {"libcrypto-3-x64.dll",  // OpenSSL 3.x x64 crypto from MSYS2 (prioritized)
+                             "libcrypto-3.dll",      // OpenSSL 3.x crypto from MSYS2 (most common)
+                             "libcrypto-1_1.dll",    // OpenSSL 1.1.x crypto from MSYS2
+                             "libeay32.dll",         // Legacy OpenSSL crypto
+                             "libcrypto.dll",        // Generic crypto naming
+                             NULL};
+
   HMODULE handle = NULL;
-  
+
   // Method 1: Try loading using system DLL search order (includes PATH)
   for (int i = 0; dll_names[i] != NULL; i++) {
     JSRT_Debug("JSRT_Crypto: Attempting to load %s using system search", dll_names[i]);
@@ -107,20 +105,16 @@ static HMODULE try_load_openssl_windows_enhanced() {
     DWORD error = GetLastError();
     JSRT_Debug("JSRT_Crypto: Failed to load %s: Error %lu", dll_names[i], error);
   }
-  
+
   // Method 2: Try specific MSYS2 paths (DLL files are in bin directories)
-  const char* msys2_paths[] = {
-    "C:\\msys64\\ucrt64\\bin\\",
-    "C:\\msys64\\mingw64\\bin\\", 
-    "C:\\msys64\\usr\\bin\\",
-    NULL
-  };
-  
+  const char* msys2_paths[] = {"C:\\msys64\\ucrt64\\bin\\", "C:\\msys64\\mingw64\\bin\\", "C:\\msys64\\usr\\bin\\",
+                               NULL};
+
   for (int i = 0; msys2_paths[i] != NULL; i++) {
     for (int j = 0; dll_names[j] != NULL; j++) {
       char full_path[MAX_PATH];
       snprintf(full_path, sizeof(full_path), "%s%s", msys2_paths[i], dll_names[j]);
-      
+
       JSRT_Debug("JSRT_Crypto: Attempting to load from path: %s", full_path);
       handle = LoadLibraryA(full_path);
       if (handle != NULL) {
@@ -131,7 +125,7 @@ static HMODULE try_load_openssl_windows_enhanced() {
       JSRT_Debug("JSRT_Crypto: Failed to load %s: Error %lu", full_path, error);
     }
   }
-  
+
   // Method 3: Search PATH directories manually for better diagnostics
   char* path_env = getenv("PATH");
   if (path_env != NULL) {
@@ -143,7 +137,7 @@ static HMODULE try_load_openssl_windows_enhanced() {
         for (int j = 0; dll_names[j] != NULL; j++) {
           char full_path[MAX_PATH];
           snprintf(full_path, sizeof(full_path), "%s\\%s", token, dll_names[j]);
-          
+
           // Check if file exists before trying to load
           DWORD attrs = GetFileAttributesA(full_path);
           if (attrs != INVALID_FILE_ATTRIBUTES && !(attrs & FILE_ATTRIBUTE_DIRECTORY)) {
@@ -161,7 +155,7 @@ static HMODULE try_load_openssl_windows_enhanced() {
       free(path_copy);
     }
   }
-  
+
   return NULL;
 }
 #endif
@@ -177,9 +171,9 @@ static bool load_openssl() {
 #ifdef _WIN32
       // For Windows, we'll use the enhanced loading function
       // These names are here for reference but won't be used in the loop
-      "libcrypto-3.dll",     // MSYS2 OpenSSL 3.x crypto (most common)
-      "libcrypto-1_1.dll",   // MSYS2 OpenSSL 1.1.x crypto
-      "libeay32.dll",        // Windows legacy OpenSSL crypto
+      "libcrypto-3.dll",    // MSYS2 OpenSSL 3.x crypto (most common)
+      "libcrypto-1_1.dll",  // MSYS2 OpenSSL 1.1.x crypto
+      "libeay32.dll",       // Windows legacy OpenSSL crypto
 #elif __APPLE__
       "/opt/homebrew/lib/libssl.3.dylib",  // macOS Homebrew OpenSSL 3.x (full path)
       "/opt/homebrew/lib/libssl.dylib",    // macOS Homebrew OpenSSL (full path)
@@ -198,7 +192,7 @@ static bool load_openssl() {
 #ifdef _WIN32
   // Use enhanced Windows-specific loading strategy
   openssl_handle = try_load_openssl_windows_enhanced();
-#else  
+#else
   // Unix/macOS loading
   for (int i = 0; openssl_names[i] != NULL; i++) {
     openssl_handle = dlopen(openssl_names[i], RTLD_LAZY);

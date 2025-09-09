@@ -655,7 +655,7 @@ file(GLOB_RECURSE JSRT_HTTP_FILES "src/http/*.c")
 file(GLOB_RECURSE JSRT_WASM_FILES "src/wasm/*.c")
 
 # For static OpenSSL builds, exclude modules that need runtime loading
-if(JSRT_STATIC_OPENSSL)
+if(JSRT_STATIC_OPENSSL AND OPENSSL_LIBRARIES)
     list(REMOVE_ITEM JSRT_STD_FILES 
         "${CMAKE_SOURCE_DIR}/src/std/crypto_digest.c"
         "${CMAKE_SOURCE_DIR}/src/std/crypto_hmac.c" 
@@ -705,7 +705,7 @@ target_compile_definitions(jsrtcore PRIVATE JSRT_VERSION="${JSRT_VERSION}")
 if(JSRT_NODE_COMPAT)
     target_compile_definitions(jsrtcore PRIVATE JSRT_NODE_COMPAT)
 endif()
-if(JSRT_STATIC_OPENSSL)
+if(JSRT_STATIC_OPENSSL AND OPENSSL_LIBRARIES)
     target_compile_definitions(jsrtcore PRIVATE JSRT_STATIC_OPENSSL)
     target_include_directories(jsrtcore PRIVATE ${OPENSSL_INCLUDE_DIRS})
 endif()

@@ -521,6 +521,10 @@ static JSValue jsrt_crypto_randomUUID_static(JSContext* ctx, JSValueConst this_v
 #include "../util/debug.h"
 #include "crypto_subtle.h"
 
+// Forward declarations for stub implementations
+static JSValue jsrt_crypto_getRandomValues_stub(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv);
+static JSValue jsrt_crypto_randomUUID_stub(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv);
+
 // Stub implementations for when OpenSSL is not available
 JSValue jsrt_subtle_digest(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
   return JS_ThrowTypeError(ctx, "crypto.subtle.digest not available (OpenSSL not found)");

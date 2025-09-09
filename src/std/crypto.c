@@ -385,7 +385,7 @@ static JSValue jsrt_crypto_getRandomValues(JSContext* ctx, JSValueConst this_val
       // Fallback if DOMException not available
       return JS_ThrowTypeError(ctx, "The operation is not supported");
     } else {
-      return JS_ThrowTypeError(ctx, error_msg);
+      return JS_ThrowTypeError(ctx, "%s", error_msg);
     }
   }
 

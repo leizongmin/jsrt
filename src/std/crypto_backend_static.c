@@ -1,4 +1,5 @@
 #include "crypto_backend.h"
+#include "crypto_core.h"
 #include "../util/debug.h"
 
 #ifdef JSRT_STATIC_OPENSSL
@@ -8,9 +9,22 @@
 #include <stdio.h>
 #include <string.h>
 
+// Static backend function pointers
+static jsrt_crypto_openssl_funcs_t static_openssl_funcs = {0};
+static bool static_funcs_initialized = false;
+
 // Static backend initialization
 static bool static_backend_init(void) {
   JSRT_Debug("Initializing static OpenSSL crypto backend");
+  
+  if (!static_funcs_initialized) {
+    if (!jsrt_crypto_core_setup_static_funcs(&static_openssl_funcs)) {
+      JSRT_Debug("Failed to setup static OpenSSL functions");
+      return false;
+    }
+    static_funcs_initialized = true;
+  }
+  
   return true;
 }
 
@@ -19,88 +33,25 @@ static void static_backend_cleanup(void) {
   JSRT_Debug("Cleaning up static OpenSSL crypto backend");
 }
 
-// Static digest implementation (reuse from crypto_subtle_static.c)
+// Static digest implementation (using unified crypto_core)
 static int static_digest_data(jsrt_crypto_algorithm_t alg, const uint8_t* input, size_t input_len,
                              uint8_t** output, size_t* output_len) {
-  const EVP_MD* md = NULL;
-
-  switch (alg) {
-    case JSRT_CRYPTO_ALG_SHA1:
-      md = EVP_sha1();
-      break;
-    case JSRT_CRYPTO_ALG_SHA256:
-      md = EVP_sha256();
-      break;
-    case JSRT_CRYPTO_ALG_SHA384:
-      md = EVP_sha384();
-      break;
-    case JSRT_CRYPTO_ALG_SHA512:
-      md = EVP_sha512();
-      break;
-    default:
-      return -1;
-  }
-
-  if (!md)
-    return -1;
-
-  EVP_MD_CTX* ctx = EVP_MD_CTX_new();
-  if (!ctx)
-    return -1;
-
-  if (EVP_DigestInit_ex(ctx, md, NULL) != 1) {
-    EVP_MD_CTX_free(ctx);
+  if (!static_funcs_initialized) {
+    JSRT_Debug("Static OpenSSL functions not initialized");
     return -1;
   }
-
-  if (EVP_DigestUpdate(ctx, input, input_len) != 1) {
-    EVP_MD_CTX_free(ctx);
-    return -1;
-  }
-
-  unsigned int digest_len = EVP_MD_size(md);
-  *output = malloc(digest_len);
-  if (!*output) {
-    EVP_MD_CTX_free(ctx);
-    return -1;
-  }
-
-  unsigned int final_len;
-  if (EVP_DigestFinal_ex(ctx, *output, &final_len) != 1) {
-    free(*output);
-    *output = NULL;
-    EVP_MD_CTX_free(ctx);
-    return -1;
-  }
-
-  *output_len = final_len;
-  EVP_MD_CTX_free(ctx);
-  return 0;
+  
+  return jsrt_crypto_core_digest(&static_openssl_funcs, alg, input, input_len, output, output_len);
 }
 
-// Static AES key generation
+// Static AES key generation (using unified crypto_core)
 static int static_generate_aes_key(size_t key_length_bits, uint8_t** key_data, size_t* key_data_length) {
-  size_t key_bytes = key_length_bits / 8;
+  if (!static_funcs_initialized) {
+    JSRT_Debug("Static OpenSSL functions not initialized");
+    return -1;
+  }
   
-  // Validate key length
-  if (key_bytes != 16 && key_bytes != 24 && key_bytes != 32) {
-    JSRT_Debug("Invalid AES key length: %zu bits", key_length_bits);
-    return -1;
-  }
-
-  *key_data = malloc(key_bytes);
-  if (!*key_data) {
-    return -1;
-  }
-
-  if (RAND_bytes(*key_data, (int)key_bytes) != 1) {
-    free(*key_data);
-    *key_data = NULL;
-    return -1;
-  }
-
-  *key_data_length = key_bytes;
-  return 0;
+  return jsrt_crypto_core_generate_aes_key(&static_openssl_funcs, key_length_bits, key_data, key_data_length);
 }
 
 // Static AES-CBC encryption
@@ -574,35 +525,24 @@ static int static_aes_decrypt(jsrt_symmetric_params_t* params, const uint8_t* ci
   }
 }
 
-// Static random number generation
+// Static random number generation (using unified crypto_core)
 static int static_get_random_bytes(uint8_t* buffer, size_t length) {
-  return (RAND_bytes(buffer, (int)length) == 1) ? 0 : -1;
+  if (!static_funcs_initialized) {
+    JSRT_Debug("Static OpenSSL functions not initialized");
+    return -1;
+  }
+  
+  return jsrt_crypto_core_get_random_bytes(&static_openssl_funcs, buffer, length);
 }
 
-// Static UUID generation
+// Static UUID generation (using unified crypto_core)
 static int static_random_uuid(char* uuid_str, size_t uuid_str_size) {
-  if (uuid_str_size < 37) {  // UUID string length + null terminator
+  if (!static_funcs_initialized) {
+    JSRT_Debug("Static OpenSSL functions not initialized");
     return -1;
   }
-
-  unsigned char random_bytes[16];
-  if (RAND_bytes(random_bytes, 16) != 1) {
-    return -1;
-  }
-
-  // Set version bits (4 bits): version 4 (random)
-  random_bytes[6] = (random_bytes[6] & 0x0F) | 0x40;
-
-  // Set variant bits (2 bits): variant 1 (RFC 4122)
-  random_bytes[8] = (random_bytes[8] & 0x3F) | 0x80;
-
-  // Format as UUID string
-  snprintf(uuid_str, uuid_str_size, "%02x%02x%02x%02x-%02x%02x-%02x%02x-%02x%02x-%02x%02x%02x%02x%02x%02x",
-           random_bytes[0], random_bytes[1], random_bytes[2], random_bytes[3], random_bytes[4], random_bytes[5],
-           random_bytes[6], random_bytes[7], random_bytes[8], random_bytes[9], random_bytes[10], random_bytes[11],
-           random_bytes[12], random_bytes[13], random_bytes[14], random_bytes[15]);
-
-  return 0;
+  
+  return jsrt_crypto_core_random_uuid(&static_openssl_funcs, uuid_str, uuid_str_size);
 }
 
 // Static version info

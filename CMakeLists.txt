@@ -669,7 +669,9 @@ if(JSRT_STATIC_OPENSSL AND OPENSSL_LIBRARIES)
         "${CMAKE_SOURCE_DIR}/src/http/fetch.c")
     list(REMOVE_ITEM JSRT_UTIL_FILES 
         "${CMAKE_SOURCE_DIR}/src/util/http_client.c")
-    # Add full static implementations
+    # Add full static implementations with unified core
+    list(APPEND JSRT_STD_FILES "${CMAKE_SOURCE_DIR}/src/std/crypto_core.c")
+    list(APPEND JSRT_STD_FILES "${CMAKE_SOURCE_DIR}/src/std/crypto_unified.c")
     list(APPEND JSRT_STD_FILES "${CMAKE_SOURCE_DIR}/src/std/crypto_subtle_static.c")
     list(APPEND JSRT_STD_FILES "${CMAKE_SOURCE_DIR}/src/std/crypto_backend.c")
     list(APPEND JSRT_STD_FILES "${CMAKE_SOURCE_DIR}/src/std/crypto_backend_static.c")
@@ -677,7 +679,12 @@ if(JSRT_STATIC_OPENSSL AND OPENSSL_LIBRARIES)
     list(APPEND JSRT_UTIL_FILES "${CMAKE_SOURCE_DIR}/src/util/http_client_static.c")
     message(STATUS "Static OpenSSL: Using full static implementations")
 else()
-    # For dynamic builds, add the unified backend and dynamic backend implementation
+    # For dynamic builds, exclude static-only files and add dynamic implementations
+    list(REMOVE_ITEM JSRT_STD_FILES 
+        "${CMAKE_SOURCE_DIR}/src/std/crypto_subtle_static.c"
+        "${CMAKE_SOURCE_DIR}/src/std/crypto_backend_static.c")
+    list(APPEND JSRT_STD_FILES "${CMAKE_SOURCE_DIR}/src/std/crypto_core.c")
+    list(APPEND JSRT_STD_FILES "${CMAKE_SOURCE_DIR}/src/std/crypto_unified.c")
     list(APPEND JSRT_STD_FILES "${CMAKE_SOURCE_DIR}/src/std/crypto_backend.c")
     list(APPEND JSRT_STD_FILES "${CMAKE_SOURCE_DIR}/src/std/crypto_backend_dynamic.c")
     message(STATUS "Dynamic OpenSSL: Using runtime loading with unified backend")

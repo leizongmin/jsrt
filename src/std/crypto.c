@@ -354,8 +354,8 @@ static bool is_valid_integer_typed_array(JSContext* ctx, JSValue arg, const char
   return true;
 }
 
-// crypto.getRandomValues(typedArray)
-static JSValue jsrt_crypto_getRandomValues(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
+// crypto.getRandomValues(typedArray) - unified implementation for both static and dynamic OpenSSL
+JSValue jsrt_crypto_getRandomValues(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
   if (argc < 1) {
     return JS_ThrowTypeError(ctx, "crypto.getRandomValues requires 1 argument");
   }
@@ -443,8 +443,8 @@ static JSValue jsrt_crypto_getRandomValues(JSContext* ctx, JSValueConst this_val
   return JS_DupValue(ctx, arg);
 }
 
-// crypto.randomUUID()
-static JSValue jsrt_crypto_randomUUID(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
+// crypto.randomUUID() - unified implementation for both static and dynamic OpenSSL
+JSValue jsrt_crypto_randomUUID(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
   unsigned char random_bytes[16];
   bool success = false;
 

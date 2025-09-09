@@ -19,13 +19,12 @@
 #include <uv.h>
 
 #include "../util/debug.h"
+#include "crypto.h"  // Include for unified crypto functions
 #include "crypto_subtle.h"
 #include "crypto_backend.h"
 #include "crypto_symmetric.h"
 
 // Forward declarations for static implementations
-static JSValue jsrt_crypto_getRandomValues_static(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv);
-static JSValue jsrt_crypto_randomUUID_static(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv);
 static JSValue jsrt_rsa_encrypt(JSContext* ctx, JSValueConst* argv, jsrt_crypto_algorithm_t alg);
 static JSValue jsrt_rsa_decrypt(JSContext* ctx, JSValueConst* argv, jsrt_crypto_algorithm_t alg);
 static JSValue jsrt_rsa_sign(JSContext* ctx, JSValueConst* argv, jsrt_crypto_algorithm_t alg);
@@ -3791,13 +3790,13 @@ void JSRT_RuntimeSetupStdCrypto(JSRT_Runtime* rt) {
   // Create crypto object
   JSValue crypto_obj = JS_NewObject(rt->ctx);
 
-  // crypto.getRandomValues() - implement using static OpenSSL
+  // crypto.getRandomValues() - use unified implementation 
   JS_SetPropertyStr(rt->ctx, crypto_obj, "getRandomValues",
-                    JS_NewCFunction(rt->ctx, jsrt_crypto_getRandomValues_static, "getRandomValues", 1));
+                    JS_NewCFunction(rt->ctx, jsrt_crypto_getRandomValues, "getRandomValues", 1));
 
-  // crypto.randomUUID() - implement using static OpenSSL
+  // crypto.randomUUID() - use unified implementation
   JS_SetPropertyStr(rt->ctx, crypto_obj, "randomUUID",
-                    JS_NewCFunction(rt->ctx, jsrt_crypto_randomUUID_static, "randomUUID", 0));
+                    JS_NewCFunction(rt->ctx, jsrt_crypto_randomUUID, "randomUUID", 0));
 
   // crypto.subtle (SubtleCrypto API)
   JSValue subtle_obj = JSRT_CreateSubtleCrypto(rt->ctx);
@@ -3817,126 +3816,8 @@ const char* JSRT_GetOpenSSLVersion() {
   return OPENSSL_VERSION_TEXT;
 }
 
-// Validate typed array for getRandomValues
-static bool is_valid_integer_typed_array_static(JSContext* ctx, JSValue arg, const char** error_msg) {
-  if (!JS_IsObject(arg)) {
-    *error_msg = "Argument must be a typed array";
-    return false;
-  }
 
-  // Check if it has the basic TypedArray properties
-  JSValue byteLength_val = JS_GetPropertyStr(ctx, arg, "byteLength");
-  JSValue buffer_val = JS_GetPropertyStr(ctx, arg, "buffer");
 
-  if (JS_IsException(byteLength_val) || JS_IsException(buffer_val) || JS_IsUndefined(byteLength_val) ||
-      JS_IsUndefined(buffer_val)) {
-    JS_FreeValue(ctx, byteLength_val);
-    JS_FreeValue(ctx, buffer_val);
-    *error_msg = "Argument must be a typed array";
-    return false;
-  }
-
-  JS_FreeValue(ctx, byteLength_val);
-  JS_FreeValue(ctx, buffer_val);
-
-  // For simplicity in static mode, accept any object with buffer/byteLength properties
-  // In a full implementation, we'd check the actual constructor
-  return true;
-}
-
-// crypto.getRandomValues implementation for static mode
-static JSValue jsrt_crypto_getRandomValues_static(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
-  if (argc < 1) {
-    return JS_ThrowTypeError(ctx, "crypto.getRandomValues requires 1 argument");
-  }
-
-  JSValue arg = argv[0];
-
-  // Validate that it's a proper integer TypedArray
-  const char* error_msg;
-  if (!is_valid_integer_typed_array_static(ctx, arg, &error_msg)) {
-    return JS_ThrowTypeError(ctx, "%s", error_msg);
-  }
-
-  // Get byteLength property to determine the size
-  JSValue byteLength_val = JS_GetPropertyStr(ctx, arg, "byteLength");
-  if (JS_IsException(byteLength_val)) {
-    return JS_ThrowTypeError(ctx, "crypto.getRandomValues argument must be a typed array");
-  }
-
-  uint32_t byte_length;
-  if (JS_ToUint32(ctx, &byte_length, byteLength_val) < 0) {
-    JS_FreeValue(ctx, byteLength_val);
-    return JS_ThrowTypeError(ctx, "Invalid byteLength");
-  }
-  JS_FreeValue(ctx, byteLength_val);
-
-  if (byte_length == 0) {
-    return JS_DupValue(ctx, arg);  // Return the original array
-  }
-
-  if (byte_length > 65536) {
-    return JS_ThrowRangeError(ctx, "crypto.getRandomValues array length exceeds quota (65536 bytes)");
-  }
-
-  // Generate random bytes using static OpenSSL
-  unsigned char* random_data = malloc(byte_length);
-  if (!random_data) {
-    return JS_ThrowInternalError(ctx, "Failed to allocate memory for random data");
-  }
-
-  if (RAND_bytes(random_data, (int)byte_length) != 1) {
-    free(random_data);
-    return JS_ThrowInternalError(ctx, "Failed to generate random bytes");
-  }
-
-  // Copy random data to the typed array's underlying buffer
-  JSValue buffer = JS_GetPropertyStr(ctx, arg, "buffer");
-  JSValue byteOffset_val = JS_GetPropertyStr(ctx, arg, "byteOffset");
-
-  uint32_t byte_offset = 0;
-  if (!JS_IsUndefined(byteOffset_val)) {
-    JS_ToUint32(ctx, &byte_offset, byteOffset_val);
-  }
-
-  size_t buffer_size;
-  uint8_t* buffer_data = JS_GetArrayBuffer(ctx, &buffer_size, buffer);
-
-  if (buffer_data && byte_offset + byte_length <= buffer_size) {
-    memcpy(buffer_data + byte_offset, random_data, byte_length);
-  }
-
-  JS_FreeValue(ctx, buffer);
-  JS_FreeValue(ctx, byteOffset_val);
-  free(random_data);
-
-  return JS_DupValue(ctx, arg);
-}
-
-// crypto.randomUUID implementation for static mode
-static JSValue jsrt_crypto_randomUUID_static(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
-  unsigned char random_bytes[16];
-
-  // Generate 16 random bytes for UUID using static OpenSSL
-  if (RAND_bytes(random_bytes, 16) != 1) {
-    return JS_ThrowInternalError(ctx, "Failed to generate random bytes for UUID");
-  }
-
-  // Set version bits (4 bits): version 4 (random)
-  random_bytes[6] = (random_bytes[6] & 0x0F) | 0x40;
-
-  // Set variant bits (2 bits): variant 1 (RFC 4122)
-  random_bytes[8] = (random_bytes[8] & 0x3F) | 0x80;
-
-  // Format as UUID string: xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx
-  char uuid_str[37];
-  snprintf(uuid_str, sizeof(uuid_str), "%02x%02x%02x%02x-%02x%02x-%02x%02x-%02x%02x-%02x%02x%02x%02x%02x%02x",
-           random_bytes[0], random_bytes[1], random_bytes[2], random_bytes[3], random_bytes[4], random_bytes[5],
-           random_bytes[6], random_bytes[7], random_bytes[8], random_bytes[9], random_bytes[10], random_bytes[11],
-           random_bytes[12], random_bytes[13], random_bytes[14], random_bytes[15]);
-
-  return JS_NewString(ctx, uuid_str);
-}
 
 #else  // !JSRT_STATIC_OPENSSL
 
@@ -4019,13 +3900,13 @@ void JSRT_RuntimeSetupStdCrypto(JSRT_Runtime* rt) {
   // Create crypto object with stub implementations
   JSValue crypto_obj = JS_NewObject(rt->ctx);
 
-  // crypto.getRandomValues() - stub that throws
+  // crypto.getRandomValues() - use unified implementation (with fallback)
   JS_SetPropertyStr(rt->ctx, crypto_obj, "getRandomValues",
-                    JS_NewCFunction(rt->ctx, jsrt_crypto_getRandomValues_stub, "getRandomValues", 1));
+                    JS_NewCFunction(rt->ctx, jsrt_crypto_getRandomValues, "getRandomValues", 1));
 
-  // crypto.randomUUID() - stub that throws
+  // crypto.randomUUID() - use unified implementation (with fallback)
   JS_SetPropertyStr(rt->ctx, crypto_obj, "randomUUID",
-                    JS_NewCFunction(rt->ctx, jsrt_crypto_randomUUID_stub, "randomUUID", 0));
+                    JS_NewCFunction(rt->ctx, jsrt_crypto_randomUUID, "randomUUID", 0));
 
   // crypto.subtle (SubtleCrypto API) - stub version
   JSValue subtle_obj = JSRT_CreateSubtleCrypto(rt->ctx);

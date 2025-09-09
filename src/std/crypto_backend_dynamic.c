@@ -1,8 +1,13 @@
 #include "crypto_backend.h"
+#include "crypto_core.h"
 #include "../util/debug.h"
 #include "crypto_symmetric.h"
 
 #include <stdio.h>
+
+// Dynamic backend function pointers
+static jsrt_crypto_openssl_funcs_t dynamic_openssl_funcs = {0};
+static bool dynamic_funcs_initialized = false;
 
 // Include existing dynamic implementation headers  
 extern int jsrt_crypto_digest_data(jsrt_crypto_algorithm_t alg, const uint8_t* input, size_t input_len,
@@ -11,7 +16,23 @@ extern int jsrt_crypto_digest_data(jsrt_crypto_algorithm_t alg, const uint8_t* i
 // Dynamic backend initialization
 static bool dynamic_backend_init(void) {
   JSRT_Debug("Initializing dynamic OpenSSL crypto backend");
-  // The dynamic backend initialization is handled by existing crypto setup
+  
+  if (!dynamic_funcs_initialized) {
+    // Get the dynamic OpenSSL handle from existing crypto setup
+    extern void* openssl_handle;  // Defined in crypto.c or similar
+    
+    if (!openssl_handle) {
+      JSRT_Debug("OpenSSL handle not available for dynamic backend");
+      return false;
+    }
+    
+    if (!jsrt_crypto_core_setup_dynamic_funcs(&dynamic_openssl_funcs, openssl_handle)) {
+      JSRT_Debug("Failed to setup dynamic OpenSSL functions");
+      return false;
+    }
+    dynamic_funcs_initialized = true;
+  }
+  
   return true;
 }
 
@@ -21,15 +42,25 @@ static void dynamic_backend_cleanup(void) {
   // Cleanup is handled by existing crypto teardown
 }
 
-// Dynamic digest wrapper (using existing implementation)
+// Dynamic digest wrapper (using unified crypto_core)
 static int dynamic_digest_data(jsrt_crypto_algorithm_t alg, const uint8_t* input, size_t input_len,
                               uint8_t** output, size_t* output_len) {
-  return jsrt_crypto_digest_data(alg, input, input_len, output, output_len);
+  if (!dynamic_funcs_initialized) {
+    JSRT_Debug("Dynamic OpenSSL functions not initialized");
+    return -1;
+  }
+  
+  return jsrt_crypto_core_digest(&dynamic_openssl_funcs, alg, input, input_len, output, output_len);
 }
 
-// Dynamic AES key generation wrapper
+// Dynamic AES key generation wrapper (using unified crypto_core)
 static int dynamic_generate_aes_key(size_t key_length_bits, uint8_t** key_data, size_t* key_data_length) {
-  return jsrt_crypto_generate_aes_key(key_length_bits, key_data, key_data_length);
+  if (!dynamic_funcs_initialized) {
+    JSRT_Debug("Dynamic OpenSSL functions not initialized");
+    return -1;
+  }
+  
+  return jsrt_crypto_core_generate_aes_key(&dynamic_openssl_funcs, key_length_bits, key_data, key_data_length);
 }
 
 // Dynamic AES encryption wrapper
@@ -44,56 +75,24 @@ static int dynamic_aes_decrypt(jsrt_symmetric_params_t* params, const uint8_t* c
   return jsrt_crypto_aes_decrypt(params, ciphertext, ciphertext_length, plaintext, plaintext_length);
 }
 
-// Dynamic random number generation (using external OpenSSL)
-extern void* openssl_handle;
+// Dynamic random number generation (using unified crypto_core)
 static int dynamic_get_random_bytes(uint8_t* buffer, size_t length) {
-  // Use dynamic loading to get RAND_bytes function
-  if (!openssl_handle) {
-    JSRT_Debug("OpenSSL handle not available");
+  if (!dynamic_funcs_initialized) {
+    JSRT_Debug("Dynamic OpenSSL functions not initialized");
     return -1;
   }
-
-#ifdef _WIN32
-  #include <windows.h>
-  #define JSRT_DLSYM(handle, name) ((void*)GetProcAddress(handle, name))
-#else
-  #include <dlfcn.h>
-  #define JSRT_DLSYM(handle, name) dlsym(handle, name)
-#endif
-
-  int (*RAND_bytes_func)(unsigned char*, int) = JSRT_DLSYM(openssl_handle, "RAND_bytes");
-  if (!RAND_bytes_func) {
-    JSRT_Debug("RAND_bytes function not found in OpenSSL library");
-    return -1;
-  }
-
-  return (RAND_bytes_func(buffer, (int)length) == 1) ? 0 : -1;
+  
+  return jsrt_crypto_core_get_random_bytes(&dynamic_openssl_funcs, buffer, length);
 }
 
-// Dynamic UUID generation
+// Dynamic UUID generation (using unified crypto_core)
 static int dynamic_random_uuid(char* uuid_str, size_t uuid_str_size) {
-  if (uuid_str_size < 37) {  // UUID string length + null terminator
+  if (!dynamic_funcs_initialized) {
+    JSRT_Debug("Dynamic OpenSSL functions not initialized");
     return -1;
   }
-
-  unsigned char random_bytes[16];
-  if (dynamic_get_random_bytes(random_bytes, 16) != 0) {
-    return -1;
-  }
-
-  // Set version bits (4 bits): version 4 (random)
-  random_bytes[6] = (random_bytes[6] & 0x0F) | 0x40;
-
-  // Set variant bits (2 bits): variant 1 (RFC 4122)
-  random_bytes[8] = (random_bytes[8] & 0x3F) | 0x80;
-
-  // Format as UUID string
-  snprintf(uuid_str, uuid_str_size, "%02x%02x%02x%02x-%02x%02x-%02x%02x-%02x%02x-%02x%02x%02x%02x%02x%02x",
-           random_bytes[0], random_bytes[1], random_bytes[2], random_bytes[3], random_bytes[4], random_bytes[5],
-           random_bytes[6], random_bytes[7], random_bytes[8], random_bytes[9], random_bytes[10], random_bytes[11],
-           random_bytes[12], random_bytes[13], random_bytes[14], random_bytes[15]);
-
-  return 0;
+  
+  return jsrt_crypto_core_random_uuid(&dynamic_openssl_funcs, uuid_str, uuid_str_size);
 }
 
 // Dynamic version info (using external OpenSSL)

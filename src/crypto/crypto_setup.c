@@ -11,6 +11,8 @@ extern void JSRT_SetupSubtleCrypto(JSRT_Runtime* rt);
 #else
 // Dynamic loading - define global variables for OpenSSL
 #ifdef _WIN32
+#include <stdlib.h>
+#include <string.h>
 #include <windows.h>
 HMODULE openssl_handle = NULL;
 #else
@@ -33,6 +35,55 @@ static bool load_openssl_dynamic(void);
 static char* openssl_version = NULL;
 
 #ifndef JSRT_STATIC_OPENSSL
+// Windows-specific function to search for DLL in PATH directories
+#ifdef _WIN32
+static HMODULE load_library_from_path(const char* lib_name) {
+  // First try the normal LoadLibrary (searches current dir, system dirs, and PATH)
+  HMODULE handle = LoadLibraryA(lib_name);
+  if (handle != NULL) {
+    return handle;
+  }
+
+  // If that fails, manually search PATH directories
+  char* path_env = getenv("PATH");
+  if (path_env == NULL) {
+    return NULL;
+  }
+
+  // Make a copy of PATH since strtok modifies the string
+  size_t path_len = strlen(path_env);
+  char* path_copy = malloc(path_len + 1);
+  if (path_copy == NULL) {
+    return NULL;
+  }
+  strcpy(path_copy, path_env);
+
+  char* path_token = strtok(path_copy, ";");
+  while (path_token != NULL) {
+    // Build full path: PATH_DIR\lib_name
+    size_t full_path_len = strlen(path_token) + strlen(lib_name) + 2;  // +1 for '\', +1 for '\0'
+    char* full_path = malloc(full_path_len);
+    if (full_path != NULL) {
+      snprintf(full_path, full_path_len, "%s\\%s", path_token, lib_name);
+
+      // Try to load from this specific path
+      handle = LoadLibraryA(full_path);
+      free(full_path);
+
+      if (handle != NULL) {
+        JSRT_Debug("JSRT_Crypto: Found OpenSSL in PATH directory: %s", path_token);
+        break;
+      }
+    }
+
+    path_token = strtok(NULL, ";");
+  }
+
+  free(path_copy);
+  return handle;
+}
+#endif
+
 // Dynamic OpenSSL loading implementation
 static bool load_openssl_dynamic(void) {
   if (openssl_handle != NULL) {
@@ -44,7 +95,7 @@ static bool load_openssl_dynamic(void) {
   // and libssl includes the crypto functions we need (like RAND_bytes)
   const char* openssl_names[] = {
 #ifdef _WIN32
-      "libssl-3.dll", "libssl-1_1.dll", "libssl.dll",
+      "libssl-3.dll", "libssl-1_1.dll", "libssl.dll", "ssleay32.dll",  // Added ssleay32.dll for older versions
 #elif __APPLE__
       "/opt/homebrew/lib/libssl.3.dylib",    // Homebrew OpenSSL 3.x
       "/opt/homebrew/lib/libssl.1.1.dylib",  // Homebrew OpenSSL 1.1.x
@@ -62,7 +113,8 @@ static bool load_openssl_dynamic(void) {
 
   for (int i = 0; openssl_names[i] != NULL; i++) {
 #ifdef _WIN32
-    openssl_handle = LoadLibraryA(openssl_names[i]);
+    // Use enhanced PATH search for Windows
+    openssl_handle = load_library_from_path(openssl_names[i]);
 #else
     openssl_handle = dlopen(openssl_names[i], RTLD_LAZY);
 #endif

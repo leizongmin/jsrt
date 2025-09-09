@@ -21,8 +21,149 @@
 #include "../util/debug.h"
 #include "crypto.h"  // Include for unified crypto functions
 #include "crypto_subtle.h"
-#include "crypto_backend.h"
+// crypto_backend.h removed - using unified setup
 #include "crypto_symmetric.h"
+
+// AES encryption/decryption functions for static builds
+int jsrt_crypto_aes_encrypt(jsrt_symmetric_params_t* params, const uint8_t* plaintext, size_t plaintext_length,
+                            uint8_t** ciphertext, size_t* ciphertext_length) {
+  EVP_CIPHER_CTX* ctx = EVP_CIPHER_CTX_new();
+  if (!ctx) return -1;
+
+  const EVP_CIPHER* cipher = NULL;
+  
+  // Select cipher based on algorithm and key length
+  if (params->algorithm == JSRT_SYMMETRIC_AES_CBC) {
+    if (params->key_length == 16) cipher = EVP_aes_128_cbc();
+    else if (params->key_length == 24) cipher = EVP_aes_192_cbc();
+    else if (params->key_length == 32) cipher = EVP_aes_256_cbc();
+  } else if (params->algorithm == JSRT_SYMMETRIC_AES_GCM) {
+    if (params->key_length == 16) cipher = EVP_aes_128_gcm();
+    else if (params->key_length == 24) cipher = EVP_aes_192_gcm();
+    else if (params->key_length == 32) cipher = EVP_aes_256_gcm();
+  }
+
+  if (!cipher) {
+    EVP_CIPHER_CTX_free(ctx);
+    return -1;
+  }
+
+  // Initialize encryption
+  if (EVP_EncryptInit_ex(ctx, cipher, NULL, params->key_data, 
+                        params->algorithm == JSRT_SYMMETRIC_AES_CBC ? params->params.cbc.iv : 
+                        params->params.gcm.iv) != 1) {
+    EVP_CIPHER_CTX_free(ctx);
+    return -1;
+  }
+
+  // Allocate output buffer
+  *ciphertext_length = plaintext_length + EVP_CIPHER_block_size(cipher);
+  *ciphertext = malloc(*ciphertext_length);
+  if (!*ciphertext) {
+    EVP_CIPHER_CTX_free(ctx);
+    return -1;
+  }
+
+  int len = 0;
+  int total_len = 0;
+
+  // Encrypt data
+  if (EVP_EncryptUpdate(ctx, *ciphertext, &len, plaintext, plaintext_length) != 1) {
+    free(*ciphertext);
+    EVP_CIPHER_CTX_free(ctx);
+    return -1;
+  }
+  total_len = len;
+
+  // Finalize encryption
+  if (EVP_EncryptFinal_ex(ctx, *ciphertext + len, &len) != 1) {
+    free(*ciphertext);
+    EVP_CIPHER_CTX_free(ctx);
+    return -1;
+  }
+  total_len += len;
+
+  *ciphertext_length = total_len;
+  EVP_CIPHER_CTX_free(ctx);
+  return 0;
+}
+
+int jsrt_crypto_aes_decrypt(jsrt_symmetric_params_t* params, const uint8_t* ciphertext, size_t ciphertext_length,
+                            uint8_t** plaintext, size_t* plaintext_length) {
+  EVP_CIPHER_CTX* ctx = EVP_CIPHER_CTX_new();
+  if (!ctx) return -1;
+
+  const EVP_CIPHER* cipher = NULL;
+  
+  // Select cipher based on algorithm and key length
+  if (params->algorithm == JSRT_SYMMETRIC_AES_CBC) {
+    if (params->key_length == 16) cipher = EVP_aes_128_cbc();
+    else if (params->key_length == 24) cipher = EVP_aes_192_cbc();
+    else if (params->key_length == 32) cipher = EVP_aes_256_cbc();
+  } else if (params->algorithm == JSRT_SYMMETRIC_AES_GCM) {
+    if (params->key_length == 16) cipher = EVP_aes_128_gcm();
+    else if (params->key_length == 24) cipher = EVP_aes_192_gcm();
+    else if (params->key_length == 32) cipher = EVP_aes_256_gcm();
+  }
+
+  if (!cipher) {
+    EVP_CIPHER_CTX_free(ctx);
+    return -1;
+  }
+
+  // Initialize decryption
+  if (EVP_DecryptInit_ex(ctx, cipher, NULL, params->key_data, 
+                        params->algorithm == JSRT_SYMMETRIC_AES_CBC ? params->params.cbc.iv : 
+                        params->params.gcm.iv) != 1) {
+    EVP_CIPHER_CTX_free(ctx);
+    return -1;
+  }
+
+  // Allocate output buffer
+  *plaintext_length = ciphertext_length + EVP_CIPHER_block_size(cipher);
+  *plaintext = malloc(*plaintext_length);
+  if (!*plaintext) {
+    EVP_CIPHER_CTX_free(ctx);
+    return -1;
+  }
+
+  int len = 0;
+  int total_len = 0;
+
+  // Decrypt data
+  if (EVP_DecryptUpdate(ctx, *plaintext, &len, ciphertext, ciphertext_length) != 1) {
+    free(*plaintext);
+    EVP_CIPHER_CTX_free(ctx);
+    return -1;
+  }
+  total_len = len;
+
+  // Finalize decryption
+  if (EVP_DecryptFinal_ex(ctx, *plaintext + len, &len) != 1) {
+    free(*plaintext);
+    EVP_CIPHER_CTX_free(ctx);
+    return -1;
+  }
+  total_len += len;
+
+  *plaintext_length = total_len;
+  EVP_CIPHER_CTX_free(ctx);
+  return 0;
+}
+
+int jsrt_crypto_generate_aes_key(size_t key_length_bits, uint8_t** key_data, size_t* key_data_length) {
+  size_t key_length_bytes = key_length_bits / 8;
+  *key_data = malloc(key_length_bytes);
+  if (!*key_data) return -1;
+
+  if (RAND_bytes(*key_data, key_length_bytes) != 1) {
+    free(*key_data);
+    return -1;
+  }
+
+  *key_data_length = key_length_bytes;
+  return 0;
+}
 
 // Forward declarations for static implementations
 static JSValue jsrt_rsa_encrypt(JSContext* ctx, JSValueConst* argv, jsrt_crypto_algorithm_t alg);
@@ -474,9 +615,7 @@ JSValue jsrt_subtle_encrypt(JSContext* ctx, JSValueConst this_val, int argc, JSV
   }
 
   // Setup encryption parameters based on algorithm
-  if (!g_crypto_backend) {
-    return JS_ThrowInternalError(ctx, "Crypto backend not available");
-  }
+  // Static build - backend is always available
 
   jsrt_symmetric_params_t params;
   params.key_data = key_data;
@@ -544,7 +683,7 @@ JSValue jsrt_subtle_encrypt(JSContext* ctx, JSValueConst this_val, int argc, JSV
   uint8_t* ciphertext = NULL;
   size_t ciphertext_length = 0;
 
-  int result = g_crypto_backend->aes_encrypt(&params, plaintext_data, plaintext_size,
+  int result = jsrt_crypto_aes_encrypt(&params, plaintext_data, plaintext_size,
                                             &ciphertext, &ciphertext_length);
 
   if (result != 0) {
@@ -642,9 +781,7 @@ JSValue jsrt_subtle_decrypt(JSContext* ctx, JSValueConst this_val, int argc, JSV
   }
 
   // Setup decryption parameters based on algorithm
-  if (!g_crypto_backend) {
-    return JS_ThrowInternalError(ctx, "Crypto backend not available");
-  }
+  // Static build - backend is always available
 
   jsrt_symmetric_params_t params;
   params.key_data = key_data;
@@ -712,7 +849,7 @@ JSValue jsrt_subtle_decrypt(JSContext* ctx, JSValueConst this_val, int argc, JSV
   uint8_t* plaintext = NULL;
   size_t plaintext_length = 0;
 
-  int result = g_crypto_backend->aes_decrypt(&params, ciphertext_data, ciphertext_size,
+  int result = jsrt_crypto_aes_decrypt(&params, ciphertext_data, ciphertext_size,
                                             &plaintext, &plaintext_length);
 
   if (result != 0) {
@@ -2935,7 +3072,7 @@ JSValue jsrt_subtle_generateKey(JSContext* ctx, JSValueConst this_val, int argc,
   // Generate AES key using unified backend
   uint8_t* key_data;
   size_t key_data_length;
-  int result = jsrt_crypto_unified_generate_aes_key(key_length, &key_data, &key_data_length);
+  int result = jsrt_crypto_generate_aes_key(key_length, &key_data, &key_data_length);
   
   if (result != 0) {
     // Reject promise
@@ -3777,44 +3914,6 @@ void JSRT_SetupSubtleCrypto(JSRT_Runtime* rt) {
   JSRT_Debug("JSRT_SetupSubtleCrypto: static OpenSSL mode initialized");
 }
 
-// Setup crypto module in runtime (static version)
-void JSRT_RuntimeSetupStdCrypto(JSRT_Runtime* rt) {
-  JSRT_Debug("JSRT_RuntimeSetupStdCrypto: setting up static OpenSSL crypto");
-
-  // Initialize the unified crypto backend for static builds
-  if (!jsrt_crypto_backend_init(JSRT_CRYPTO_BACKEND_STATIC)) {
-    JSRT_Debug("JSRT_RuntimeSetupStdCrypto: Failed to initialize static crypto backend");
-    return;
-  }
-
-  // Create crypto object
-  JSValue crypto_obj = JS_NewObject(rt->ctx);
-
-  // crypto.getRandomValues() - use unified implementation 
-  JS_SetPropertyStr(rt->ctx, crypto_obj, "getRandomValues",
-                    JS_NewCFunction(rt->ctx, jsrt_crypto_getRandomValues, "getRandomValues", 1));
-
-  // crypto.randomUUID() - use unified implementation
-  JS_SetPropertyStr(rt->ctx, crypto_obj, "randomUUID",
-                    JS_NewCFunction(rt->ctx, jsrt_crypto_randomUUID, "randomUUID", 0));
-
-  // crypto.subtle (SubtleCrypto API)
-  JSValue subtle_obj = JSRT_CreateSubtleCrypto(rt->ctx);
-  JS_SetPropertyStr(rt->ctx, crypto_obj, "subtle", subtle_obj);
-
-  // Register crypto object to globalThis
-  JS_SetPropertyStr(rt->ctx, rt->global, "crypto", crypto_obj);
-
-  // Initialize SubtleCrypto
-  JSRT_SetupSubtleCrypto(rt);
-
-  JSRT_Debug("JSRT_RuntimeSetupStdCrypto: initialized WebCrypto API with static OpenSSL support");
-}
-
-// Get OpenSSL version for process.versions.openssl (static version)
-const char* JSRT_GetOpenSSLVersion() {
-  return OPENSSL_VERSION_TEXT;
-}
 
 
 
@@ -3893,38 +3992,6 @@ void JSRT_SetupSubtleCrypto(JSRT_Runtime* rt) {
   JSRT_Debug("JSRT_SetupSubtleCrypto: OpenSSL not available - crypto functions disabled");
 }
 
-// Setup crypto module in runtime (fallback version)
-void JSRT_RuntimeSetupStdCrypto(JSRT_Runtime* rt) {
-  JSRT_Debug("JSRT_RuntimeSetupStdCrypto: OpenSSL not available - using stub implementations");
-
-  // Create crypto object with stub implementations
-  JSValue crypto_obj = JS_NewObject(rt->ctx);
-
-  // crypto.getRandomValues() - use unified implementation (with fallback)
-  JS_SetPropertyStr(rt->ctx, crypto_obj, "getRandomValues",
-                    JS_NewCFunction(rt->ctx, jsrt_crypto_getRandomValues, "getRandomValues", 1));
-
-  // crypto.randomUUID() - use unified implementation (with fallback)
-  JS_SetPropertyStr(rt->ctx, crypto_obj, "randomUUID",
-                    JS_NewCFunction(rt->ctx, jsrt_crypto_randomUUID, "randomUUID", 0));
-
-  // crypto.subtle (SubtleCrypto API) - stub version
-  JSValue subtle_obj = JSRT_CreateSubtleCrypto(rt->ctx);
-  JS_SetPropertyStr(rt->ctx, crypto_obj, "subtle", subtle_obj);
-
-  // Register crypto object to globalThis
-  JS_SetPropertyStr(rt->ctx, rt->global, "crypto", crypto_obj);
-
-  // Initialize SubtleCrypto
-  JSRT_SetupSubtleCrypto(rt);
-
-  JSRT_Debug("JSRT_RuntimeSetupStdCrypto: initialized stub WebCrypto API (OpenSSL not available)");
-}
-
-// Stub version for process.versions.openssl
-const char* JSRT_GetOpenSSLVersion() {
-  return "not available";
-}
 
 // Stub implementations for crypto functions
 static JSValue jsrt_crypto_getRandomValues_stub(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {

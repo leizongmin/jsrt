@@ -665,7 +665,7 @@ if(JSRT_STATIC_OPENSSL AND OPENSSL_LIBRARIES)
         "${CMAKE_SOURCE_DIR}/src/crypto/crypto_subtle.c"
         "${CMAKE_SOURCE_DIR}/src/crypto/crypto_symmetric.c"
         "${CMAKE_SOURCE_DIR}/src/crypto/crypto_ec.c"
-        "${CMAKE_SOURCE_DIR}/src/crypto/crypto_backend_dynamic.c")
+        )
     list(REMOVE_ITEM JSRT_HTTP_FILES 
         "${CMAKE_SOURCE_DIR}/src/http/fetch.c")
     list(REMOVE_ITEM JSRT_UTIL_FILES 
@@ -673,21 +673,18 @@ if(JSRT_STATIC_OPENSSL AND OPENSSL_LIBRARIES)
     # Add full static implementations with unified core
     list(APPEND JSRT_CRYPTO_FILES "${CMAKE_SOURCE_DIR}/src/crypto/crypto_core.c")
     list(APPEND JSRT_CRYPTO_FILES "${CMAKE_SOURCE_DIR}/src/crypto/crypto_unified.c")
+    list(APPEND JSRT_CRYPTO_FILES "${CMAKE_SOURCE_DIR}/src/crypto/crypto_setup.c")
     list(APPEND JSRT_CRYPTO_FILES "${CMAKE_SOURCE_DIR}/src/crypto/crypto_subtle_static.c")
-    list(APPEND JSRT_CRYPTO_FILES "${CMAKE_SOURCE_DIR}/src/crypto/crypto_backend.c")
-    list(APPEND JSRT_CRYPTO_FILES "${CMAKE_SOURCE_DIR}/src/crypto/crypto_backend_static.c")
     list(APPEND JSRT_HTTP_FILES "${CMAKE_SOURCE_DIR}/src/http/fetch_static.c")
     list(APPEND JSRT_UTIL_FILES "${CMAKE_SOURCE_DIR}/src/util/http_client_static.c")
     message(STATUS "Static OpenSSL: Using full static implementations")
 else()
     # For dynamic builds, exclude static-only files and add dynamic implementations
     list(REMOVE_ITEM JSRT_CRYPTO_FILES 
-        "${CMAKE_SOURCE_DIR}/src/crypto/crypto_subtle_static.c"
-        "${CMAKE_SOURCE_DIR}/src/crypto/crypto_backend_static.c")
+        "${CMAKE_SOURCE_DIR}/src/crypto/crypto_subtle_static.c")
     list(APPEND JSRT_CRYPTO_FILES "${CMAKE_SOURCE_DIR}/src/crypto/crypto_core.c")
     list(APPEND JSRT_CRYPTO_FILES "${CMAKE_SOURCE_DIR}/src/crypto/crypto_unified.c")
-    list(APPEND JSRT_CRYPTO_FILES "${CMAKE_SOURCE_DIR}/src/crypto/crypto_backend.c")
-    list(APPEND JSRT_CRYPTO_FILES "${CMAKE_SOURCE_DIR}/src/crypto/crypto_backend_dynamic.c")
+    list(APPEND JSRT_CRYPTO_FILES "${CMAKE_SOURCE_DIR}/src/crypto/crypto_setup.c")
     message(STATUS "Dynamic OpenSSL: Using runtime loading with unified backend")
 endif()
 

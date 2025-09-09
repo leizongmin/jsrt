@@ -650,43 +650,44 @@ endif()
 
 # build jsrt
 file(GLOB_RECURSE JSRT_STD_FILES "src/std/*.c")
+file(GLOB_RECURSE JSRT_CRYPTO_FILES "src/crypto/*.c")
 file(GLOB_RECURSE JSRT_UTIL_FILES "src/util/*.c")
 file(GLOB_RECURSE JSRT_HTTP_FILES "src/http/*.c")
 file(GLOB_RECURSE JSRT_WASM_FILES "src/wasm/*.c")
 
 # For static OpenSSL builds, exclude modules that need runtime loading
 if(JSRT_STATIC_OPENSSL AND OPENSSL_LIBRARIES)
-    list(REMOVE_ITEM JSRT_STD_FILES 
-        "${CMAKE_SOURCE_DIR}/src/std/crypto_digest.c"
-        "${CMAKE_SOURCE_DIR}/src/std/crypto_hmac.c" 
-        "${CMAKE_SOURCE_DIR}/src/std/crypto_kdf.c"
-        "${CMAKE_SOURCE_DIR}/src/std/crypto_rsa.c"
-        "${CMAKE_SOURCE_DIR}/src/std/crypto_subtle.c"
-        "${CMAKE_SOURCE_DIR}/src/std/crypto_symmetric.c"
-        "${CMAKE_SOURCE_DIR}/src/std/crypto_ec.c"
-        "${CMAKE_SOURCE_DIR}/src/std/crypto_backend_dynamic.c")
+    list(REMOVE_ITEM JSRT_CRYPTO_FILES 
+        "${CMAKE_SOURCE_DIR}/src/crypto/crypto_digest.c"
+        "${CMAKE_SOURCE_DIR}/src/crypto/crypto_hmac.c" 
+        "${CMAKE_SOURCE_DIR}/src/crypto/crypto_kdf.c"
+        "${CMAKE_SOURCE_DIR}/src/crypto/crypto_rsa.c"
+        "${CMAKE_SOURCE_DIR}/src/crypto/crypto_subtle.c"
+        "${CMAKE_SOURCE_DIR}/src/crypto/crypto_symmetric.c"
+        "${CMAKE_SOURCE_DIR}/src/crypto/crypto_ec.c"
+        "${CMAKE_SOURCE_DIR}/src/crypto/crypto_backend_dynamic.c")
     list(REMOVE_ITEM JSRT_HTTP_FILES 
         "${CMAKE_SOURCE_DIR}/src/http/fetch.c")
     list(REMOVE_ITEM JSRT_UTIL_FILES 
         "${CMAKE_SOURCE_DIR}/src/util/http_client.c")
     # Add full static implementations with unified core
-    list(APPEND JSRT_STD_FILES "${CMAKE_SOURCE_DIR}/src/std/crypto_core.c")
-    list(APPEND JSRT_STD_FILES "${CMAKE_SOURCE_DIR}/src/std/crypto_unified.c")
-    list(APPEND JSRT_STD_FILES "${CMAKE_SOURCE_DIR}/src/std/crypto_subtle_static.c")
-    list(APPEND JSRT_STD_FILES "${CMAKE_SOURCE_DIR}/src/std/crypto_backend.c")
-    list(APPEND JSRT_STD_FILES "${CMAKE_SOURCE_DIR}/src/std/crypto_backend_static.c")
+    list(APPEND JSRT_CRYPTO_FILES "${CMAKE_SOURCE_DIR}/src/crypto/crypto_core.c")
+    list(APPEND JSRT_CRYPTO_FILES "${CMAKE_SOURCE_DIR}/src/crypto/crypto_unified.c")
+    list(APPEND JSRT_CRYPTO_FILES "${CMAKE_SOURCE_DIR}/src/crypto/crypto_subtle_static.c")
+    list(APPEND JSRT_CRYPTO_FILES "${CMAKE_SOURCE_DIR}/src/crypto/crypto_backend.c")
+    list(APPEND JSRT_CRYPTO_FILES "${CMAKE_SOURCE_DIR}/src/crypto/crypto_backend_static.c")
     list(APPEND JSRT_HTTP_FILES "${CMAKE_SOURCE_DIR}/src/http/fetch_static.c")
     list(APPEND JSRT_UTIL_FILES "${CMAKE_SOURCE_DIR}/src/util/http_client_static.c")
     message(STATUS "Static OpenSSL: Using full static implementations")
 else()
     # For dynamic builds, exclude static-only files and add dynamic implementations
-    list(REMOVE_ITEM JSRT_STD_FILES 
-        "${CMAKE_SOURCE_DIR}/src/std/crypto_subtle_static.c"
-        "${CMAKE_SOURCE_DIR}/src/std/crypto_backend_static.c")
-    list(APPEND JSRT_STD_FILES "${CMAKE_SOURCE_DIR}/src/std/crypto_core.c")
-    list(APPEND JSRT_STD_FILES "${CMAKE_SOURCE_DIR}/src/std/crypto_unified.c")
-    list(APPEND JSRT_STD_FILES "${CMAKE_SOURCE_DIR}/src/std/crypto_backend.c")
-    list(APPEND JSRT_STD_FILES "${CMAKE_SOURCE_DIR}/src/std/crypto_backend_dynamic.c")
+    list(REMOVE_ITEM JSRT_CRYPTO_FILES 
+        "${CMAKE_SOURCE_DIR}/src/crypto/crypto_subtle_static.c"
+        "${CMAKE_SOURCE_DIR}/src/crypto/crypto_backend_static.c")
+    list(APPEND JSRT_CRYPTO_FILES "${CMAKE_SOURCE_DIR}/src/crypto/crypto_core.c")
+    list(APPEND JSRT_CRYPTO_FILES "${CMAKE_SOURCE_DIR}/src/crypto/crypto_unified.c")
+    list(APPEND JSRT_CRYPTO_FILES "${CMAKE_SOURCE_DIR}/src/crypto/crypto_backend.c")
+    list(APPEND JSRT_CRYPTO_FILES "${CMAKE_SOURCE_DIR}/src/crypto/crypto_backend_dynamic.c")
     message(STATUS "Dynamic OpenSSL: Using runtime loading with unified backend")
 endif()
 
@@ -698,6 +699,7 @@ endif()
 
 set(JSRT_LIB_FILES
     ${JSRT_STD_FILES}
+    ${JSRT_CRYPTO_FILES}
     ${JSRT_UTIL_FILES}
     ${JSRT_HTTP_FILES}
     ${JSRT_WASM_FILES}

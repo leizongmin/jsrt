@@ -4,7 +4,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <uv.h>
-#include "../std/crypto.h"
+#include "../crypto/crypto.h"
 #include "../util/debug.h"
 #include "../util/jsutils.h"
 #include "parser.h"

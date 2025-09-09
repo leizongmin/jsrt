@@ -20,7 +20,7 @@
 #include <uv.h>
 
 #include "../util/debug.h"
-#include "crypto.h"
+#include "../crypto/crypto.h"
 
 // Platform-specific function implementations
 #ifdef _WIN32

@@ -15,7 +15,7 @@
 #include "std/blob.h"
 #include "std/clone.h"
 #include "std/console.h"
-#include "std/crypto.h"
+#include "crypto/crypto.h"
 #include "std/dom.h"
 #include "std/encoding.h"
 #include "std/event.h"

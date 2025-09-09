@@ -663,16 +663,24 @@ if(JSRT_STATIC_OPENSSL AND OPENSSL_LIBRARIES)
         "${CMAKE_SOURCE_DIR}/src/std/crypto_rsa.c"
         "${CMAKE_SOURCE_DIR}/src/std/crypto_subtle.c"
         "${CMAKE_SOURCE_DIR}/src/std/crypto_symmetric.c"
-        "${CMAKE_SOURCE_DIR}/src/std/crypto_ec.c")
+        "${CMAKE_SOURCE_DIR}/src/std/crypto_ec.c"
+        "${CMAKE_SOURCE_DIR}/src/std/crypto_backend_dynamic.c")
     list(REMOVE_ITEM JSRT_HTTP_FILES 
         "${CMAKE_SOURCE_DIR}/src/http/fetch.c")
     list(REMOVE_ITEM JSRT_UTIL_FILES 
         "${CMAKE_SOURCE_DIR}/src/util/http_client.c")
     # Add full static implementations
     list(APPEND JSRT_STD_FILES "${CMAKE_SOURCE_DIR}/src/std/crypto_subtle_static.c")
+    list(APPEND JSRT_STD_FILES "${CMAKE_SOURCE_DIR}/src/std/crypto_backend.c")
+    list(APPEND JSRT_STD_FILES "${CMAKE_SOURCE_DIR}/src/std/crypto_backend_static.c")
     list(APPEND JSRT_HTTP_FILES "${CMAKE_SOURCE_DIR}/src/http/fetch_static.c")
     list(APPEND JSRT_UTIL_FILES "${CMAKE_SOURCE_DIR}/src/util/http_client_static.c")
     message(STATUS "Static OpenSSL: Using full static implementations")
+else()
+    # For dynamic builds, add the unified backend and dynamic backend implementation
+    list(APPEND JSRT_STD_FILES "${CMAKE_SOURCE_DIR}/src/std/crypto_backend.c")
+    list(APPEND JSRT_STD_FILES "${CMAKE_SOURCE_DIR}/src/std/crypto_backend_dynamic.c")
+    message(STATUS "Dynamic OpenSSL: Using runtime loading with unified backend")
 endif()
 
 # Add Node.js compatibility sources

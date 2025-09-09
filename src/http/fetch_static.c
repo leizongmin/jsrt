@@ -1,8 +1,9 @@
-// Static OpenSSL build - minimal HTTP fetch implementation
+// Static OpenSSL build - HTTP fetch implementation using static OpenSSL
 #include "../runtime.h"
+#include "../std/fetch.h"
 
-// Minimal implementation for static builds
+// Use the standard fetch implementation for static builds with OpenSSL
 void JSRT_RuntimeSetupHttpFetch(JSRT_Runtime* rt) {
-  // Do nothing for now - fetch disabled in static builds
-  (void)rt;
+  // Call the standard fetch setup function - it works with static OpenSSL too
+  JSRT_RuntimeSetupStdFetch(rt);
 }

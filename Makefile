@@ -187,6 +187,10 @@ test_m: jsrt_m
 test_cov: jsrt_cov
 	cd target/coverage && ctest --verbose
 
+.PHONY: test_static
+test_static: jsrt_static npm-install
+	cd target/static && ctest --verbose
+
 .PHONY: coverage
 coverage: test_cov
 	@echo "Generating coverage report..."
@@ -258,6 +262,11 @@ wpt_g: jsrt_g wpt-download
 wpt_cov: jsrt_cov wpt-download
 	@echo "Running Web Platform Tests with coverage..."
 	python3 scripts/run-wpt.py --jsrt $(CURDIR)/target/coverage/jsrt --wpt-dir $(CURDIR)/wpt || echo "Some WPT tests failed, but continuing..."
+
+.PHONY: wpt_static
+wpt_static: jsrt_static wpt-download
+	@echo "Running Web Platform Tests with static build..."
+	python3 scripts/run-wpt.py --jsrt $(CURDIR)/target/static/jsrt --wpt-dir $(CURDIR)/wpt
 
 .PHONY: wpt-list
 wpt-list:
@@ -344,10 +353,12 @@ help:
 	@echo "  make prettier      - Format JavaScript code"
 	@echo ""
 	@echo "Testing:"
-	@echo "  make test          - Run all tests"
+	@echo "  make test          - Run all tests (release build)"
+	@echo "  make test_static   - Run all tests (static build)"
 	@echo "  make test-quick    - Run essential tests only"
 	@echo "  make test-fast     - Run tests in parallel"
-	@echo "  make wpt           - Run Web Platform Tests"
+	@echo "  make wpt           - Run Web Platform Tests (release build)"
+	@echo "  make wpt_static    - Run Web Platform Tests (static build)"
 	@echo "  make coverage      - Generate coverage report"
 	@echo ""
 	@echo "Docker & Dev Environment:"

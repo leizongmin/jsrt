@@ -1,11 +1,11 @@
 // Unified crypto setup for both static and dynamic OpenSSL builds
-#include "crypto.h"
 #include "../util/debug.h"
+#include "crypto.h"
 
 #ifdef JSRT_STATIC_OPENSSL
 #include <openssl/opensslv.h>
 #include <openssl/rand.h>
-// External functions from other crypto modules  
+// External functions from other crypto modules
 extern JSValue JSRT_CreateSubtleCrypto(JSContext* ctx);
 extern void JSRT_SetupSubtleCrypto(JSRT_Runtime* rt);
 #else
@@ -19,9 +19,9 @@ void* openssl_handle = NULL;
 #endif
 
 // Function pointer for RAND_bytes
-int (*openssl_RAND_bytes)(unsigned char *buf, int num) = NULL;
+int (*openssl_RAND_bytes)(unsigned char* buf, int num) = NULL;
 
-// External functions from other crypto modules  
+// External functions from other crypto modules
 extern JSValue JSRT_CreateSubtleCrypto(JSContext* ctx);
 extern void JSRT_SetupSubtleCrypto(JSRT_Runtime* rt);
 
@@ -44,24 +44,21 @@ static bool load_openssl_dynamic(void) {
   // and libssl includes the crypto functions we need (like RAND_bytes)
   const char* openssl_names[] = {
 #ifdef _WIN32
-    "libssl-3.dll",
-    "libssl-1_1.dll", 
-    "libssl.dll",
+      "libssl-3.dll", "libssl-1_1.dll", "libssl.dll",
 #elif __APPLE__
-    "/opt/homebrew/lib/libssl.3.dylib",  // Homebrew OpenSSL 3.x
-    "/opt/homebrew/lib/libssl.1.1.dylib", // Homebrew OpenSSL 1.1.x
-    "/usr/local/lib/libssl.3.dylib",     // MacPorts OpenSSL 3.x
-    "/usr/local/lib/libssl.1.1.dylib",   // MacPorts OpenSSL 1.1.x
-    "libssl.3.dylib",
-    "libssl.1.1.dylib",
-    "libssl.dylib",
+      "/opt/homebrew/lib/libssl.3.dylib",    // Homebrew OpenSSL 3.x
+      "/opt/homebrew/lib/libssl.1.1.dylib",  // Homebrew OpenSSL 1.1.x
+      "/usr/local/lib/libssl.3.dylib",       // MacPorts OpenSSL 3.x
+      "/usr/local/lib/libssl.1.1.dylib",     // MacPorts OpenSSL 1.1.x
+      "libssl.3.dylib",
+      "libssl.1.1.dylib",
+      "libssl.dylib",
 #else
-    "libssl.so.3",    // Linux OpenSSL 3.x
-    "libssl.so.1.1",  // Linux OpenSSL 1.1.x
-    "libssl.so",      // Linux generic
+      "libssl.so.3",    // Linux OpenSSL 3.x
+      "libssl.so.1.1",  // Linux OpenSSL 1.1.x
+      "libssl.so",      // Linux generic
 #endif
-    NULL
-  };
+      NULL};
 
   for (int i = 0; openssl_names[i] != NULL; i++) {
 #ifdef _WIN32

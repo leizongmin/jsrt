@@ -25,7 +25,7 @@ typedef void* jsrt_handle_t;
 #endif
 
 // External reference to dynamic OpenSSL function pointers
-extern int (*openssl_RAND_bytes)(unsigned char *buf, int num);
+extern int (*openssl_RAND_bytes)(unsigned char* buf, int num);
 #endif
 
 // Fallback random number generator for when OpenSSL is not available
@@ -37,14 +37,14 @@ static bool fallback_random_bytes(unsigned char* buf, int num) {
     fclose(urandom);
     return read_count == (size_t)num;
   }
-  
+
   // Fallback to poor quality random
   static bool seeded = false;
   if (!seeded) {
     srand((unsigned int)time(NULL));
     seeded = true;
   }
-  
+
   for (int i = 0; i < num; i++) {
     buf[i] = (unsigned char)(rand() % 256);
   }

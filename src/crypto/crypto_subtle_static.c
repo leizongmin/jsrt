@@ -3,16 +3,16 @@
 
 // Only compile static OpenSSL implementation when OpenSSL is available
 #ifdef JSRT_STATIC_OPENSSL
+#include <openssl/bio.h>
+#include <openssl/bn.h>
+#include <openssl/core_names.h>
 #include <openssl/evp.h>
 #include <openssl/hmac.h>
 #include <openssl/opensslv.h>
+#include <openssl/params.h>
+#include <openssl/pem.h>
 #include <openssl/rand.h>
 #include <openssl/rsa.h>
-#include <openssl/bio.h>
-#include <openssl/pem.h>
-#include <openssl/bn.h>
-#include <openssl/params.h>
-#include <openssl/core_names.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -28,19 +28,26 @@
 int jsrt_crypto_aes_encrypt(jsrt_symmetric_params_t* params, const uint8_t* plaintext, size_t plaintext_length,
                             uint8_t** ciphertext, size_t* ciphertext_length) {
   EVP_CIPHER_CTX* ctx = EVP_CIPHER_CTX_new();
-  if (!ctx) return -1;
+  if (!ctx)
+    return -1;
 
   const EVP_CIPHER* cipher = NULL;
-  
+
   // Select cipher based on algorithm and key length
   if (params->algorithm == JSRT_SYMMETRIC_AES_CBC) {
-    if (params->key_length == 16) cipher = EVP_aes_128_cbc();
-    else if (params->key_length == 24) cipher = EVP_aes_192_cbc();
-    else if (params->key_length == 32) cipher = EVP_aes_256_cbc();
+    if (params->key_length == 16)
+      cipher = EVP_aes_128_cbc();
+    else if (params->key_length == 24)
+      cipher = EVP_aes_192_cbc();
+    else if (params->key_length == 32)
+      cipher = EVP_aes_256_cbc();
   } else if (params->algorithm == JSRT_SYMMETRIC_AES_GCM) {
-    if (params->key_length == 16) cipher = EVP_aes_128_gcm();
-    else if (params->key_length == 24) cipher = EVP_aes_192_gcm();
-    else if (params->key_length == 32) cipher = EVP_aes_256_gcm();
+    if (params->key_length == 16)
+      cipher = EVP_aes_128_gcm();
+    else if (params->key_length == 24)
+      cipher = EVP_aes_192_gcm();
+    else if (params->key_length == 32)
+      cipher = EVP_aes_256_gcm();
   }
 
   if (!cipher) {
@@ -49,9 +56,9 @@ int jsrt_crypto_aes_encrypt(jsrt_symmetric_params_t* params, const uint8_t* plai
   }
 
   // Initialize encryption
-  if (EVP_EncryptInit_ex(ctx, cipher, NULL, params->key_data, 
-                        params->algorithm == JSRT_SYMMETRIC_AES_CBC ? params->params.cbc.iv : 
-                        params->params.gcm.iv) != 1) {
+  if (EVP_EncryptInit_ex(ctx, cipher, NULL, params->key_data,
+                         params->algorithm == JSRT_SYMMETRIC_AES_CBC ? params->params.cbc.iv : params->params.gcm.iv) !=
+      1) {
     EVP_CIPHER_CTX_free(ctx);
     return -1;
   }
@@ -91,19 +98,26 @@ int jsrt_crypto_aes_encrypt(jsrt_symmetric_params_t* params, const uint8_t* plai
 int jsrt_crypto_aes_decrypt(jsrt_symmetric_params_t* params, const uint8_t* ciphertext, size_t ciphertext_length,
                             uint8_t** plaintext, size_t* plaintext_length) {
   EVP_CIPHER_CTX* ctx = EVP_CIPHER_CTX_new();
-  if (!ctx) return -1;
+  if (!ctx)
+    return -1;
 
   const EVP_CIPHER* cipher = NULL;
-  
+
   // Select cipher based on algorithm and key length
   if (params->algorithm == JSRT_SYMMETRIC_AES_CBC) {
-    if (params->key_length == 16) cipher = EVP_aes_128_cbc();
-    else if (params->key_length == 24) cipher = EVP_aes_192_cbc();
-    else if (params->key_length == 32) cipher = EVP_aes_256_cbc();
+    if (params->key_length == 16)
+      cipher = EVP_aes_128_cbc();
+    else if (params->key_length == 24)
+      cipher = EVP_aes_192_cbc();
+    else if (params->key_length == 32)
+      cipher = EVP_aes_256_cbc();
   } else if (params->algorithm == JSRT_SYMMETRIC_AES_GCM) {
-    if (params->key_length == 16) cipher = EVP_aes_128_gcm();
-    else if (params->key_length == 24) cipher = EVP_aes_192_gcm();
-    else if (params->key_length == 32) cipher = EVP_aes_256_gcm();
+    if (params->key_length == 16)
+      cipher = EVP_aes_128_gcm();
+    else if (params->key_length == 24)
+      cipher = EVP_aes_192_gcm();
+    else if (params->key_length == 32)
+      cipher = EVP_aes_256_gcm();
   }
 
   if (!cipher) {
@@ -112,9 +126,9 @@ int jsrt_crypto_aes_decrypt(jsrt_symmetric_params_t* params, const uint8_t* ciph
   }
 
   // Initialize decryption
-  if (EVP_DecryptInit_ex(ctx, cipher, NULL, params->key_data, 
-                        params->algorithm == JSRT_SYMMETRIC_AES_CBC ? params->params.cbc.iv : 
-                        params->params.gcm.iv) != 1) {
+  if (EVP_DecryptInit_ex(ctx, cipher, NULL, params->key_data,
+                         params->algorithm == JSRT_SYMMETRIC_AES_CBC ? params->params.cbc.iv : params->params.gcm.iv) !=
+      1) {
     EVP_CIPHER_CTX_free(ctx);
     return -1;
   }
@@ -154,7 +168,8 @@ int jsrt_crypto_aes_decrypt(jsrt_symmetric_params_t* params, const uint8_t* ciph
 int jsrt_crypto_generate_aes_key(size_t key_length_bits, uint8_t** key_data, size_t* key_data_length) {
   size_t key_length_bytes = key_length_bits / 8;
   *key_data = malloc(key_length_bytes);
-  if (!*key_data) return -1;
+  if (!*key_data)
+    return -1;
 
   if (RAND_bytes(*key_data, key_length_bytes) != 1) {
     free(*key_data);
@@ -193,20 +208,18 @@ static bool jsrt_get_array_buffer_data(JSContext* ctx, JSValueConst val, uint8_t
   if (!JS_IsException(buffer)) {
     JSValue byteOffset = JS_GetPropertyStr(ctx, val, "byteOffset");
     JSValue byteLength = JS_GetPropertyStr(ctx, val, "byteLength");
-    
+
     if (!JS_IsException(byteOffset) && !JS_IsException(byteLength)) {
       size_t buf_size;
       uint8_t* buf_data = JS_GetArrayBuffer(ctx, &buf_size, buffer);
-      
+
       if (buf_data != NULL) {
         int32_t offset, length;
-        if (JS_ToInt32(ctx, &offset, byteOffset) == 0 && 
-            JS_ToInt32(ctx, &length, byteLength) == 0 &&
-            offset >= 0 && length >= 0 && 
-            (size_t)(offset + length) <= buf_size) {
+        if (JS_ToInt32(ctx, &offset, byteOffset) == 0 && JS_ToInt32(ctx, &length, byteLength) == 0 && offset >= 0 &&
+            length >= 0 && (size_t)(offset + length) <= buf_size) {
           *data = buf_data + offset;
           *size = length;
-          
+
           JS_FreeValue(ctx, buffer);
           JS_FreeValue(ctx, byteOffset);
           JS_FreeValue(ctx, byteLength);
@@ -553,8 +566,11 @@ JSValue jsrt_subtle_encrypt(JSContext* ctx, JSValueConst this_val, int argc, JSV
 
   // Parse algorithm
   jsrt_crypto_algorithm_t alg = jsrt_crypto_parse_algorithm(ctx, argv[0]);
-  if (alg != JSRT_CRYPTO_ALG_AES_CBC && alg != JSRT_CRYPTO_ALG_AES_GCM && alg != JSRT_CRYPTO_ALG_AES_CTR && alg != JSRT_CRYPTO_ALG_RSA_OAEP && alg != JSRT_CRYPTO_ALG_RSA_PKCS1_V1_5) {
-    return JS_ThrowTypeError(ctx, "Only AES-CBC, AES-GCM, AES-CTR, RSA-OAEP, and RSA-PKCS1-v1_5 encryption are currently supported in static build");
+  if (alg != JSRT_CRYPTO_ALG_AES_CBC && alg != JSRT_CRYPTO_ALG_AES_GCM && alg != JSRT_CRYPTO_ALG_AES_CTR &&
+      alg != JSRT_CRYPTO_ALG_RSA_OAEP && alg != JSRT_CRYPTO_ALG_RSA_PKCS1_V1_5) {
+    return JS_ThrowTypeError(ctx,
+                             "Only AES-CBC, AES-GCM, AES-CTR, RSA-OAEP, and RSA-PKCS1-v1_5 encryption are currently "
+                             "supported in static build");
   }
 
   // Handle RSA encryption separately (no IV needed)
@@ -629,7 +645,7 @@ JSValue jsrt_subtle_encrypt(JSContext* ctx, JSValueConst this_val, int argc, JSV
     params.algorithm = JSRT_SYMMETRIC_AES_GCM;
     params.params.gcm.iv = iv_data;
     params.params.gcm.iv_length = iv_size;
-    
+
     // Get optional additional data
     JSValue aad_val = JS_GetPropertyStr(ctx, argv[0], "additionalData");
     if (!JS_IsUndefined(aad_val) && !JS_IsNull(aad_val)) {
@@ -646,7 +662,7 @@ JSValue jsrt_subtle_encrypt(JSContext* ctx, JSValueConst this_val, int argc, JSV
       params.params.gcm.additional_data_length = 0;
     }
     JS_FreeValue(ctx, aad_val);
-    
+
     // Get tag length (default to 16 bytes if not specified)
     JSValue tagLen_val = JS_GetPropertyStr(ctx, argv[0], "tagLength");
     if (!JS_IsUndefined(tagLen_val) && !JS_IsNull(tagLen_val)) {
@@ -664,7 +680,7 @@ JSValue jsrt_subtle_encrypt(JSContext* ctx, JSValueConst this_val, int argc, JSV
     params.algorithm = JSRT_SYMMETRIC_AES_CTR;
     params.params.ctr.counter = iv_data;
     params.params.ctr.counter_length = iv_size;
-    
+
     // Get counter length in bits (default to 64 if not specified)
     JSValue length_val = JS_GetPropertyStr(ctx, argv[0], "length");
     if (!JS_IsUndefined(length_val) && !JS_IsNull(length_val)) {
@@ -683,8 +699,7 @@ JSValue jsrt_subtle_encrypt(JSContext* ctx, JSValueConst this_val, int argc, JSV
   uint8_t* ciphertext = NULL;
   size_t ciphertext_length = 0;
 
-  int result = jsrt_crypto_aes_encrypt(&params, plaintext_data, plaintext_size,
-                                            &ciphertext, &ciphertext_length);
+  int result = jsrt_crypto_aes_encrypt(&params, plaintext_data, plaintext_size, &ciphertext, &ciphertext_length);
 
   if (result != 0) {
     return JS_ThrowInternalError(ctx, "AES encryption failed");
@@ -719,8 +734,11 @@ JSValue jsrt_subtle_decrypt(JSContext* ctx, JSValueConst this_val, int argc, JSV
 
   // Parse algorithm
   jsrt_crypto_algorithm_t alg = jsrt_crypto_parse_algorithm(ctx, argv[0]);
-  if (alg != JSRT_CRYPTO_ALG_AES_CBC && alg != JSRT_CRYPTO_ALG_AES_GCM && alg != JSRT_CRYPTO_ALG_AES_CTR && alg != JSRT_CRYPTO_ALG_RSA_OAEP && alg != JSRT_CRYPTO_ALG_RSA_PKCS1_V1_5) {
-    return JS_ThrowTypeError(ctx, "Only AES-CBC, AES-GCM, AES-CTR, RSA-OAEP, and RSA-PKCS1-v1_5 decryption are currently supported in static build");
+  if (alg != JSRT_CRYPTO_ALG_AES_CBC && alg != JSRT_CRYPTO_ALG_AES_GCM && alg != JSRT_CRYPTO_ALG_AES_CTR &&
+      alg != JSRT_CRYPTO_ALG_RSA_OAEP && alg != JSRT_CRYPTO_ALG_RSA_PKCS1_V1_5) {
+    return JS_ThrowTypeError(ctx,
+                             "Only AES-CBC, AES-GCM, AES-CTR, RSA-OAEP, and RSA-PKCS1-v1_5 decryption are currently "
+                             "supported in static build");
   }
 
   // Handle RSA decryption separately (no IV needed)
@@ -795,7 +813,7 @@ JSValue jsrt_subtle_decrypt(JSContext* ctx, JSValueConst this_val, int argc, JSV
     params.algorithm = JSRT_SYMMETRIC_AES_GCM;
     params.params.gcm.iv = iv_data;
     params.params.gcm.iv_length = iv_size;
-    
+
     // Get optional additional data
     JSValue aad_val = JS_GetPropertyStr(ctx, argv[0], "additionalData");
     if (!JS_IsUndefined(aad_val) && !JS_IsNull(aad_val)) {
@@ -812,7 +830,7 @@ JSValue jsrt_subtle_decrypt(JSContext* ctx, JSValueConst this_val, int argc, JSV
       params.params.gcm.additional_data_length = 0;
     }
     JS_FreeValue(ctx, aad_val);
-    
+
     // Get tag length (default to 16 bytes if not specified)
     JSValue tagLen_val = JS_GetPropertyStr(ctx, argv[0], "tagLength");
     if (!JS_IsUndefined(tagLen_val) && !JS_IsNull(tagLen_val)) {
@@ -830,7 +848,7 @@ JSValue jsrt_subtle_decrypt(JSContext* ctx, JSValueConst this_val, int argc, JSV
     params.algorithm = JSRT_SYMMETRIC_AES_CTR;
     params.params.ctr.counter = iv_data;
     params.params.ctr.counter_length = iv_size;
-    
+
     // Get counter length in bits (default to 64 if not specified)
     JSValue length_val = JS_GetPropertyStr(ctx, argv[0], "length");
     if (!JS_IsUndefined(length_val) && !JS_IsNull(length_val)) {
@@ -849,8 +867,7 @@ JSValue jsrt_subtle_decrypt(JSContext* ctx, JSValueConst this_val, int argc, JSV
   uint8_t* plaintext = NULL;
   size_t plaintext_length = 0;
 
-  int result = jsrt_crypto_aes_decrypt(&params, ciphertext_data, ciphertext_size,
-                                            &plaintext, &plaintext_length);
+  int result = jsrt_crypto_aes_decrypt(&params, ciphertext_data, ciphertext_size, &plaintext, &plaintext_length);
 
   if (result != 0) {
     return JS_ThrowInternalError(ctx, "AES decryption failed");
@@ -885,8 +902,10 @@ JSValue jsrt_subtle_sign(JSContext* ctx, JSValueConst this_val, int argc, JSValu
 
   // Parse algorithm
   jsrt_crypto_algorithm_t alg = jsrt_crypto_parse_algorithm(ctx, argv[0]);
-  if (alg != JSRT_CRYPTO_ALG_HMAC && alg != JSRT_CRYPTO_ALG_RSA_PSS && alg != JSRT_CRYPTO_ALG_RSASSA_PKCS1_V1_5 && alg != JSRT_CRYPTO_ALG_ECDSA) {
-    return JS_ThrowTypeError(ctx, "Only HMAC, RSA-PSS, RSASSA-PKCS1-v1_5, and ECDSA signing are currently supported in static build");
+  if (alg != JSRT_CRYPTO_ALG_HMAC && alg != JSRT_CRYPTO_ALG_RSA_PSS && alg != JSRT_CRYPTO_ALG_RSASSA_PKCS1_V1_5 &&
+      alg != JSRT_CRYPTO_ALG_ECDSA) {
+    return JS_ThrowTypeError(
+        ctx, "Only HMAC, RSA-PSS, RSASSA-PKCS1-v1_5, and ECDSA signing are currently supported in static build");
   }
 
   // Handle RSA signing separately
@@ -894,7 +913,7 @@ JSValue jsrt_subtle_sign(JSContext* ctx, JSValueConst this_val, int argc, JSValu
     return jsrt_rsa_sign(ctx, argv, alg);
   }
 
-  // Handle ECDSA signing separately  
+  // Handle ECDSA signing separately
   if (alg == JSRT_CRYPTO_ALG_ECDSA) {
     return jsrt_ecdsa_sign(ctx, argv, alg);
   }
@@ -995,8 +1014,10 @@ JSValue jsrt_subtle_verify(JSContext* ctx, JSValueConst this_val, int argc, JSVa
 
   // Parse algorithm
   jsrt_crypto_algorithm_t alg = jsrt_crypto_parse_algorithm(ctx, argv[0]);
-  if (alg != JSRT_CRYPTO_ALG_HMAC && alg != JSRT_CRYPTO_ALG_RSA_PSS && alg != JSRT_CRYPTO_ALG_RSASSA_PKCS1_V1_5 && alg != JSRT_CRYPTO_ALG_ECDSA) {
-    return JS_ThrowTypeError(ctx, "Only HMAC, RSA-PSS, RSASSA-PKCS1-v1_5, and ECDSA verification are currently supported in static build");
+  if (alg != JSRT_CRYPTO_ALG_HMAC && alg != JSRT_CRYPTO_ALG_RSA_PSS && alg != JSRT_CRYPTO_ALG_RSASSA_PKCS1_V1_5 &&
+      alg != JSRT_CRYPTO_ALG_ECDSA) {
+    return JS_ThrowTypeError(
+        ctx, "Only HMAC, RSA-PSS, RSASSA-PKCS1-v1_5, and ECDSA verification are currently supported in static build");
   }
 
   // Handle RSA verification separately
@@ -1004,7 +1025,7 @@ JSValue jsrt_subtle_verify(JSContext* ctx, JSValueConst this_val, int argc, JSVa
     return jsrt_rsa_verify(ctx, argv, alg);
   }
 
-  // Handle ECDSA verification separately  
+  // Handle ECDSA verification separately
   if (alg == JSRT_CRYPTO_ALG_ECDSA) {
     return jsrt_ecdsa_verify(ctx, argv, alg);
   }
@@ -1084,8 +1105,8 @@ JSValue jsrt_subtle_verify(JSContext* ctx, JSValueConst this_val, int argc, JSVa
   }
 
   // Compare signatures using constant-time comparison
-  bool is_valid = (signature_size == computed_length) && 
-                  (CRYPTO_memcmp(signature_data, computed_signature, computed_length) == 0);
+  bool is_valid =
+      (signature_size == computed_length) && (CRYPTO_memcmp(signature_data, computed_signature, computed_length) == 0);
 
   free(computed_signature);
 
@@ -1163,13 +1184,13 @@ static JSValue jsrt_generate_hmac_key(JSContext* ctx, JSValueConst* argv) {
   JSValue crypto_key = JS_NewObject(ctx);
   JS_SetPropertyStr(ctx, crypto_key, "type", JS_NewString(ctx, "secret"));
   JS_SetPropertyStr(ctx, crypto_key, "extractable", JS_NewBool(ctx, true));
-  
+
   // Create algorithm object
   JSValue alg_obj = JS_NewObject(ctx);
   JS_SetPropertyStr(ctx, alg_obj, "name", JS_NewString(ctx, "HMAC"));
   JS_SetPropertyStr(ctx, alg_obj, "hash", JS_NewString(ctx, hash_name));
   JS_SetPropertyStr(ctx, crypto_key, "algorithm", alg_obj);
-  
+
   // Store key data as ArrayBuffer
   JSValue key_buffer = JS_NewArrayBuffer(ctx, key_data, key_length, NULL, NULL, 0);
   JS_SetPropertyStr(ctx, crypto_key, "_keyData", key_buffer);
@@ -1212,8 +1233,7 @@ static JSValue jsrt_generate_ec_key_pair(JSContext* ctx, JSValueConst* argv, jsr
     JSValue resolving_funcs[2];
     JSValue promise = JS_NewPromiseCapability(ctx, resolving_funcs);
     if (!JS_IsException(promise)) {
-      JS_Call(ctx, resolving_funcs[1], JS_UNDEFINED, 1, 
-              (JSValue[]){JS_NewError(ctx)});
+      JS_Call(ctx, resolving_funcs[1], JS_UNDEFINED, 1, (JSValue[]){JS_NewError(ctx)});
       JS_FreeValue(ctx, resolving_funcs[0]);
       JS_FreeValue(ctx, resolving_funcs[1]);
     }
@@ -1258,10 +1278,7 @@ static JSValue jsrt_generate_ec_key_pair(JSContext* ctx, JSValueConst* argv, jsr
   }
 
   // Set the curve using OSSL_PARAM (OpenSSL 3.x compatible)
-  OSSL_PARAM params[] = {
-    OSSL_PARAM_utf8_string(OSSL_PKEY_PARAM_GROUP_NAME, (char*)OBJ_nid2sn(nid), 0),
-    OSSL_PARAM_END
-  };
+  OSSL_PARAM params[] = {OSSL_PARAM_utf8_string(OSSL_PKEY_PARAM_GROUP_NAME, (char*)OBJ_nid2sn(nid), 0), OSSL_PARAM_END};
 
   if (EVP_PKEY_CTX_set_params(pkey_ctx, params) <= 0) {
     EVP_PKEY_CTX_free(pkey_ctx);
@@ -1291,7 +1308,7 @@ static JSValue jsrt_generate_ec_key_pair(JSContext* ctx, JSValueConst* argv, jsr
 
   char* pub_pem_data;
   long pub_pem_size = BIO_get_mem_data(pub_bio, &pub_pem_data);
-  
+
   uint8_t* pub_pem_copy = js_malloc(ctx, pub_pem_size);
   memcpy(pub_pem_copy, pub_pem_data, pub_pem_size);
   JSValue public_key_data = JS_NewArrayBufferCopy(ctx, pub_pem_copy, pub_pem_size);
@@ -1320,7 +1337,7 @@ static JSValue jsrt_generate_ec_key_pair(JSContext* ctx, JSValueConst* argv, jsr
 
   char* priv_pem_data;
   long priv_pem_size = BIO_get_mem_data(priv_bio, &priv_pem_data);
-  
+
   uint8_t* priv_pem_copy = js_malloc(ctx, priv_pem_size);
   memcpy(priv_pem_copy, priv_pem_data, priv_pem_size);
   JSValue private_key_data = JS_NewArrayBufferCopy(ctx, priv_pem_copy, priv_pem_size);
@@ -1463,8 +1480,8 @@ static JSValue jsrt_generate_rsa_key_pair(JSContext* ctx, JSValueConst* argv, js
 
   // For OpenSSL 3.x, use parameter setting API
   OSSL_PARAM params[3];
-  OSSL_PARAM *p = params;
-  
+  OSSL_PARAM* p = params;
+
   // Convert BIGNUM to buffer for OSSL_PARAM
   int bn_size = BN_num_bytes(public_exp);
   uint8_t* bn_buf = malloc(bn_size);
@@ -1474,7 +1491,7 @@ static JSValue jsrt_generate_rsa_key_pair(JSContext* ctx, JSValueConst* argv, js
     return JS_ThrowInternalError(ctx, "Failed to allocate memory for public exponent buffer");
   }
   BN_bn2bin(public_exp, bn_buf);
-  
+
   *p++ = OSSL_PARAM_construct_int(OSSL_PKEY_PARAM_RSA_BITS, &modulus_length);
   *p++ = OSSL_PARAM_construct_BN(OSSL_PKEY_PARAM_RSA_E, bn_buf, bn_size);
   *p = OSSL_PARAM_construct_end();
@@ -1535,14 +1552,15 @@ static JSValue jsrt_generate_rsa_key_pair(JSContext* ctx, JSValueConst* argv, js
   }
   JS_SetPropertyStr(ctx, pub_alg_obj, "name", JS_NewString(ctx, alg_name));
   JS_SetPropertyStr(ctx, pub_alg_obj, "modulusLength", JS_NewInt32(ctx, modulus_length));
-  JS_SetPropertyStr(ctx, pub_alg_obj, "publicExponent", JS_NewArrayBuffer(ctx, public_exponent_data, public_exponent_size, NULL, NULL, 0));
-  
+  JS_SetPropertyStr(ctx, pub_alg_obj, "publicExponent",
+                    JS_NewArrayBuffer(ctx, public_exponent_data, public_exponent_size, NULL, NULL, 0));
+
   if (alg == JSRT_CRYPTO_ALG_RSA_OAEP || alg == JSRT_CRYPTO_ALG_RSA_PSS) {
     JSValue hash_obj = JS_NewObject(ctx);
     JS_SetPropertyStr(ctx, hash_obj, "name", JS_NewString(ctx, hash_name));
     JS_SetPropertyStr(ctx, pub_alg_obj, "hash", hash_obj);
   }
-  
+
   JS_SetPropertyStr(ctx, public_key, "algorithm", pub_alg_obj);
 
   // Serialize public key to DER format using BIO
@@ -1591,7 +1609,7 @@ static JSValue jsrt_generate_rsa_key_pair(JSContext* ctx, JSValueConst* argv, js
   JSValue private_key = JS_NewObject(ctx);
   JS_SetPropertyStr(ctx, private_key, "type", JS_NewString(ctx, "private"));
   JS_SetPropertyStr(ctx, private_key, "extractable", JS_NewBool(ctx, false));  // Private keys typically not extractable
-  
+
   // Create algorithm object for private key (same as public key)
   JSValue priv_alg_obj = JS_DupValue(ctx, pub_alg_obj);
   JS_SetPropertyStr(ctx, private_key, "algorithm", priv_alg_obj);
@@ -1697,7 +1715,7 @@ static JSValue jsrt_rsa_encrypt(JSContext* ctx, JSValueConst* argv, jsrt_crypto_
     return JS_ThrowTypeError(ctx, "Key is not an RSA key");
   }
 
-  // Get hash algorithm from algorithm object  
+  // Get hash algorithm from algorithm object
   const char* hash_name = "sha256";  // Default OpenSSL name
   JSValue hash_val = JS_GetPropertyStr(ctx, argv[0], "hash");
   if (!JS_IsException(hash_val)) {
@@ -1708,7 +1726,7 @@ static JSValue jsrt_rsa_encrypt(JSContext* ctx, JSValueConst* argv, jsrt_crypto_
       if (strcmp(temp_hash, "SHA-1") == 0) {
         hash_name = "sha1";
       } else if (strcmp(temp_hash, "SHA-256") == 0) {
-        hash_name = "sha256"; 
+        hash_name = "sha256";
       } else if (strcmp(temp_hash, "SHA-384") == 0) {
         hash_name = "sha384";
       } else if (strcmp(temp_hash, "SHA-512") == 0) {
@@ -1805,7 +1823,7 @@ static JSValue jsrt_rsa_encrypt(JSContext* ctx, JSValueConst* argv, jsrt_crypto_
         return JS_ThrowInternalError(ctx, "Failed to allocate memory for label copy");
       }
       memcpy(label_copy, label_data, label_size);
-      
+
       if (EVP_PKEY_CTX_set0_rsa_oaep_label(encrypt_ctx, label_copy, label_size) <= 0) {
         free(label_copy);
         EVP_PKEY_CTX_free(encrypt_ctx);
@@ -1914,7 +1932,7 @@ static JSValue jsrt_rsa_decrypt(JSContext* ctx, JSValueConst* argv, jsrt_crypto_
     return JS_ThrowTypeError(ctx, "Key is not an RSA key");
   }
 
-  // Get hash algorithm from algorithm object  
+  // Get hash algorithm from algorithm object
   const char* hash_name = "sha256";  // Default OpenSSL name
   JSValue hash_val = JS_GetPropertyStr(ctx, argv[0], "hash");
   if (!JS_IsException(hash_val)) {
@@ -1925,7 +1943,7 @@ static JSValue jsrt_rsa_decrypt(JSContext* ctx, JSValueConst* argv, jsrt_crypto_
       if (strcmp(temp_hash, "SHA-1") == 0) {
         hash_name = "sha1";
       } else if (strcmp(temp_hash, "SHA-256") == 0) {
-        hash_name = "sha256"; 
+        hash_name = "sha256";
       } else if (strcmp(temp_hash, "SHA-384") == 0) {
         hash_name = "sha384";
       } else if (strcmp(temp_hash, "SHA-512") == 0) {
@@ -2022,7 +2040,7 @@ static JSValue jsrt_rsa_decrypt(JSContext* ctx, JSValueConst* argv, jsrt_crypto_
         return JS_ThrowInternalError(ctx, "Failed to allocate memory for label copy");
       }
       memcpy(label_copy, label_data, label_size);
-      
+
       if (EVP_PKEY_CTX_set0_rsa_oaep_label(decrypt_ctx, label_copy, label_size) <= 0) {
         free(label_copy);
         EVP_PKEY_CTX_free(decrypt_ctx);
@@ -2131,7 +2149,7 @@ static JSValue jsrt_rsa_sign(JSContext* ctx, JSValueConst* argv, jsrt_crypto_alg
     return JS_ThrowTypeError(ctx, "Key is not an RSA key");
   }
 
-  // Get hash algorithm from algorithm object  
+  // Get hash algorithm from algorithm object
   const char* hash_name = "sha256";  // Default OpenSSL name
   JSValue hash_val = JS_GetPropertyStr(ctx, argv[0], "hash");
   if (!JS_IsException(hash_val)) {
@@ -2142,7 +2160,7 @@ static JSValue jsrt_rsa_sign(JSContext* ctx, JSValueConst* argv, jsrt_crypto_alg
       if (strcmp(temp_hash, "SHA-1") == 0) {
         hash_name = "sha1";
       } else if (strcmp(temp_hash, "SHA-256") == 0) {
-        hash_name = "sha256"; 
+        hash_name = "sha256";
       } else if (strcmp(temp_hash, "SHA-384") == 0) {
         hash_name = "sha384";
       } else if (strcmp(temp_hash, "SHA-512") == 0) {
@@ -2210,7 +2228,7 @@ static JSValue jsrt_rsa_sign(JSContext* ctx, JSValueConst* argv, jsrt_crypto_alg
       EVP_PKEY_free(pkey);
       return JS_ThrowInternalError(ctx, "Failed to set RSA PSS padding");
     }
-    
+
     // Get salt length from algorithm object, default to digest length
     int salt_length = RSA_PSS_SALTLEN_DIGEST;
     JSValue salt_len_val = JS_GetPropertyStr(ctx, argv[0], "saltLength");
@@ -2221,7 +2239,7 @@ static JSValue jsrt_rsa_sign(JSContext* ctx, JSValueConst* argv, jsrt_crypto_alg
       }
     }
     JS_FreeValue(ctx, salt_len_val);
-    
+
     if (EVP_PKEY_CTX_set_rsa_pss_saltlen(sign_ctx, salt_length) <= 0) {
       EVP_MD_CTX_free(md_ctx);
       EVP_PKEY_free(pkey);
@@ -2351,7 +2369,7 @@ static JSValue jsrt_rsa_verify(JSContext* ctx, JSValueConst* argv, jsrt_crypto_a
     return JS_ThrowTypeError(ctx, "Key is not an RSA key");
   }
 
-  // Get hash algorithm from algorithm object  
+  // Get hash algorithm from algorithm object
   const char* hash_name = "sha256";  // Default OpenSSL name
   JSValue hash_val = JS_GetPropertyStr(ctx, argv[0], "hash");
   if (!JS_IsException(hash_val)) {
@@ -2362,7 +2380,7 @@ static JSValue jsrt_rsa_verify(JSContext* ctx, JSValueConst* argv, jsrt_crypto_a
       if (strcmp(temp_hash, "SHA-1") == 0) {
         hash_name = "sha1";
       } else if (strcmp(temp_hash, "SHA-256") == 0) {
-        hash_name = "sha256"; 
+        hash_name = "sha256";
       } else if (strcmp(temp_hash, "SHA-384") == 0) {
         hash_name = "sha384";
       } else if (strcmp(temp_hash, "SHA-512") == 0) {
@@ -2430,7 +2448,7 @@ static JSValue jsrt_rsa_verify(JSContext* ctx, JSValueConst* argv, jsrt_crypto_a
       EVP_PKEY_free(pkey);
       return JS_ThrowInternalError(ctx, "Failed to set RSA PSS padding");
     }
-    
+
     // Get salt length from algorithm object, default to digest length
     int salt_length = RSA_PSS_SALTLEN_DIGEST;
     JSValue salt_len_val = JS_GetPropertyStr(ctx, argv[0], "saltLength");
@@ -2441,7 +2459,7 @@ static JSValue jsrt_rsa_verify(JSContext* ctx, JSValueConst* argv, jsrt_crypto_a
       }
     }
     JS_FreeValue(ctx, salt_len_val);
-    
+
     if (EVP_PKEY_CTX_set_rsa_pss_saltlen(verify_ctx, salt_length) <= 0) {
       EVP_MD_CTX_free(md_ctx);
       EVP_PKEY_free(pkey);
@@ -2513,7 +2531,7 @@ static JSValue jsrt_ecdsa_sign(JSContext* ctx, JSValueConst* argv, jsrt_crypto_a
       if (strcmp(temp_hash, "SHA-1") == 0) {
         hash_name = "sha1";
       } else if (strcmp(temp_hash, "SHA-256") == 0) {
-        hash_name = "sha256"; 
+        hash_name = "sha256";
       } else if (strcmp(temp_hash, "SHA-384") == 0) {
         hash_name = "sha384";
       } else if (strcmp(temp_hash, "SHA-512") == 0) {
@@ -2678,7 +2696,7 @@ static JSValue jsrt_ecdsa_verify(JSContext* ctx, JSValueConst* argv, jsrt_crypto
       if (strcmp(temp_hash, "SHA-1") == 0) {
         hash_name = "sha1";
       } else if (strcmp(temp_hash, "SHA-256") == 0) {
-        hash_name = "sha256"; 
+        hash_name = "sha256";
       } else if (strcmp(temp_hash, "SHA-384") == 0) {
         hash_name = "sha384";
       } else if (strcmp(temp_hash, "SHA-512") == 0) {
@@ -2786,7 +2804,7 @@ static JSValue jsrt_ecdsa_verify(JSContext* ctx, JSValueConst* argv, jsrt_crypto
 
   // Verify signature
   int verify_result = EVP_DigestVerifyFinal(md_ctx, signature_data, signature_size);
-  
+
   // Clean up
   EVP_MD_CTX_free(md_ctx);
   EVP_PKEY_free(pkey);
@@ -2819,11 +2837,11 @@ static JSValue jsrt_ecdh_derive_key(JSContext* ctx, JSValueConst* argv, jsrt_cry
   if (JS_ToInt32(ctx, &length, argv[2]) < 0) {
     return JS_ThrowTypeError(ctx, "Invalid length parameter");
   }
-  
+
   if (length <= 0 || length % 8 != 0) {
     return JS_ThrowTypeError(ctx, "Length must be a positive multiple of 8");
   }
-  
+
   size_t byte_length = length / 8;
 
   // Get the private key from the base key (argv[1])
@@ -3006,7 +3024,7 @@ JSValue jsrt_subtle_generateKey(JSContext* ctx, JSValueConst this_val, int argc,
 
   // Parse algorithm
   jsrt_crypto_algorithm_t alg = jsrt_crypto_parse_algorithm(ctx, argv[0]);
-  
+
   // Provide specific error messages for different unsupported algorithms
   switch (alg) {
     case JSRT_CRYPTO_ALG_AES_CBC:
@@ -3037,7 +3055,7 @@ JSValue jsrt_subtle_generateKey(JSContext* ctx, JSValueConst this_val, int argc,
   // Handle different algorithm types
   if (alg == JSRT_CRYPTO_ALG_HMAC) {
     return jsrt_generate_hmac_key(ctx, argv);
-  } else if (alg == JSRT_CRYPTO_ALG_RSA_OAEP || alg == JSRT_CRYPTO_ALG_RSA_PSS || 
+  } else if (alg == JSRT_CRYPTO_ALG_RSA_OAEP || alg == JSRT_CRYPTO_ALG_RSA_PSS ||
              alg == JSRT_CRYPTO_ALG_RSASSA_PKCS1_V1_5 || alg == JSRT_CRYPTO_ALG_RSA_PKCS1_V1_5) {
     return jsrt_generate_rsa_key_pair(ctx, argv, alg);
   } else if (alg == JSRT_CRYPTO_ALG_ECDSA || alg == JSRT_CRYPTO_ALG_ECDH) {
@@ -3049,7 +3067,7 @@ JSValue jsrt_subtle_generateKey(JSContext* ctx, JSValueConst this_val, int argc,
     if (JS_IsException(length_val)) {
       return length_val;
     }
-    
+
     int32_t key_length;
     if (JS_ToInt32(ctx, &key_length, length_val) < 0) {
       JS_FreeValue(ctx, length_val);
@@ -3063,61 +3081,61 @@ JSValue jsrt_subtle_generateKey(JSContext* ctx, JSValueConst this_val, int argc,
     }
 
     // Create promise for async operation
-  JSValue resolving_funcs[2];
-  JSValue promise = JS_NewPromiseCapability(ctx, resolving_funcs);
-  if (JS_IsException(promise)) {
+    JSValue resolving_funcs[2];
+    JSValue promise = JS_NewPromiseCapability(ctx, resolving_funcs);
+    if (JS_IsException(promise)) {
+      return promise;
+    }
+
+    // Generate AES key using unified backend
+    uint8_t* key_data;
+    size_t key_data_length;
+    int result = jsrt_crypto_generate_aes_key(key_length, &key_data, &key_data_length);
+
+    if (result != 0) {
+      // Reject promise
+      JSValue error = JS_NewError(ctx);
+      JS_SetPropertyStr(ctx, error, "message", JS_NewString(ctx, "Failed to generate AES key"));
+      JSValue args[1] = {error};
+      JS_Call(ctx, resolving_funcs[1], JS_UNDEFINED, 1, args);
+      JS_FreeValue(ctx, args[0]);
+    } else {
+      // Create CryptoKey object
+      JSValue crypto_key = JS_NewObject(ctx);
+      JS_SetPropertyStr(ctx, crypto_key, "type", JS_NewString(ctx, "secret"));
+      JS_SetPropertyStr(ctx, crypto_key, "extractable", JS_NewBool(ctx, true));
+
+      // Create algorithm object
+      JSValue alg_obj = JS_NewObject(ctx);
+      JS_SetPropertyStr(ctx, alg_obj, "name", JS_NewString(ctx, "AES-CBC"));
+      JS_SetPropertyStr(ctx, alg_obj, "length", JS_NewInt32(ctx, key_length));
+      JS_SetPropertyStr(ctx, crypto_key, "algorithm", alg_obj);
+
+      // Store key data (simplified - in real implementation this should be more secure)
+      JSValue key_buffer = JS_NewArrayBuffer(ctx, key_data, key_data_length, NULL, NULL, 0);
+      JS_SetPropertyStr(ctx, crypto_key, "_keyData", key_buffer);
+
+      // Resolve promise with CryptoKey
+      JSValue args[1] = {crypto_key};
+      JS_Call(ctx, resolving_funcs[0], JS_UNDEFINED, 1, args);
+      JS_FreeValue(ctx, args[0]);
+    }
+
+    JS_FreeValue(ctx, resolving_funcs[0]);
+    JS_FreeValue(ctx, resolving_funcs[1]);
+
     return promise;
-  }
-
-  // Generate AES key using unified backend
-  uint8_t* key_data;
-  size_t key_data_length;
-  int result = jsrt_crypto_generate_aes_key(key_length, &key_data, &key_data_length);
-  
-  if (result != 0) {
-    // Reject promise
-    JSValue error = JS_NewError(ctx);
-    JS_SetPropertyStr(ctx, error, "message", JS_NewString(ctx, "Failed to generate AES key"));
-    JSValue args[1] = {error};
-    JS_Call(ctx, resolving_funcs[1], JS_UNDEFINED, 1, args);
-    JS_FreeValue(ctx, args[0]);
-  } else {
-    // Create CryptoKey object
-    JSValue crypto_key = JS_NewObject(ctx);
-    JS_SetPropertyStr(ctx, crypto_key, "type", JS_NewString(ctx, "secret"));
-    JS_SetPropertyStr(ctx, crypto_key, "extractable", JS_NewBool(ctx, true));
-    
-    // Create algorithm object
-    JSValue alg_obj = JS_NewObject(ctx);
-    JS_SetPropertyStr(ctx, alg_obj, "name", JS_NewString(ctx, "AES-CBC"));
-    JS_SetPropertyStr(ctx, alg_obj, "length", JS_NewInt32(ctx, key_length));
-    JS_SetPropertyStr(ctx, crypto_key, "algorithm", alg_obj);
-    
-    // Store key data (simplified - in real implementation this should be more secure)
-    JSValue key_buffer = JS_NewArrayBuffer(ctx, key_data, key_data_length, NULL, NULL, 0);
-    JS_SetPropertyStr(ctx, crypto_key, "_keyData", key_buffer);
-    
-    // Resolve promise with CryptoKey
-    JSValue args[1] = {crypto_key};
-    JS_Call(ctx, resolving_funcs[0], JS_UNDEFINED, 1, args);
-    JS_FreeValue(ctx, args[0]);
-  }
-
-  JS_FreeValue(ctx, resolving_funcs[0]);
-  JS_FreeValue(ctx, resolving_funcs[1]);
-
-  return promise;
-  } // End of AES key generation path
+  }  // End of AES key generation path
 }
 
 JSValue jsrt_subtle_importKey(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
   if (argc < 5) {
     return JS_ThrowTypeError(ctx, "importKey requires 5 arguments");
   }
-  
+
   // Parse the algorithm from the third argument to provide specific error messages
   jsrt_crypto_algorithm_t alg = jsrt_crypto_parse_algorithm(ctx, argv[2]);
-  
+
   switch (alg) {
     case JSRT_CRYPTO_ALG_AES_CBC:
       return JS_ThrowTypeError(ctx, "AES-CBC key import not yet implemented in static build");
@@ -3151,7 +3169,7 @@ static JSValue jsrt_import_pbkdf2_key(JSContext* ctx, JSValueConst* argv) {
   if (JS_IsException(promise)) {
     return JS_EXCEPTION;
   }
-  
+
   // Extract format (argv[0]), keyData (argv[1]), algorithm (argv[2]), extractable (argv[3]), usages (argv[4])
   const char* format = JS_ToCString(ctx, argv[0]);
   if (!format) {
@@ -3163,7 +3181,7 @@ static JSValue jsrt_import_pbkdf2_key(JSContext* ctx, JSValueConst* argv) {
     JS_FreeValue(ctx, error);
     return promise;
   }
-  
+
   // Check if format is 'raw' for PBKDF2
   if (strcmp(format, "raw") != 0) {
     JS_FreeCString(ctx, format);
@@ -3176,7 +3194,7 @@ static JSValue jsrt_import_pbkdf2_key(JSContext* ctx, JSValueConst* argv) {
     return promise;
   }
   JS_FreeCString(ctx, format);
-  
+
   // Extract key data
   JSValue key_data = argv[1];
   size_t key_size;
@@ -3190,7 +3208,7 @@ static JSValue jsrt_import_pbkdf2_key(JSContext* ctx, JSValueConst* argv) {
     JS_FreeValue(ctx, error);
     return promise;
   }
-  
+
   // For PBKDF2, we just store the raw key data as-is
   uint8_t* pbkdf2_key_copy = js_malloc(ctx, key_size);
   if (!pbkdf2_key_copy) {
@@ -3203,10 +3221,10 @@ static JSValue jsrt_import_pbkdf2_key(JSContext* ctx, JSValueConst* argv) {
     return promise;
   }
   memcpy(pbkdf2_key_copy, raw_key_data, key_size);
-  
+
   JSValue pbkdf2_key_data = JS_NewArrayBufferCopy(ctx, pbkdf2_key_copy, key_size);
   js_free(ctx, pbkdf2_key_copy);
-  
+
   if (JS_IsException(pbkdf2_key_data)) {
     JSValue error = JS_NewError(ctx);
     JS_SetPropertyStr(ctx, error, "message", JS_NewString(ctx, "Failed to create key data"));
@@ -3216,27 +3234,27 @@ static JSValue jsrt_import_pbkdf2_key(JSContext* ctx, JSValueConst* argv) {
     JS_FreeValue(ctx, error);
     return promise;
   }
-  
+
   // Create CryptoKey object
   JSValue crypto_key = JS_NewObject(ctx);
   JS_SetPropertyStr(ctx, crypto_key, "type", JS_NewString(ctx, "secret"));
-  JS_SetPropertyStr(ctx, crypto_key, "extractable", JS_DupValue(ctx, argv[3])); // extractable
-  JS_SetPropertyStr(ctx, crypto_key, "usages", JS_DupValue(ctx, argv[4])); // usages
+  JS_SetPropertyStr(ctx, crypto_key, "extractable", JS_DupValue(ctx, argv[3]));  // extractable
+  JS_SetPropertyStr(ctx, crypto_key, "usages", JS_DupValue(ctx, argv[4]));       // usages
   JS_SetPropertyStr(ctx, crypto_key, "_keyData", pbkdf2_key_data);
-  
+
   // Create algorithm object
   JSValue algorithm = JS_NewObject(ctx);
   JS_SetPropertyStr(ctx, algorithm, "name", JS_NewString(ctx, "PBKDF2"));
   JS_SetPropertyStr(ctx, crypto_key, "algorithm", algorithm);
-  
+
   // Resolve the promise with the crypto key
   JS_Call(ctx, resolving_funcs[0], JS_UNDEFINED, 1, &crypto_key);
-  
+
   // Clean up
   JS_FreeValue(ctx, resolving_funcs[0]);
   JS_FreeValue(ctx, resolving_funcs[1]);
   JS_FreeValue(ctx, crypto_key);
-  
+
   return promise;
 }
 
@@ -3247,7 +3265,7 @@ static JSValue jsrt_ecdh_derive_key_to_key(JSContext* ctx, JSValueConst* argv, j
   if (JS_IsException(promise)) {
     return JS_EXCEPTION;
   }
-  
+
   // Extract public key from algorithm object
   JSValue algorithm = argv[0];
   JSValue public_key_val = JS_GetPropertyStr(ctx, algorithm, "public");
@@ -3261,7 +3279,7 @@ static JSValue jsrt_ecdh_derive_key_to_key(JSContext* ctx, JSValueConst* argv, j
     JS_FreeValue(ctx, public_key_val);
     return promise;
   }
-  
+
   // Extract private key
   JSValue base_key = argv[1];
   JSValue private_key_data = JS_GetPropertyStr(ctx, base_key, "_keyData");
@@ -3276,7 +3294,7 @@ static JSValue jsrt_ecdh_derive_key_to_key(JSContext* ctx, JSValueConst* argv, j
     JS_FreeValue(ctx, private_key_data);
     return promise;
   }
-  
+
   // Extract target key algorithm
   JSValue derived_key_algorithm = argv[2];
   const char* target_alg_name = JS_ToCString(ctx, JS_GetPropertyStr(ctx, derived_key_algorithm, "name"));
@@ -3291,14 +3309,14 @@ static JSValue jsrt_ecdh_derive_key_to_key(JSContext* ctx, JSValueConst* argv, j
     JS_FreeValue(ctx, private_key_data);
     return promise;
   }
-  
+
   // Extract target key length
   JSValue length_val = JS_GetPropertyStr(ctx, derived_key_algorithm, "length");
   int32_t key_length = 0;
   if (JS_ToInt32(ctx, &key_length, length_val) < 0) {
-    key_length = 256; // default
+    key_length = 256;  // default
   }
-  
+
   // Parse key data from base key and public key (same logic as deriveBits)
   size_t private_der_size;
   uint8_t* private_der_data = NULL;
@@ -3315,7 +3333,7 @@ static JSValue jsrt_ecdh_derive_key_to_key(JSContext* ctx, JSValueConst* argv, j
     JS_FreeCString(ctx, target_alg_name);
     return promise;
   }
-  
+
   JSValue public_key_data = JS_GetPropertyStr(ctx, public_key_val, "_keyData");
   size_t public_der_size;
   uint8_t* public_der_data = NULL;
@@ -3333,7 +3351,7 @@ static JSValue jsrt_ecdh_derive_key_to_key(JSContext* ctx, JSValueConst* argv, j
     JS_FreeCString(ctx, target_alg_name);
     return promise;
   }
-  
+
   // Load private key from PEM data
   BIO* private_bio = BIO_new_mem_buf(private_der_data, (int)private_der_size);
   if (!private_bio) {
@@ -3352,7 +3370,7 @@ static JSValue jsrt_ecdh_derive_key_to_key(JSContext* ctx, JSValueConst* argv, j
   }
   EVP_PKEY* private_pkey = PEM_read_bio_PrivateKey(private_bio, NULL, NULL, NULL);
   BIO_free(private_bio);
-  
+
   if (!private_pkey) {
     JSValue error = JS_NewError(ctx);
     JS_SetPropertyStr(ctx, error, "message", JS_NewString(ctx, "Failed to load private key"));
@@ -3367,7 +3385,7 @@ static JSValue jsrt_ecdh_derive_key_to_key(JSContext* ctx, JSValueConst* argv, j
     JS_FreeCString(ctx, target_alg_name);
     return promise;
   }
-  
+
   // Load public key from PEM data
   BIO* public_bio = BIO_new_mem_buf(public_der_data, (int)public_der_size);
   if (!public_bio) {
@@ -3387,7 +3405,7 @@ static JSValue jsrt_ecdh_derive_key_to_key(JSContext* ctx, JSValueConst* argv, j
   }
   EVP_PKEY* public_pkey = PEM_read_bio_PUBKEY(public_bio, NULL, NULL, NULL);
   BIO_free(public_bio);
-  
+
   if (!public_pkey) {
     EVP_PKEY_free(private_pkey);
     JSValue error = JS_NewError(ctx);
@@ -3403,7 +3421,7 @@ static JSValue jsrt_ecdh_derive_key_to_key(JSContext* ctx, JSValueConst* argv, j
     JS_FreeCString(ctx, target_alg_name);
     return promise;
   }
-  
+
   // Create derivation context
   EVP_PKEY_CTX* derive_ctx = EVP_PKEY_CTX_new(private_pkey, NULL);
   if (!derive_ctx) {
@@ -3422,7 +3440,7 @@ static JSValue jsrt_ecdh_derive_key_to_key(JSContext* ctx, JSValueConst* argv, j
     JS_FreeCString(ctx, target_alg_name);
     return promise;
   }
-  
+
   if (EVP_PKEY_derive_init(derive_ctx) <= 0) {
     EVP_PKEY_CTX_free(derive_ctx);
     EVP_PKEY_free(private_pkey);
@@ -3440,7 +3458,7 @@ static JSValue jsrt_ecdh_derive_key_to_key(JSContext* ctx, JSValueConst* argv, j
     JS_FreeCString(ctx, target_alg_name);
     return promise;
   }
-  
+
   if (EVP_PKEY_derive_set_peer(derive_ctx, public_pkey) <= 0) {
     EVP_PKEY_CTX_free(derive_ctx);
     EVP_PKEY_free(private_pkey);
@@ -3458,7 +3476,7 @@ static JSValue jsrt_ecdh_derive_key_to_key(JSContext* ctx, JSValueConst* argv, j
     JS_FreeCString(ctx, target_alg_name);
     return promise;
   }
-  
+
   // Get the length of the shared secret
   size_t secret_len = 0;
   if (EVP_PKEY_derive(derive_ctx, NULL, &secret_len) <= 0) {
@@ -3478,7 +3496,7 @@ static JSValue jsrt_ecdh_derive_key_to_key(JSContext* ctx, JSValueConst* argv, j
     JS_FreeCString(ctx, target_alg_name);
     return promise;
   }
-  
+
   // Derive the shared secret
   uint8_t* secret = js_malloc(ctx, secret_len);
   if (!secret) {
@@ -3498,7 +3516,7 @@ static JSValue jsrt_ecdh_derive_key_to_key(JSContext* ctx, JSValueConst* argv, j
     JS_FreeCString(ctx, target_alg_name);
     return promise;
   }
-  
+
   if (EVP_PKEY_derive(derive_ctx, secret, &secret_len) <= 0) {
     js_free(ctx, secret);
     EVP_PKEY_CTX_free(derive_ctx);
@@ -3517,19 +3535,19 @@ static JSValue jsrt_ecdh_derive_key_to_key(JSContext* ctx, JSValueConst* argv, j
     JS_FreeCString(ctx, target_alg_name);
     return promise;
   }
-  
+
   // Clean up OpenSSL resources
   EVP_PKEY_CTX_free(derive_ctx);
   EVP_PKEY_free(private_pkey);
   EVP_PKEY_free(public_pkey);
-  
+
   // Use shared secret to create AES key - for simplicity, we'll use the shared secret directly
   // In a full implementation, you'd want to use a KDF like HKDF
   size_t aes_key_bytes = key_length / 8;  // Convert bits to bytes
   if (aes_key_bytes > secret_len) {
     aes_key_bytes = secret_len;  // Use available secret length
   }
-  
+
   // Create key data for the derived AES key
   uint8_t* aes_key_copy = js_malloc(ctx, aes_key_bytes);
   if (!aes_key_copy) {
@@ -3547,13 +3565,13 @@ static JSValue jsrt_ecdh_derive_key_to_key(JSContext* ctx, JSValueConst* argv, j
     JS_FreeCString(ctx, target_alg_name);
     return promise;
   }
-  
+
   memcpy(aes_key_copy, secret, aes_key_bytes);
   js_free(ctx, secret);
-  
+
   JSValue aes_key_data = JS_NewArrayBufferCopy(ctx, aes_key_copy, aes_key_bytes);
   js_free(ctx, aes_key_copy);
-  
+
   if (JS_IsException(aes_key_data)) {
     JSValue error = JS_NewError(ctx);
     JS_SetPropertyStr(ctx, error, "message", JS_NewString(ctx, "Failed to create AES key data"));
@@ -3568,27 +3586,27 @@ static JSValue jsrt_ecdh_derive_key_to_key(JSContext* ctx, JSValueConst* argv, j
     JS_FreeCString(ctx, target_alg_name);
     return promise;
   }
-  
+
   // Parse extractable and usages
   JSValue extractable = argv[3];
   JSValue usages = argv[4];
-  
+
   // Create CryptoKey object for the derived AES key
   JSValue derived_key = JS_NewObject(ctx);
   JS_SetPropertyStr(ctx, derived_key, "type", JS_NewString(ctx, "secret"));
   JS_SetPropertyStr(ctx, derived_key, "extractable", JS_DupValue(ctx, extractable));
   JS_SetPropertyStr(ctx, derived_key, "usages", JS_DupValue(ctx, usages));
   JS_SetPropertyStr(ctx, derived_key, "key_data", aes_key_data);
-  
+
   // Create algorithm object for the derived key
   JSValue derived_alg = JS_NewObject(ctx);
   JS_SetPropertyStr(ctx, derived_alg, "name", JS_NewString(ctx, target_alg_name));
   JS_SetPropertyStr(ctx, derived_alg, "length", JS_NewInt32(ctx, key_length));
   JS_SetPropertyStr(ctx, derived_key, "algorithm", derived_alg);
-  
+
   // Resolve the promise with the derived key
   JS_Call(ctx, resolving_funcs[0], JS_UNDEFINED, 1, &derived_key);
-  
+
   // Clean up
   JS_FreeValue(ctx, resolving_funcs[0]);
   JS_FreeValue(ctx, resolving_funcs[1]);
@@ -3598,7 +3616,7 @@ static JSValue jsrt_ecdh_derive_key_to_key(JSContext* ctx, JSValueConst* argv, j
   JS_FreeValue(ctx, public_key_data);
   JS_FreeValue(ctx, length_val);
   JS_FreeCString(ctx, target_alg_name);
-  
+
   return promise;
 }
 
@@ -3609,10 +3627,10 @@ static JSValue jsrt_pbkdf2_derive_key(JSContext* ctx, JSValueConst* argv, jsrt_c
   if (JS_IsException(promise)) {
     return JS_EXCEPTION;
   }
-  
+
   // Extract PBKDF2 parameters from algorithm object (argv[0])
   JSValue algorithm = argv[0];
-  
+
   // Extract salt
   JSValue salt_val = JS_GetPropertyStr(ctx, algorithm, "salt");
   if (JS_IsException(salt_val)) {
@@ -3625,7 +3643,7 @@ static JSValue jsrt_pbkdf2_derive_key(JSContext* ctx, JSValueConst* argv, jsrt_c
     JS_FreeValue(ctx, salt_val);
     return promise;
   }
-  
+
   size_t salt_size;
   uint8_t* salt_data = NULL;
   if (!jsrt_get_array_buffer_data(ctx, salt_val, &salt_data, &salt_size)) {
@@ -3638,7 +3656,7 @@ static JSValue jsrt_pbkdf2_derive_key(JSContext* ctx, JSValueConst* argv, jsrt_c
     JS_FreeValue(ctx, salt_val);
     return promise;
   }
-  
+
   // Extract iterations
   JSValue iterations_val = JS_GetPropertyStr(ctx, algorithm, "iterations");
   int32_t iterations = 0;
@@ -3653,7 +3671,7 @@ static JSValue jsrt_pbkdf2_derive_key(JSContext* ctx, JSValueConst* argv, jsrt_c
     JS_FreeValue(ctx, iterations_val);
     return promise;
   }
-  
+
   // Extract hash algorithm
   JSValue hash_val = JS_GetPropertyStr(ctx, algorithm, "hash");
   const char* hash_name = JS_ToCString(ctx, hash_val);
@@ -3669,7 +3687,7 @@ static JSValue jsrt_pbkdf2_derive_key(JSContext* ctx, JSValueConst* argv, jsrt_c
     JS_FreeValue(ctx, hash_val);
     return promise;
   }
-  
+
   // Map WebCrypto hash names to OpenSSL digest names
   const EVP_MD* digest = NULL;
   if (strcmp(hash_name, "SHA-256") == 0) {
@@ -3694,7 +3712,7 @@ static JSValue jsrt_pbkdf2_derive_key(JSContext* ctx, JSValueConst* argv, jsrt_c
     return promise;
   }
   JS_FreeCString(ctx, hash_name);
-  
+
   // Extract base key (argv[1])
   JSValue base_key = argv[1];
   JSValue base_key_data = JS_GetPropertyStr(ctx, base_key, "_keyData");
@@ -3711,7 +3729,7 @@ static JSValue jsrt_pbkdf2_derive_key(JSContext* ctx, JSValueConst* argv, jsrt_c
     JS_FreeValue(ctx, base_key_data);
     return promise;
   }
-  
+
   size_t password_size;
   uint8_t* password_data = NULL;
   if (!jsrt_get_array_buffer_data(ctx, base_key_data, &password_data, &password_size)) {
@@ -3727,7 +3745,7 @@ static JSValue jsrt_pbkdf2_derive_key(JSContext* ctx, JSValueConst* argv, jsrt_c
     JS_FreeValue(ctx, base_key_data);
     return promise;
   }
-  
+
   // Extract derived key algorithm (argv[2])
   JSValue derived_key_algorithm = argv[2];
   const char* target_alg_name = JS_ToCString(ctx, JS_GetPropertyStr(ctx, derived_key_algorithm, "name"));
@@ -3744,15 +3762,15 @@ static JSValue jsrt_pbkdf2_derive_key(JSContext* ctx, JSValueConst* argv, jsrt_c
     JS_FreeValue(ctx, base_key_data);
     return promise;
   }
-  
+
   // Extract target key length
   JSValue length_val = JS_GetPropertyStr(ctx, derived_key_algorithm, "length");
   int32_t key_length_bits = 0;
   if (JS_ToInt32(ctx, &key_length_bits, length_val) < 0 || key_length_bits <= 0) {
-    key_length_bits = 256; // default to 256 bits
+    key_length_bits = 256;  // default to 256 bits
   }
   size_t key_length_bytes = key_length_bits / 8;
-  
+
   // Perform PBKDF2 key derivation
   uint8_t* derived_key_data = js_malloc(ctx, key_length_bytes);
   if (!derived_key_data) {
@@ -3770,12 +3788,10 @@ static JSValue jsrt_pbkdf2_derive_key(JSContext* ctx, JSValueConst* argv, jsrt_c
     JS_FreeCString(ctx, target_alg_name);
     return promise;
   }
-  
-  int result = PKCS5_PBKDF2_HMAC((const char*)password_data, password_size,
-                                salt_data, salt_size,
-                                iterations, digest,
-                                key_length_bytes, derived_key_data);
-  
+
+  int result = PKCS5_PBKDF2_HMAC((const char*)password_data, password_size, salt_data, salt_size, iterations, digest,
+                                 key_length_bytes, derived_key_data);
+
   if (result != 1) {
     js_free(ctx, derived_key_data);
     JSValue error = JS_NewError(ctx);
@@ -3792,11 +3808,11 @@ static JSValue jsrt_pbkdf2_derive_key(JSContext* ctx, JSValueConst* argv, jsrt_c
     JS_FreeCString(ctx, target_alg_name);
     return promise;
   }
-  
+
   // Create derived key ArrayBuffer
   JSValue derived_key_buffer = JS_NewArrayBufferCopy(ctx, derived_key_data, key_length_bytes);
   js_free(ctx, derived_key_data);
-  
+
   if (JS_IsException(derived_key_buffer)) {
     JSValue error = JS_NewError(ctx);
     JS_SetPropertyStr(ctx, error, "message", JS_NewString(ctx, "Failed to create derived key data"));
@@ -3812,27 +3828,27 @@ static JSValue jsrt_pbkdf2_derive_key(JSContext* ctx, JSValueConst* argv, jsrt_c
     JS_FreeCString(ctx, target_alg_name);
     return promise;
   }
-  
+
   // Parse extractable and usages
   JSValue extractable = argv[3];
   JSValue usages = argv[4];
-  
+
   // Create CryptoKey object for the derived key
   JSValue crypto_key = JS_NewObject(ctx);
   JS_SetPropertyStr(ctx, crypto_key, "type", JS_NewString(ctx, "secret"));
   JS_SetPropertyStr(ctx, crypto_key, "extractable", JS_DupValue(ctx, extractable));
   JS_SetPropertyStr(ctx, crypto_key, "usages", JS_DupValue(ctx, usages));
   JS_SetPropertyStr(ctx, crypto_key, "_keyData", derived_key_buffer);
-  
+
   // Create algorithm object for the derived key
   JSValue derived_alg = JS_NewObject(ctx);
   JS_SetPropertyStr(ctx, derived_alg, "name", JS_NewString(ctx, target_alg_name));
   JS_SetPropertyStr(ctx, derived_alg, "length", JS_NewInt32(ctx, key_length_bits));
   JS_SetPropertyStr(ctx, crypto_key, "algorithm", derived_alg);
-  
+
   // Resolve the promise with the derived key
   JS_Call(ctx, resolving_funcs[0], JS_UNDEFINED, 1, &crypto_key);
-  
+
   // Clean up
   JS_FreeValue(ctx, resolving_funcs[0]);
   JS_FreeValue(ctx, resolving_funcs[1]);
@@ -3843,7 +3859,7 @@ static JSValue jsrt_pbkdf2_derive_key(JSContext* ctx, JSValueConst* argv, jsrt_c
   JS_FreeValue(ctx, base_key_data);
   JS_FreeValue(ctx, length_val);
   JS_FreeCString(ctx, target_alg_name);
-  
+
   return promise;
 }
 
@@ -3855,21 +3871,21 @@ JSValue jsrt_subtle_deriveKey(JSContext* ctx, JSValueConst this_val, int argc, J
   if (argc < 5) {
     return JS_ThrowTypeError(ctx, "deriveKey requires 5 arguments");
   }
-  
-  // Parse algorithm  
+
+  // Parse algorithm
   jsrt_crypto_algorithm_t alg = jsrt_crypto_parse_algorithm(ctx, argv[0]);
   if (alg == JSRT_CRYPTO_ALG_UNKNOWN) {
     return JS_ThrowTypeError(ctx, "Unsupported algorithm for deriveKey");
   }
-  
+
   if (alg == JSRT_CRYPTO_ALG_ECDH) {
     return jsrt_ecdh_derive_key_to_key(ctx, argv, alg);
   }
-  
+
   if (alg == JSRT_CRYPTO_ALG_PBKDF2) {
     return jsrt_pbkdf2_derive_key(ctx, argv, alg);
   }
-  
+
   return JS_ThrowTypeError(ctx, "Unsupported algorithm for deriveKey");
 }
 
@@ -3913,10 +3929,6 @@ void JSRT_SetupSubtleCrypto(JSRT_Runtime* rt) {
   // No additional setup needed for static mode
   JSRT_Debug("JSRT_SetupSubtleCrypto: static OpenSSL mode initialized");
 }
-
-
-
-
 
 #else  // !JSRT_STATIC_OPENSSL
 
@@ -3991,7 +4003,6 @@ JSValue JSRT_CreateSubtleCrypto(JSContext* ctx) {
 void JSRT_SetupSubtleCrypto(JSRT_Runtime* rt) {
   JSRT_Debug("JSRT_SetupSubtleCrypto: OpenSSL not available - crypto functions disabled");
 }
-
 
 // Stub implementations for crypto functions
 static JSValue jsrt_crypto_getRandomValues_stub(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {

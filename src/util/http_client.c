@@ -1,5 +1,7 @@
 #include "http_client.h"
-#include "../util/debug.h"
+#include "debug.h"
+#include "ssl_client.h"
+#include "url_parser.h"
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -14,47 +16,11 @@
 typedef int socklen_t;
 #else
 #include <arpa/inet.h>
-#include <dlfcn.h>
 #include <netdb.h>
 #include <netinet/in.h>
 #include <sys/socket.h>
 #include <unistd.h>
 #endif
-
-// External OpenSSL handle from crypto.c
-#ifdef _WIN32
-extern HMODULE openssl_handle;
-#else
-extern void* openssl_handle;
-#endif
-
-// SSL function pointers
-typedef struct {
-  void* (*TLS_client_method)(void);
-  void* (*SSL_CTX_new)(const void* method);
-  void (*SSL_CTX_free)(void* ctx);
-  void* (*SSL_new)(void* ctx);
-  void (*SSL_free)(void* ssl);
-  int (*SSL_set_fd)(void* ssl, int fd);
-  int (*SSL_connect)(void* ssl);
-  int (*SSL_read)(void* ssl, void* buf, int num);
-  int (*SSL_write)(void* ssl, const void* buf, int num);
-  int (*SSL_shutdown)(void* ssl);
-  int (*SSL_get_error)(const void* ssl, int ret);
-  void (*SSL_CTX_set_verify)(void* ctx, int mode, void* verify_callback);
-  int (*SSL_set_tlsext_host_name)(void* ssl, const char* name);
-  long (*SSL_ctrl)(void* ssl, int cmd, long larg, void* parg);
-  long (*SSL_CTX_ctrl)(void* ctx, int cmd, long larg, void* parg);
-  int (*SSL_CTX_set_default_verify_paths)(void* ctx);
-  int (*SSL_library_init)(void);
-  void (*SSL_load_error_strings)(void);
-  unsigned long (*ERR_get_error)(void);
-  char* (*ERR_error_string)(unsigned long e, char* buf);
-  int (*SSL_CTX_set_cipher_list)(void* ctx, const char* str);
-} ssl_functions_t;
-
-static ssl_functions_t ssl_funcs;
-static int ssl_initialized = 0;
 
 // Cross-platform case-insensitive string comparison
 #ifdef _WIN32
@@ -78,143 +44,37 @@ static int jsrt_strncasecmp(const char* s1, const char* s2, size_t n) {
 #endif
 #endif
 
-// Internal function to parse URLs - enhanced to support HTTPS
+// Internal function to parse URLs using unified parser
 static int parse_url(const char* url, char** host, int* port, char** path, int* is_https) {
-  *is_https = 0;
-  const char* start;
+  jsrt_url_t parsed_url;
 
-  if (strncmp(url, "https://", 8) == 0) {
-    *is_https = 1;
-    start = url + 8;  // Skip "https://"
-    *port = 443;      // Default HTTPS port
-  } else if (strncmp(url, "http://", 7) == 0) {
-    start = url + 7;  // Skip "http://"
-    *port = 80;       // Default HTTP port
-  } else {
-    return -1;  // Unsupported protocol
-  }
-
-  // Find the end of hostname (either : or / or end of string)
-  const char* host_end = start;
-  while (*host_end && *host_end != ':' && *host_end != '/') {
-    host_end++;
-  }
-
-  // Extract hostname
-  size_t host_len = host_end - start;
-  *host = malloc(host_len + 1);
-  if (!*host)
-    return -1;
-  strncpy(*host, start, host_len);
-  (*host)[host_len] = '\0';
-
-  // Parse port if present (override default)
-  if (*host_end == ':') {
-    *port = atoi(host_end + 1);
-    // Find start of path
-    while (*host_end && *host_end != '/') {
-      host_end++;
-    }
-  }
-
-  // Extract path
-  if (*host_end == '/') {
-    *path = strdup(host_end);
-  } else {
-    *path = strdup("/");
-  }
-
-  if (!*path) {
-    free(*host);
+  if (jsrt_url_parse(url, &parsed_url) != 0) {
     return -1;
   }
 
+  // Copy parsed components
+  *host = strdup(parsed_url.host);
+  *port = parsed_url.port;
+  *path = strdup(parsed_url.path);
+  *is_https = parsed_url.is_secure;
+
+  // Check for allocation failures
+  if (!*host || !*path) {
+    if (*host)
+      free(*host);
+    if (*path)
+      free(*path);
+    jsrt_url_free(&parsed_url);
+    return -1;
+  }
+
+  jsrt_url_free(&parsed_url);
   return 0;
 }
 
-// Initialize SSL functions
+// Initialize SSL using unified SSL client
 static int init_ssl_functions(void) {
-  if (ssl_initialized) {
-    return ssl_funcs.TLS_client_method != NULL;
-  }
-
-  if (!openssl_handle) {
-    JSRT_Debug("HTTP Client: OpenSSL handle not available");
-    ssl_initialized = 1;
-    return 0;
-  }
-
-#ifdef _WIN32
-  ssl_funcs.TLS_client_method = (void* (*)(void))GetProcAddress(openssl_handle, "TLS_client_method");
-  ssl_funcs.SSL_CTX_new = (void* (*)(const void*))GetProcAddress(openssl_handle, "SSL_CTX_new");
-  ssl_funcs.SSL_CTX_free = (void (*)(void*))GetProcAddress(openssl_handle, "SSL_CTX_free");
-  ssl_funcs.SSL_new = (void* (*)(void*))GetProcAddress(openssl_handle, "SSL_new");
-  ssl_funcs.SSL_free = (void (*)(void*))GetProcAddress(openssl_handle, "SSL_free");
-  ssl_funcs.SSL_set_fd = (int (*)(void*, int))GetProcAddress(openssl_handle, "SSL_set_fd");
-  ssl_funcs.SSL_connect = (int (*)(void*))GetProcAddress(openssl_handle, "SSL_connect");
-  ssl_funcs.SSL_read = (int (*)(void*, void*, int))GetProcAddress(openssl_handle, "SSL_read");
-  ssl_funcs.SSL_write = (int (*)(void*, const void*, int))GetProcAddress(openssl_handle, "SSL_write");
-  ssl_funcs.SSL_shutdown = (int (*)(void*))GetProcAddress(openssl_handle, "SSL_shutdown");
-  ssl_funcs.SSL_get_error = (int (*)(const void*, int))GetProcAddress(openssl_handle, "SSL_get_error");
-  ssl_funcs.SSL_CTX_set_verify = (void (*)(void*, int, void*))GetProcAddress(openssl_handle, "SSL_CTX_set_verify");
-  ssl_funcs.SSL_set_tlsext_host_name =
-      (int (*)(void*, const char*))GetProcAddress(openssl_handle, "SSL_set_tlsext_host_name");
-  ssl_funcs.SSL_ctrl = (long (*)(void*, int, long, void*))GetProcAddress(openssl_handle, "SSL_ctrl");
-  ssl_funcs.SSL_CTX_ctrl = (long (*)(void*, int, long, void*))GetProcAddress(openssl_handle, "SSL_CTX_ctrl");
-  ssl_funcs.SSL_CTX_set_default_verify_paths =
-      (int (*)(void*))GetProcAddress(openssl_handle, "SSL_CTX_set_default_verify_paths");
-  ssl_funcs.SSL_library_init = (int (*)(void))GetProcAddress(openssl_handle, "SSL_library_init");
-  ssl_funcs.SSL_load_error_strings = (void (*)(void))GetProcAddress(openssl_handle, "SSL_load_error_strings");
-  ssl_funcs.ERR_get_error = (unsigned long (*)(void))GetProcAddress(openssl_handle, "ERR_get_error");
-  ssl_funcs.ERR_error_string = (char* (*)(unsigned long, char*))GetProcAddress(openssl_handle, "ERR_error_string");
-  ssl_funcs.SSL_CTX_set_cipher_list =
-      (int (*)(void*, const char*))GetProcAddress(openssl_handle, "SSL_CTX_set_cipher_list");
-#else
-  ssl_funcs.TLS_client_method = (void* (*)(void))dlsym(openssl_handle, "TLS_client_method");
-  ssl_funcs.SSL_CTX_new = (void* (*)(const void*))dlsym(openssl_handle, "SSL_CTX_new");
-  ssl_funcs.SSL_CTX_free = (void (*)(void*))dlsym(openssl_handle, "SSL_CTX_free");
-  ssl_funcs.SSL_new = (void* (*)(void*))dlsym(openssl_handle, "SSL_new");
-  ssl_funcs.SSL_free = (void (*)(void*))dlsym(openssl_handle, "SSL_free");
-  ssl_funcs.SSL_set_fd = (int (*)(void*, int))dlsym(openssl_handle, "SSL_set_fd");
-  ssl_funcs.SSL_connect = (int (*)(void*))dlsym(openssl_handle, "SSL_connect");
-  ssl_funcs.SSL_read = (int (*)(void*, void*, int))dlsym(openssl_handle, "SSL_read");
-  ssl_funcs.SSL_write = (int (*)(void*, const void*, int))dlsym(openssl_handle, "SSL_write");
-  ssl_funcs.SSL_shutdown = (int (*)(void*))dlsym(openssl_handle, "SSL_shutdown");
-  ssl_funcs.SSL_get_error = (int (*)(const void*, int))dlsym(openssl_handle, "SSL_get_error");
-  ssl_funcs.SSL_CTX_set_verify = (void (*)(void*, int, void*))dlsym(openssl_handle, "SSL_CTX_set_verify");
-  ssl_funcs.SSL_set_tlsext_host_name = (int (*)(void*, const char*))dlsym(openssl_handle, "SSL_set_tlsext_host_name");
-  ssl_funcs.SSL_ctrl = (long (*)(void*, int, long, void*))dlsym(openssl_handle, "SSL_ctrl");
-  ssl_funcs.SSL_CTX_ctrl = (long (*)(void*, int, long, void*))dlsym(openssl_handle, "SSL_CTX_ctrl");
-  ssl_funcs.SSL_CTX_set_default_verify_paths =
-      (int (*)(void*))dlsym(openssl_handle, "SSL_CTX_set_default_verify_paths");
-  ssl_funcs.SSL_library_init = (int (*)(void))dlsym(openssl_handle, "SSL_library_init");
-  ssl_funcs.SSL_load_error_strings = (void (*)(void))dlsym(openssl_handle, "SSL_load_error_strings");
-  ssl_funcs.ERR_get_error = (unsigned long (*)(void))dlsym(openssl_handle, "ERR_get_error");
-  ssl_funcs.ERR_error_string = (char* (*)(unsigned long, char*))dlsym(openssl_handle, "ERR_error_string");
-  ssl_funcs.SSL_CTX_set_cipher_list = (int (*)(void*, const char*))dlsym(openssl_handle, "SSL_CTX_set_cipher_list");
-#endif
-
-  ssl_initialized = 1;
-
-  // Check if we have the essential functions
-  if (!ssl_funcs.TLS_client_method || !ssl_funcs.SSL_CTX_new || !ssl_funcs.SSL_new || !ssl_funcs.SSL_connect ||
-      !ssl_funcs.SSL_read || !ssl_funcs.SSL_write) {
-    JSRT_Debug("HTTP Client: Failed to load essential SSL functions");
-    return 0;
-  }
-
-  // Initialize SSL library (for older OpenSSL versions - OpenSSL 3.0 does this automatically)
-  if (ssl_funcs.SSL_library_init) {
-    int init_result = ssl_funcs.SSL_library_init();
-    JSRT_Debug("HTTP Client: SSL_library_init returned %d", init_result);
-  }
-  if (ssl_funcs.SSL_load_error_strings) {
-    ssl_funcs.SSL_load_error_strings();
-    JSRT_Debug("HTTP Client: SSL_load_error_strings called");
-  }
-
-  JSRT_Debug("HTTP Client: SSL functions loaded successfully");
-  return 1;
+  return jsrt_ssl_global_init();
 }
 
 // Extract Location header for redirect handling
@@ -448,8 +308,7 @@ static JSRT_HttpResponse http_request_internal(const char* url, int redirect_cou
   char* response_buffer = NULL;
   size_t response_capacity = 4096;
   size_t response_size = 0;
-  void* ssl_ctx = NULL;
-  void* ssl = NULL;
+  jsrt_ssl_client_t* ssl_client = NULL;
 
   // Prevent infinite redirect loops
   if (redirect_count > 10) {
@@ -487,52 +346,10 @@ static JSRT_HttpResponse http_request_internal(const char* url, int redirect_cou
     goto cleanup;
   }
 
-  // Setup SSL context if needed
+  // Setup SSL client if needed
   if (is_https) {
-    const void* method = ssl_funcs.TLS_client_method();
-    if (!method) {
-      response.error = JSRT_HTTP_ERROR_SSL_ERROR;
-      goto cleanup;
-    }
-
-    ssl_ctx = ssl_funcs.SSL_CTX_new(method);
-    if (!ssl_ctx) {
-      response.error = JSRT_HTTP_ERROR_SSL_ERROR;
-      goto cleanup;
-    }
-
-    // Set up SSL context for better compatibility
-    // Load default certificate paths (system CA certificates)
-    if (ssl_funcs.SSL_CTX_set_default_verify_paths) {
-      ssl_funcs.SSL_CTX_set_default_verify_paths(ssl_ctx);
-    }
-
-    // Don't verify certificates for simplicity (not recommended for production)
-    ssl_funcs.SSL_CTX_set_verify(ssl_ctx, 0, NULL);
-
-    // Set a permissive cipher list for better compatibility with various servers
-    if (ssl_funcs.SSL_CTX_set_cipher_list) {
-      // Use DEFAULT for TLS 1.2 and below ciphers
-      if (ssl_funcs.SSL_CTX_set_cipher_list(ssl_ctx, "DEFAULT") != 1) {
-        JSRT_Debug("HTTP Client: Warning - Failed to set cipher list");
-      } else {
-        JSRT_Debug("HTTP Client: Set default cipher list");
-      }
-    }
-
-    // Enable TLS 1.2 and 1.3 explicitly using SSL_CTX_ctrl
-    if (ssl_funcs.SSL_CTX_ctrl) {
-      // SSL_CTRL_SET_MIN_PROTO_VERSION = 123, TLS 1.2 = 0x0303
-      ssl_funcs.SSL_CTX_ctrl(ssl_ctx, 123, 0x0303, NULL);  // TLS 1.2 minimum
-      JSRT_Debug("HTTP Client: Set minimum TLS version to 1.2");
-
-      // SSL_CTRL_SET_MAX_PROTO_VERSION = 124, TLS 1.3 = 0x0304
-      ssl_funcs.SSL_CTX_ctrl(ssl_ctx, 124, 0x0304, NULL);  // TLS 1.3 maximum
-      JSRT_Debug("HTTP Client: Set maximum TLS version to 1.3");
-    }
-
-    ssl = ssl_funcs.SSL_new(ssl_ctx);
-    if (!ssl) {
+    ssl_client = jsrt_ssl_client_new();
+    if (!ssl_client) {
       response.error = JSRT_HTTP_ERROR_SSL_ERROR;
       goto cleanup;
     }
@@ -586,66 +403,35 @@ static JSRT_HttpResponse http_request_internal(const char* url, int redirect_cou
 
   // Setup SSL connection if needed
   if (is_https) {
-    if (ssl_funcs.SSL_set_fd(ssl, sockfd) != 1) {
-      JSRT_Debug("HTTP Client: Failed to set SSL file descriptor");
+    if (jsrt_ssl_client_setup(ssl_client, sockfd, host) != 0) {
+      JSRT_Debug("HTTP Client: SSL setup failed");
       response.error = JSRT_HTTP_ERROR_SSL_ERROR;
       goto cleanup;
     }
 
-    // Set SNI (Server Name Indication) for HTTPS
-    if (ssl_funcs.SSL_set_tlsext_host_name) {
-      if (ssl_funcs.SSL_set_tlsext_host_name(ssl, host) != 1) {
-        JSRT_Debug("HTTP Client: Warning - Failed to set SNI hostname: %s", host);
-        // Don't fail here, some servers don't require SNI
-      } else {
-        JSRT_Debug("HTTP Client: SNI hostname set to: %s", host);
-      }
-    }
+    if (jsrt_ssl_client_handshake(ssl_client) != 1) {
+      JSRT_Debug("HTTP Client: SSL handshake failed - trying curl fallback");
 
-    int ssl_result = ssl_funcs.SSL_connect(ssl);
-    if (ssl_result != 1) {
-      int ssl_error = ssl_funcs.SSL_get_error(ssl, ssl_result);
-      JSRT_Debug("HTTP Client: SSL handshake failed with error %d (SSL_connect returned %d)", ssl_error, ssl_result);
-
-      // Get more detailed SSL error information
-      if (ssl_funcs.ERR_get_error) {
-        unsigned long err = ssl_funcs.ERR_get_error();
-        if (ssl_funcs.ERR_error_string) {
-          char err_buf[256];
-          ssl_funcs.ERR_error_string(err, err_buf);
-          JSRT_Debug("HTTP Client: SSL detailed error: %s", err_buf);
-
-          // Special handling for handshake failure - try curl fallback
-          if (strstr(err_buf, "handshake failure")) {
-            JSRT_Debug("HTTP Client: TLS handshake failure detected - trying curl fallback");
-
-            // Try using curl as a fallback
-            JSRT_HttpResponse curl_response = try_curl_fallback(url);
-            if (curl_response.error == JSRT_HTTP_OK) {
-              JSRT_Debug("HTTP Client: curl fallback succeeded");
-              // Clean up current SSL resources first
-              if (ssl)
-                ssl_funcs.SSL_free(ssl);
-              if (ssl_ctx)
-                ssl_funcs.SSL_CTX_free(ssl_ctx);
+      // Try using curl as a fallback
+      JSRT_HttpResponse curl_response = try_curl_fallback(url);
+      if (curl_response.error == JSRT_HTTP_OK) {
+        JSRT_Debug("HTTP Client: curl fallback succeeded");
+        // Clean up current SSL resources first
+        if (ssl_client)
+          jsrt_ssl_client_free(ssl_client);
 #ifdef _WIN32
-              if (sockfd != INVALID_SOCKET)
-                closesocket(sockfd);
-              WSACleanup();
+        if (sockfd != INVALID_SOCKET)
+          closesocket(sockfd);
+        WSACleanup();
 #else
-              if (sockfd >= 0)
-                close(sockfd);
+        if (sockfd >= 0)
+          close(sockfd);
 #endif
-              free(host);
-              free(path);
-              return curl_response;
-            } else {
-              JSRT_Debug("HTTP Client: curl fallback also failed");
-            }
-          }
-        } else {
-          JSRT_Debug("HTTP Client: SSL error code: %lu", err);
-        }
+        free(host);
+        free(path);
+        return curl_response;
+      } else {
+        JSRT_Debug("HTTP Client: curl fallback also failed");
       }
 
       response.error = JSRT_HTTP_ERROR_SSL_ERROR;
@@ -660,7 +446,7 @@ static JSRT_HttpResponse http_request_internal(const char* url, int redirect_cou
   ssize_t sent;
 
   if (is_https) {
-    sent = ssl_funcs.SSL_write(ssl, http_request, (int)request_len);
+    sent = jsrt_ssl_client_write(ssl_client, http_request, request_len);
     if (sent <= 0) {
       response.error = JSRT_HTTP_ERROR_SSL_ERROR;
       goto cleanup;
@@ -684,15 +470,10 @@ static JSRT_HttpResponse http_request_internal(const char* url, int redirect_cou
     ssize_t received;
 
     if (is_https) {
-      received = ssl_funcs.SSL_read(ssl, response_buffer + response_size, (int)(response_capacity - response_size - 1));
+      received =
+          jsrt_ssl_client_read(ssl_client, response_buffer + response_size, response_capacity - response_size - 1);
       if (received <= 0) {
-        int ssl_error = ssl_funcs.SSL_get_error(ssl, (int)received);
-        if (ssl_error == 0 || ssl_error == 6) {  // SSL_ERROR_ZERO_RETURN or SSL_ERROR_SYSCALL
-          break;                                 // Connection closed cleanly
-        } else {
-          JSRT_Debug("HTTP Client: SSL read error: %d", ssl_error);
-          break;
-        }
+        break;  // Connection closed or error
       }
     } else {
       received = recv(sockfd, response_buffer + response_size, response_capacity - response_size - 1, 0);
@@ -741,12 +522,8 @@ static JSRT_HttpResponse http_request_internal(const char* url, int redirect_cou
 cleanup:
 cleanup_no_response:
   // SSL cleanup
-  if (ssl) {
-    ssl_funcs.SSL_shutdown(ssl);
-    ssl_funcs.SSL_free(ssl);
-  }
-  if (ssl_ctx) {
-    ssl_funcs.SSL_CTX_free(ssl_ctx);
+  if (ssl_client) {
+    jsrt_ssl_client_free(ssl_client);
   }
 
   // Standard cleanup

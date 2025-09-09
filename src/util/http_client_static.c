@@ -2,6 +2,9 @@
 #include "../util/debug.h"
 #include "http_client.h"
 
+// Only compile when static OpenSSL is available
+#ifdef JSRT_STATIC_OPENSSL
+
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -320,3 +323,33 @@ void JSRT_HttpResponseFree(JSRT_HttpResponse* response) {
     memset(response, 0, sizeof(JSRT_HttpResponse));
   }
 }
+
+#else
+// Stub implementations when static OpenSSL is not available
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+
+JSRT_HttpResponse JSRT_HttpGet(const char* url) {
+  JSRT_HttpResponse response = {0};
+  response.error = JSRT_HTTP_ERROR_SSL_ERROR;
+  response.status_text = strdup("OpenSSL not available");
+  return response;
+}
+
+JSRT_HttpResponse JSRT_HttpGetWithOptions(const char* url, const char* user_agent, int timeout_ms) {
+  return JSRT_HttpGet(url);
+}
+
+void JSRT_HttpResponseFree(JSRT_HttpResponse* response) {
+  if (response) {
+    free(response->status_text);
+    free(response->body);
+    free(response->content_type);
+    free(response->etag);
+    free(response->last_modified);
+    memset(response, 0, sizeof(JSRT_HttpResponse));
+  }
+}
+
+#endif  // JSRT_STATIC_OPENSSL

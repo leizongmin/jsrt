@@ -9,13 +9,13 @@
 #include <unistd.h>
 #include <uv.h>
 
+#include "crypto/crypto.h"
 #include "http/fetch.h"
 #include "std/abort.h"
 #include "std/base64.h"
 #include "std/blob.h"
 #include "std/clone.h"
 #include "std/console.h"
-#include "std/crypto.h"
 #include "std/dom.h"
 #include "std/encoding.h"
 #include "std/event.h"

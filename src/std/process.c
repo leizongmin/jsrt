@@ -19,8 +19,8 @@
 #include <time.h>
 #include <uv.h>
 
+#include "../crypto/crypto.h"
 #include "../util/debug.h"
-#include "crypto.h"
 
 // Platform-specific function implementations
 #ifdef _WIN32

@@ -34,6 +34,40 @@ jsrt_cov:
 	ls -alh target/coverage/jsrt
 	@cd deps/wamr && git restore core/version.h 2>/dev/null || true
 
+.PHONY: jsrt_static
+jsrt_static:
+	mkdir -p target/static
+	@echo "Building static jsrt with all dependencies statically linked..."
+	@if [ "$(OS)" = "Windows_NT" ] || [ -n "$(MSYSTEM)" ]; then \
+		echo "Windows detected: Applying pre-build fixes..."; \
+		chmod +x scripts/pre-build-windows.sh scripts/patch-libuv-windows.sh scripts/cleanup-submodules.sh; \
+		./scripts/pre-build-windows.sh; \
+		echo "Using MSYS Makefiles generator"; \
+		cd target/static && cmake -G "MSYS Makefiles" -DCMAKE_BUILD_TYPE=Release -DBUILD_SHARED_LIBS=OFF -DJSRT_STATIC_OPENSSL=ON -DCMAKE_MAKE_PROGRAM=/usr/bin/make $(CURDIR); \
+		if [ $$? -eq 0 ]; then \
+			echo "CMake configuration successful, building..."; \
+			/usr/bin/make -j$(cpu_count); \
+			BUILD_RESULT=$$?; \
+		else \
+			echo "CMake configuration failed"; \
+			BUILD_RESULT=1; \
+		fi; \
+		cd ../..; \
+		if [ -f scripts/post-build-windows.sh ]; then ./scripts/post-build-windows.sh; fi; \
+		./scripts/cleanup-submodules.sh; \
+		exit $$BUILD_RESULT; \
+	else \
+		echo "Unix-like system: Using Unix Makefiles generator"; \
+		cd target/static && cmake -G "Unix Makefiles" -DCMAKE_BUILD_TYPE=Release -DBUILD_SHARED_LIBS=OFF -DJSRT_STATIC_OPENSSL=ON $(CURDIR) && make -j$(cpu_count); \
+	fi
+	ls -alh target/static/jsrt 2>/dev/null || dir target\\static\\jsrt.exe
+	@echo "Cleaning up submodule modifications..."
+	@cd deps/wamr && git restore core/version.h 2>/dev/null || true
+	@cd deps/libuv && git checkout -- . 2>/dev/null || true
+	@cd deps/quickjs && git checkout -- . 2>/dev/null || true
+	@cd deps/llhttp && git checkout -- . 2>/dev/null || true
+	@echo "All submodules reset to clean state"
+
 .PHONY: jsrt_s
 jsrt_s: jsrt
 	cp -f target/release/jsrt target/release/jsrt_s
@@ -153,6 +187,10 @@ test_m: jsrt_m
 test_cov: jsrt_cov
 	cd target/coverage && ctest --verbose
 
+.PHONY: test_static
+test_static: jsrt_static npm-install
+	cd target/static && ctest --verbose
+
 .PHONY: coverage
 coverage: test_cov
 	@echo "Generating coverage report..."
@@ -224,6 +262,11 @@ wpt_g: jsrt_g wpt-download
 wpt_cov: jsrt_cov wpt-download
 	@echo "Running Web Platform Tests with coverage..."
 	python3 scripts/run-wpt.py --jsrt $(CURDIR)/target/coverage/jsrt --wpt-dir $(CURDIR)/wpt || echo "Some WPT tests failed, but continuing..."
+
+.PHONY: wpt_static
+wpt_static: jsrt_static wpt-download
+	@echo "Running Web Platform Tests with static build..."
+	python3 scripts/run-wpt.py --jsrt $(CURDIR)/target/static/jsrt --wpt-dir $(CURDIR)/wpt
 
 .PHONY: wpt-list
 wpt-list:
@@ -302,6 +345,7 @@ help:
 	@echo "  make jsrt_g        - Build debug version"
 	@echo "  make jsrt_m        - Build with AddressSanitizer"
 	@echo "  make jsrt_cov      - Build with coverage"
+	@echo "  make jsrt_static   - Build with static linking (includes OpenSSL)"
 	@echo "  make clean         - Clean build artifacts"
 	@echo ""
 	@echo "Code Quality:"
@@ -309,10 +353,12 @@ help:
 	@echo "  make prettier      - Format JavaScript code"
 	@echo ""
 	@echo "Testing:"
-	@echo "  make test          - Run all tests"
+	@echo "  make test          - Run all tests (release build)"
+	@echo "  make test_static   - Run all tests (static build)"
 	@echo "  make test-quick    - Run essential tests only"
 	@echo "  make test-fast     - Run tests in parallel"
-	@echo "  make wpt           - Run Web Platform Tests"
+	@echo "  make wpt           - Run Web Platform Tests (release build)"
+	@echo "  make wpt_static    - Run Web Platform Tests (static build)"
 	@echo "  make coverage      - Generate coverage report"
 	@echo ""
 	@echo "Docker & Dev Environment:"

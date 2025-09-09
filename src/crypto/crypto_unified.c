@@ -1,12 +1,4 @@
-#include "crypto.h"
-
-// Platform-specific includes for dynamic loading
-#ifdef _WIN32
-#include <windows.h>
-#else
-#include <dlfcn.h>
-#endif
-
+// Unified crypto functions that work for both static and dynamic OpenSSL builds
 #include <quickjs.h>
 #include <stdbool.h>
 #include <stdint.h>
@@ -15,111 +7,38 @@
 #include <string.h>
 #include <time.h>
 
+#ifdef JSRT_STATIC_OPENSSL
+#include <openssl/rand.h>
+#endif
+
 #include "../util/debug.h"
-#include "crypto_subtle.h"
+#include "crypto.h"
 
-// OpenSSL function pointers - make openssl_handle accessible to other modules
+// Platform-specific includes for dynamic loading (dynamic builds only)
+#ifndef JSRT_STATIC_OPENSSL
 #ifdef _WIN32
-HMODULE openssl_handle = NULL;
+#include <windows.h>
+typedef HMODULE jsrt_handle_t;
 #else
-void* openssl_handle = NULL;
-#endif
-static char* openssl_version = NULL;
-
-// Function pointer types for OpenSSL functions we need
-typedef int (*RAND_bytes_func)(unsigned char* buf, int num);
-typedef const char* (*OpenSSL_version_func)(int type);
-
-// Function pointers
-static RAND_bytes_func openssl_RAND_bytes = NULL;
-static OpenSSL_version_func openssl_OpenSSL_version = NULL;
-
-// OpenSSL version constants
-#define OPENSSL_VERSION 0
-
-// Try to load OpenSSL dynamically
-static bool load_openssl() {
-  if (openssl_handle != NULL) {
-    return true;  // Already loaded
-  }
-
-  // Try different OpenSSL library names based on platform
-  const char* openssl_names[] = {
-#ifdef _WIN32
-      "libssl-3-x64.dll",    // Windows OpenSSL 3.x 64-bit
-      "libssl-1_1-x64.dll",  // Windows OpenSSL 1.1.x 64-bit
-      "libssl-3.dll",        // Windows OpenSSL 3.x
-      "libssl-1_1.dll",      // Windows OpenSSL 1.1.x
-      "ssleay32.dll",        // Windows legacy OpenSSL
-#elif __APPLE__
-      "/opt/homebrew/lib/libssl.3.dylib",  // macOS Homebrew OpenSSL 3.x (full path)
-      "/opt/homebrew/lib/libssl.dylib",    // macOS Homebrew OpenSSL (full path)
-      "/usr/local/lib/libssl.3.dylib",     // macOS local install OpenSSL 3.x
-      "/usr/local/lib/libssl.dylib",       // macOS local install OpenSSL
-      "libssl.3.dylib",                    // macOS with Homebrew OpenSSL 3.x
-      "libssl.1.1.dylib",                  // macOS with Homebrew OpenSSL 1.1.x
-      "libssl.dylib",                      // macOS system OpenSSL
-#else
-      "libssl.so.3",    // Linux OpenSSL 3.x
-      "libssl.so.1.1",  // Linux OpenSSL 1.1.x
-      "libssl.so",      // Linux generic
-#endif
-      NULL};
-
-  for (int i = 0; openssl_names[i] != NULL; i++) {
-#ifdef _WIN32
-    openssl_handle = LoadLibraryA(openssl_names[i]);
-#else
-    openssl_handle = dlopen(openssl_names[i], RTLD_LAZY);
-#endif
-    if (openssl_handle != NULL) {
-      JSRT_Debug("JSRT_Crypto: Successfully loaded OpenSSL from %s", openssl_names[i]);
-      break;
-    }
-  }
-
-  if (openssl_handle == NULL) {
-#ifdef _WIN32
-    JSRT_Debug("JSRT_Crypto: Failed to load OpenSSL library: Error %lu", GetLastError());
-#else
-    JSRT_Debug("JSRT_Crypto: Failed to load OpenSSL library: %s", dlerror());
-#endif
-    return false;
-  }
-
-  // Load required functions
-#ifdef _WIN32
-  openssl_RAND_bytes = (RAND_bytes_func)GetProcAddress(openssl_handle, "RAND_bytes");
-  openssl_OpenSSL_version = (OpenSSL_version_func)GetProcAddress(openssl_handle, "OpenSSL_version");
-#else
-  openssl_RAND_bytes = (RAND_bytes_func)dlsym(openssl_handle, "RAND_bytes");
-  openssl_OpenSSL_version = (OpenSSL_version_func)dlsym(openssl_handle, "OpenSSL_version");
+#include <dlfcn.h>
+typedef void* jsrt_handle_t;
 #endif
 
-  if (openssl_RAND_bytes == NULL) {
-    JSRT_Debug("JSRT_Crypto: Failed to load RAND_bytes function");
-#ifdef _WIN32
-    FreeLibrary(openssl_handle);
-#else
-    dlclose(openssl_handle);
+// External reference to dynamic OpenSSL function pointers
+extern int (*openssl_RAND_bytes)(unsigned char* buf, int num);
 #endif
-    openssl_handle = NULL;
-    return false;
-  }
 
-  if (openssl_OpenSSL_version != NULL) {
-    const char* version_str = openssl_OpenSSL_version(OPENSSL_VERSION);
-    if (version_str) {
-      openssl_version = strdup(version_str);
-      JSRT_Debug("JSRT_Crypto: OpenSSL version: %s", openssl_version);
-    }
-  }
-
-  return true;
-}
-
-// Fallback random bytes using system random (not cryptographically secure)
+// Fallback random number generator for when OpenSSL is not available
 static bool fallback_random_bytes(unsigned char* buf, int num) {
+  // Use system random or fallback
+  FILE* urandom = fopen("/dev/urandom", "rb");
+  if (urandom) {
+    size_t read_count = fread(buf, 1, num, urandom);
+    fclose(urandom);
+    return read_count == (size_t)num;
+  }
+
+  // Fallback to poor quality random
   static bool seeded = false;
   if (!seeded) {
     srand((unsigned int)time(NULL));
@@ -158,7 +77,6 @@ static bool is_valid_integer_typed_array(JSContext* ctx, JSValue arg, const char
   JSValue global = JS_GetGlobalObject(ctx);
 
   // Check if it's an instance of allowed integer TypedArray types
-  // We need to check instanceof for each allowed type
   const char* allowed_types[] = {"Int8Array",         "Int16Array",  "Int32Array",  "BigInt64Array", "Uint8Array",
                                  "Uint8ClampedArray", "Uint16Array", "Uint32Array", "BigUint64Array"};
 
@@ -215,15 +133,15 @@ static bool is_valid_integer_typed_array(JSContext* ctx, JSValue arg, const char
   JS_FreeValue(ctx, global);
 
   if (!is_valid_integer) {
-    *error_msg = "Argument must be a typed array";
+    *error_msg = "Argument must be an integer typed array";
     return false;
   }
 
   return true;
 }
 
-// crypto.getRandomValues(typedArray)
-static JSValue jsrt_crypto_getRandomValues(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
+// crypto.getRandomValues(typedArray) - unified implementation for both static and dynamic OpenSSL
+JSValue jsrt_crypto_getRandomValues(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
   if (argc < 1) {
     return JS_ThrowTypeError(ctx, "crypto.getRandomValues requires 1 argument");
   }
@@ -253,7 +171,7 @@ static JSValue jsrt_crypto_getRandomValues(JSContext* ctx, JSValueConst this_val
       // Fallback if DOMException not available
       return JS_ThrowTypeError(ctx, "The operation is not supported");
     } else {
-      return JS_ThrowTypeError(ctx, error_msg);
+      return JS_ThrowTypeError(ctx, "%s", error_msg);
     }
   }
 
@@ -285,9 +203,15 @@ static JSValue jsrt_crypto_getRandomValues(JSContext* ctx, JSValueConst this_val
   }
 
   bool success = false;
+#ifdef JSRT_STATIC_OPENSSL
+  // Use statically linked RAND_bytes
+  success = (RAND_bytes(random_data, (int)byte_length) == 1);
+#else
+  // Use dynamically loaded RAND_bytes
   if (openssl_RAND_bytes != NULL) {
     success = (openssl_RAND_bytes(random_data, (int)byte_length) == 1);
   }
+#endif
 
   if (!success) {
     // Use fallback random (warn that it's not cryptographically secure)
@@ -305,19 +229,23 @@ static JSValue jsrt_crypto_getRandomValues(JSContext* ctx, JSValueConst this_val
   return JS_DupValue(ctx, arg);
 }
 
-// crypto.randomUUID()
-static JSValue jsrt_crypto_randomUUID(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
+// crypto.randomUUID() - unified implementation for both static and dynamic OpenSSL
+JSValue jsrt_crypto_randomUUID(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
   unsigned char random_bytes[16];
   bool success = false;
 
   // Generate 16 random bytes for UUID
+#ifdef JSRT_STATIC_OPENSSL
+  success = (RAND_bytes(random_bytes, 16) == 1);
+#else
   if (openssl_RAND_bytes != NULL) {
     success = (openssl_RAND_bytes(random_bytes, 16) == 1);
   }
+#endif
 
   if (!success) {
-    // Use fallback random
-    JSRT_Debug("JSRT_Crypto: Using fallback random number generator for UUID (not cryptographically secure)");
+    // Use fallback random (warn that it's not cryptographically secure)
+    JSRT_Debug("JSRT_Crypto: Using fallback random number generator (not cryptographically secure)");
     fallback_random_bytes(random_bytes, 16);
   }
 
@@ -335,45 +263,4 @@ static JSValue jsrt_crypto_randomUUID(JSContext* ctx, JSValueConst this_val, int
            random_bytes[12], random_bytes[13], random_bytes[14], random_bytes[15]);
 
   return JS_NewString(ctx, uuid_str);
-}
-
-// Get OpenSSL version for process.versions.openssl
-const char* JSRT_GetOpenSSLVersion() {
-  if (openssl_version != NULL) {
-    return openssl_version;
-  }
-  return NULL;
-}
-
-// Setup crypto module in runtime
-void JSRT_RuntimeSetupStdCrypto(JSRT_Runtime* rt) {
-  bool openssl_loaded = load_openssl();
-
-  if (!openssl_loaded) {
-    JSRT_Debug("JSRT_RuntimeSetupStdCrypto: OpenSSL not available, crypto API not registered");
-    return;
-  }
-
-  // Create crypto object
-  JSValue crypto_obj = JS_NewObject(rt->ctx);
-
-  // crypto.getRandomValues()
-  JS_SetPropertyStr(rt->ctx, crypto_obj, "getRandomValues",
-                    JS_NewCFunction(rt->ctx, jsrt_crypto_getRandomValues, "getRandomValues", 1));
-
-  // crypto.randomUUID()
-  JS_SetPropertyStr(rt->ctx, crypto_obj, "randomUUID",
-                    JS_NewCFunction(rt->ctx, jsrt_crypto_randomUUID, "randomUUID", 0));
-
-  // crypto.subtle (SubtleCrypto API)
-  JSValue subtle_obj = JSRT_CreateSubtleCrypto(rt->ctx);
-  JS_SetPropertyStr(rt->ctx, crypto_obj, "subtle", subtle_obj);
-
-  // Register crypto object to globalThis
-  JS_SetPropertyStr(rt->ctx, rt->global, "crypto", crypto_obj);
-
-  // Initialize SubtleCrypto
-  JSRT_SetupSubtleCrypto(rt);
-
-  JSRT_Debug("JSRT_RuntimeSetupStdCrypto: initialized WebCrypto API with OpenSSL support");
 }

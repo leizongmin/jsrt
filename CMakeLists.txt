@@ -47,7 +47,17 @@ if(PkgConfig_FOUND)
 endif()
 
 # Optional: Enable libffi integration
+# Note: On macOS, libffi will be dynamically linked even in static builds since static libffi is not available
+# On Linux, static libffi is available through libffi-dev/libffi-devel packages
 option(ENABLE_LIBFFI "Enable libffi integration for robust FFI calling conventions" ${LIBFFI_FOUND})
+
+if(JSRT_STATIC_OPENSSL AND ENABLE_LIBFFI AND LIBFFI_FOUND)
+    if(APPLE)
+        message(STATUS "libffi will be dynamically linked in static builds (static libffi not available on macOS)")
+    else()
+        message(STATUS "libffi can be statically linked in static builds on this platform")
+    endif()
+endif()
 
 if(ENABLE_LIBFFI AND LIBFFI_FOUND)
     message(STATUS "libffi support enabled")
@@ -101,7 +111,7 @@ endif()
 
 # build libuv
 # Force libuv to use Windows build on MinGW to avoid Cygwin path conflicts
-if(WIN32 AND MINGW)
+if(WIN32)
     # Override system detection variables before libuv processes them
     set(CMAKE_SYSTEM_NAME "Windows" CACHE STRING "Force Windows system name for libuv" FORCE)
     set(WIN32 TRUE CACHE BOOL "Force WIN32 for libuv" FORCE)
@@ -114,26 +124,55 @@ if(WIN32 AND MINGW)
     
     # Force libuv to treat this as pure Windows build
     set(CMAKE_HOST_SYSTEM_NAME "Windows" CACHE STRING "Override host system for libuv" FORCE)
-    
-    message(STATUS "MinGW detected: Forcing libuv to use Windows build path instead of Cygwin/MSYS")
-endif()
-
-# Override libuv's platform detection by setting the variables it checks
-if(WIN32)
-    # These variables are used by libuv's CMakeLists.txt
-    set(CMAKE_SYSTEM_NAME "Windows")
-    set(WIN32 TRUE)
-    unset(MSYS)
-    unset(CYGWIN)
+    set(CMAKE_HOST_WIN32 TRUE CACHE BOOL "Force host WIN32 for libuv" FORCE)
     
     # Additional forced variables for libuv platform detection
     set(__MSYS__ FALSE CACHE BOOL "Force MSYS detection off" FORCE)
     set(__CYGWIN__ FALSE CACHE BOOL "Force CYGWIN detection off" FORCE)
     set(__MINGW32__ TRUE CACHE BOOL "Force MinGW32 detection on" FORCE)
     set(__MINGW64__ TRUE CACHE BOOL "Force MinGW64 detection on" FORCE)
+    
+    # Set environment variables that libuv checks
+    set(ENV{MSYSTEM} "")
+    set(ENV{CYGWIN} "")
+    
+    # Force compiler predefined macros for Windows
+    add_definitions(-DWIN32=1 -D_WIN32=1 -D__WIN32__=1)
+    if(CMAKE_SIZEOF_VOID_P EQUAL 8)
+        add_definitions(-DWIN64=1 -D_WIN64=1 -D__WIN64__=1)
+    endif()
+    
+    message(STATUS "Windows detected: Forcing libuv to use Windows build path (not Cygwin/MSYS/Unix)")
+    message(STATUS "CMAKE_SYSTEM_NAME: ${CMAKE_SYSTEM_NAME}")
+    message(STATUS "WIN32: ${WIN32}")
+    message(STATUS "MSYS: ${MSYS}")
+    message(STATUS "CYGWIN: ${CYGWIN}")
+endif()
+
+# Apply Windows fixes for libuv before building
+if(WIN32)
+    include(scripts/fix-libuv-windows.cmake)
 endif()
 
 add_subdirectory(deps/libuv)
+
+# Verify and fix libuv build after configuration
+if(WIN32)
+    # Get the uv_a target properties for diagnostics
+    get_target_property(UV_SOURCES uv_a SOURCES)
+    if(UV_SOURCES)
+        list(LENGTH UV_SOURCES UV_SOURCES_COUNT)
+        message(STATUS "libuv configured with ${UV_SOURCES_COUNT} source files")
+        
+        # Check for problematic files
+        foreach(source ${UV_SOURCES})
+            if(source MATCHES "unix/(cygwin|bsd-ifaddrs)")
+                message(WARNING "libuv included problematic Unix source: ${source}")
+                message(STATUS "This may cause build failures. Consider using libuv Windows-only build.")
+            endif()
+        endforeach()
+    endif()
+endif()
 
 # build WAMR
 # Configure WAMR for minimal interpreter-only build
@@ -389,6 +428,128 @@ target_compile_definitions(llhttp PRIVATE _GNU_SOURCE)
 # Add option for Node.js compatibility
 option(JSRT_NODE_COMPAT "Enable Node.js compatibility layer" ON)
 
+# Add option for static OpenSSL linking
+option(JSRT_STATIC_OPENSSL "Enable static OpenSSL linking instead of runtime loading" OFF)
+
+# Find OpenSSL for static linking when enabled
+set(OPENSSL_LIBRARIES "")
+set(OPENSSL_INCLUDE_DIRS "")
+if(JSRT_STATIC_OPENSSL)
+    if(WIN32)
+        # Windows-specific OpenSSL static linking
+        message(STATUS "Looking for OpenSSL static libraries on Windows...")
+        
+        # Common MSYS2 OpenSSL installation paths
+        set(OPENSSL_SEARCH_PATHS
+            "C:/msys64/ucrt64/lib"
+            "C:/msys64/mingw64/lib"
+            "C:/msys64/usr/lib"
+            "${CMAKE_INSTALL_PREFIX}/lib"
+            "${CMAKE_PREFIX_PATH}/lib"
+        )
+        
+        # Look for static library files in MSYS2 paths
+        find_library(OPENSSL_CRYPTO_STATIC
+            NAMES libcrypto.a crypto.lib libcrypto-3-x64.lib libcrypto-3.lib
+            PATHS ${OPENSSL_SEARCH_PATHS}
+            NO_DEFAULT_PATH
+        )
+        
+        find_library(OPENSSL_SSL_STATIC  
+            NAMES libssl.a ssl.lib libssl-3-x64.lib libssl-3.lib
+            PATHS ${OPENSSL_SEARCH_PATHS}
+            NO_DEFAULT_PATH
+        )
+        
+        # Look for include directory
+        find_path(OPENSSL_INCLUDE_DIR
+            NAMES openssl/opensslconf.h openssl/ssl.h
+            PATHS
+                "C:/msys64/ucrt64/include"
+                "C:/msys64/mingw64/include" 
+                "C:/msys64/usr/include"
+                "${CMAKE_INSTALL_PREFIX}/include"
+                "${CMAKE_PREFIX_PATH}/include"
+            NO_DEFAULT_PATH
+        )
+        
+        if(OPENSSL_CRYPTO_STATIC AND OPENSSL_SSL_STATIC AND OPENSSL_INCLUDE_DIR)
+            set(OPENSSL_LIBRARIES ${OPENSSL_SSL_STATIC} ${OPENSSL_CRYPTO_STATIC})
+            set(OPENSSL_INCLUDE_DIRS ${OPENSSL_INCLUDE_DIR})
+            
+            # Add required Windows system libraries for static OpenSSL
+            list(APPEND OPENSSL_LIBRARIES ws2_32 crypt32 bcrypt)
+            
+            message(STATUS "Found OpenSSL static libraries for Windows:")
+            message(STATUS "  SSL: ${OPENSSL_SSL_STATIC}")  
+            message(STATUS "  Crypto: ${OPENSSL_CRYPTO_STATIC}")
+            message(STATUS "  Include: ${OPENSSL_INCLUDE_DIR}")
+        else()
+            message(STATUS "OpenSSL static libraries not found on Windows, trying fallback...")
+            find_package(OpenSSL QUIET)
+            if(OpenSSL_FOUND)
+                message(STATUS "Using OpenSSL dynamic libraries as fallback")
+                set(OPENSSL_LIBRARIES OpenSSL::Crypto OpenSSL::SSL)
+                set(OPENSSL_INCLUDE_DIRS ${OPENSSL_INCLUDE_DIR})
+            else()
+                message(WARNING "JSRT_STATIC_OPENSSL enabled but OpenSSL not found - falling back to dynamic loading")
+                set(JSRT_STATIC_OPENSSL OFF)
+            endif()
+        endif()
+    else()
+        # Unix/Linux/macOS static linking (existing logic)
+        find_package(OpenSSL QUIET)
+        if(OpenSSL_FOUND)
+            message(STATUS "OpenSSL found for static linking: ${OPENSSL_VERSION}")
+            
+            # For true static linking, we need to find the .a files instead of using imported targets
+            get_target_property(OPENSSL_CRYPTO_LIB OpenSSL::Crypto IMPORTED_LOCATION)
+            get_target_property(OPENSSL_SSL_LIB OpenSSL::SSL IMPORTED_LOCATION)
+            
+            # Convert .dylib paths to .a paths for static linking
+            if(OPENSSL_CRYPTO_LIB)
+                string(REPLACE ".dylib" ".a" OPENSSL_CRYPTO_STATIC ${OPENSSL_CRYPTO_LIB})
+                string(REPLACE ".so" ".a" OPENSSL_CRYPTO_STATIC ${OPENSSL_CRYPTO_STATIC})
+            endif()
+            if(OPENSSL_SSL_LIB) 
+                string(REPLACE ".dylib" ".a" OPENSSL_SSL_STATIC ${OPENSSL_SSL_LIB})
+                string(REPLACE ".so" ".a" OPENSSL_SSL_STATIC ${OPENSSL_SSL_STATIC})
+            endif()
+            
+            # Check if static libraries exist
+            if(EXISTS "${OPENSSL_CRYPTO_STATIC}" AND EXISTS "${OPENSSL_SSL_STATIC}")
+                set(OPENSSL_LIBRARIES ${OPENSSL_SSL_STATIC} ${OPENSSL_CRYPTO_STATIC})
+                message(STATUS "Using OpenSSL static libraries:")
+                message(STATUS "  SSL: ${OPENSSL_SSL_STATIC}")
+                message(STATUS "  Crypto: ${OPENSSL_CRYPTO_STATIC}")
+            else()
+                message(WARNING "OpenSSL static libraries not found, using dynamic linking")
+                message(STATUS "  Looked for: ${OPENSSL_SSL_STATIC}")
+                message(STATUS "  Looked for: ${OPENSSL_CRYPTO_STATIC}")
+                set(OPENSSL_LIBRARIES OpenSSL::Crypto OpenSSL::SSL)
+            endif()
+            
+            set(OPENSSL_INCLUDE_DIRS ${OPENSSL_INCLUDE_DIR})
+        else()
+            # Try pkg-config as fallback
+            find_package(PkgConfig QUIET)
+            if(PkgConfig_FOUND)
+                pkg_check_modules(OPENSSL_PKG QUIET openssl)
+                if(OPENSSL_PKG_FOUND)
+                    message(STATUS "OpenSSL found via pkg-config for static linking")
+                    set(OPENSSL_LIBRARIES ${OPENSSL_PKG_LIBRARIES})
+                    set(OPENSSL_INCLUDE_DIRS ${OPENSSL_PKG_INCLUDE_DIRS})
+                endif()
+            endif()
+            
+            if(NOT OPENSSL_LIBRARIES)
+                message(WARNING "JSRT_STATIC_OPENSSL enabled but OpenSSL not found - falling back to dynamic loading")
+                set(JSRT_STATIC_OPENSSL OFF)
+            endif()
+        endif()
+    endif()
+endif()
+
 # Try to find system readline with robust detection
 set(READLINE_WORKING FALSE)
 
@@ -474,7 +635,14 @@ endif()
 # Platform-specific libraries
 if(WIN32)
     # Windows doesn't need dl, m is built into MSVCRT, pthread is handled by libuv
+    # For static builds, we may need additional system libraries
     set(JSRT_PLATFORM_LIBS)
+    
+    # Add additional Windows libraries for static linking
+    if(JSRT_STATIC_OPENSSL)
+        # These are already added to OPENSSL_LIBRARIES but ensure they're available
+        list(APPEND JSRT_PLATFORM_LIBS ws2_32 crypt32 bcrypt)
+    endif()
 else()
     # Unix/Linux/macOS need these libraries
     set(JSRT_PLATFORM_LIBS dl m pthread)
@@ -482,9 +650,41 @@ endif()
 
 # build jsrt
 file(GLOB_RECURSE JSRT_STD_FILES "src/std/*.c")
+file(GLOB_RECURSE JSRT_CRYPTO_FILES "src/crypto/*.c")
 file(GLOB_RECURSE JSRT_UTIL_FILES "src/util/*.c")
 file(GLOB_RECURSE JSRT_HTTP_FILES "src/http/*.c")
 file(GLOB_RECURSE JSRT_WASM_FILES "src/wasm/*.c")
+
+# For static OpenSSL builds, exclude modules that need runtime loading
+if(JSRT_STATIC_OPENSSL AND OPENSSL_LIBRARIES)
+    list(REMOVE_ITEM JSRT_CRYPTO_FILES 
+        "${CMAKE_SOURCE_DIR}/src/crypto/crypto_digest.c"
+        "${CMAKE_SOURCE_DIR}/src/crypto/crypto_hmac.c" 
+        "${CMAKE_SOURCE_DIR}/src/crypto/crypto_kdf.c"
+        "${CMAKE_SOURCE_DIR}/src/crypto/crypto_rsa.c"
+        "${CMAKE_SOURCE_DIR}/src/crypto/crypto_subtle.c"
+        "${CMAKE_SOURCE_DIR}/src/crypto/crypto_symmetric.c"
+        "${CMAKE_SOURCE_DIR}/src/crypto/crypto_ec.c"
+        )
+    list(REMOVE_ITEM JSRT_HTTP_FILES 
+        "${CMAKE_SOURCE_DIR}/src/http/fetch.c")
+    list(REMOVE_ITEM JSRT_UTIL_FILES 
+        "${CMAKE_SOURCE_DIR}/src/util/http_client.c")
+    # Add full static implementations with unified core
+    list(APPEND JSRT_CRYPTO_FILES "${CMAKE_SOURCE_DIR}/src/crypto/crypto_unified.c")
+    list(APPEND JSRT_CRYPTO_FILES "${CMAKE_SOURCE_DIR}/src/crypto/crypto_setup.c")
+    list(APPEND JSRT_CRYPTO_FILES "${CMAKE_SOURCE_DIR}/src/crypto/crypto_subtle_static.c")
+    list(APPEND JSRT_HTTP_FILES "${CMAKE_SOURCE_DIR}/src/http/fetch_static.c")
+    list(APPEND JSRT_UTIL_FILES "${CMAKE_SOURCE_DIR}/src/util/http_client_static.c")
+    message(STATUS "Static OpenSSL: Using full static implementations")
+else()
+    # For dynamic builds, exclude static-only files and add dynamic implementations
+    list(REMOVE_ITEM JSRT_CRYPTO_FILES 
+        "${CMAKE_SOURCE_DIR}/src/crypto/crypto_subtle_static.c")
+    list(APPEND JSRT_CRYPTO_FILES "${CMAKE_SOURCE_DIR}/src/crypto/crypto_unified.c")
+    list(APPEND JSRT_CRYPTO_FILES "${CMAKE_SOURCE_DIR}/src/crypto/crypto_setup.c")
+    message(STATUS "Dynamic OpenSSL: Using runtime loading with unified backend")
+endif()
 
 # Add Node.js compatibility sources
 set(NODE_SOURCES "")
@@ -494,6 +694,7 @@ endif()
 
 set(JSRT_LIB_FILES
     ${JSRT_STD_FILES}
+    ${JSRT_CRYPTO_FILES}
     ${JSRT_UTIL_FILES}
     ${JSRT_HTTP_FILES}
     ${JSRT_WASM_FILES}
@@ -509,11 +710,16 @@ set(JSRT_LINK_LIBS
     readline
     vmlib
     ${JSRT_PLATFORM_LIBS}
-    ${FFI_LIBRARIES})
+    ${FFI_LIBRARIES}
+    ${OPENSSL_LIBRARIES})
 add_library(jsrtcore STATIC ${JSRT_LIB_FILES})
 target_compile_definitions(jsrtcore PRIVATE JSRT_VERSION="${JSRT_VERSION}")
 if(JSRT_NODE_COMPAT)
     target_compile_definitions(jsrtcore PRIVATE JSRT_NODE_COMPAT)
+endif()
+if(JSRT_STATIC_OPENSSL AND OPENSSL_LIBRARIES)
+    target_compile_definitions(jsrtcore PRIVATE JSRT_STATIC_OPENSSL)
+    target_include_directories(jsrtcore PRIVATE ${OPENSSL_INCLUDE_DIRS})
 endif()
 target_link_libraries(jsrtcore PRIVATE readline)
 add_executable(jsrt src/main.c src/build.c)

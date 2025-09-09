@@ -65,7 +65,13 @@ yarn.lock
 
 # Temporary test files
 test_*.js
+test_*.mjs
 !test/test_*.js
+!test/test_*.mjs
+!test/**/test_*.js
+!test/**/test_*.mjs
+debug_*.js
+debug_*.mjs
 
 # Claude settings
 .claude/settings.local.json

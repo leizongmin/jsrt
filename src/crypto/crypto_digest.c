@@ -1,5 +1,119 @@
 #include "crypto_digest.h"
 
+#ifdef JSRT_STATIC_OPENSSL
+// Static OpenSSL mode - use statically linked OpenSSL functions
+#include <openssl/evp.h>
+#include <openssl/rand.h>
+#include <stdlib.h>
+#include <string.h>
+
+#include "../util/debug.h"
+
+// Get OpenSSL EVP_MD for algorithm (static linking)
+static const EVP_MD* get_openssl_md_static(jsrt_crypto_algorithm_t alg) {
+  switch (alg) {
+    case JSRT_CRYPTO_ALG_SHA1:
+      return EVP_sha1();
+    case JSRT_CRYPTO_ALG_SHA256:
+      return EVP_sha256();
+    case JSRT_CRYPTO_ALG_SHA384:
+      return EVP_sha384();
+    case JSRT_CRYPTO_ALG_SHA512:
+      return EVP_sha512();
+    default:
+      return NULL;
+  }
+}
+
+// Get digest size for algorithm (static linking)
+static size_t get_digest_size_static(jsrt_crypto_algorithm_t alg) {
+  const EVP_MD* md = get_openssl_md_static(alg);
+  if (!md) {
+    // Fallback to known sizes
+    switch (alg) {
+      case JSRT_CRYPTO_ALG_SHA1:
+        return 20;
+      case JSRT_CRYPTO_ALG_SHA256:
+        return 32;
+      case JSRT_CRYPTO_ALG_SHA384:
+        return 48;
+      case JSRT_CRYPTO_ALG_SHA512:
+        return 64;
+      default:
+        return 0;
+    }
+  }
+
+  return EVP_MD_size(md);
+}
+
+// Perform digest operation (blocking, for worker thread) - static linking
+int jsrt_crypto_digest_data(jsrt_crypto_algorithm_t alg, const uint8_t* input, size_t input_len, uint8_t** output,
+                            size_t* output_len) {
+  const EVP_MD* md = get_openssl_md_static(alg);
+  if (!md) {
+    JSRT_Debug("JSRT_Crypto_Digest: Unsupported algorithm");
+    return -1;
+  }
+
+  // Create digest context
+  EVP_MD_CTX* ctx = EVP_MD_CTX_new();
+  if (!ctx) {
+    JSRT_Debug("JSRT_Crypto_Digest: Failed to create digest context");
+    return -1;
+  }
+
+  // Initialize digest
+  if (EVP_DigestInit_ex(ctx, md, NULL) != 1) {
+    EVP_MD_CTX_free(ctx);
+    JSRT_Debug("JSRT_Crypto_Digest: Failed to initialize digest");
+    return -1;
+  }
+
+  // Update with input data
+  if (EVP_DigestUpdate(ctx, input, input_len) != 1) {
+    EVP_MD_CTX_free(ctx);
+    JSRT_Debug("JSRT_Crypto_Digest: Failed to update digest");
+    return -1;
+  }
+
+  // Get digest size and allocate output buffer
+  size_t digest_size = get_digest_size_static(alg);
+  if (digest_size == 0) {
+    EVP_MD_CTX_free(ctx);
+    JSRT_Debug("JSRT_Crypto_Digest: Invalid digest size");
+    return -1;
+  }
+
+  *output = malloc(digest_size);
+  if (!*output) {
+    EVP_MD_CTX_free(ctx);
+    JSRT_Debug("JSRT_Crypto_Digest: Failed to allocate output buffer");
+    return -1;
+  }
+
+  // Finalize digest
+  unsigned int final_size;
+  if (EVP_DigestFinal_ex(ctx, *output, &final_size) != 1) {
+    free(*output);
+    *output = NULL;
+    EVP_MD_CTX_free(ctx);
+    JSRT_Debug("JSRT_Crypto_Digest: Failed to finalize digest");
+    return -1;
+  }
+
+  *output_len = final_size;
+
+  // Clean up context
+  EVP_MD_CTX_free(ctx);
+
+  JSRT_Debug("JSRT_Crypto_Digest: Successfully computed %s digest (%zu bytes)", jsrt_crypto_algorithm_to_string(alg),
+             *output_len);
+  return 0;
+}
+
+#else
+// Dynamic OpenSSL mode - use dynamically loaded OpenSSL functions
 // Platform-specific includes for dynamic loading
 #ifdef _WIN32
 #include <windows.h>
@@ -193,3 +307,5 @@ int jsrt_crypto_digest_data(jsrt_crypto_algorithm_t alg, const uint8_t* input, s
              *output_len);
   return 0;
 }
+
+#endif

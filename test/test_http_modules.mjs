@@ -159,9 +159,14 @@ function runTests() {
 }
 
 // Run the tests
-try {
-  runTests();
-} catch (error) {
-  console.error('Test failed:', error.message);
-  process.exit(1);
+if (typeof crypto === 'undefined') {
+  console.log('❌ SKIP: crypto object not available (OpenSSL not found)');
+  console.log('=== HTTP module Tests Completed (Skipped) ===');
+} else {
+  try {
+    runTests();
+  } catch (error) {
+    console.error('Test failed:', error.message);
+    process.exit(1);
+  }
 }

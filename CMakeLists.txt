@@ -84,7 +84,9 @@ set(QUICKJS_LIB_FILES
     deps/quickjs/quickjs.c
     )
 add_library(quickjs STATIC ${QUICKJS_LIB_FILES})
-file(STRINGS deps/quickjs/VERSION QUICKJS_VERSION)
+file(STRINGS deps/quickjs/VERSION QUICKJS_VERSION_RAW)
+string(STRIP "${QUICKJS_VERSION_RAW}" QUICKJS_VERSION)
+message(STATUS "QUICKJS_VERSION: '${QUICKJS_VERSION}'")
 target_compile_definitions(quickjs PRIVATE CONFIG_VERSION="${QUICKJS_VERSION}" _GNU_SOURCE)
 
 # In debug builds, disable the strict GC assertion that can fail with complex runtime environments
@@ -713,7 +715,7 @@ set(JSRT_LINK_LIBS
     ${FFI_LIBRARIES}
     ${OPENSSL_LIBRARIES})
 add_library(jsrtcore STATIC ${JSRT_LIB_FILES})
-target_compile_definitions(jsrtcore PRIVATE JSRT_VERSION="${JSRT_VERSION}")
+target_compile_definitions(jsrtcore PRIVATE JSRT_VERSION="${JSRT_VERSION}" QUICKJS_VERSION="${QUICKJS_VERSION}")
 if(JSRT_NODE_COMPAT)
     target_compile_definitions(jsrtcore PRIVATE JSRT_NODE_COMPAT)
 endif()
@@ -723,7 +725,7 @@ if(JSRT_STATIC_OPENSSL AND OPENSSL_LIBRARIES)
 endif()
 target_link_libraries(jsrtcore PRIVATE readline)
 add_executable(jsrt src/main.c src/build.c)
-target_compile_definitions(jsrt PRIVATE JSRT_VERSION="${JSRT_VERSION}")
+target_compile_definitions(jsrt PRIVATE JSRT_VERSION="${JSRT_VERSION}" QUICKJS_VERSION="${QUICKJS_VERSION}")
 target_link_libraries(jsrt ${JSRT_LINK_LIBS})
 
 # build jsrt tests using individual jsrt runs

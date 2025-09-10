@@ -260,8 +260,12 @@ static JSValue jsrt_process_get_versions(JSContext* ctx, JSValueConst this_val, 
     JS_SetPropertyStr(ctx, versions_obj, "openssl", JS_NewString(ctx, openssl_version));
   }
 
-  // Add QuickJS version
-  JS_SetPropertyStr(ctx, versions_obj, "quickjs", JS_NewString(ctx, "2024-01-13"));
+  // Add QuickJS version from compile-time macro
+#ifdef QUICKJS_VERSION
+  JS_SetPropertyStr(ctx, versions_obj, "quickjs", JS_NewString(ctx, QUICKJS_VERSION));
+#else
+  JS_SetPropertyStr(ctx, versions_obj, "quickjs", JS_NewString(ctx, "unknown"));
+#endif
 
   return versions_obj;
 }

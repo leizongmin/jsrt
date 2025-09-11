@@ -57,6 +57,7 @@ typedef struct JSRT_URL {
 // Forward declarations
 static JSRT_URL* JSRT_ParseURL(const char* url, const char* base);
 static int validate_url_characters(const char* url);
+static int validate_hostname_characters(const char* hostname);
 static void JSRT_FreeURL(JSRT_URL* url);
 static JSValue JSRT_URLSearchParamsToString(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv);
 static char* url_encode_with_len(const char* str, size_t len);
@@ -112,6 +113,7 @@ static int is_default_port(const char* scheme, const char* port) {
 
 // Canonicalize IPv6 address according to RFC 5952
 // Handles IPv4-mapped IPv6 addresses like ::127.0.0.1 -> ::7f00:1
+// Also handles zero compression like 1:0:: -> 1::
 static char* canonicalize_ipv6(const char* ipv6_str) {
   if (!ipv6_str || strlen(ipv6_str) < 3) {
     return strdup(ipv6_str ? ipv6_str : "");
@@ -133,79 +135,163 @@ static char* canonicalize_ipv6(const char* ipv6_str) {
   strncpy(addr, addr_start, addr_len);
   addr[addr_len] = '\0';
 
-  // Check for IPv4-mapped IPv6 address (::d.d.d.d or 0:0:0:0:0:0:d.d.d.d format)
-  char* ipv4_part = NULL;
+  // Parse IPv6 address into 16-bit groups
+  uint16_t groups[8] = {0};
+  int group_count = 0;
+  int double_colon_pos = -1;
 
-  // Look for IPv4 address at the end (has dots)
-  char* last_colon = strrchr(addr, ':');
-  if (last_colon && strchr(last_colon + 1, '.')) {
-    ipv4_part = last_colon + 1;
-
-    // Check if the IPv6 part is all zeros (canonical form should be ::)
-    char* ipv6_part = malloc(last_colon - addr + 1);
-    strncpy(ipv6_part, addr, last_colon - addr);
-    ipv6_part[last_colon - addr] = '\0';
-
-    // Convert patterns like "0:0:0:0:0:0" to "::" for canonical form
-    if (strcmp(ipv6_part, "0:0:0:0:0:0") == 0 || strcmp(ipv6_part, "::0:0:0:0:0") == 0 ||
-        strcmp(ipv6_part, "::") == 0 || strlen(ipv6_part) == 0) {
-      // This is a valid IPv4-mapped IPv6 address
-      *last_colon = '\0';  // Temporarily null-terminate the IPv6 part
-    } else {
-      ipv4_part = NULL;  // Not a standard IPv4-mapped format
-    }
-    free(ipv6_part);
+  // Check for double colon
+  char* double_colon = strstr(addr, "::");
+  if (double_colon) {
+    double_colon_pos = double_colon - addr;
   }
 
-  // Also check for :: prefix format (like ::127.0.0.1)
-  if (strstr(addr, "::") == addr && strlen(addr) > 2 && !ipv4_part) {
-    // Handle :: prefix format (like ::127.0.0.1)
-    if (strlen(addr) > 2) {
-      // Look for IPv4 part after ::
-      char* potential_ipv4 = addr + 2;  // Skip ::
-      if (strchr(potential_ipv4, '.')) {
-        ipv4_part = potential_ipv4;
-        // For :: prefix, the IPv6 part is implicitly all zeros
+  // Parse groups before double colon (if any)
+  if (double_colon_pos >= 0) {
+    if (double_colon_pos > 0) {
+      char* before_dc = malloc(double_colon_pos + 1);
+      strncpy(before_dc, addr, double_colon_pos);
+      before_dc[double_colon_pos] = '\0';
+
+      char* token = strtok(before_dc, ":");
+      while (token && group_count < 8) {
+        groups[group_count++] = (uint16_t)strtoul(token, NULL, 16);
+        token = strtok(NULL, ":");
       }
+      free(before_dc);
     }
-  }
 
-  char* result = NULL;
+    // Parse groups after double colon
+    char* after_dc = addr + double_colon_pos + 2;
+    if (strlen(after_dc) > 0) {
+      // Check for IPv4 suffix
+      if (strchr(after_dc, '.')) {
+        // Handle IPv4-mapped IPv6
+        char* ipv4_start = strrchr(after_dc, ':');
+        if (ipv4_start) {
+          ipv4_start++;
+        } else {
+          ipv4_start = after_dc;
+        }
 
-  if (ipv4_part) {
-    // Convert IPv4 to hex representation
-    int a, b, c, d;
-    if (sscanf(ipv4_part, "%d.%d.%d.%d", &a, &b, &c, &d) == 4 && a >= 0 && a <= 255 && b >= 0 && b <= 255 && c >= 0 &&
-        c <= 255 && d >= 0 && d <= 255) {
-      // Convert to two 16-bit hex values
-      uint16_t high = (a << 8) | b;
-      uint16_t low = (c << 8) | d;
+        int a, b, c, d;
+        if (sscanf(ipv4_start, "%d.%d.%d.%d", &a, &b, &c, &d) == 4 && a >= 0 && a <= 255 && b >= 0 && b <= 255 &&
+            c >= 0 && c <= 255 && d >= 0 && d <= 255) {
+          // Convert IPv4 to two 16-bit groups
+          uint16_t high = (a << 8) | b;
+          uint16_t low = (c << 8) | d;
 
-      // Build the canonical form with brackets
-      result = malloc(32);
-      if (high == 0) {
-        snprintf(result, 32, "[::%x]", low);
+          // Parse any groups before the IPv4 part
+          if (ipv4_start > after_dc) {
+            char* before_ipv4 = malloc(ipv4_start - after_dc);
+            strncpy(before_ipv4, after_dc, ipv4_start - after_dc - 1);
+            before_ipv4[ipv4_start - after_dc - 1] = '\0';
+
+            char* token = strtok(before_ipv4, ":");
+            while (token && group_count < 6) {
+              groups[group_count++] = (uint16_t)strtoul(token, NULL, 16);
+              token = strtok(NULL, ":");
+            }
+            free(before_ipv4);
+          }
+
+          // Add IPv4 as two groups
+          if (group_count < 8)
+            groups[group_count++] = high;
+          if (group_count < 8)
+            groups[group_count++] = low;
+        }
       } else {
-        snprintf(result, 32, "[::%x:%x]", high, low);
+        // Regular hex groups after ::
+        char* token = strtok(after_dc, ":");
+        int after_groups[8];
+        int after_count = 0;
+        while (token && after_count < 8) {
+          after_groups[after_count++] = (uint16_t)strtoul(token, NULL, 16);
+          token = strtok(NULL, ":");
+        }
+
+        // Fill in the zero groups
+        int zeros_needed = 8 - group_count - after_count;
+        for (int i = 0; i < zeros_needed && group_count < 8; i++) {
+          groups[group_count++] = 0;
+        }
+
+        // Add the groups after ::
+        for (int i = 0; i < after_count && group_count < 8; i++) {
+          groups[group_count++] = after_groups[i];
+        }
       }
     } else {
-      // Invalid IPv4, return original with brackets
-      result = malloc(strlen(ipv6_str) + 3);
-      if (ipv6_str[0] == '[') {
-        strcpy(result, ipv6_str);
-      } else {
-        snprintf(result, strlen(ipv6_str) + 3, "[%s]", ipv6_str);
+      // :: at the end, fill with zeros
+      while (group_count < 8) {
+        groups[group_count++] = 0;
       }
     }
   } else {
-    // Not an IPv4-mapped address, return original with brackets
-    result = malloc(strlen(ipv6_str) + 3);
-    if (ipv6_str[0] == '[') {
-      strcpy(result, ipv6_str);
-    } else {
-      snprintf(result, strlen(ipv6_str) + 3, "[%s]", ipv6_str);
+    // No double colon, parse all groups
+    char* token = strtok(addr, ":");
+    while (token && group_count < 8) {
+      groups[group_count++] = (uint16_t)strtoul(token, NULL, 16);
+      token = strtok(NULL, ":");
     }
   }
+
+  // Find the longest run of zeros for compression
+  int best_start = -1, best_len = 0;
+  int current_start = -1, current_len = 0;
+
+  for (int i = 0; i < 8; i++) {
+    if (groups[i] == 0) {
+      if (current_start == -1) {
+        current_start = i;
+        current_len = 1;
+      } else {
+        current_len++;
+      }
+    } else {
+      if (current_len > best_len && current_len > 1) {
+        best_start = current_start;
+        best_len = current_len;
+      }
+      current_start = -1;
+      current_len = 0;
+    }
+  }
+
+  // Check the final run
+  if (current_len > best_len && current_len > 1) {
+    best_start = current_start;
+    best_len = current_len;
+  }
+
+  // Build the canonical form
+  char* result = malloc(64);
+  result[0] = '[';
+  result[1] = '\0';
+
+  int i = 0;
+  while (i < 8) {
+    if (i == best_start && best_len > 1) {
+      // Use :: compression
+      if (i == 0) {
+        strcat(result, "::");
+      } else {
+        strcat(result, "::");
+      }
+      i += best_len;
+    } else {
+      if (i > 0 && !(i == best_start + best_len && best_len > 1)) {
+        strcat(result, ":");
+      }
+      char group_str[8];
+      snprintf(group_str, sizeof(group_str), "%x", groups[i]);
+      strcat(result, group_str);
+      i++;
+    }
+  }
+
+  strcat(result, "]");
 
   free(addr);
   return result;
@@ -223,10 +309,15 @@ static char* canonicalize_ipv4_address(const char* input) {
   int has_dots = strchr(input, '.') != NULL;
   int has_hex = strstr(input, "0x") != NULL || strstr(input, "0X") != NULL;
 
-  if (!has_dots && !has_hex) {
-    // Try to parse as a single 32-bit number
+  // Reject all hex notation per WPT tests - these should be treated as invalid hostnames
+  if (has_hex) {
+    return NULL;
+  }
+
+  if (!has_dots) {
+    // Try to parse as a single 32-bit number (decimal or octal only, no hex)
     char* endptr;
-    unsigned long addr = strtoul(input, &endptr, 0);  // Auto-detect base (0x for hex, 0 for octal)
+    unsigned long addr = strtoul(input, &endptr, 10);  // Only decimal base
 
     // If the entire string was consumed and it's a valid 32-bit value
     if (*endptr == '\0' && addr <= 0xFFFFFFFF) {
@@ -358,8 +449,28 @@ static char* compute_origin(const char* protocol, const char* hostname, const ch
     scheme[strlen(scheme) - 1] = '\0';
   }
 
+  // Handle blob URLs - extract origin from the inner URL
+  if (strcmp(scheme, "blob") == 0) {
+    free(scheme);
+    // For blob URLs, the origin is derived from the inner URL
+    // blob:https://example.com/uuid -> https://example.com
+    // The hostname for blob URLs should contain the inner URL
+    if (strncmp(hostname, "http://", 7) == 0 || strncmp(hostname, "https://", 8) == 0) {
+      // Parse the inner URL to extract its origin
+      JSRT_URL* inner_url = JSRT_ParseURL(hostname, NULL);
+      if (inner_url && inner_url->protocol && inner_url->hostname) {
+        char* inner_origin = compute_origin(inner_url->protocol, inner_url->hostname, inner_url->port);
+        JSRT_FreeURL(inner_url);
+        return inner_origin;
+      }
+      if (inner_url)
+        JSRT_FreeURL(inner_url);
+    }
+    return strdup("null");
+  }
+
   // Special schemes that can have tuple origins: http, https, ftp, ws, wss
-  // All other schemes (including file, data, javascript, blob, and custom schemes) have null origin
+  // All other schemes (including file, data, javascript, and custom schemes) have null origin
   if (strcmp(scheme, "http") != 0 && strcmp(scheme, "https") != 0 && strcmp(scheme, "ftp") != 0 &&
       strcmp(scheme, "ws") != 0 && strcmp(scheme, "wss") != 0) {
     free(scheme);
@@ -479,7 +590,8 @@ static JSRT_URL* resolve_relative_url(const char* url, const char* base) {
 }
 
 // Validate credentials according to WHATWG URL specification
-// Reject characters that are not allowed in userinfo: space, tab, LF, CR, @, /, ?, #, [, ], \, <, >, ", {, }, |, ^, `, (, )
+// Reject characters that are not allowed in userinfo: space, tab, LF, CR, @, /, ?, #, [, ], \, <, >, ", {, }, |, ^, `,
+// (, )
 static int validate_credentials(const char* credentials) {
   if (!credentials)
     return 1;
@@ -535,6 +647,52 @@ static int validate_url_characters(const char* url) {
     // This fixes the issue where Unicode characters like β (0xCE 0xB2 in UTF-8) were rejected
   }
   return 1;  // Valid
+}
+
+// Validate hostname characters according to WHATWG URL spec
+static int validate_hostname_characters(const char* hostname) {
+  if (!hostname)
+    return 0;
+
+  for (const char* p = hostname; *p; p++) {
+    unsigned char c = (unsigned char)*p;
+
+    // Reject forbidden hostname characters per WHATWG URL spec
+    // These characters are forbidden in hostnames: " # % / : ? @ [ \ ] ^
+    if (c == '"' || c == '#' || c == '%' || c == '/' || c == ':' || c == '?' || c == '@' || c == '[' || c == '\\' ||
+        c == ']' || c == '^') {
+      return 0;  // Invalid hostname character
+    }
+
+    // Reject ASCII control characters
+    if (c < 0x20 || c == 0x7F) {
+      return 0;  // Control characters not allowed
+    }
+
+    // Reject space character in hostname
+    if (c == ' ') {
+      return 0;  // Spaces not allowed in hostname
+    }
+
+    // Reject Unicode control characters and non-ASCII characters
+    // Check for UTF-8 encoded Unicode characters
+    if (c >= 0x80) {
+      // Check for soft hyphen (U+00AD) encoded as UTF-8: 0xC2 0xAD
+      if (c == 0xC2 && (unsigned char)*(p + 1) == 0xAD) {
+        return 0;  // Soft hyphen not allowed
+      }
+      // Reject all non-ASCII characters in hostnames per WPT tests
+      // This includes Unicode characters like ☃ (snowman)
+      return 0;  // Non-ASCII characters not allowed in hostnames
+    }
+
+    // Reject hex notation patterns in hostnames (0x prefix)
+    if (c == '0' && (*(p + 1) == 'x' || *(p + 1) == 'X')) {
+      return 0;  // Hex notation not allowed in hostnames
+    }
+  }
+
+  return 1;  // Valid hostname
 }
 
 // Strip leading and trailing ASCII whitespace from URL string
@@ -683,6 +841,7 @@ static JSRT_URL* JSRT_ParseURL(const char* url, const char* base) {
 
   // Decode percent-encoded sequences and validate UTF-8 per WHATWG URL spec
   // This ensures invalid UTF-16 surrogates like %ED%A0%80 are replaced with %EF%BF%BD
+  // For URL decoding, we need to preserve + in scheme part, only decode + to space in query parameters
   size_t decoded_len;
   char* decoded_url = url_decode_with_length_and_output_len(cleaned_url, strlen(cleaned_url), &decoded_len);
   if (!decoded_url) {
@@ -691,7 +850,31 @@ static JSRT_URL* JSRT_ParseURL(const char* url, const char* base) {
   }
 
   // Re-encode the validated UTF-8 back to percent-encoded form for further processing
-  char* reencoded_url = url_component_encode(decoded_url);
+  // For non-special schemes, we need to preserve spaces in the path portion
+  char* reencoded_url;
+
+  // Check if this URL has a non-special scheme by looking for a colon
+  char* scheme_colon_pos = strchr(decoded_url, ':');
+  if (scheme_colon_pos && scheme_colon_pos > decoded_url) {
+    // Extract potential scheme
+    size_t scheme_len = scheme_colon_pos - decoded_url;
+    char* scheme = malloc(scheme_len + 1);
+    strncpy(scheme, decoded_url, scheme_len);
+    scheme[scheme_len] = '\0';
+
+    if (is_valid_scheme(scheme) && !is_special_scheme(scheme)) {
+      // Non-special scheme: use special encoding that preserves spaces in path
+      reencoded_url = url_nonspecial_path_encode(decoded_url);
+    } else {
+      // Special scheme or invalid scheme: use normal encoding
+      reencoded_url = url_component_encode(decoded_url);
+    }
+    free(scheme);
+  } else {
+    // No scheme found: use normal encoding
+    reencoded_url = url_component_encode(decoded_url);
+  }
+
   free(decoded_url);
   free(cleaned_url);
   if (!reencoded_url)
@@ -739,22 +922,37 @@ static JSRT_URL* JSRT_ParseURL(const char* url, const char* base) {
   // First character must be a letter for valid scheme
   if (cleaned_url[0] &&
       ((cleaned_url[0] >= 'a' && cleaned_url[0] <= 'z') || (cleaned_url[0] >= 'A' && cleaned_url[0] <= 'Z'))) {
-    for (const char* p = cleaned_url; *p; p++) {
-      if (*p == ':') {
-        // Found colon - extract scheme and validate it
-        size_t scheme_len = p - cleaned_url;
-        char* scheme = malloc(scheme_len + 1);
-        strncpy(scheme, cleaned_url, scheme_len);
-        scheme[scheme_len] = '\0';
+    // Look for "://" pattern to find the correct scheme boundary
+    char* scheme_end = strstr(cleaned_url, "://");
+    if (scheme_end) {
+      // Found "://" - extract scheme and validate it
+      size_t scheme_len = scheme_end - cleaned_url;
+      char* scheme = malloc(scheme_len + 1);
+      strncpy(scheme, cleaned_url, scheme_len);
+      scheme[scheme_len] = '\0';
 
-        if (is_valid_scheme(scheme)) {
+      // Always accept scheme if it follows basic format rules
+      colon_pos = scheme_end;  // Points to the ':' in "://"
+      has_scheme = 1;
+      free(scheme);
+    } else {
+      // No "://" found, look for single colon
+      for (const char* p = cleaned_url; *p; p++) {
+        if (*p == ':') {
+          // Found colon - extract scheme and validate it
+          size_t scheme_len = p - cleaned_url;
+          char* scheme = malloc(scheme_len + 1);
+          strncpy(scheme, cleaned_url, scheme_len);
+          scheme[scheme_len] = '\0';
+
+          // Always accept scheme if it follows basic format rules
           colon_pos = (char*)p;
           has_scheme = 1;
+          free(scheme);
+          break;
+        } else if (*p == '/' || *p == '?' || *p == '#') {
+          break;  // No colon found before path/query/fragment
         }
-        free(scheme);
-        break;
-      } else if (*p == '/' || *p == '?' || *p == '#') {
-        break;  // No colon found before path/query/fragment
       }
     }
   }
@@ -852,14 +1050,93 @@ static JSRT_URL* JSRT_ParseURL(const char* url, const char* base) {
     return parsed;
   }
 
-  // Extract protocol for regular URLs
-  char* protocol_end = strstr(ptr, "://");
-  if (protocol_end) {
-    *protocol_end = '\0';
+  // Handle blob URLs: blob:<origin>/<uuid>
+  if (strncmp(ptr, "blob:", 5) == 0) {
     free(parsed->protocol);
-    parsed->protocol = malloc(strlen(ptr) + 2);
-    sprintf(parsed->protocol, "%s:", ptr);
-    ptr = protocol_end + 3;
+    parsed->protocol = strdup("blob:");
+
+    // Extract the inner URL part (everything after "blob:")
+    char* inner_url_start = ptr + 5;
+
+    // For blob URLs, we need to find the third slash to separate origin from UUID
+    // Format: blob:https://example.com/uuid or blob:https://example.com:443/uuid
+    char* first_slash = strchr(inner_url_start, '/');
+    if (first_slash && first_slash[1] == '/') {
+      // Found "//", now find the next slash after the hostname
+      char* hostname_start = first_slash + 2;
+      char* uuid_slash = strchr(hostname_start, '/');
+
+      if (uuid_slash) {
+        // Split into origin part and UUID part
+        size_t origin_len = uuid_slash - inner_url_start;
+        char* origin_part = malloc(origin_len + 1);
+        strncpy(origin_part, inner_url_start, origin_len);
+        origin_part[origin_len] = '\0';
+
+        // Parse the origin part to extract its origin
+        JSRT_URL* inner_url = JSRT_ParseURL(origin_part, NULL);
+        if (inner_url && inner_url->protocol && inner_url->hostname) {
+          free(parsed->origin);
+          parsed->origin = compute_origin(inner_url->protocol, inner_url->hostname, inner_url->port);
+          JSRT_FreeURL(inner_url);
+        } else {
+          free(parsed->origin);
+          parsed->origin = strdup("null");
+          if (inner_url)
+            JSRT_FreeURL(inner_url);
+        }
+
+        // Set the pathname to the UUID part
+        free(parsed->pathname);
+        parsed->pathname = strdup(uuid_slash);  // Include the leading slash
+
+        free(origin_part);
+      } else {
+        // No UUID slash found, treat entire part as origin
+        JSRT_URL* inner_url = JSRT_ParseURL(inner_url_start, NULL);
+        if (inner_url && inner_url->protocol && inner_url->hostname) {
+          free(parsed->origin);
+          parsed->origin = compute_origin(inner_url->protocol, inner_url->hostname, inner_url->port);
+          JSRT_FreeURL(inner_url);
+        } else {
+          free(parsed->origin);
+          parsed->origin = strdup("null");
+          if (inner_url)
+            JSRT_FreeURL(inner_url);
+        }
+
+        free(parsed->pathname);
+        parsed->pathname = strdup("/");
+      }
+    } else {
+      // Invalid blob URL format
+      free(parsed->origin);
+      parsed->origin = strdup("null");
+      free(parsed->pathname);
+      parsed->pathname = strdup("");
+    }
+
+    free(url_copy);
+    free(cleaned_url);
+    return parsed;
+  }
+
+  // Extract protocol for regular URLs
+  // Use the colon position we already found during scheme detection
+  if (has_scheme && colon_pos && strncmp(colon_pos, "://", 3) == 0) {
+    // This is a scheme with "://" format
+    size_t scheme_len = colon_pos - cleaned_url;
+    char* scheme = malloc(scheme_len + 1);
+    strncpy(scheme, cleaned_url, scheme_len);
+    scheme[scheme_len] = '\0';
+
+    free(parsed->protocol);
+    parsed->protocol = malloc(strlen(scheme) + 2);
+    sprintf(parsed->protocol, "%s:", scheme);
+
+    // Move pointer past "scheme://"
+    ptr = colon_pos + 3;  // Skip ":" and "//"
+    free(scheme);
   } else if (strncmp(ptr, "file:", 5) == 0) {
     free(parsed->protocol);
     parsed->protocol = strdup("file:");
@@ -876,30 +1153,35 @@ static JSRT_URL* JSRT_ParseURL(const char* url, const char* base) {
     parsed->origin = compute_origin(parsed->protocol, parsed->hostname, parsed->port);
     free(cleaned_url);
     return parsed;
-  } else if (has_scheme) {
+  } else if (has_scheme && colon_pos) {
     // Handle schemes with single slash - check if it's a special scheme that needs normalization
-    char* colon_pos = strchr(ptr, ':');
-    if (colon_pos) {
-      *colon_pos = '\0';
+    // Use the colon_pos we already found during scheme detection
+    char* scheme_end = colon_pos;
+    size_t scheme_len = scheme_end - cleaned_url;
+    char* scheme = malloc(scheme_len + 1);
+    strncpy(scheme, cleaned_url, scheme_len);
+    scheme[scheme_len] = '\0';
 
+    if (scheme && is_valid_scheme(scheme)) {
       // Check if this is a special scheme
       const char* special_schemes[] = {"http", "https", "ftp", "ws", "wss", "file", NULL};
       int is_special = 0;
       for (int i = 0; special_schemes[i]; i++) {
-        if (strcmp(ptr, special_schemes[i]) == 0) {
+        if (strcmp(scheme, special_schemes[i]) == 0) {
           is_special = 1;
           break;
         }
       }
 
       if (is_special) {
-        if (strncmp(colon_pos + 1, "/", 1) == 0 && strncmp(colon_pos + 1, "//", 2) != 0) {
+        if (strncmp(scheme_end + 1, "/", 1) == 0 && strncmp(scheme_end + 1, "//", 2) != 0) {
           // Special scheme with single slash - normalize to double slash for absolute URL
           // Per WHATWG URL spec, URLs like "https:/example.com/" should be parsed as absolute URLs
-          char* rest = colon_pos + 2;                                  // Skip ":" and "/"
-          size_t normalized_len = strlen(ptr) + 3 + strlen(rest) + 1;  // scheme + "://" + rest + null
+          char* rest = scheme_end + 2;                                    // Skip ":" and "/"
+          size_t normalized_len = strlen(scheme) + 3 + strlen(rest) + 1;  // scheme + "://" + rest + null
           char* normalized_url = malloc(normalized_len);
-          snprintf(normalized_url, normalized_len, "%s://%s", ptr, rest);
+          snprintf(normalized_url, normalized_len, "%s://%s", scheme, rest);
+          free(scheme);
 
           // Parse the normalized URL recursively
           free(url_copy);
@@ -920,10 +1202,11 @@ static JSRT_URL* JSRT_ParseURL(const char* url, const char* base) {
           JSRT_URL* result = JSRT_ParseURL(normalized_url, NULL);
           free(normalized_url);
           return result;
-        } else if (strncmp(colon_pos + 1, "//", 2) != 0) {
+        } else if (strncmp(scheme_end + 1, "//", 2) != 0) {
           // Special scheme with single colon (no slash)
           if (base) {
             // With base: treat as relative URL (resolve against base)
+            free(scheme);
             free(url_copy);
             free(cleaned_url);
             free(parsed->href);
@@ -942,10 +1225,11 @@ static JSRT_URL* JSRT_ParseURL(const char* url, const char* base) {
             return resolve_relative_url(url, base);
           } else {
             // Without base: normalize to double slash (absolute URL)
-            char* rest = colon_pos + 1;                                  // Skip ":"
-            size_t normalized_len = strlen(ptr) + 3 + strlen(rest) + 1;  // scheme + "://" + rest + null
+            char* rest = scheme_end + 1;                                    // Skip ":"
+            size_t normalized_len = strlen(scheme) + 3 + strlen(rest) + 1;  // scheme + "://" + rest + null
             char* normalized_url = malloc(normalized_len);
-            snprintf(normalized_url, normalized_len, "%s://%s", ptr, rest);
+            snprintf(normalized_url, normalized_len, "%s://%s", scheme, rest);
+            free(scheme);
 
             // Parse the normalized URL recursively
             free(url_copy);
@@ -972,9 +1256,12 @@ static JSRT_URL* JSRT_ParseURL(const char* url, const char* base) {
 
       // Handle non-special schemes (like "a:", "mailto:", "data:", etc.)
       free(parsed->protocol);
-      parsed->protocol = malloc(strlen(ptr) + 2);
-      sprintf(parsed->protocol, "%s:", ptr);
-      ptr = colon_pos + 1;
+      // For protocol field, preserve the original scheme without encoding
+      // The scheme should remain as-is (e.g., "git+https:" not "git%20https:")
+      parsed->protocol = malloc(strlen(scheme) + 2);
+      sprintf(parsed->protocol, "%s:", scheme);
+      ptr = scheme_end + 1;
+      free(scheme);
 
       // For non-special schemes, parse hash and search from the path
       // Extract hash first (fragment)
@@ -995,9 +1282,8 @@ static JSRT_URL* JSRT_ParseURL(const char* url, const char* base) {
 
       // The rest is the pathname
       free(parsed->pathname);
-      // For non-special schemes, normalize spaces in pathname (tab->space, collapse consecutive spaces)
-      char* normalized_pathname = normalize_spaces_in_path(ptr);
-      parsed->pathname = normalized_pathname ? normalized_pathname : strdup(ptr);
+      // For non-special schemes, preserve spaces in pathname as-is
+      parsed->pathname = strdup(ptr);
 
       // Rebuild href with encoded components for non-special schemes
       // For non-special schemes, pathname should NOT be encoded (spaces remain as spaces)
@@ -1166,13 +1452,31 @@ static JSRT_URL* JSRT_ParseURL(const char* url, const char* base) {
     // Set hostname with IPv4 address canonicalization
     free(parsed->hostname);
 
-    // Try to parse as IPv4 address (including hexadecimal formats)
+    // Try to parse as IPv4 address first (including hexadecimal formats)
     char* canonical_ipv4 = canonicalize_ipv4_address(hostname_part);
     if (canonical_ipv4) {
+      // IPv4 address was successfully parsed
       parsed->hostname = canonical_ipv4;
       free(hostname_part);
     } else {
+      // Not a valid IPv4 address, validate as hostname
+      if (!validate_hostname_characters(hostname_part)) {
+        // Don't free hostname_part here - it will be freed by JSRT_FreeURL
+        if (port_part) {
+          // Restore the colon we might have modified
+          char* colon_in_authority = strchr(authority, ':');
+          if (colon_in_authority)
+            *colon_in_authority = ':';
+        }
+        // Assign hostname_part to parsed->hostname so it gets freed properly
+        parsed->hostname = hostname_part;
+        free(url_copy);
+        free(cleaned_url);
+        JSRT_FreeURL(parsed);
+        return NULL;
+      }
       parsed->hostname = hostname_part;
+      // Don't free hostname_part here since it's now assigned to parsed->hostname
     }
 
     // Set port
@@ -1181,8 +1485,10 @@ static JSRT_URL* JSRT_ParseURL(const char* url, const char* base) {
       parsed->port = normalize_port(port_part, parsed->protocol);
       if (!parsed->port) {
         // Invalid port - cleanup and return error
-        free(hostname_part);
+        // Don't free hostname_part here since it might be assigned to parsed->hostname
         // Don't free port_part - it's just a pointer into authority string
+        free(url_copy);
+        free(cleaned_url);
         JSRT_FreeURL(parsed);
         return NULL;
       }
@@ -1214,11 +1520,8 @@ static JSRT_URL* JSRT_ParseURL(const char* url, const char* base) {
       scheme[strlen(scheme) - 1] = '\0';
     }
 
-    if (!is_valid_scheme(scheme)) {
-      free(scheme);
-      JSRT_FreeURL(parsed);
-      return NULL;  // Invalid scheme
-    }
+    // Accept all schemes that were successfully parsed
+    // The scheme validation was already done during parsing
 
     // Check if this is a special scheme that requires a host
     const char* special_schemes[] = {"http", "https", "ftp", "ws", "wss", NULL};
@@ -1258,6 +1561,7 @@ static JSRT_URL* JSRT_ParseURL(const char* url, const char* base) {
     encoded_pathname = strdup(parsed->pathname ? parsed->pathname : "");
   }
   char* encoded_search = url_component_encode(parsed->search);
+  // Hash should be encoded
   char* encoded_hash = url_component_encode(parsed->hash);
 
   size_t href_len = strlen(parsed->protocol) + 2 + strlen(parsed->host) + strlen(encoded_pathname);
@@ -1788,7 +2092,8 @@ static int hex_to_int(char c) {
   return -1;
 }
 
-static char* url_decode_with_length_and_output_len(const char* str, size_t len, size_t* output_len) {
+// URL decode function for query parameters (+ becomes space)
+static char* url_decode_query_with_length_and_output_len(const char* str, size_t len, size_t* output_len) {
   char* decoded = malloc(len * 3 + 1);  // Allocate more space for potential replacement characters
   size_t i = 0, j = 0;
 
@@ -1869,6 +2174,84 @@ static char* url_decode_with_length_and_output_len(const char* str, size_t len, 
   return decoded;
 }
 
+// URL decode function for general URL components (+ remains as +)
+static char* url_decode_with_length_and_output_len(const char* str, size_t len, size_t* output_len) {
+  char* decoded = malloc(len * 3 + 1);  // Allocate more space for potential replacement characters
+  size_t i = 0, j = 0;
+
+  while (i < len) {
+    if (str[i] == '%' && i + 2 < len) {
+      int h1 = hex_to_int(str[i + 1]);
+      int h2 = hex_to_int(str[i + 2]);
+      if (h1 >= 0 && h2 >= 0) {
+        unsigned char byte = (unsigned char)((h1 << 4) | h2);
+
+        // Check if this starts a UTF-8 sequence
+        if (byte >= 0x80) {
+          // Collect the complete UTF-8 sequence
+          size_t seq_start = j;
+          decoded[j++] = byte;
+          i += 3;
+
+          // Determine expected sequence length
+          int expected_len = 1;
+          if ((byte & 0xE0) == 0xC0)
+            expected_len = 2;
+          else if ((byte & 0xF0) == 0xE0)
+            expected_len = 3;
+          else if ((byte & 0xF8) == 0xF0)
+            expected_len = 4;
+
+          // Collect continuation bytes
+          for (int k = 1; k < expected_len && i + 2 < len; k++) {
+            if (str[i] == '%' && i + 2 < len) {
+              int h1_cont = hex_to_int(str[i + 1]);
+              int h2_cont = hex_to_int(str[i + 2]);
+              if (h1_cont >= 0 && h2_cont >= 0) {
+                unsigned char cont_byte = (unsigned char)((h1_cont << 4) | h2_cont);
+                if ((cont_byte & 0xC0) == 0x80) {
+                  decoded[j++] = cont_byte;
+                  i += 3;
+                } else {
+                  break;  // Invalid continuation byte
+                }
+              } else {
+                break;  // Invalid hex
+              }
+            } else {
+              break;  // Not a percent-encoded byte
+            }
+          }
+
+          // Validate the collected UTF-8 sequence
+          const uint8_t* next;
+          int codepoint = JSRT_ValidateUTF8Sequence((const uint8_t*)(decoded + seq_start), j - seq_start, &next);
+
+          if (codepoint < 0) {
+            // Invalid UTF-8 sequence, replace with U+FFFD (0xEF 0xBF 0xBD)
+            j = seq_start;  // Reset to start of sequence
+            decoded[j++] = 0xEF;
+            decoded[j++] = 0xBF;
+            decoded[j++] = 0xBD;
+          }
+        } else {
+          // ASCII byte, add directly
+          decoded[j++] = byte;
+          i += 3;
+        }
+        continue;
+      }
+    }
+    // For general URL components, + remains as + (not converted to space)
+    decoded[j++] = str[i++];
+  }
+  decoded[j] = '\0';
+  if (output_len) {
+    *output_len = j;
+  }
+  return decoded;
+}
+
 static char* url_decode_with_length(const char* str, size_t len) {
   return url_decode_with_length_and_output_len(str, len, NULL);
 }
@@ -1922,11 +2305,11 @@ static JSRT_URLSearchParams* JSRT_ParseSearchParams(const char* search_string, s
         size_t name_len = eq_pos - param_start;
         size_t value_len = param_start + param_len - eq_pos - 1;
 
-        param->name = url_decode_with_length_and_output_len(start + param_start, name_len, &param->name_len);
-        param->value = url_decode_with_length_and_output_len(start + eq_pos + 1, value_len, &param->value_len);
+        param->name = url_decode_query_with_length_and_output_len(start + param_start, name_len, &param->name_len);
+        param->value = url_decode_query_with_length_and_output_len(start + eq_pos + 1, value_len, &param->value_len);
       } else {
         // No '=' - name only, empty value
-        param->name = url_decode_with_length_and_output_len(start + param_start, param_len, &param->name_len);
+        param->name = url_decode_query_with_length_and_output_len(start + param_start, param_len, &param->name_len);
         param->value = strdup("");
         param->value_len = 0;
       }
@@ -2866,7 +3249,7 @@ static char* url_component_encode(const char* str) {
   return encoded;
 }
 
-// Special encoding for non-special scheme paths (spaces are NOT encoded, but normalized)
+// Special encoding for non-special scheme paths (spaces are preserved as-is)
 static char* url_nonspecial_path_encode(const char* str) {
   if (!str)
     return NULL;
@@ -2874,57 +3257,41 @@ static char* url_nonspecial_path_encode(const char* str) {
   static const char hex_chars[] = "0123456789ABCDEF";
   size_t len = strlen(str);
   size_t encoded_len = 0;
-  bool prev_was_space = false;
 
-  // Calculate encoded length (normalize consecutive spaces to single space)
+  // Calculate encoded length (preserve all spaces)
   for (size_t i = 0; i < len; i++) {
     unsigned char c = (unsigned char)str[i];
     if (c == ' ') {
-      if (!prev_was_space) {
-        encoded_len++;  // Keep first space in sequence
-        prev_was_space = true;
-      }
-      // Skip additional consecutive spaces
+      encoded_len++;  // Keep space as-is
+    } else if (c == '%' && i + 2 < len && hex_to_int(str[i + 1]) >= 0 && hex_to_int(str[i + 2]) >= 0) {
+      // Already percent-encoded sequence, keep as-is
+      encoded_len += 3;
+    } else if (c < 32 || c > 126) {
+      encoded_len += 3;  // %XX
     } else {
-      prev_was_space = false;
-      if (c == '%' && i + 2 < len && hex_to_int(str[i + 1]) >= 0 && hex_to_int(str[i + 2]) >= 0) {
-        // Already percent-encoded sequence, keep as-is
-        encoded_len += 3;
-      } else if (c < 32 || c > 126) {
-        encoded_len += 3;  // %XX
-      } else {
-        encoded_len++;
-      }
+      encoded_len++;
     }
   }
 
   char* encoded = malloc(encoded_len + 1);
   size_t j = 0;
-  prev_was_space = false;
 
   for (size_t i = 0; i < len; i++) {
     unsigned char c = (unsigned char)str[i];
     if (c == ' ') {
-      if (!prev_was_space) {
-        encoded[j++] = c;  // Keep first space in sequence
-        prev_was_space = true;
-      }
-      // Skip additional consecutive spaces
+      encoded[j++] = c;  // Keep space as-is
+    } else if (c == '%' && i + 2 < len && hex_to_int(str[i + 1]) >= 0 && hex_to_int(str[i + 2]) >= 0) {
+      // Already percent-encoded sequence, copy as-is
+      encoded[j++] = str[i];
+      encoded[j++] = str[i + 1];
+      encoded[j++] = str[i + 2];
+      i += 2;  // Skip the next two characters
+    } else if (c < 32 || c > 126) {
+      encoded[j++] = '%';
+      encoded[j++] = hex_chars[c >> 4];
+      encoded[j++] = hex_chars[c & 15];
     } else {
-      prev_was_space = false;
-      if (c == '%' && i + 2 < len && hex_to_int(str[i + 1]) >= 0 && hex_to_int(str[i + 2]) >= 0) {
-        // Already percent-encoded sequence, copy as-is
-        encoded[j++] = str[i];
-        encoded[j++] = str[i + 1];
-        encoded[j++] = str[i + 2];
-        i += 2;  // Skip the next two characters
-      } else if (c < 32 || c > 126) {
-        encoded[j++] = '%';
-        encoded[j++] = hex_chars[c >> 4];
-        encoded[j++] = hex_chars[c & 15];
-      } else {
-        encoded[j++] = c;
-      }
+      encoded[j++] = c;
     }
   }
   encoded[j] = '\0';

@@ -331,7 +331,10 @@ function test(func, name) {
     } catch (e) {
         testObj.status = TEST_FAIL;
         testObj.message = e.message;
-        console.log(`❌ ${testName}: ${e.message}`);
+        console.log(`❌ FAIL: ${testName}: ${e.message}`);
+        // Immediately print failure summary for visibility
+        console.log(`\n🔴 FAILURE DETECTED: ${testName}`);
+        console.log(`   Error: ${e.message}`);
     } finally {
         wptCurrentTest = null;
     }
@@ -415,7 +418,9 @@ function async_test(func, name) {
             completed = true;
             testObj.status = TEST_FAIL;
             testObj.message = e.message;
-            console.log(`❌ ${testName}: ${e.message}`);
+            console.log(`❌ FAIL: ${testName}: ${e.message}`);
+            console.log(`\n🔴 ASYNC FAILURE DETECTED: ${testName}`);
+            console.log(`   Error: ${e.message}`);
             wptCurrentTest = null;
         }
     }
@@ -465,7 +470,9 @@ function promise_test(func, name) {
             }).catch(e => {
                 testObj.status = TEST_FAIL;
                 testObj.message = e.message;
-                console.log(`❌ ${testName}: ${e.message}`);
+                console.log(`❌ FAIL: ${testName}: ${e.message}`);
+                console.log(`\n🔴 PROMISE REJECTION DETECTED: ${testName}`);
+                console.log(`   Error: ${e.message}`);
             }).finally(() => {
                 wptCurrentTest = null;
             });
@@ -479,7 +486,9 @@ function promise_test(func, name) {
     } catch (e) {
         testObj.status = TEST_FAIL;
         testObj.message = e.message;
-        console.log(`❌ ${testName}: ${e.message}`);
+        console.log(`❌ FAIL: ${testName}: ${e.message}`);
+        console.log(`\n🔴 PROMISE FAILURE DETECTED: ${testName}`);
+        console.log(`   Error: ${e.message}`);
         wptCurrentTest = null;
     }
 }
@@ -715,14 +724,18 @@ function printTestSummary() {
     const total = wptTests.length;
 
     if (total > 0) {
-        console.log(`\n=== Test Results ===`);
+        console.log(`\n=== WPT Test Results Summary ===`);
         console.log(`Total: ${total}, Passed: ${passed}, Failed: ${failed}`);
 
         if (failed > 0) {
-            console.log('\nFailed tests:');
+            console.log('\n🔴 Failed tests:');
             wptTests.filter(t => t.status === TEST_FAIL).forEach(t => {
-                console.log(`  ❌ ${t.name}: ${t.message}`);
+                console.log(`  ❌ FAILED: ${t.name}`);
+                console.log(`      Reason: ${t.message}`);
             });
+            console.log(`\n🔴 Summary: ${failed} test case(s) failed out of ${total} total`);
+        } else {
+            console.log('\n🟢 All tests passed!');
         }
     }
 }
@@ -730,7 +743,7 @@ function printTestSummary() {
 // Set up automatic summary printing with a longer timeout to wait for async tests
 setTimeout(() => {
     printTestSummary();
-}, 300);
+}, 1000);  // Increased to 1 second to ensure all tests complete
 
 // Export for CommonJS compatibility
 if (typeof module !== 'undefined' && module.exports) {

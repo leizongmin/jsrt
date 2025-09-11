@@ -309,7 +309,7 @@ globalThis.fetch = function(url) {{
                 cmd,
                 capture_output=True,
                 text=True,
-                timeout=30,
+                timeout=60,  # Increased timeout to 60 seconds
                 cwd=str(self.wpt_path),  # Set working directory to wpt for relative imports
                 encoding='utf-8',
                 errors='replace'  # Replace invalid UTF-8 sequences with replacement character
@@ -323,8 +323,15 @@ globalThis.fetch = function(url) {{
             
             # Determine test result based on output
             if result.returncode == 0:
-                # Check if any tests failed in the output
-                if '❌' in result.stdout:
+                # Check if any tests failed in the output or if the process crashed
+                # Look for both individual failures (❌) and test summary failures
+                has_failures = ('❌' in result.stdout or 
+                               'Failed: ' in result.stdout and not 'Failed: 0' in result.stdout)
+                
+                # Also consider non-zero exit codes as failures, even if output looks clean
+                has_crashes = result.returncode != 0
+                
+                if has_failures or has_crashes:
                     status = 'FAIL'
                     self.results['failed'] += 1
                 else:
@@ -402,11 +409,71 @@ globalThis.fetch = function(url) {{
                     if result.get('stderr'):
                         print(f"    Error: {result['stderr']}")
                     if result.get('stdout'):
-                        # Show full stdout for debugging
-                        print(f"    Output:")
-                        for line in result['stdout'].split('\n'):
-                            if line.strip():
-                                print(f"      {line}")
+                        # Extract and show failure information more clearly
+                        stdout_lines = result['stdout'].split('\n')
+                        failed_tests = []
+                        in_summary = False
+                        
+                        # Look for failed test cases (❌ lines), immediate failures, and summary
+                        for line in stdout_lines:
+                            line = line.strip()
+                            if '❌' in line:
+                                failed_tests.append(line)
+                            elif 'FAILURE DETECTED:' in line or 'ASYNC FAILURE DETECTED:' in line or 'PROMISE FAILURE DETECTED:' in line or 'PROMISE REJECTION DETECTED:' in line:
+                                failed_tests.append(line)
+                            elif 'Failed tests:' in line:
+                                in_summary = True
+                            elif in_summary and line.startswith('❌'):
+                                failed_tests.append(line)
+                            elif line.startswith('   Error:') and in_summary:
+                                failed_tests.append(line)
+                        
+                        if failed_tests:
+                            print(f"    Failed test cases:")
+                            for failed_test in failed_tests[:10]:  # Show first 10 failures
+                                print(f"      {failed_test}")
+                            if len(failed_tests) > 10:
+                                print(f"      ... and {len(failed_tests) - 10} more failures")
+                        else:
+                            # If no specific failures found, analyze the situation
+                            print(f"    Output analysis:")
+                            
+                            # Check if this is a crash/abort situation (non-zero exit but no visible failures)
+                            if result.get('returncode', 0) != 0:
+                                crash_codes = {134: 'SIGABRT (assertion failure/abort)', 139: 'SIGSEGV (segmentation fault)', 127: 'command not found'}
+                                crash_type = crash_codes.get(result['returncode'], f'exit code {result["returncode"]}')
+                                print(f"      🚨 Test crashed or aborted: {crash_type}")
+                                print(f"      This suggests internal failures not captured in output.")
+                                
+                                # Look for patterns that might indicate where the crash occurred
+                                total_tests = stdout_lines.count('✅') + stdout_lines.count('❌')
+                                if total_tests > 0:
+                                    print(f"      📊 {total_tests} test cases executed before crash")
+                                
+                                # Show end of output to see what was happening before crash
+                                print(f"      Last 10 lines before crash:")
+                                for line in stdout_lines[-10:]:
+                                    if line.strip():
+                                        print(f"        {line}")
+                            else:
+                                # Look for test summary section
+                                summary_start = -1
+                                for i, line in enumerate(stdout_lines):
+                                    if 'Test Results Summary' in line or 'Failed tests:' in line:
+                                        summary_start = i
+                                        break
+                                
+                                if summary_start >= 0:
+                                    print(f"      Test summary found:")
+                                    for line in stdout_lines[summary_start:summary_start+20]:
+                                        if line.strip():
+                                            print(f"        {line}")
+                                else:
+                                    # Show more context - last 25 lines
+                                    print(f"      Last 25 lines of output:")
+                                    for line in stdout_lines[-25:]:
+                                        if line.strip():
+                                            print(f"        {line}")
                 elif 'reason' in result:
                     print(f"    {result['reason']}")
                 

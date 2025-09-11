@@ -251,12 +251,12 @@ wpt-update:
 .PHONY: wpt
 wpt: jsrt wpt-download
 	@echo "Running Web Platform Tests for WinterCG Minimum Common API..."
-	python3 scripts/run-wpt.py --jsrt $(CURDIR)/target/release/jsrt --wpt-dir $(CURDIR)/wpt $(if $(N),--category $(N))
+	python3 scripts/run-wpt.py --jsrt $(CURDIR)/target/release/jsrt --wpt-dir $(CURDIR)/wpt $(if $(N),--category $(N)) $(if $(SHOW_ALL_FAILURES),--show-all-failures) $(if $(MAX_FAILURES),--max-failures $(MAX_FAILURES))
 
 .PHONY: wpt_g
 wpt_g: jsrt_g wpt-download
 	@echo "Running Web Platform Tests with debug build..."
-	python3 scripts/run-wpt.py --jsrt $(CURDIR)/target/debug/jsrt --wpt-dir $(CURDIR)/wpt --verbose $(if $(N),--category $(N))
+	python3 scripts/run-wpt.py --jsrt $(CURDIR)/target/debug/jsrt --wpt-dir $(CURDIR)/wpt --verbose $(if $(N),--category $(N)) $(if $(SHOW_ALL_FAILURES),--show-all-failures) $(if $(MAX_FAILURES),--max-failures $(MAX_FAILURES))
 
 .PHONY: wpt_cov
 wpt_cov: jsrt_cov wpt-download
@@ -266,7 +266,7 @@ wpt_cov: jsrt_cov wpt-download
 .PHONY: wpt_static
 wpt_static: jsrt_static wpt-download
 	@echo "Running Web Platform Tests with static build..."
-	python3 scripts/run-wpt.py --jsrt $(CURDIR)/target/static/jsrt --wpt-dir $(CURDIR)/wpt $(if $(N),--category $(N))
+	python3 scripts/run-wpt.py --jsrt $(CURDIR)/target/static/jsrt --wpt-dir $(CURDIR)/wpt $(if $(N),--category $(N)) $(if $(SHOW_ALL_FAILURES),--show-all-failures) $(if $(MAX_FAILURES),--max-failures $(MAX_FAILURES))
 
 .PHONY: wpt-list
 wpt-list:
@@ -360,6 +360,11 @@ help:
 	@echo "  make wpt           - Run Web Platform Tests (release build)"
 	@echo "  make wpt_static    - Run Web Platform Tests (static build)"
 	@echo "  make coverage      - Generate coverage report"
+	@echo ""
+	@echo "WPT Options (use with make wpt/wpt_g/wpt_static):"
+	@echo "  N=category         - Run specific test category"
+	@echo "  SHOW_ALL_FAILURES=1 - Show all test failures (no limit)"
+	@echo "  MAX_FAILURES=N     - Show max N failures per test (default: 10)"
 	@echo ""
 	@echo "Docker & Dev Environment:"
 	@echo "  make docker-build  - Build Claude Code Docker image"

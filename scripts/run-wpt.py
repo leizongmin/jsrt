@@ -71,10 +71,11 @@ WINTERCG_TESTS = {
 }
 
 class JSRTTestRunner:
-    def __init__(self, jsrt_path: str, wpt_path: str, verbose: bool = False):
+    def __init__(self, jsrt_path: str, wpt_path: str, verbose: bool = False, max_failures: int = 10):
         self.jsrt_path = Path(jsrt_path)
         self.wpt_path = Path(wpt_path)
         self.verbose = verbose
+        self.max_failures = max_failures
         self.results = {
             'passed': 0,
             'failed': 0,
@@ -430,10 +431,11 @@ globalThis.fetch = function(url) {{
                         
                         if failed_tests:
                             print(f"    Failed test cases:")
-                            for failed_test in failed_tests[:10]:  # Show first 10 failures
+                            max_show = self.max_failures if self.max_failures > 0 else len(failed_tests)
+                            for failed_test in failed_tests[:max_show]:
                                 print(f"      {failed_test}")
-                            if len(failed_tests) > 10:
-                                print(f"      ... and {len(failed_tests) - 10} more failures")
+                            if len(failed_tests) > max_show:
+                                print(f"      ... and {len(failed_tests) - max_show} more failures")
                         else:
                             # If no specific failures found, analyze the situation
                             print(f"    Output analysis:")
@@ -511,6 +513,10 @@ def main():
                         help='Enable verbose output')
     parser.add_argument('--output', '-o',
                         help='Output results to JSON file')
+    parser.add_argument('--max-failures', type=int, default=10,
+                        help='Maximum number of failures to show per test (0 = show all, default: 10)')
+    parser.add_argument('--show-all-failures', action='store_true',
+                        help='Show all failures (equivalent to --max-failures=0)')
     
     args = parser.parse_args()
     
@@ -534,8 +540,11 @@ def main():
         print("Please run 'make wpt-download' or 'make wpt' to download WPT tests")
         return 1
     
+    # Handle failure display options
+    max_failures = 0 if args.show_all_failures else args.max_failures
+    
     # Run tests
-    runner = JSRTTestRunner(jsrt_path, wpt_path, args.verbose)
+    runner = JSRTTestRunner(jsrt_path, wpt_path, args.verbose, max_failures)
     results = runner.run_tests(args.category)
     runner.print_summary()
     

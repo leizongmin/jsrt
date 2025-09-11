@@ -968,14 +968,30 @@ static JSValue JSRT_URLGetPathname(JSContext* ctx, JSValueConst this_val, int ar
   JSRT_URL* url = JS_GetOpaque2(ctx, this_val, JSRT_URLClassID);
   if (!url)
     return JS_EXCEPTION;
-  return JS_NewString(ctx, url->pathname);
+  
+  // Return the percent-encoded pathname as per URL specification
+  char* encoded_pathname = url_component_encode(url->pathname);
+  if (!encoded_pathname)
+    return JS_EXCEPTION;
+  
+  JSValue result = JS_NewString(ctx, encoded_pathname);
+  free(encoded_pathname);
+  return result;
 }
 
 static JSValue JSRT_URLGetSearch(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
   JSRT_URL* url = JS_GetOpaque2(ctx, this_val, JSRT_URLClassID);
   if (!url)
     return JS_EXCEPTION;
-  return JS_NewString(ctx, url->search);
+  
+  // Return the percent-encoded search as per URL specification
+  char* encoded_search = url_component_encode(url->search);
+  if (!encoded_search)
+    return JS_EXCEPTION;
+  
+  JSValue result = JS_NewString(ctx, encoded_search);
+  free(encoded_search);
+  return result;
 }
 
 static JSValue JSRT_URLSetSearch(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
@@ -1055,7 +1071,15 @@ static JSValue JSRT_URLGetHash(JSContext* ctx, JSValueConst this_val, int argc, 
   JSRT_URL* url = JS_GetOpaque2(ctx, this_val, JSRT_URLClassID);
   if (!url)
     return JS_EXCEPTION;
-  return JS_NewString(ctx, url->hash);
+  
+  // Return the percent-encoded hash as per URL specification
+  char* encoded_hash = url_component_encode(url->hash);
+  if (!encoded_hash)
+    return JS_EXCEPTION;
+  
+  JSValue result = JS_NewString(ctx, encoded_hash);
+  free(encoded_hash);
+  return result;
 }
 
 static JSValue JSRT_URLGetOrigin(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {

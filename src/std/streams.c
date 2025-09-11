@@ -728,6 +728,22 @@ static JSValue JSRT_ReadableStreamDefaultReaderReleaseLock(JSContext* ctx, JSVal
   // Mark the reader as closed
   reader->closed = true;
 
+  // Reject the existing closed promise if it's pending
+  // According to the Streams spec, when a reader releases its lock, the closed promise should be rejected
+  if (reader->closed_promise_pending && !JS_IsUndefined(reader->closed_promise_reject)) {
+    // Create a TypeError for the rejection
+    JSValue error = JS_NewError(ctx);
+    JS_SetPropertyStr(ctx, error, "name", JS_NewString(ctx, "TypeError"));
+    JS_SetPropertyStr(ctx, error, "message", JS_NewString(ctx, "Reader was released"));
+    
+    // Call the reject function
+    JSValue result = JS_Call(ctx, reader->closed_promise_reject, JS_UNDEFINED, 1, &error);
+    JS_FreeValue(ctx, result);
+    JS_FreeValue(ctx, error);
+    
+    reader->closed_promise_pending = false;
+  }
+
   // Clear the cached closed promise so a new one will be created
   // This is required by WPT test: "closed is replaced when stream closes and reader releases its lock"
   if (!JS_IsUninitialized(reader->closed_promise)) {
@@ -744,7 +760,6 @@ static JSValue JSRT_ReadableStreamDefaultReaderReleaseLock(JSContext* ctx, JSVal
     JS_FreeValue(ctx, reader->closed_promise_reject);
     reader->closed_promise_reject = JS_UNDEFINED;
   }
-  reader->closed_promise_pending = false;
 
   return JS_UNDEFINED;
 }

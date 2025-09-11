@@ -204,8 +204,9 @@ void JSRT_RuntimeSetupStdDOM(JSRT_Runtime* rt) {
   JS_SetPropertyStr(ctx, dom_exception_ctor, "INVALID_NODE_TYPE_ERR", JS_NewInt32(ctx, 24));
   JS_SetPropertyStr(ctx, dom_exception_ctor, "DATA_CLONE_ERR", JS_NewInt32(ctx, 25));
 
-  // Set the constructor's prototype property
-  JS_SetPropertyStr(ctx, dom_exception_ctor, "prototype", JS_DupValue(ctx, dom_exception_proto));
+  // Set the constructor's prototype property (non-enumerable for WPT compliance)
+  JS_DefinePropertyValueStr(ctx, dom_exception_ctor, "prototype", JS_DupValue(ctx, dom_exception_proto),
+                            JS_PROP_WRITABLE | JS_PROP_CONFIGURABLE);
 
   JS_SetPropertyStr(ctx, rt->global, "DOMException", dom_exception_ctor);
 

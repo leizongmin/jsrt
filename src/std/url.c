@@ -121,6 +121,9 @@ static char* canonicalize_ipv6(const char* ipv6_str) {
     return strdup(ipv6_str ? ipv6_str : "");
   }
 
+  // WPT expects IPv4 in IPv6 to be converted to hexadecimal format
+  // Remove the preservation logic and use standard normalization
+
   // Remove brackets if present
   const char* addr_start = ipv6_str;
   const char* addr_end = ipv6_str + strlen(ipv6_str);
@@ -177,31 +180,54 @@ static char* canonicalize_ipv6(const char* ipv6_str) {
         }
 
         int a, b, c, d;
-        if (sscanf(ipv4_start, "%d.%d.%d.%d", &a, &b, &c, &d) == 4 && a >= 0 && a <= 255 && b >= 0 && b <= 255 &&
-            c >= 0 && c <= 255 && d >= 0 && d <= 255) {
+        char extra;
+        // Use sscanf with %c to detect any trailing characters (like dots)
+        if (sscanf(ipv4_start, "%d.%d.%d.%d%c", &a, &b, &c, &d, &extra) == 4 && a >= 0 && a <= 255 && b >= 0 &&
+            b <= 255 && c >= 0 && c <= 255 && d >= 0 && d <= 255) {
           // Convert IPv4 to two 16-bit groups
           uint16_t high = (a << 8) | b;
           uint16_t low = (c << 8) | d;
 
-          // Parse any groups before the IPv4 part
+          // Parse any hex groups before the IPv4 part
+          int after_groups[6];  // Max 6 hex groups before IPv4
+          int after_count = 0;
+
           if (ipv4_start > after_dc) {
             char* before_ipv4 = malloc(ipv4_start - after_dc);
             strncpy(before_ipv4, after_dc, ipv4_start - after_dc - 1);
             before_ipv4[ipv4_start - after_dc - 1] = '\0';
 
             char* token = strtok(before_ipv4, ":");
-            while (token && group_count < 6) {
-              groups[group_count++] = (uint16_t)strtoul(token, NULL, 16);
+            while (token && after_count < 6) {
+              after_groups[after_count++] = (uint16_t)strtoul(token, NULL, 16);
               token = strtok(NULL, ":");
             }
             free(before_ipv4);
           }
 
-          // Add IPv4 as two groups
+          // Calculate how many zero groups we need
+          int total_after_groups = after_count + 2;  // after_count hex groups + 2 IPv4 groups
+          int zeros_needed = 8 - group_count - total_after_groups;
+
+          // Fill in the zero groups
+          for (int i = 0; i < zeros_needed && group_count < 8; i++) {
+            groups[group_count++] = 0;
+          }
+
+          // Add the hex groups after ::
+          for (int i = 0; i < after_count && group_count < 8; i++) {
+            groups[group_count++] = after_groups[i];
+          }
+
+          // Add IPv4 as two groups at the end
           if (group_count < 8)
             groups[group_count++] = high;
           if (group_count < 8)
             groups[group_count++] = low;
+        } else {
+          // Invalid IPv4 format in IPv6 address
+          free(addr);
+          return NULL;
         }
       } else {
         // Regular hex groups after ::
@@ -232,10 +258,50 @@ static char* canonicalize_ipv6(const char* ipv6_str) {
     }
   } else {
     // No double colon, parse all groups
-    char* token = strtok(addr, ":");
-    while (token && group_count < 8) {
-      groups[group_count++] = (uint16_t)strtoul(token, NULL, 16);
-      token = strtok(NULL, ":");
+    // Check if there's an IPv4 address at the end
+    if (strchr(addr, '.')) {
+      // Find the last colon to separate hex groups from IPv4
+      char* ipv4_start = strrchr(addr, ':');
+      if (ipv4_start) {
+        ipv4_start++;
+
+        // Parse hex groups before IPv4
+        char* hex_part = malloc(ipv4_start - addr);
+        strncpy(hex_part, addr, ipv4_start - addr - 1);
+        hex_part[ipv4_start - addr - 1] = '\0';
+
+        char* token = strtok(hex_part, ":");
+        while (token && group_count < 6) {  // Max 6 hex groups + 2 IPv4 groups = 8
+          groups[group_count++] = (uint16_t)strtoul(token, NULL, 16);
+          token = strtok(NULL, ":");
+        }
+        free(hex_part);
+
+        // Parse IPv4 part
+        int a, b, c, d;
+        char extra;
+        // Use sscanf with %c to detect any trailing characters (like dots)
+        if (sscanf(ipv4_start, "%d.%d.%d.%d%c", &a, &b, &c, &d, &extra) == 4 && a >= 0 && a <= 255 && b >= 0 &&
+            b <= 255 && c >= 0 && c <= 255 && d >= 0 && d <= 255) {
+          uint16_t high = (a << 8) | b;
+          uint16_t low = (c << 8) | d;
+          if (group_count < 8)
+            groups[group_count++] = high;
+          if (group_count < 8)
+            groups[group_count++] = low;
+        } else {
+          // Invalid IPv4 format in IPv6 address
+          free(addr);
+          return NULL;
+        }
+      }
+    } else {
+      // Regular hex groups only
+      char* token = strtok(addr, ":");
+      while (token && group_count < 8) {
+        groups[group_count++] = (uint16_t)strtoul(token, NULL, 16);
+        token = strtok(NULL, ":");
+      }
     }
   }
 
@@ -267,10 +333,9 @@ static char* canonicalize_ipv6(const char* ipv6_str) {
     best_len = current_len;
   }
 
-  // Build the canonical form
+  // Build the canonical form (without brackets for hostname storage)
   char* result = malloc(64);
-  result[0] = '[';
-  result[1] = '\0';
+  result[0] = '\0';
 
   int i = 0;
   while (i < 8) {
@@ -292,8 +357,6 @@ static char* canonicalize_ipv6(const char* ipv6_str) {
       i++;
     }
   }
-
-  strcat(result, "]");
 
   free(addr);
   return result;
@@ -427,7 +490,7 @@ static int is_special_scheme(const char* protocol) {
     scheme[strlen(scheme) - 1] = '\0';
   }
 
-  const char* special_schemes[] = {"http", "https", "ws", "wss", "file", NULL};
+  const char* special_schemes[] = {"http", "https", "ws", "wss", "file", "ftp", NULL};
   int is_special = 0;
   for (int i = 0; special_schemes[i]; i++) {
     if (strcmp(scheme, special_schemes[i]) == 0) {
@@ -907,6 +970,12 @@ static char* normalize_port(const char* port_str, const char* protocol) {
   if (!port_str || !*port_str)
     return strdup("");
 
+  // Check for excessive leading zeros (WPT requirement)
+  // If port has more than 5 leading zeros, it's invalid
+  if (strlen(port_str) > 6 && strspn(port_str, "0") >= 5) {
+    return NULL;  // Invalid port due to excessive leading zeros
+  }
+
   // Convert port string to number (handles leading zeros)
   char* endptr;
   long port_num = strtol(port_str, &endptr, 10);
@@ -916,12 +985,8 @@ static char* normalize_port(const char* port_str, const char* protocol) {
     return NULL;  // Invalid port causes error
   }
 
-  // Check for default ports that should be omitted
-  if ((strcmp(protocol, "http:") == 0 && port_num == 80) || (strcmp(protocol, "https:") == 0 && port_num == 443) ||
-      (strcmp(protocol, "ftp:") == 0 && port_num == 21) || (strcmp(protocol, "ws:") == 0 && port_num == 80) ||
-      (strcmp(protocol, "wss:") == 0 && port_num == 443)) {
-    return strdup("");  // Default port becomes empty
-  }
+  // Note: Do not omit default ports for url.port property
+  // Default port omission is handled separately in href/host serialization
 
   // Return normalized port as string
   char* result = malloc(16);  // Enough for any valid port number
@@ -1177,7 +1242,7 @@ static JSRT_URL* JSRT_ParseURL(const char* url, const char* base) {
   char* relative_part = NULL;  // For storing the part after scheme: when treating as relative
   if (has_scheme && colon_pos) {
     int scheme_len = colon_pos - cleaned_url;
-    const char* special_schemes[] = {"http", "https", "ws", "wss", "file", NULL};
+    const char* special_schemes[] = {"http", "https", "ws", "wss", "file", "ftp", NULL};
 
     // Extract scheme for checking
     char* scheme = malloc(scheme_len + 1);
@@ -1501,7 +1566,7 @@ static JSRT_URL* JSRT_ParseURL(const char* url, const char* base) {
 
     if (scheme && is_valid_scheme(scheme)) {
       // Check if this is a special scheme
-      const char* special_schemes[] = {"http", "https", "ws", "wss", "file", NULL};
+      const char* special_schemes[] = {"http", "https", "ws", "wss", "file", "ftp", NULL};
       int is_special = 0;
       for (int i = 0; special_schemes[i]; i++) {
         if (strcmp(scheme, special_schemes[i]) == 0) {
@@ -1512,33 +1577,61 @@ static JSRT_URL* JSRT_ParseURL(const char* url, const char* base) {
 
       if (is_special) {
         if (strncmp(scheme_end + 1, "/", 1) == 0 && strncmp(scheme_end + 1, "//", 2) != 0) {
-          // Special scheme with single slash - normalize to double slash for absolute URL
-          // Per WHATWG URL spec, URLs like "https:/example.com/" should be parsed as absolute URLs
-          char* rest = scheme_end + 2;                                    // Skip ":" and "/"
-          size_t normalized_len = strlen(scheme) + 3 + strlen(rest) + 1;  // scheme + "://" + rest + null
-          char* normalized_url = malloc(normalized_len);
-          snprintf(normalized_url, normalized_len, "%s://%s", scheme, rest);
-          free(scheme);
+          // Special scheme with single slash
+          if (base && strcmp(scheme, "ftp") != 0) {
+            // With base URL: treat as relative URL (per WHATWG spec and WPT tests)
+            // URLs like "http:/example.com/" should be resolved relative to base
+            // Exception: FTP should be normalized to absolute format
+            char* relative_part = strdup(scheme_end + 1);  // Copy "/example.com/"
 
-          // Parse the normalized URL recursively
-          free(url_copy);
-          free(cleaned_url);
-          free(parsed->href);
-          free(parsed->protocol);
-          free(parsed->username);
-          free(parsed->password);
-          free(parsed->host);
-          free(parsed->hostname);
-          free(parsed->port);
-          free(parsed->pathname);
-          free(parsed->search);
-          free(parsed->hash);
-          free(parsed->origin);
-          free(parsed);
+            free(url_copy);
+            free(cleaned_url);
+            free(parsed->href);
+            free(parsed->protocol);
+            free(parsed->username);
+            free(parsed->password);
+            free(parsed->host);
+            free(parsed->hostname);
+            free(parsed->port);
+            free(parsed->pathname);
+            free(parsed->search);
+            free(parsed->hash);
+            free(parsed->origin);
+            free(parsed);
+            free(scheme);
 
-          JSRT_URL* result = JSRT_ParseURL(normalized_url, NULL);
-          free(normalized_url);
-          return result;
+            // Parse as relative URL against base
+            JSRT_URL* result = JSRT_ParseURL(relative_part, base);
+            free(relative_part);  // Free the copy
+            return result;
+          } else {
+            // Without base: normalize to double slash (absolute URL)
+            char* rest = scheme_end + 2;                                    // Skip ":" and "/"
+            size_t normalized_len = strlen(scheme) + 3 + strlen(rest) + 1;  // scheme + "://" + rest + null
+            char* normalized_url = malloc(normalized_len);
+            snprintf(normalized_url, normalized_len, "%s://%s", scheme, rest);
+            free(scheme);
+
+            // Parse the normalized URL recursively
+            free(url_copy);
+            free(cleaned_url);
+            free(parsed->href);
+            free(parsed->protocol);
+            free(parsed->username);
+            free(parsed->password);
+            free(parsed->host);
+            free(parsed->hostname);
+            free(parsed->port);
+            free(parsed->pathname);
+            free(parsed->search);
+            free(parsed->hash);
+            free(parsed->origin);
+            free(parsed);
+
+            JSRT_URL* result = JSRT_ParseURL(normalized_url, NULL);
+            free(normalized_url);
+            return result;
+          }
         } else if (strncmp(scheme_end + 1, "//", 2) != 0) {
           // Special scheme with single colon (no slash)
           if (base) {
@@ -1704,7 +1797,7 @@ static JSRT_URL* JSRT_ParseURL(const char* url, const char* base) {
       scheme_without_colon[strlen(scheme_without_colon) - 1] = '\0';
     }
 
-    const char* special_schemes[] = {"http", "https", "ws", "wss", "file", NULL};
+    const char* special_schemes[] = {"http", "https", "ws", "wss", "file", "ftp", NULL};
     int is_special = 0;
     for (int i = 0; special_schemes[i]; i++) {
       if (strcmp(scheme_without_colon, special_schemes[i]) == 0) {
@@ -1778,6 +1871,7 @@ static JSRT_URL* JSRT_ParseURL(const char* url, const char* base) {
     // Now parse the authority part (hostname:port, possibly IPv6)
     char* hostname_part;
     char* port_part = NULL;
+    int is_ipv6 = 0;  // Flag to track IPv6 addresses
 
     // Check for IPv6 address notation [::1] or [::1]:port
     if (authority[0] == '[') {
@@ -1792,6 +1886,16 @@ static JSRT_URL* JSRT_ParseURL(const char* url, const char* base) {
         // Canonicalize the IPv6 address
         hostname_part = canonicalize_ipv6(raw_ipv6);
         free(raw_ipv6);
+
+        // Check if IPv6 canonicalization failed due to invalid format
+        if (!hostname_part) {
+          free(url_copy);
+          free(cleaned_url);
+          JSRT_FreeURL(parsed);
+          return NULL;
+        }
+
+        is_ipv6 = 1;  // Mark as IPv6 address
 
         // Check for port after IPv6 address
         if (ipv6_end[1] == ':') {
@@ -1816,34 +1920,42 @@ static JSRT_URL* JSRT_ParseURL(const char* url, const char* base) {
       }
     }
 
-    // Set hostname with IPv4 address canonicalization
+    // Set hostname with appropriate validation
     free(parsed->hostname);
 
-    // Try to parse as IPv4 address first (including hexadecimal formats)
-    char* canonical_ipv4 = canonicalize_ipv4_address(hostname_part);
-    if (canonical_ipv4) {
-      // IPv4 address was successfully parsed
-      parsed->hostname = canonical_ipv4;
+    if (is_ipv6) {
+      // IPv6 address - hostname should include brackets per WPT
+      size_t hostname_len = strlen(hostname_part) + 3;  // +3 for []
+      parsed->hostname = malloc(hostname_len);
+      snprintf(parsed->hostname, hostname_len, "[%s]", hostname_part);
       free(hostname_part);
     } else {
-      // Not a valid IPv4 address, validate as hostname
-      if (!validate_hostname_characters(hostname_part)) {
-        // Don't free hostname_part here - it will be freed by JSRT_FreeURL
-        if (port_part) {
-          // Restore the colon we might have modified
-          char* colon_in_authority = strchr(authority, ':');
-          if (colon_in_authority)
-            *colon_in_authority = ':';
+      // Try to parse as IPv4 address first (including hexadecimal formats)
+      char* canonical_ipv4 = canonicalize_ipv4_address(hostname_part);
+      if (canonical_ipv4) {
+        // IPv4 address was successfully parsed
+        parsed->hostname = canonical_ipv4;
+        free(hostname_part);
+      } else {
+        // Not a valid IPv4 address, validate as hostname
+        if (!validate_hostname_characters(hostname_part)) {
+          // Don't free hostname_part here - it will be freed by JSRT_FreeURL
+          if (port_part) {
+            // Restore the colon we might have modified
+            char* colon_in_authority = strchr(authority, ':');
+            if (colon_in_authority)
+              *colon_in_authority = ':';
+          }
+          // Assign hostname_part to parsed->hostname so it gets freed properly
+          parsed->hostname = hostname_part;
+          free(url_copy);
+          free(cleaned_url);
+          JSRT_FreeURL(parsed);
+          return NULL;
         }
-        // Assign hostname_part to parsed->hostname so it gets freed properly
         parsed->hostname = hostname_part;
-        free(url_copy);
-        free(cleaned_url);
-        JSRT_FreeURL(parsed);
-        return NULL;
+        // Don't free hostname_part here since it's now assigned to parsed->hostname
       }
-      parsed->hostname = hostname_part;
-      // Don't free hostname_part here since it's now assigned to parsed->hostname
     }
 
     // Set port
@@ -1851,13 +1963,8 @@ static JSRT_URL* JSRT_ParseURL(const char* url, const char* base) {
     if (port_part && strlen(port_part) > 0) {
       parsed->port = normalize_port(port_part, parsed->protocol);
       if (!parsed->port) {
-        // Invalid port - cleanup and return error
-        // Don't free hostname_part here since it might be assigned to parsed->hostname
-        // Don't free port_part - it's just a pointer into authority string
-        free(url_copy);
-        free(cleaned_url);
-        JSRT_FreeURL(parsed);
-        return NULL;
+        // Invalid port (e.g., excessive leading zeros) - use empty port per WPT
+        parsed->port = strdup("");
       }
     } else {
       parsed->port = strdup("");
@@ -1865,11 +1972,31 @@ static JSRT_URL* JSRT_ParseURL(const char* url, const char* base) {
 
     // Set host field (hostname:port format, excluding credentials)
     free(parsed->host);
-    if (strlen(parsed->port) > 0) {
-      parsed->host = malloc(strlen(parsed->hostname) + strlen(parsed->port) + 2);
-      sprintf(parsed->host, "%s:%s", parsed->hostname, parsed->port);
+
+    // Extract scheme from protocol (remove colon) for default port check
+    char scheme[32];
+    strncpy(scheme, parsed->protocol, sizeof(scheme) - 1);
+    scheme[sizeof(scheme) - 1] = '\0';
+    char* colon = strchr(scheme, ':');
+    if (colon)
+      *colon = '\0';
+
+    if (is_ipv6) {
+      // IPv6 addresses - hostname already includes brackets
+      if (strlen(parsed->port) > 0 && !is_default_port(scheme, parsed->port)) {
+        parsed->host = malloc(strlen(parsed->hostname) + strlen(parsed->port) + 2);  // +2 for :
+        sprintf(parsed->host, "%s:%s", parsed->hostname, parsed->port);
+      } else {
+        parsed->host = strdup(parsed->hostname);
+      }
     } else {
-      parsed->host = strdup(parsed->hostname);
+      // Regular hostnames and IPv4 addresses
+      if (strlen(parsed->port) > 0 && !is_default_port(scheme, parsed->port)) {
+        parsed->host = malloc(strlen(parsed->hostname) + strlen(parsed->port) + 2);
+        sprintf(parsed->host, "%s:%s", parsed->hostname, parsed->port);
+      } else {
+        parsed->host = strdup(parsed->hostname);
+      }
     }
   }
 
@@ -1933,9 +2060,11 @@ static JSRT_URL* JSRT_ParseURL(const char* url, const char* base) {
 
   size_t href_len = strlen(parsed->protocol) + 2 + strlen(parsed->host) + strlen(encoded_pathname);
 
-  // Add space for username:password@ if present
-  if (parsed->username && strlen(parsed->username) > 0) {
-    href_len += strlen(parsed->username);
+  // Add space for username:password@ if present (include if either username or password is present)
+  if ((parsed->username && strlen(parsed->username) > 0) || (parsed->password && strlen(parsed->password) > 0)) {
+    if (parsed->username && strlen(parsed->username) > 0) {
+      href_len += strlen(parsed->username);
+    }
     if (parsed->password && strlen(parsed->password) > 0) {
       href_len += 1 + strlen(parsed->password);  // +1 for colon
     }

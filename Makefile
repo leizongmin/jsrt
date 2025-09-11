@@ -251,12 +251,12 @@ wpt-update:
 .PHONY: wpt
 wpt: jsrt wpt-download
 	@echo "Running Web Platform Tests for WinterCG Minimum Common API..."
-	python3 scripts/run-wpt.py --jsrt $(CURDIR)/target/release/jsrt --wpt-dir $(CURDIR)/wpt
+	python3 scripts/run-wpt.py --jsrt $(CURDIR)/target/release/jsrt --wpt-dir $(CURDIR)/wpt $(if $(N),--category $(N))
 
 .PHONY: wpt_g
 wpt_g: jsrt_g wpt-download
 	@echo "Running Web Platform Tests with debug build..."
-	python3 scripts/run-wpt.py --jsrt $(CURDIR)/target/debug/jsrt --wpt-dir $(CURDIR)/wpt --verbose
+	python3 scripts/run-wpt.py --jsrt $(CURDIR)/target/debug/jsrt --wpt-dir $(CURDIR)/wpt --verbose $(if $(N),--category $(N))
 
 .PHONY: wpt_cov
 wpt_cov: jsrt_cov wpt-download
@@ -266,7 +266,7 @@ wpt_cov: jsrt_cov wpt-download
 .PHONY: wpt_static
 wpt_static: jsrt_static wpt-download
 	@echo "Running Web Platform Tests with static build..."
-	python3 scripts/run-wpt.py --jsrt $(CURDIR)/target/static/jsrt --wpt-dir $(CURDIR)/wpt
+	python3 scripts/run-wpt.py --jsrt $(CURDIR)/target/static/jsrt --wpt-dir $(CURDIR)/wpt $(if $(N),--category $(N))
 
 .PHONY: wpt-list
 wpt-list:

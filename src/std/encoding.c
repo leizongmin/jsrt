@@ -1520,3 +1520,8 @@ void JSRT_RuntimeSetupStdEncoding(JSRT_Runtime* rt) {
 
   JSRT_Debug("Encoding API setup completed");
 }
+
+// Public UTF-8 validation function for use by other modules
+int JSRT_ValidateUTF8Sequence(const uint8_t* data, size_t len, const uint8_t** next) {
+  return validate_utf8_sequence(data, len, next);
+}

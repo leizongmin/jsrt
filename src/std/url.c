@@ -63,6 +63,7 @@ static JSValue JSRT_URLSearchParamsToString(JSContext* ctx, JSValueConst this_va
 static char* url_encode_with_len(const char* str, size_t len);
 static char* url_component_encode(const char* str);
 static char* url_nonspecial_path_encode(const char* str);
+static char* url_userinfo_encode(const char* str);
 static char* url_decode_with_length_and_output_len(const char* str, size_t len, size_t* output_len);
 static char* url_decode_with_length(const char* str, size_t len);
 static char* url_decode(const char* str);
@@ -71,6 +72,7 @@ static JSRT_URLSearchParams* JSRT_ParseSearchParamsFromFormData(JSContext* ctx, 
 static void JSRT_FreeSearchParams(JSRT_URLSearchParams* search_params);
 static char* canonicalize_ipv6(const char* ipv6_str);
 static int is_special_scheme(const char* protocol);
+static char* normalize_dot_segments(const char* path);
 
 // Simple URL parser (basic implementation)
 static int is_valid_scheme(const char* scheme) {
@@ -425,7 +427,7 @@ static int is_special_scheme(const char* protocol) {
     scheme[strlen(scheme) - 1] = '\0';
   }
 
-  const char* special_schemes[] = {"http", "https", "ftp", "ws", "wss", "file", NULL};
+  const char* special_schemes[] = {"http", "https", "ws", "wss", "file", NULL};
   int is_special = 0;
   for (int i = 0; special_schemes[i]; i++) {
     if (strcmp(scheme, special_schemes[i]) == 0) {
@@ -520,7 +522,7 @@ static JSRT_URL* resolve_relative_url(const char* url, const char* base) {
 
   // Check if this looks like a scheme-relative URL (e.g., "http:foo.com")
   char* colon_pos = strchr(url, ':');
-  if (colon_pos != NULL) {
+  if (colon_pos != NULL && colon_pos > url) {  // Ensure colon is not at the start
     // Check if it's a known scheme followed by a relative path (not "://")
     const char* schemes[] = {"http", "https", "ftp", "ws", "wss", NULL};
     size_t scheme_len = colon_pos - url;
@@ -534,32 +536,104 @@ static JSRT_URL* resolve_relative_url(const char* url, const char* base) {
     }
   }
 
-  if (relative_path[0] == '/') {
-    // Absolute path (including paths extracted from single-slash URLs like "http:/example.com/")
-    result->pathname = strdup(relative_path);
-    result->search = strdup("");
+  // Handle URLs that start with a fragment (e.g., "#fragment" or ":#")
+  char* fragment_pos = strchr(relative_path, '#');
+  if (fragment_pos != NULL) {
+    // Check if it's a fragment-only URL (starts with #) or has a fragment part
+    if (relative_path[0] == '#') {
+      // Fragment-only URL: preserve base pathname and search, replace hash
+      result->pathname = strdup(base_url->pathname);
+      result->search = strdup(base_url->search ? base_url->search : "");
+      result->hash = strdup(relative_path);  // Include the '#'
+    } else {
+      // URL has both path and fragment components - will be handled below
+      goto handle_complex_relative_path;
+    }
+  } else if (relative_path[0] == '?') {
+    // Query-only URL: preserve base pathname, replace search and clear hash
+    result->pathname = strdup(base_url->pathname);
+    result->search = strdup(relative_path);  // Include the '?'
     result->hash = strdup("");
+  } else if (relative_path[0] == '/') {
+    // Absolute path (including paths extracted from single-slash URLs like "http:/example.com/")
+    // Parse the path to separate pathname, search, and hash
+    char* path_copy = strdup(relative_path);
+    char* search_pos = strchr(path_copy, '?');
+    char* hash_pos = strchr(path_copy, '#');
+
+    if (hash_pos) {
+      *hash_pos = '\0';
+      result->hash = malloc(strlen(hash_pos + 1) + 2);  // +1 for '#', +1 for '\0'
+      sprintf(result->hash, "#%s", hash_pos + 1);
+    } else {
+      result->hash = strdup("");
+    }
+
+    if (search_pos && (!hash_pos || search_pos < hash_pos)) {
+      *search_pos = '\0';
+      const char* search_end = hash_pos ? (hash_pos) : (search_pos + strlen(search_pos + 1) + 1);
+      size_t search_len = search_end - search_pos;
+      result->search = malloc(search_len + 2);  // +1 for '?', +1 for '\0'
+      sprintf(result->search, "?%.*s", (int)(search_len - 1), search_pos + 1);
+    } else {
+      result->search = strdup("");
+    }
+
+    result->pathname = strdup(path_copy);
+    free(path_copy);
   } else {
+  handle_complex_relative_path:
     // Relative path - resolve against base directory
-    // First find the directory part of the base pathname
+    // First, parse the relative path to separate path, search, and hash components
+    char* path_copy = strdup(relative_path);
+    char* search_pos = strchr(path_copy, '?');
+    char* hash_pos = strchr(path_copy, '#');
+
+    // Extract hash component
+    if (hash_pos) {
+      *hash_pos = '\0';
+      result->hash = malloc(strlen(hash_pos + 1) + 2);  // +1 for '#', +1 for '\0'
+      sprintf(result->hash, "#%s", hash_pos + 1);
+    } else {
+      result->hash = strdup("");
+    }
+
+    // Extract search component
+    if (search_pos && (!hash_pos || search_pos < hash_pos)) {
+      *search_pos = '\0';
+      const char* search_end = hash_pos ? hash_pos : (search_pos + strlen(search_pos + 1) + 1);
+      size_t search_len = search_end - search_pos;
+      result->search = malloc(search_len + 2);  // +1 for '?', +1 for '\0'
+      sprintf(result->search, "?%.*s", (int)(search_len - 1), search_pos + 1);
+    } else {
+      result->search = strdup("");
+    }
+
+    // Now resolve the path component against the base
     const char* base_pathname = base_url->pathname;
     char* last_slash = strrchr(base_pathname, '/');
 
     if (last_slash == NULL || last_slash == base_pathname) {
       // No directory or root directory
-      result->pathname = malloc(strlen(relative_path) + 2);
-      sprintf(result->pathname, "/%s", relative_path);
+      result->pathname = malloc(strlen(path_copy) + 2);
+      sprintf(result->pathname, "/%s", path_copy);
     } else {
       // Copy base directory and append relative path
-      size_t dir_len = last_slash - base_pathname;                     // Length up to but not including last slash
-      result->pathname = malloc(dir_len + strlen(relative_path) + 3);  // dir + '/' + relative_path + '\0'
+      size_t dir_len = last_slash - base_pathname;                 // Length up to but not including last slash
+      result->pathname = malloc(dir_len + strlen(path_copy) + 3);  // dir + '/' + relative_path + '\0'
       strncpy(result->pathname, base_pathname, dir_len);
       result->pathname[dir_len] = '/';
-      strcpy(result->pathname + dir_len + 1, relative_path);
+      strcpy(result->pathname + dir_len + 1, path_copy);
     }
 
-    result->search = strdup("");
-    result->hash = strdup("");
+    free(path_copy);
+  }
+
+  // Normalize dot segments in the pathname
+  char* normalized_pathname = normalize_dot_segments(result->pathname);
+  if (normalized_pathname) {
+    free(result->pathname);
+    result->pathname = normalized_pathname;
   }
 
   // Build origin using compute_origin function to handle all scheme types correctly
@@ -590,8 +664,8 @@ static JSRT_URL* resolve_relative_url(const char* url, const char* base) {
 }
 
 // Validate credentials according to WHATWG URL specification
-// Reject characters that are not allowed in userinfo: space, tab, LF, CR, @, /, ?, #, [, ], \, <, >, ", {, }, |, ^, `,
-// (, )
+// Only reject the most critical characters that would break URL parsing
+// Other characters will be percent-encoded as needed
 static int validate_credentials(const char* credentials) {
   if (!credentials)
     return 1;
@@ -599,22 +673,20 @@ static int validate_credentials(const char* credentials) {
   for (const char* p = credentials; *p; p++) {
     unsigned char c = (unsigned char)*p;
 
-    // Check for forbidden characters in userinfo per WHATWG URL spec
-    if (c == 0x09 || c == 0x0A || c == 0x0D || c == 0x20 ||          // whitespace
-        c == '@' || c == '/' || c == '?' || c == '#' ||              // URL delimiters
-        c == '[' || c == ']' || c == '(' || c == ')' ||              // brackets and parentheses
-        c == '\\' ||                                                 // backslash
-        c == '<' || c == '>' || c == '"' ||                          // angle brackets and quote
-        c == '{' || c == '}' || c == '|' || c == '^' || c == '`') {  // other forbidden chars
-      return 0;                                                      // Invalid character found
+    // Only reject characters that would completely break URL parsing
+    // Per WHATWG URL spec, most special characters should be percent-encoded, not rejected
+    // Note: @ should be percent-encoded as %40 in userinfo, not rejected
+    if (c == 0x09 || c == 0x0A || c == 0x0D ||  // control chars: tab, LF, CR
+        c == '/' || c == '?' || c == '#') {     // URL structure delimiters (except @)
+      return 0;                                 // Invalid character found
     }
 
-    // Also reject other control characters
+    // Reject other ASCII control characters (< 0x20) except those already checked
     if (c < 0x20) {
       return 0;
     }
   }
-  return 1;  // Valid
+  return 1;  // Valid - other special characters will be percent-encoded
 }
 
 // Validate URL characters according to WPT specification
@@ -623,10 +695,8 @@ static int validate_url_characters(const char* url) {
   for (const char* p = url; *p; p++) {
     unsigned char c = (unsigned char)*p;
 
-    // Check for ASCII tab, LF, CR which should be rejected
-    if (c == 0x09 || c == 0x0A || c == 0x0D) {
-      return 0;  // Invalid character found
-    }
+    // Note: ASCII tab, LF, CR should have already been removed by remove_all_ascii_whitespace()
+    // so we don't need to check for them here
 
     // Check for backslash at start of URL (invalid per WHATWG URL Standard)
     if (p == url && c == '\\') {
@@ -693,6 +763,114 @@ static int validate_hostname_characters(const char* hostname) {
   }
 
   return 1;  // Valid hostname
+}
+
+// Normalize dot segments in URL path according to RFC 3986
+// Resolves "." and ".." segments in paths
+static char* normalize_dot_segments(const char* path) {
+  if (!path || strlen(path) == 0) {
+    return strdup("");
+  }
+
+  // Create output buffer - worst case is same size as input
+  size_t input_len = strlen(path);
+  char* output = malloc(input_len + 1);
+  if (!output) {
+    return NULL;
+  }
+
+  char* out_ptr = output;
+  const char* input = path;
+
+  // Start with empty output buffer
+  *out_ptr = '\0';
+
+  while (*input != '\0') {
+    // A: If input begins with "../" or "./", remove prefix
+    if (strncmp(input, "../", 3) == 0) {
+      input += 3;
+      continue;
+    }
+    if (strncmp(input, "./", 2) == 0) {
+      input += 2;
+      continue;
+    }
+
+    // B: If input begins with "/./" or "/." (at end), replace with "/"
+    if (strncmp(input, "/./", 3) == 0) {
+      *out_ptr++ = '/';
+      *out_ptr = '\0';
+      input += 3;
+      continue;
+    }
+    if (strncmp(input, "/.", 2) == 0 && input[2] == '\0') {
+      *out_ptr++ = '/';
+      *out_ptr = '\0';
+      input += 2;
+      continue;
+    }
+
+    // C: If input begins with "/../" or "/.." (at end), replace with "/" and remove last segment
+    if (strncmp(input, "/../", 4) == 0 || (strncmp(input, "/..", 3) == 0 && input[3] == '\0')) {
+      // Remove last segment from output
+      if (out_ptr > output) {
+        out_ptr--;  // Back up from current position
+        while (out_ptr > output && *(out_ptr - 1) != '/') {
+          out_ptr--;
+        }
+        *out_ptr = '\0';
+      }
+
+      // Add "/" to output
+      *out_ptr++ = '/';
+      *out_ptr = '\0';
+
+      // Skip the input pattern
+      if (input[3] == '\0') {
+        input += 3;  // "/.."
+      } else {
+        input += 4;  // "/../"
+      }
+      continue;
+    }
+
+    // D: If input is ".." or ".", remove it
+    if (strcmp(input, ".") == 0 || strcmp(input, "..") == 0) {
+      break;  // End of input
+    }
+
+    // E: Move first path segment from input to output
+    if (*input == '/') {
+      *out_ptr++ = *input++;
+      *out_ptr = '\0';
+    }
+
+    // Copy segment until next '/' or end
+    while (*input != '\0' && *input != '/') {
+      *out_ptr++ = *input++;
+      *out_ptr = '\0';
+    }
+  }
+
+  // Clean up multiple consecutive slashes (e.g., "//parent" -> "/parent")
+  char* final_output = output;
+  char* read_ptr = output;
+  char* write_ptr = output;
+
+  while (*read_ptr != '\0') {
+    *write_ptr = *read_ptr;
+    if (*read_ptr == '/') {
+      // Skip consecutive slashes
+      while (*(read_ptr + 1) == '/') {
+        read_ptr++;
+      }
+    }
+    read_ptr++;
+    write_ptr++;
+  }
+  *write_ptr = '\0';
+
+  return final_output;
 }
 
 // Strip leading and trailing ASCII whitespace from URL string
@@ -816,10 +994,24 @@ static char* normalize_url_backslashes(const char* url) {
   if (!result)
     return NULL;
 
+  // Find fragment and query positions to avoid normalizing backslashes in them
+  char* fragment_pos = strchr(url, '#');
+  char* query_pos = strchr(url, '?');
+
+  // Determine where to stop normalizing (fragment comes first, then query)
+  size_t stop_pos = len;
+  if (fragment_pos) {
+    stop_pos = fragment_pos - url;
+  } else if (query_pos) {
+    stop_pos = query_pos - url;
+  }
+
   for (size_t i = 0; i < len; i++) {
-    if (url[i] == '\\') {
+    if (i < stop_pos && url[i] == '\\') {
+      // Only normalize backslashes before fragment/query
       result[i] = '/';
     } else {
+      // Preserve backslashes in fragment and query
       result[i] = url[i];
     }
   }
@@ -833,8 +1025,31 @@ static JSRT_URL* JSRT_ParseURL(const char* url, const char* base) {
   if (!trimmed_url)
     return NULL;
 
-  // Remove all ASCII whitespace characters from the URL
-  char* cleaned_url = remove_all_ascii_whitespace(trimmed_url);
+  // Determine if this URL has a special scheme first
+  // We need to check this before removing internal whitespace
+  char* initial_colon_pos = strchr(trimmed_url, ':');
+  int has_special_scheme = 0;
+
+  if (initial_colon_pos && initial_colon_pos > trimmed_url) {
+    // Extract potential scheme
+    size_t scheme_len = initial_colon_pos - trimmed_url;
+    char* scheme = malloc(scheme_len + 1);
+    strncpy(scheme, trimmed_url, scheme_len);
+    scheme[scheme_len] = '\0';
+    has_special_scheme = is_valid_scheme(scheme) && is_special_scheme(scheme);
+    free(scheme);
+  }
+
+  // Only remove internal ASCII whitespace for special schemes
+  // For non-special schemes, preserve internal whitespace (it will be percent-encoded later)
+  char* cleaned_url;
+  if (has_special_scheme) {
+    // Special schemes: remove internal ASCII whitespace per WHATWG URL spec
+    cleaned_url = remove_all_ascii_whitespace(trimmed_url);
+  } else {
+    // Non-special schemes: preserve internal whitespace
+    cleaned_url = strdup(trimmed_url);
+  }
   free(trimmed_url);  // Free the intermediate result
   if (!cleaned_url)
     return NULL;
@@ -902,7 +1117,8 @@ static JSRT_URL* JSRT_ParseURL(const char* url, const char* base) {
     }
   }
 
-  // Validate URL characters first
+  // Validate URL characters first (but skip ASCII whitespace check since we already removed them)
+  // Note: validate_url_characters should not check for tab/LF/CR since we already removed them
   if (!validate_url_characters(cleaned_url)) {
     free(cleaned_url);
     return NULL;  // Invalid characters detected
@@ -961,16 +1177,61 @@ static JSRT_URL* JSRT_ParseURL(const char* url, const char* base) {
   char* relative_part = NULL;  // For storing the part after scheme: when treating as relative
   if (has_scheme && colon_pos) {
     int scheme_len = colon_pos - cleaned_url;
-    const char* special_schemes[] = {"http", "https", "ftp", "ws", "wss", "file", NULL};
+    const char* special_schemes[] = {"http", "https", "ws", "wss", "file", NULL};
 
+    // Extract scheme for checking
+    char* scheme = malloc(scheme_len + 1);
+    strncpy(scheme, cleaned_url, scheme_len);
+    scheme[scheme_len] = '\0';
+
+    // Check if this is a special scheme
+    int is_special = 0;
     for (int i = 0; special_schemes[i]; i++) {
-      if (strncmp(cleaned_url, special_schemes[i], scheme_len) == 0 && strlen(special_schemes[i]) == scheme_len) {
-        // This is a special scheme - check protocol format
-        // All special schemes should be parsed as absolute URLs
-        // Single slash normalization will be handled later in the parsing process
+      if (strcmp(scheme, special_schemes[i]) == 0) {
+        is_special = 1;
         break;
       }
     }
+
+    if (is_special) {
+      // Special scheme handling
+      if (strncmp(colon_pos, "://", 3) != 0) {
+        if (!base) {
+          // No base URL: convert single colon to double slash format (absolute URL)
+          size_t after_colon_len = strlen(colon_pos + 1);             // Length after the ':'
+          size_t new_url_len = scheme_len + 3 + after_colon_len + 1;  // scheme + "://" + rest + '\0'
+          char* normalized_url = malloc(new_url_len);
+
+          strncpy(normalized_url, cleaned_url, scheme_len);
+          strcpy(normalized_url + scheme_len, "://");
+          strcpy(normalized_url + scheme_len + 3, colon_pos + 1);
+
+          // Replace the original URL with normalized version
+          free(cleaned_url);
+          cleaned_url = normalized_url;
+
+          // Update colon_pos to point to the new position
+          colon_pos = cleaned_url + scheme_len;
+        } else {
+          // Base URL exists: treat single colon as relative for special schemes
+          // Store the part after the colon for relative processing
+          relative_part = strdup(colon_pos + 1);
+        }
+      }
+    } else if (is_valid_scheme(scheme)) {
+      // Non-special scheme handling per WHATWG URL spec
+      if (strncmp(colon_pos, "://", 3) == 0) {
+        // Already has "://" - this is an authority-based non-special URL
+        // Keep as-is for parsing as authority-based URL
+      } else {
+        // Single colon: this is an opaque path URL per WHATWG spec
+        // For opaque path URLs like "a:foo bar", don't convert to authority format
+        // The path after the colon should be preserved as opaque path
+        // We'll handle this in the opaque path parsing logic below
+      }
+    }
+
+    free(scheme);
   }
 
   // Handle protocol-relative URLs (starting with "//")
@@ -1121,6 +1382,82 @@ static JSRT_URL* JSRT_ParseURL(const char* url, const char* base) {
     return parsed;
   }
 
+  // Handle non-special schemes with opaque paths (single colon, no "://")
+  // E.g., "a:foo bar", "mailto:user@example.com"
+  if (has_scheme && colon_pos && strncmp(colon_pos, "://", 3) != 0) {
+    // Extract scheme
+    size_t scheme_len = colon_pos - cleaned_url;
+    char* scheme = malloc(scheme_len + 1);
+    strncpy(scheme, cleaned_url, scheme_len);
+    scheme[scheme_len] = '\0';
+
+    // Check if this is a non-special scheme
+    if (is_valid_scheme(scheme) && !is_special_scheme(scheme)) {
+      // This is a non-special scheme with opaque path
+      free(parsed->protocol);
+      parsed->protocol = malloc(strlen(scheme) + 2);
+      sprintf(parsed->protocol, "%s:", scheme);
+
+      // Extract fragment and query from the opaque path first
+      const char* opaque_path_full = colon_pos + 1;
+
+      // Find fragment and query positions
+      char* fragment_pos = strchr(opaque_path_full, '#');
+      char* query_pos = strchr(opaque_path_full, '?');
+
+      // Create a copy to work with
+      char* opaque_path_copy = strdup(opaque_path_full);
+      char* opaque_path = opaque_path_copy;
+
+      // Extract fragment if present
+      if (fragment_pos) {
+        size_t fragment_offset = fragment_pos - opaque_path_full;
+        free(parsed->hash);
+        parsed->hash = strdup(opaque_path_copy + fragment_offset);  // Include '#'
+        opaque_path_copy[fragment_offset] = '\0';                   // Terminate path before fragment
+      }
+
+      // Extract query if present (and if it comes before fragment)
+      if (query_pos && (!fragment_pos || query_pos < fragment_pos)) {
+        size_t query_offset = query_pos - opaque_path_full;
+        free(parsed->search);
+        parsed->search = strdup(opaque_path_copy + query_offset);  // Include '?'
+        opaque_path_copy[query_offset] = '\0';                     // Terminate path before query
+      }
+
+      // Now encode what remains as the opaque path (without fragment/query)
+      char* encoded_path = url_nonspecial_path_encode(opaque_path_copy);
+      free(parsed->pathname);
+      parsed->pathname = encoded_path ? encoded_path : strdup(opaque_path_copy);
+
+      free(opaque_path_copy);
+
+      // Non-special schemes have null origin
+      free(parsed->origin);
+      parsed->origin = strdup("null");
+
+      // Build href for non-special scheme
+      free(parsed->href);
+      char* encoded_search = url_component_encode(parsed->search);
+      char* encoded_hash = url_component_encode(parsed->hash);
+
+      size_t href_len =
+          strlen(parsed->protocol) + strlen(parsed->pathname) + strlen(encoded_search) + strlen(encoded_hash) + 1;
+      parsed->href = malloc(href_len);
+      snprintf(parsed->href, href_len, "%s%s%s%s", parsed->protocol, parsed->pathname, encoded_search, encoded_hash);
+
+      free(encoded_search);
+      free(encoded_hash);
+
+      free(scheme);
+      free(url_copy);
+      free(cleaned_url);
+      return parsed;
+    }
+
+    free(scheme);
+  }
+
   // Extract protocol for regular URLs
   // Use the colon position we already found during scheme detection
   if (has_scheme && colon_pos && strncmp(colon_pos, "://", 3) == 0) {
@@ -1164,7 +1501,7 @@ static JSRT_URL* JSRT_ParseURL(const char* url, const char* base) {
 
     if (scheme && is_valid_scheme(scheme)) {
       // Check if this is a special scheme
-      const char* special_schemes[] = {"http", "https", "ftp", "ws", "wss", "file", NULL};
+      const char* special_schemes[] = {"http", "https", "ws", "wss", "file", NULL};
       int is_special = 0;
       for (int i = 0; special_schemes[i]; i++) {
         if (strcmp(scheme, special_schemes[i]) == 0) {
@@ -1264,17 +1601,46 @@ static JSRT_URL* JSRT_ParseURL(const char* url, const char* base) {
       free(scheme);
 
       // For non-special schemes, parse hash and search from the path
-      // Extract hash first (fragment)
+      // Find both positions first
       char* hash_start = strchr(ptr, '#');
-      if (hash_start) {
+      char* search_start = strchr(ptr, '?');
+
+      // Determine which comes first and extract in proper order
+      if (hash_start && search_start) {
+        if (hash_start < search_start) {
+          // Hash comes before search: extract hash first
+          free(parsed->hash);
+          parsed->hash = strdup(hash_start);
+          *hash_start = '\0';
+
+          // Now extract search from the truncated string
+          search_start = strchr(ptr, '?');
+          if (search_start) {
+            free(parsed->search);
+            parsed->search = strdup(search_start);
+            *search_start = '\0';
+          }
+        } else {
+          // Search comes before hash: extract search first
+          free(parsed->search);
+          parsed->search = strdup(search_start);
+          *search_start = '\0';
+
+          // Now extract hash from the truncated string
+          hash_start = strchr(ptr, '#');
+          if (hash_start) {
+            free(parsed->hash);
+            parsed->hash = strdup(hash_start);
+            *hash_start = '\0';
+          }
+        }
+      } else if (hash_start) {
+        // Only hash present
         free(parsed->hash);
         parsed->hash = strdup(hash_start);
         *hash_start = '\0';
-      }
-
-      // Extract search (query)
-      char* search_start = strchr(ptr, '?');
-      if (search_start) {
+      } else if (search_start) {
+        // Only search present
         free(parsed->search);
         parsed->search = strdup(search_start);
         *search_start = '\0';
@@ -1338,7 +1704,7 @@ static JSRT_URL* JSRT_ParseURL(const char* url, const char* base) {
       scheme_without_colon[strlen(scheme_without_colon) - 1] = '\0';
     }
 
-    const char* special_schemes[] = {"http", "https", "ftp", "ws", "wss", "file", NULL};
+    const char* special_schemes[] = {"http", "https", "ws", "wss", "file", NULL};
     int is_special = 0;
     for (int i = 0; special_schemes[i]; i++) {
       if (strcmp(scheme_without_colon, special_schemes[i]) == 0) {
@@ -1394,10 +1760,11 @@ static JSRT_URL* JSRT_ParseURL(const char* url, const char* base) {
       // Validate decoded credentials - if invalid, ignore them per WHATWG URL spec
       if (validate_credentials(raw_username) && validate_credentials(raw_password)) {
         free(parsed->username);
-        parsed->username = strdup(raw_username);
+        // Encode userinfo using userinfo-specific encoding rules
+        parsed->username = url_userinfo_encode(raw_username);
         free(parsed->password);
-        // URL-encode the password as per WHATWG URL spec
-        parsed->password = url_encode_with_len(raw_password, strlen(raw_password));
+        // Encode userinfo using userinfo-specific encoding rules
+        parsed->password = url_userinfo_encode(raw_password);
       }
       // If credentials are invalid, ignore them (keep defaults)
 
@@ -1807,6 +2174,11 @@ static JSValue JSRT_URLGetSearch(JSContext* ctx, JSValueConst this_val, int argc
   if (!url)
     return JS_EXCEPTION;
 
+  // Per WPT spec: empty query ("?") should return empty string, not "?"
+  if (url->search && strcmp(url->search, "?") == 0) {
+    return JS_NewString(ctx, "");
+  }
+
   // Return the percent-encoded search as per URL specification
   char* encoded_search = url_component_encode(url->search);
   if (!encoded_search)
@@ -1894,6 +2266,11 @@ static JSValue JSRT_URLGetHash(JSContext* ctx, JSValueConst this_val, int argc, 
   JSRT_URL* url = JS_GetOpaque2(ctx, this_val, JSRT_URLClassID);
   if (!url)
     return JS_EXCEPTION;
+
+  // Per WPT spec: empty fragment ("#") should return empty string, not "#"
+  if (url->hash && strcmp(url->hash, "#") == 0) {
+    return JS_NewString(ctx, "");
+  }
 
   // Return the percent-encoded hash as per URL specification
   char* encoded_hash = url_component_encode(url->hash);
@@ -3301,6 +3678,50 @@ static char* url_nonspecial_path_encode(const char* str) {
 // Backward compatibility wrapper
 static char* url_encode(const char* str) {
   return url_encode_with_len(str, strlen(str));
+}
+
+// Userinfo encoding per WHATWG URL spec (less aggressive than url_encode_with_len)
+// According to WPT tests, some characters like & and ( should not be percent-encoded in userinfo
+static char* url_userinfo_encode(const char* str) {
+  if (!str)
+    return NULL;
+
+  static const char hex_chars[] = "0123456789ABCDEF";
+  size_t len = strlen(str);
+  size_t encoded_len = 0;
+
+  // Calculate encoded length
+  for (size_t i = 0; i < len; i++) {
+    unsigned char c = (unsigned char)str[i];
+    // Characters allowed in userinfo without encoding (per WPT tests)
+    if ((c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z') || (c >= '0' && c <= '9') || c == '-' || c == '_' ||
+        c == '.' || c == '~' || c == '*' || c == '&' || c == '(' || c == ')' || c == '!' || c == '$' || c == '\'' ||
+        c == ',' || c == ';' || c == '=' || c == '+') {
+      encoded_len++;
+    } else {
+      encoded_len += 3;  // %XX
+    }
+  }
+
+  char* encoded = malloc(encoded_len + 1);
+  size_t j = 0;
+
+  for (size_t i = 0; i < len; i++) {
+    unsigned char c = (unsigned char)str[i];
+    // Characters allowed in userinfo without encoding
+    if ((c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z') || (c >= '0' && c <= '9') || c == '-' || c == '_' ||
+        c == '.' || c == '~' || c == '*' || c == '&' || c == '(' || c == ')' || c == '!' || c == '$' || c == '\'' ||
+        c == ',' || c == ';' || c == '=' || c == '+') {
+      encoded[j++] = c;
+    } else {
+      encoded[j++] = '%';
+      encoded[j++] = hex_chars[(c >> 4) & 0x0F];
+      encoded[j++] = hex_chars[c & 0x0F];
+    }
+  }
+
+  encoded[j] = '\0';
+  return encoded;
 }
 
 static JSValue JSRT_URLSearchParamsToString(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {

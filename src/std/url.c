@@ -365,38 +365,118 @@ static char* canonicalize_ipv6(const char* ipv6_str) {
 // Canonicalize IPv4 address according to WHATWG URL spec
 // Handles decimal, octal, and hexadecimal formats
 // Returns NULL if not a valid IPv4 address, otherwise returns canonical dotted decimal
+// Convert full-width characters to half-width for IPv4 parsing per WPT
+static char* normalize_fullwidth_characters(const char* input) {
+  if (!input)
+    return NULL;
+
+  size_t len = strlen(input);
+  char* result = malloc(len + 1);
+  if (!result)
+    return NULL;
+
+  size_t j = 0;
+  for (size_t i = 0; i < len; i++) {
+    unsigned char c = (unsigned char)input[i];
+
+    // Full-width digits (０-９) -> half-width (0-9)
+    if (c == 0xEF && i + 2 < len && (unsigned char)input[i + 1] == 0xBC) {
+      unsigned char third = (unsigned char)input[i + 2];
+      if (third >= 0x90 && third <= 0x99) {
+        // ０-９ (0xEFBC90-0xEFBC99) -> 0-9
+        result[j++] = '0' + (third - 0x90);
+        i += 2;  // Skip next 2 bytes
+        continue;
+      }
+    }
+
+    // Full-width uppercase letters A-F and X
+    if (c == 0xEF && i + 2 < len && (unsigned char)input[i + 1] == 0xBC) {
+      unsigned char third = (unsigned char)input[i + 2];
+      // A-F (Ａ-Ｆ) -> A-F
+      if (third >= 0x81 && third <= 0x86) {
+        result[j++] = 'A' + (third - 0x81);
+        i += 2;
+        continue;
+      }
+      // X (Ｘ) -> X
+      else if (third == 0xB8) {
+        result[j++] = 'X';
+        i += 2;
+        continue;
+      }
+    }
+
+    // Full-width lowercase letters a-f and x
+    if (c == 0xEF && i + 2 < len && (unsigned char)input[i + 1] == 0xBD) {
+      unsigned char third = (unsigned char)input[i + 2];
+      // a-f (ａ-ｆ) -> a-f
+      if (third >= 0x81 && third <= 0x86) {
+        result[j++] = 'a' + (third - 0x81);
+        i += 2;
+        continue;
+      }
+      // x (ｘ) -> x
+      else if (third == 0x98) {
+        result[j++] = 'x';
+        i += 2;
+        continue;
+      }
+    }
+
+    // Full-width dot (．) -> half-width (.)
+    if (c == 0xEF && i + 2 < len && (unsigned char)input[i + 1] == 0xBC && (unsigned char)input[i + 2] == 0x8E) {
+      result[j++] = '.';
+      i += 2;
+      continue;
+    }
+
+    // Keep ASCII as-is
+    result[j++] = c;
+  }
+
+  result[j] = '\0';
+  return result;
+}
+
 static char* canonicalize_ipv4_address(const char* input) {
   if (!input || strlen(input) == 0) {
     return NULL;
   }
 
-  // Check if this looks like an IPv4 address (contains dots or hex notation)
-  int has_dots = strchr(input, '.') != NULL;
-  int has_hex = strstr(input, "0x") != NULL || strstr(input, "0X") != NULL;
-
-  // Reject all hex notation per WPT tests - these should be treated as invalid hostnames
-  if (has_hex) {
+  // First normalize full-width characters to half-width for WPT compliance
+  char* normalized_input = normalize_fullwidth_characters(input);
+  if (!normalized_input) {
     return NULL;
   }
 
+  // Check if this looks like an IPv4 address (contains dots or hex notation)
+  int has_dots = strchr(normalized_input, '.') != NULL;
+  int has_hex = strstr(normalized_input, "0x") != NULL || strstr(normalized_input, "0X") != NULL;
+
+  // WPT tests expect hex notation to be supported (e.g., http://192.0x00A80001 -> http://192.168.0.1/)
+  // So we should not reject hex notation outright
+
   if (!has_dots) {
-    // Try to parse as a single 32-bit number (decimal or octal only, no hex)
+    // Try to parse as a single 32-bit number (decimal, octal, or hex)
     char* endptr;
-    unsigned long addr = strtoul(input, &endptr, 10);  // Only decimal base
+    unsigned long addr = strtoul(normalized_input, &endptr, 0);  // Auto-detect base (supports hex 0x, octal 0, decimal)
 
     // If the entire string was consumed and it's a valid 32-bit value
     if (*endptr == '\0' && addr <= 0xFFFFFFFF) {
       char* result = malloc(16);  // "255.255.255.255\0"
       snprintf(result, 16, "%lu.%lu.%lu.%lu", (addr >> 24) & 0xFF, (addr >> 16) & 0xFF, (addr >> 8) & 0xFF,
                addr & 0xFF);
+      free(normalized_input);
       return result;
     }
+    free(normalized_input);
     return NULL;
   }
 
   if (has_dots) {
-    // Parse dotted notation (may include hex/octal parts)
-    char* input_copy = strdup(input);
+    // Parse dotted notation (may include hex/octal parts) using normalized input
+    char* input_copy = strdup(normalized_input);
     char* parts[4];
     int part_count = 0;
 
@@ -409,6 +489,7 @@ static char* canonicalize_ipv4_address(const char* input) {
     // Must have 1-4 parts for valid IPv4
     if (part_count == 0 || part_count > 4) {
       free(input_copy);
+      free(normalized_input);
       return NULL;
     }
 
@@ -421,6 +502,7 @@ static char* canonicalize_ipv4_address(const char* input) {
 
       if (*endptr != '\0') {
         free(input_copy);
+        free(normalized_input);
         return NULL;  // Invalid number
       }
     }
@@ -431,6 +513,7 @@ static char* canonicalize_ipv4_address(const char* input) {
       for (int i = 0; i < 4; i++) {
         if (values[i] > 255) {
           free(input_copy);
+          free(normalized_input);
           return NULL;
         }
       }
@@ -438,6 +521,7 @@ static char* canonicalize_ipv4_address(const char* input) {
       // First two parts 0-255, last part 0-65535
       if (values[0] > 255 || values[1] > 255 || values[2] > 65535) {
         free(input_copy);
+        free(normalized_input);
         return NULL;
       }
       // Convert a.b.c to a.b.(c>>8).(c&0xFF)
@@ -448,6 +532,7 @@ static char* canonicalize_ipv4_address(const char* input) {
       // First part 0-255, second part 0-16777215
       if (values[0] > 255 || values[1] > 16777215) {
         free(input_copy);
+        free(normalized_input);
         return NULL;
       }
       // Convert a.b to a.(b>>16).((b>>8)&0xFF).(b&0xFF)
@@ -459,6 +544,7 @@ static char* canonicalize_ipv4_address(const char* input) {
       // Single part must be 0-4294967295
       if (values[0] > 0xFFFFFFFF) {
         free(input_copy);
+        free(normalized_input);
         return NULL;
       }
       // Convert a to (a>>24).((a>>16)&0xFF).((a>>8)&0xFF).(a&0xFF)
@@ -473,9 +559,11 @@ static char* canonicalize_ipv4_address(const char* input) {
     snprintf(result, 16, "%lu.%lu.%lu.%lu", values[0], values[1], values[2], values[3]);
 
     free(input_copy);
+    free(normalized_input);
     return result;
   }
 
+  free(normalized_input);
   return NULL;
 }
 
@@ -560,10 +648,18 @@ static char* compute_origin(const char* protocol, const char* hostname, const ch
 static JSRT_URL* resolve_relative_url(const char* url, const char* base) {
   // Parse base URL first
   JSRT_URL* base_url = JSRT_ParseURL(base, NULL);
-  if (!base_url || strlen(base_url->protocol) == 0 || strlen(base_url->host) == 0) {
+  if (!base_url || strlen(base_url->protocol) == 0) {
     if (base_url)
       JSRT_FreeURL(base_url);
     return NULL;  // Invalid base URL
+  }
+
+  // For non-special schemes (like test:, mailto:, data:), empty host is valid (opaque URLs)
+  // Only require host for special schemes
+  int is_special = is_special_scheme(base_url->protocol);
+  if (is_special && strlen(base_url->host) == 0) {
+    JSRT_FreeURL(base_url);
+    return NULL;  // Special schemes require host
   }
 
   JSRT_URL* result = malloc(sizeof(JSRT_URL));
@@ -971,9 +1067,9 @@ static char* normalize_port(const char* port_str, const char* protocol) {
     return strdup("");
 
   // Check for excessive leading zeros (WPT requirement)
-  // If port has more than 5 leading zeros, it's invalid
+  // If port has more than 5 leading zeros, it's invalid but URL should not throw
   if (strlen(port_str) > 6 && strspn(port_str, "0") >= 5) {
-    return NULL;  // Invalid port due to excessive leading zeros
+    return strdup("");  // Invalid port due to excessive leading zeros - return empty string, don't fail URL
   }
 
   // Convert port string to number (handles leading zeros)
@@ -985,8 +1081,23 @@ static char* normalize_port(const char* port_str, const char* protocol) {
     return NULL;  // Invalid port causes error
   }
 
-  // Note: Do not omit default ports for url.port property
-  // Default port omission is handled separately in href/host serialization
+  // WPT requirement: omit default ports for url.port property
+  // Extract scheme from protocol for default port check
+  char scheme[32];
+  strncpy(scheme, protocol, sizeof(scheme) - 1);
+  scheme[sizeof(scheme) - 1] = '\0';
+  char* colon = strchr(scheme, ':');
+  if (colon)
+    *colon = '\0';
+
+  // Convert port number back to string for comparison
+  char port_string[16];
+  snprintf(port_string, sizeof(port_string), "%ld", port_num);
+
+  // Check if this is a default port and return empty string if so
+  if (is_default_port(scheme, port_string)) {
+    return strdup("");
+  }
 
   // Return normalized port as string
   char* result = malloc(16);  // Enough for any valid port number
@@ -1085,10 +1196,22 @@ static char* normalize_url_backslashes(const char* url) {
 }
 
 static JSRT_URL* JSRT_ParseURL(const char* url, const char* base) {
+#ifdef DEBUG_URL_NORMALIZATION
+  printf("DEBUG: JSRT_ParseURL called with URL: %s\n", url);
+#endif
+
   // Strip leading and trailing ASCII whitespace, then remove all internal ASCII whitespace per WHATWG URL spec
   char* trimmed_url = strip_url_whitespace(url);
-  if (!trimmed_url)
+  if (!trimmed_url) {
+#ifdef DEBUG_URL_NORMALIZATION
+    printf("DEBUG: strip_url_whitespace failed\n");
+#endif
     return NULL;
+  }
+
+#ifdef DEBUG_URL_NORMALIZATION
+  printf("DEBUG: After strip_url_whitespace: %s\n", trimmed_url);
+#endif
 
   // Determine if this URL has a special scheme first
   // We need to check this before removing internal whitespace
@@ -1123,11 +1246,37 @@ static JSRT_URL* JSRT_ParseURL(const char* url, const char* base) {
   // This ensures invalid UTF-16 surrogates like %ED%A0%80 are replaced with %EF%BF%BD
   // For URL decoding, we need to preserve + in scheme part, only decode + to space in query parameters
   size_t decoded_len;
+#ifdef DEBUG_URL_NORMALIZATION
+  printf("DEBUG: Before url_decode_with_length_and_output_len: %s\n", cleaned_url);
+#endif
   char* decoded_url = url_decode_with_length_and_output_len(cleaned_url, strlen(cleaned_url), &decoded_len);
   if (!decoded_url) {
+#ifdef DEBUG_URL_NORMALIZATION
+    printf("DEBUG: url_decode_with_length_and_output_len failed\n");
+#endif
     free(cleaned_url);
     return NULL;
   }
+#ifdef DEBUG_URL_NORMALIZATION
+  printf("DEBUG: After url_decode_with_length_and_output_len: %s\n", decoded_url);
+#endif
+
+  // Normalize full-width characters to half-width for proper URL parsing per WPT
+  char* normalized_fullwidth = normalize_fullwidth_characters(decoded_url);
+  if (!normalized_fullwidth) {
+#ifdef DEBUG_URL_NORMALIZATION
+    printf("DEBUG: normalize_fullwidth_characters failed\n");
+#endif
+    free(decoded_url);
+    free(cleaned_url);
+    return NULL;
+  }
+  free(decoded_url);  // Replace decoded_url with normalized version
+  decoded_url = normalized_fullwidth;
+
+#ifdef DEBUG_URL_NORMALIZATION
+  printf("DEBUG: After normalize_fullwidth_characters: %s\n", decoded_url);
+#endif
 
   // Re-encode the validated UTF-8 back to percent-encoded form for further processing
   // For non-special schemes, we need to preserve spaces in the path portion
@@ -1143,10 +1292,16 @@ static JSRT_URL* JSRT_ParseURL(const char* url, const char* base) {
     scheme[scheme_len] = '\0';
 
     if (is_valid_scheme(scheme) && !is_special_scheme(scheme)) {
-      // Non-special scheme: use special encoding that preserves spaces in path
+// Non-special scheme: use special encoding that preserves spaces in path
+#ifdef DEBUG_URL_NORMALIZATION
+      printf("DEBUG: Using url_nonspecial_path_encode\n");
+#endif
       reencoded_url = url_nonspecial_path_encode(decoded_url);
     } else {
-      // Special scheme or invalid scheme: use normal encoding
+// Special scheme or invalid scheme: use normal encoding
+#ifdef DEBUG_URL_NORMALIZATION
+      printf("DEBUG: Using url_component_encode for scheme: %s\n", scheme);
+#endif
       reencoded_url = url_component_encode(decoded_url);
     }
     free(scheme);
@@ -1157,8 +1312,16 @@ static JSRT_URL* JSRT_ParseURL(const char* url, const char* base) {
 
   free(decoded_url);
   free(cleaned_url);
-  if (!reencoded_url)
+  if (!reencoded_url) {
+#ifdef DEBUG_URL_NORMALIZATION
+    printf("DEBUG: reencoded_url is NULL, returning NULL\n");
+#endif
     return NULL;
+  }
+
+#ifdef DEBUG_URL_NORMALIZATION
+  printf("DEBUG: After reencoding: %s\n", reencoded_url);
+#endif
 
   cleaned_url = reencoded_url;
 
@@ -1182,12 +1345,21 @@ static JSRT_URL* JSRT_ParseURL(const char* url, const char* base) {
     }
   }
 
-  // Validate URL characters first (but skip ASCII whitespace check since we already removed them)
-  // Note: validate_url_characters should not check for tab/LF/CR since we already removed them
+// Validate URL characters first (but skip ASCII whitespace check since we already removed them)
+// Note: validate_url_characters should not check for tab/LF/CR since we already removed them
+#ifdef DEBUG_URL_NORMALIZATION
+  printf("DEBUG: About to validate URL characters: %s\n", cleaned_url);
+#endif
   if (!validate_url_characters(cleaned_url)) {
+#ifdef DEBUG_URL_NORMALIZATION
+    printf("DEBUG: validate_url_characters FAILED\n");
+#endif
     free(cleaned_url);
     return NULL;  // Invalid characters detected
   }
+#ifdef DEBUG_URL_NORMALIZATION
+  printf("DEBUG: validate_url_characters PASSED\n");
+#endif
   if (base && !validate_url_characters(base)) {
     free(cleaned_url);
     return NULL;  // Invalid characters in base URL
@@ -1261,27 +1433,94 @@ static JSRT_URL* JSRT_ParseURL(const char* url, const char* base) {
     if (is_special) {
       // Special scheme handling
       if (strncmp(colon_pos, "://", 3) != 0) {
-        if (!base) {
-          // No base URL: convert single colon to double slash format (absolute URL)
-          size_t after_colon_len = strlen(colon_pos + 1);             // Length after the ':'
-          size_t new_url_len = scheme_len + 3 + after_colon_len + 1;  // scheme + "://" + rest + '\0'
-          char* normalized_url = malloc(new_url_len);
+#ifdef DEBUG_URL_NORMALIZATION
+        printf("DEBUG: Special scheme single slash processing\n");
+#endif
+        // WPT tests expect special schemes to always be normalized to absolute format
+        // regardless of whether a base URL exists
+        // Convert single colon to double slash format (absolute URL)
+        char* after_colon = colon_pos + 1;  // The part after ":"
+#ifdef DEBUG_URL_NORMALIZATION
+        printf("DEBUG: after_colon: %s\n", after_colon);
+#endif
 
-          strncpy(normalized_url, cleaned_url, scheme_len);
-          strcpy(normalized_url + scheme_len, "://");
-          strcpy(normalized_url + scheme_len + 3, colon_pos + 1);
+        // Handle user info in single slash URLs per WPT requirements
+        // URLs like "http:/@host" should become "http://host" (user info stripped)
+        char* normalized_after_colon = after_colon;
+        int need_free_normalized = 0;  // Flag to track if we need to free normalized_after_colon
+        char* at_symbol = strchr(after_colon, '@');
+#ifdef DEBUG_URL_NORMALIZATION
+        printf("DEBUG: at_symbol found: %s\n", at_symbol ? "yes" : "no");
+        if (at_symbol)
+          printf("DEBUG: at_symbol: %s\n", at_symbol);
+#endif
 
-          // Replace the original URL with normalized version
-          free(cleaned_url);
-          cleaned_url = normalized_url;
-
-          // Update colon_pos to point to the new position
-          colon_pos = cleaned_url + scheme_len;
-        } else {
-          // Base URL exists: treat single colon as relative for special schemes
-          // Store the part after the colon for relative processing
-          relative_part = strdup(colon_pos + 1);
+        if (at_symbol && after_colon[0] == '/' && after_colon[1] == '@') {
+// URL like "http:/@host" - strip the /@
+#ifdef DEBUG_URL_NORMALIZATION
+          printf("DEBUG: Handling /@ pattern\n");
+#endif
+          normalized_after_colon = at_symbol + 1;  // Points to existing string, no malloc
+          need_free_normalized = 0;
+        } else if (at_symbol && after_colon[0] == '/') {
+// URL like "http:/userinfo@host" - strip everything before @ but keep the /
+#ifdef DEBUG_URL_NORMALIZATION
+          printf("DEBUG: Handling /userinfo@ pattern\n");
+#endif
+          // Allocate memory for "/" + everything after "@"
+          // Length is: 1 (for "/") + strlen(at_symbol + 1) + 1 (for null terminator)
+          size_t host_part_len = strlen(at_symbol + 1);
+          normalized_after_colon = malloc(1 + host_part_len + 1);
+          if (normalized_after_colon) {
+            normalized_after_colon[0] = '/';
+            strcpy(normalized_after_colon + 1, at_symbol + 1);
+            need_free_normalized = 1;  // We allocated memory, need to free it
+          } else {
+            // Memory allocation failed - fallback to original
+            normalized_after_colon = after_colon;
+            need_free_normalized = 0;
+          }
         }
+
+#ifdef DEBUG_URL_NORMALIZATION
+        printf("DEBUG: normalized_after_colon: %s\n", normalized_after_colon);
+#endif
+
+        size_t after_colon_len = strlen(normalized_after_colon);
+        size_t new_url_len = scheme_len + 3 + after_colon_len + 1;  // scheme + "://" + rest + '\0'
+        char* normalized_url = malloc(new_url_len);
+
+        strncpy(normalized_url, cleaned_url, scheme_len);
+        strcpy(normalized_url + scheme_len, "://");
+
+        // Handle the case where normalized_after_colon starts with "/"
+        // For "http:/example.com/" -> after_colon="/example.com/" -> we want "http://example.com/"
+        // not "http:///example.com/"
+        if (normalized_after_colon[0] == '/') {
+          strcpy(normalized_url + scheme_len + 3, normalized_after_colon + 1);  // Skip the leading /
+        } else {
+          strcpy(normalized_url + scheme_len + 3, normalized_after_colon);
+        }
+
+#ifdef DEBUG_URL_NORMALIZATION
+        printf("DEBUG: Constructed normalized URL: %s\n", normalized_url);
+#endif
+
+        // Free the temporary normalized_after_colon only if we allocated it
+        if (need_free_normalized) {
+          free(normalized_after_colon);
+        }
+
+        // Replace the original URL with normalized version
+        free(cleaned_url);
+        cleaned_url = normalized_url;
+
+#ifdef DEBUG_URL_NORMALIZATION
+        printf("DEBUG: Replaced cleaned_url with normalized URL\n");
+#endif
+
+        // Update colon_pos to point to the new position
+        colon_pos = cleaned_url + scheme_len;
       }
     } else if (is_valid_scheme(scheme)) {
       // Non-special scheme handling per WHATWG URL spec
@@ -1532,6 +1771,36 @@ static JSRT_URL* JSRT_ParseURL(const char* url, const char* base) {
     strncpy(scheme, cleaned_url, scheme_len);
     scheme[scheme_len] = '\0';
 
+    // WPT validation: file URLs should not have ports or IPv6-like brackets
+    if (strcmp(scheme, "file") == 0) {
+      char* after_slashes = colon_pos + 3;  // Skip "://"
+
+      // Look for port (colon followed by digits)
+      char* port_colon = strchr(after_slashes, ':');
+      if (port_colon) {
+        // Check if there's a digit after colon (indicating port)
+        if (port_colon[1] >= '0' && port_colon[1] <= '9') {
+          JSRT_FreeURL(parsed);
+          free(url_copy);
+          free(cleaned_url);
+          free(scheme);
+          return NULL;  // file:// URLs cannot have ports
+        }
+      }
+
+      // Look for IPv6-like brackets
+      if (after_slashes[0] == '[') {
+        char* closing_bracket = strchr(after_slashes, ']');
+        if (closing_bracket) {
+          JSRT_FreeURL(parsed);
+          free(url_copy);
+          free(cleaned_url);
+          free(scheme);
+          return NULL;  // file:// URLs cannot have IPv6-like brackets
+        }
+      }
+    }
+
     free(parsed->protocol);
     parsed->protocol = malloc(strlen(scheme) + 2);
     sprintf(parsed->protocol, "%s:", scheme);
@@ -1543,6 +1812,36 @@ static JSRT_URL* JSRT_ParseURL(const char* url, const char* base) {
     free(parsed->protocol);
     parsed->protocol = strdup("file:");
     ptr += 5;
+
+    // WPT validation: file URLs should not have ports or IPv6-like brackets
+    // Check for invalid patterns: file://host:port/ or file://[host]/
+    if (strncmp(ptr, "//", 2) == 0) {
+      char* after_slashes = ptr + 2;
+
+      // Look for port (colon followed by digits)
+      char* colon_pos = strchr(after_slashes, ':');
+      if (colon_pos) {
+        // Check if there's a digit after colon (indicating port)
+        if (colon_pos[1] >= '0' && colon_pos[1] <= '9') {
+          JSRT_FreeURL(parsed);
+          free(url_copy);
+          free(cleaned_url);
+          return NULL;  // file:// URLs cannot have ports
+        }
+      }
+
+      // Look for IPv6-like brackets
+      if (after_slashes[0] == '[') {
+        char* closing_bracket = strchr(after_slashes, ']');
+        if (closing_bracket) {
+          JSRT_FreeURL(parsed);
+          free(url_copy);
+          free(cleaned_url);
+          return NULL;  // file:// URLs cannot have IPv6-like brackets
+        }
+      }
+    }
+
     // Handle file:///path format - skip extra slashes
     while (*ptr == '/')
       ptr++;
@@ -1575,13 +1874,23 @@ static JSRT_URL* JSRT_ParseURL(const char* url, const char* base) {
         }
       }
 
+#ifdef DEBUG_URL_NORMALIZATION
+      printf("DEBUG: Found scheme: %s, is_special: %d\n", scheme, is_special);
+      printf("DEBUG: scheme_end+1: %s\n", scheme_end + 1);
+#endif
+
       if (is_special) {
+#ifdef DEBUG_URL_NORMALIZATION
+        printf("DEBUG: Processing special scheme\n");
+#endif
         if (strncmp(scheme_end + 1, "/", 1) == 0 && strncmp(scheme_end + 1, "//", 2) != 0) {
+#ifdef DEBUG_URL_NORMALIZATION
+          printf("DEBUG: Found single slash pattern\n");
+#endif
           // Special scheme with single slash
-          if (base && strcmp(scheme, "ftp") != 0) {
-            // With base URL: treat as relative URL (per WHATWG spec and WPT tests)
-            // URLs like "http:/example.com/" should be resolved relative to base
-            // Exception: FTP should be normalized to absolute format
+          // WPT tests expect all special schemes with single slash to be normalized to absolute format
+          // E.g., "wss:/example.com/" should become "wss://example.com/" (not resolved relative to base)
+          if (0) {  // Disable the relative URL logic - always normalize to absolute
             char* relative_part = strdup(scheme_end + 1);  // Copy "/example.com/"
 
             free(url_copy);
@@ -1606,10 +1915,23 @@ static JSRT_URL* JSRT_ParseURL(const char* url, const char* base) {
             return result;
           } else {
             // Without base: normalize to double slash (absolute URL)
-            char* rest = scheme_end + 2;                                    // Skip ":" and "/"
-            size_t normalized_len = strlen(scheme) + 3 + strlen(rest) + 1;  // scheme + "://" + rest + null
+            char* rest = scheme_end + 2;  // Skip ":" and "/"
+
+            // Handle user info in single slash URLs per WPT requirements
+            // URLs like "http:/@host" should become "http://host" (user info stripped)
+            char* normalized_rest = rest;
+            char* at_symbol = strchr(rest, '@');
+            if (at_symbol && rest[0] == '@') {
+              // URL starts with @ (e.g., "http:/@host") - strip the @
+              normalized_rest = at_symbol + 1;
+            } else if (at_symbol) {
+              // URL contains user info (e.g., "http:/a:b@host") - strip everything before @
+              normalized_rest = at_symbol + 1;
+            }
+
+            size_t normalized_len = strlen(scheme) + 3 + strlen(normalized_rest) + 1;  // scheme + "://" + rest + null
             char* normalized_url = malloc(normalized_len);
-            snprintf(normalized_url, normalized_len, "%s://%s", scheme, rest);
+            snprintf(normalized_url, normalized_len, "%s://%s", scheme, normalized_rest);
             free(scheme);
 
             // Parse the normalized URL recursively
@@ -1953,6 +2275,12 @@ static JSRT_URL* JSRT_ParseURL(const char* url, const char* base) {
           JSRT_FreeURL(parsed);
           return NULL;
         }
+
+        // WPT requirement: normalize hostname to lowercase
+        for (char* p = hostname_part; *p; p++) {
+          *p = tolower((unsigned char)*p);
+        }
+
         parsed->hostname = hostname_part;
         // Don't free hostname_part here since it's now assigned to parsed->hostname
       }
@@ -1963,8 +2291,11 @@ static JSRT_URL* JSRT_ParseURL(const char* url, const char* base) {
     if (port_part && strlen(port_part) > 0) {
       parsed->port = normalize_port(port_part, parsed->protocol);
       if (!parsed->port) {
-        // Invalid port (e.g., excessive leading zeros) - use empty port per WPT
-        parsed->port = strdup("");
+        // Invalid port (e.g., non-numeric, excessive leading zeros, out of range) - WPT requires throwing
+        free(url_copy);
+        free(cleaned_url);
+        JSRT_FreeURL(parsed);
+        return NULL;  // This will cause JS constructor to throw TypeError: "Invalid URL"
       }
     } else {
       parsed->port = strdup("");

@@ -75,7 +75,7 @@ function assert_array_equals(actual, expected, description) {
         // Support both regular Arrays and TypedArrays (like Uint8Array)
         const isActualArrayLike = Array.isArray(actual) || (actual && typeof actual === 'object' && typeof actual.length === 'number');
         const isExpectedArrayLike = Array.isArray(expected) || (expected && typeof expected === 'object' && typeof expected.length === 'number');
-        
+
         if (!isActualArrayLike) {
             throw new Error('actual is not an array or array-like object');
         }
@@ -103,14 +103,14 @@ function assert_object_equals(actual, expected, description) {
         if (typeof expected !== 'object' || expected === null) {
             throw new Error('expected is not an object');
         }
-        
+
         const actualKeys = Object.keys(actual);
         const expectedKeys = Object.keys(expected);
-        
+
         if (actualKeys.length !== expectedKeys.length) {
             throw new Error(`Object key count differs: expected ${expectedKeys.length}, got ${actualKeys.length}`);
         }
-        
+
         for (const key of expectedKeys) {
             if (!(key in actual)) {
                 throw new Error(`Missing key "${key}" in actual object`);
@@ -132,21 +132,21 @@ function assert_throws(errorType, func, description) {
             func = errorType;
             errorType = Error;
         }
-        
+
         let threw = false;
         let caughtError = null;
-        
+
         try {
             func();
         } catch (e) {
             threw = true;
             caughtError = e;
         }
-        
+
         if (!threw) {
             throw new Error('Expected function to throw but it did not');
         }
-        
+
         if (errorType && !(caughtError instanceof errorType)) {
             throw new Error(`Expected error of type ${errorType.name} but got ${caughtError.constructor.name}`);
         }
@@ -160,18 +160,18 @@ function assert_throws_dom(error_name, func, description) {
     try {
         let threw = false;
         let caughtError = null;
-        
+
         try {
             func();
         } catch (e) {
             threw = true;
             caughtError = e;
         }
-        
+
         if (!threw) {
             throw new Error('Expected function to throw but it did not');
         }
-        
+
         // For base64 tests, we need to check for INVALID_CHARACTER_ERR
         if (error_name === "INVALID_CHARACTER_ERR") {
             // In jsrt, this should throw a regular Error or TypeError
@@ -179,12 +179,12 @@ function assert_throws_dom(error_name, func, description) {
             // since different browsers may implement this differently
             return; // Success if it threw anything
         }
-        
+
         // For other DOM exceptions, we could check the error name
         if (caughtError.name && caughtError.name === error_name) {
             return; // Success
         }
-        
+
         // Generic check - if it threw, that's often enough for WPT tests
         return;
     } catch (e) {
@@ -197,18 +197,18 @@ function assert_throws_js(error_type, func, description) {
     try {
         let threw = false;
         let caughtError = null;
-        
+
         try {
             func();
         } catch (e) {
             threw = true;
             caughtError = e;
         }
-        
+
         if (!threw) {
             throw new Error('Expected function to throw but it did not');
         }
-        
+
         // Check if the error is of the expected JavaScript type
         if (typeof error_type === 'function') {
             // error_type is a constructor function (TypeError, SyntaxError, etc.)
@@ -221,7 +221,7 @@ function assert_throws_js(error_type, func, description) {
                 throw new Error(`Expected ${error_type} but got ${caughtError.constructor.name}: ${caughtError.message}`);
             }
         }
-        
+
         return; // Success
     } catch (e) {
         throw new Error(description || e.message);
@@ -240,8 +240,8 @@ function promise_rejects_exactly(test, expected_error, promise, description) {
         (actual_error) => {
             if (actual_error !== expected_error) {
                 throw new Error(
-                    (description || 'Promise rejected with wrong error') + 
-                    ': expected ' + format_value(expected_error) + 
+                    (description || 'Promise rejected with wrong error') +
+                    ': expected ' + format_value(expected_error) +
                     ', got ' + format_value(actual_error)
                 );
             }
@@ -274,8 +274,8 @@ function generate_tests(func, tests, options) {
             test(function() { func(testArg); }, testName);
         } else {
             // Simple test data - generate a name
-            const testName = options && options.name ? 
-                `${options.name} ${index}` : 
+            const testName = options && options.name ?
+                `${options.name} ${index}` :
                 `Test ${index}: ${format_value(testData)}`;
             test(function() { func(testData); }, testName);
         }
@@ -286,19 +286,19 @@ function generate_tests(func, tests, options) {
 function test(func, name) {
     wptTestCounter++;
     const testName = name || `Test ${wptTestCounter}`;
-    
+
     const testObj = {
         name: testName,
         func: func,
         status: null,
         message: null
     };
-    
+
     wptTests.push(testObj);
-    
+
     // Run the test immediately
     wptCurrentTest = testObj;
-    
+
     // Create test object with WPT methods
     const t = {
         step: function(stepFunc, ...args) {
@@ -309,20 +309,20 @@ function test(func, name) {
                 throw e;
             }
         },
-        
+
         step_func: function(stepFunc, context) {
             return (...args) => {
                 return t.step(() => stepFunc.apply(context || this, args));
             };
         },
-        
+
         unreached_func: function(description) {
             return function() {
                 throw new Error(description || 'Unreachable code was reached');
             };
         }
     };
-    
+
     try {
         func(t);  // Pass test object to function
         testObj.status = TEST_PASS;
@@ -340,7 +340,7 @@ function test(func, name) {
 function async_test(func, name) {
     wptTestCounter++;
     const testName = name || `Async Test ${wptTestCounter}`;
-    
+
     let completed = false;
     const testObj = {
         name: testName,
@@ -348,10 +348,10 @@ function async_test(func, name) {
         status: null,
         message: null
     };
-    
+
     wptTests.push(testObj);
     wptCurrentTest = testObj;
-    
+
     const t = {
         step: function(stepFunc, ...args) {
             if (completed) return;
@@ -362,13 +362,13 @@ function async_test(func, name) {
                 throw e;
             }
         },
-        
+
         step_func: function(stepFunc, context) {
             return (...args) => {
                 return t.step(() => stepFunc.apply(context || this, args));
             };
         },
-        
+
         step_timeout: function(stepFunc, timeout) {
             return setTimeout(() => {
                 if (!completed) {
@@ -376,13 +376,13 @@ function async_test(func, name) {
                 }
             }, timeout);
         },
-        
+
         unreached_func: function(description) {
             return function() {
                 throw new Error(description || 'Unreachable code was reached');
             };
         },
-        
+
         step_func_done: function(stepFunc, context) {
             return (...args) => {
                 return t.step(() => {
@@ -397,7 +397,7 @@ function async_test(func, name) {
                 });
             };
         },
-        
+
         done: function() {
             if (completed) return;
             completed = true;
@@ -407,7 +407,7 @@ function async_test(func, name) {
             wptCurrentTest = null;
         }
     };
-    
+
     try {
         func(t);
     } catch (e) {
@@ -419,14 +419,14 @@ function async_test(func, name) {
             wptCurrentTest = null;
         }
     }
-    
+
     return t;
 }
 
 function promise_test(func, name) {
     wptTestCounter++;
     const testName = name || `Promise Test ${wptTestCounter}`;
-    
+
     const testObj = {
         name: testName,
         func: func,
@@ -443,17 +443,17 @@ function promise_test(func, name) {
                 return stepFunc.call(context, ...args);
             };
         },
-        
+
         unreached_func: function(description) {
             return function() {
                 throw new Error(description || 'Unreachable code was reached');
             };
         }
     };
-    
+
     wptTests.push(testObj);
     wptCurrentTest = testObj;
-    
+
     try {
         const result = func(testObj);  // Pass test object as first argument
         if (result && typeof result.then === 'function') {
@@ -493,16 +493,16 @@ function setup(options) {
         // Create a global done function for single test mode
         wptTestCounter++;
         const testName = `Single Test ${wptTestCounter}`;
-        
+
         const testObj = {
             name: testName,
             status: null,
             message: null
         };
-        
+
         wptTests.push(testObj);
         wptCurrentTest = testObj;
-        
+
         // Create global done function
         globalDone = function() {
             if (testObj.status !== null) return; // Already completed
@@ -511,7 +511,7 @@ function setup(options) {
             console.log(`✅ ${testName}`);
             wptCurrentTest = null;
         };
-        
+
         // Handle test failures (will be caught by setTimeout errors)
         setTimeout(() => {
             if (testObj.status === null) {
@@ -524,7 +524,7 @@ function setup(options) {
     }
 }
 
-// Make done available globally for single_test mode  
+// Make done available globally for single_test mode
 function done() {
     if (globalDone) {
         globalDone();
@@ -589,7 +589,7 @@ function fetch_json(url) {
         ["aaa==a", null],
         ["aaaa==a", null]
     ];
-    
+
     return Promise.resolve(base64TestData);
 }
 
@@ -629,27 +629,27 @@ function assert_throws_quotaexceedederror(func, description) {
     try {
         let threw = false;
         let caughtError = null;
-        
+
         try {
             func();
         } catch (e) {
             threw = true;
             caughtError = e;
         }
-        
+
         if (!threw) {
             throw new Error('Expected function to throw but it did not');
         }
-        
+
         // Check for quota exceeded error (should be RangeError or similar)
         // In WebCrypto, this is typically a RangeError for array too large
-        if (caughtError instanceof RangeError || 
-            caughtError.message.includes('quota') || 
+        if (caughtError instanceof RangeError ||
+            caughtError.message.includes('quota') ||
             caughtError.message.includes('exceeds') ||
             caughtError.message.includes('length')) {
             return; // Success
         }
-        
+
         // If any error was thrown, consider it a success for now
         // since different implementations may use different error types
         return;
@@ -664,18 +664,18 @@ function assert_throws_exactly(expected_error, func, description) {
     try {
         let threw = false;
         let caughtError = null;
-        
+
         try {
             func();
         } catch (e) {
             threw = true;
             caughtError = e;
         }
-        
+
         if (!threw) {
             throw new Error('Expected function to throw but it did not: ' + (description || ''));
         }
-        
+
         // Check for exact error equality (same object reference or value)
         if (caughtError !== expected_error) {
             // Also check if they are equivalent errors with same message
@@ -687,7 +687,7 @@ function assert_throws_exactly(expected_error, func, description) {
             }
             throw new Error(`Expected exact error ${expected_error} but got ${caughtError}: ` + (description || ''));
         }
-        
+
         return; // Success
     } catch (e) {
         throw new Error(description || e.message);
@@ -713,11 +713,11 @@ function printTestSummary() {
     const passed = wptTests.filter(t => t.status === TEST_PASS).length;
     const failed = wptTests.filter(t => t.status === TEST_FAIL).length;
     const total = wptTests.length;
-    
+
     if (total > 0) {
         console.log(`\n=== Test Results ===`);
         console.log(`Total: ${total}, Passed: ${passed}, Failed: ${failed}`);
-        
+
         if (failed > 0) {
             console.log('\nFailed tests:');
             wptTests.filter(t => t.status === TEST_FAIL).forEach(t => {
@@ -727,10 +727,10 @@ function printTestSummary() {
     }
 }
 
-// Set up automatic summary printing with a timeout
+// Set up automatic summary printing with a longer timeout to wait for async tests
 setTimeout(() => {
     printTestSummary();
-}, 100);
+}, 300);
 
 // Export for CommonJS compatibility
 if (typeof module !== 'undefined' && module.exports) {

@@ -297,7 +297,14 @@ globalThis.fetch = function(url) {{
             wrapper_path = self.create_test_wrapper(test_path)
             
             # Run jsrt with the wrapper file
-            cmd = [str(self.jsrt_path), str(wrapper_path)]
+            # Convert jsrt path to be relative to wpt directory or absolute
+            if self.jsrt_path.is_absolute():
+                jsrt_cmd = str(self.jsrt_path)
+            else:
+                # jsrt_path is relative to main directory, but we run from wpt directory
+                # Calculate relative path from wpt directory back to main directory
+                jsrt_cmd = str(Path('..') / self.jsrt_path)
+            cmd = [jsrt_cmd, str(wrapper_path)]
             result = subprocess.run(
                 cmd,
                 capture_output=True,
@@ -393,14 +400,13 @@ globalThis.fetch = function(url) {{
                 
                 if result['status'] in ['FAIL', 'ERROR', 'TIMEOUT'] and 'reason' not in result:
                     if result.get('stderr'):
-                        print(f"    Error: {result['stderr'][:200]}...")
-                    elif result.get('stdout'):
-                        # Show stdout for debugging
-                        lines = result['stdout'].split('\n')
-                        for line in lines:
-                            if line.strip() and '❌' in line:
-                                print(f"    {line}")
-                                break
+                        print(f"    Error: {result['stderr']}")
+                    if result.get('stdout'):
+                        # Show full stdout for debugging
+                        print(f"    Output:")
+                        for line in result['stdout'].split('\n'):
+                            if line.strip():
+                                print(f"      {line}")
                 elif 'reason' in result:
                     print(f"    {result['reason']}")
                 

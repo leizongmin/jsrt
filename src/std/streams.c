@@ -18,6 +18,19 @@ JSClassID JSRT_WritableStreamDefaultControllerClassID;
 JSClassID JSRT_WritableStreamDefaultWriterClassID;
 JSClassID JSRT_TransformStreamClassID;
 
+// Forward declare structures
+typedef struct JSRT_ReadableStreamDefaultReader JSRT_ReadableStreamDefaultReader;
+
+// ReadableStreamDefaultReader implementation
+struct JSRT_ReadableStreamDefaultReader {
+  JSValue stream;
+  bool closed;
+  JSValue closed_promise;          // Cached closed promise
+  JSValue closed_promise_resolve;  // Resolve function for the closed promise
+  JSValue closed_promise_reject;   // Reject function for the closed promise
+  bool closed_promise_pending;     // Whether the closed promise is still pending
+};
+
 // Structure for pending read promise
 typedef struct PendingRead {
   JSValue promise_resolve;
@@ -35,6 +48,7 @@ typedef struct {
   bool errored;                     // Whether the controller is in error state
   JSValue error_value;              // The error value (if errored)
   PendingRead* pending_reads_head;  // Linked list of pending read promises
+  JSValue current_reader;           // Reference to the current reader (if any)
 } JSRT_ReadableStreamDefaultController;
 
 static void JSRT_ReadableStreamDefaultControllerFinalize(JSRuntime* rt, JSValue val) {
@@ -45,6 +59,9 @@ static void JSRT_ReadableStreamDefaultControllerFinalize(JSRuntime* rt, JSValue 
     }
     if (!JS_IsUndefined(controller->error_value)) {
       JS_FreeValueRT(rt, controller->error_value);
+    }
+    if (!JS_IsUndefined(controller->current_reader)) {
+      JS_FreeValueRT(rt, controller->current_reader);
     }
     // Free queue
     for (size_t i = 0; i < controller->queue_size; i++) {
@@ -178,6 +195,25 @@ static JSValue JSRT_ReadableStreamDefaultControllerClose(JSContext* ctx, JSValue
   // Clear the pending reads list
   controller->pending_reads_head = NULL;
 
+  // Resolve any pending closed promise from the current reader
+  if (!JS_IsUndefined(controller->current_reader)) {
+    JSRT_ReadableStreamDefaultReader* reader =
+        JS_GetOpaque(controller->current_reader, JSRT_ReadableStreamDefaultReaderClassID);
+    if (reader && reader->closed_promise_pending && !JS_IsUndefined(reader->closed_promise_resolve)) {
+      // Resolve the closed promise
+      JSValue undefined_val = JS_UNDEFINED;
+      JSValue resolve_args[] = {undefined_val};
+      JS_Call(ctx, reader->closed_promise_resolve, JS_UNDEFINED, 1, resolve_args);
+
+      // Clean up the resolve/reject functions
+      JS_FreeValue(ctx, reader->closed_promise_resolve);
+      JS_FreeValue(ctx, reader->closed_promise_reject);
+      reader->closed_promise_resolve = JS_UNDEFINED;
+      reader->closed_promise_reject = JS_UNDEFINED;
+      reader->closed_promise_pending = false;
+    }
+  }
+
   return JS_UNDEFINED;
 }
 
@@ -217,6 +253,24 @@ static JSValue JSRT_ReadableStreamDefaultControllerError(JSContext* ctx, JSValue
 
   // Clear the pending reads list
   controller->pending_reads_head = NULL;
+
+  // Reject any pending closed promise from the current reader
+  if (!JS_IsUndefined(controller->current_reader)) {
+    JSRT_ReadableStreamDefaultReader* reader =
+        JS_GetOpaque(controller->current_reader, JSRT_ReadableStreamDefaultReaderClassID);
+    if (reader && reader->closed_promise_pending && !JS_IsUndefined(reader->closed_promise_reject)) {
+      // Reject the closed promise with the error
+      JSValue reject_args[] = {error_value};
+      JS_Call(ctx, reader->closed_promise_reject, JS_UNDEFINED, 1, reject_args);
+
+      // Clean up the resolve/reject functions
+      JS_FreeValue(ctx, reader->closed_promise_resolve);
+      JS_FreeValue(ctx, reader->closed_promise_reject);
+      reader->closed_promise_resolve = JS_UNDEFINED;
+      reader->closed_promise_reject = JS_UNDEFINED;
+      reader->closed_promise_pending = false;
+    }
+  }
 
   return JS_UNDEFINED;
 }
@@ -270,6 +324,7 @@ static JSValue JSRT_ReadableStreamConstructor(JSContext* ctx, JSValueConst new_t
   controller_data->errored = false;
   controller_data->error_value = JS_UNDEFINED;
   controller_data->pending_reads_head = NULL;
+  controller_data->current_reader = JS_UNDEFINED;
 
   JSValue controller = JS_NewObjectClass(ctx, JSRT_ReadableStreamDefaultControllerClassID);
   JS_SetOpaque(controller, controller_data);
@@ -373,15 +428,7 @@ static JSValue JSRT_ReadableStreamCancel(JSContext* ctx, JSValueConst this_val, 
   return promise;
 }
 
-// ReadableStreamDefaultReader implementation
-typedef struct {
-  JSValue stream;
-  bool closed;
-  JSValue closed_promise;          // Cached closed promise
-  JSValue closed_promise_resolve;  // Resolve function for the closed promise
-  JSValue closed_promise_reject;   // Reject function for the closed promise
-  bool closed_promise_pending;     // Whether the closed promise is still pending
-} JSRT_ReadableStreamDefaultReader;
+// ReadableStreamDefaultReader implementation (definition moved to top of file)
 
 static void JSRT_ReadableStreamDefaultReaderFinalize(JSRuntime* rt, JSValue val) {
   JSRT_ReadableStreamDefaultReader* reader = JS_GetOpaque(val, JSRT_ReadableStreamDefaultReaderClassID);
@@ -436,6 +483,19 @@ static JSValue JSRT_ReadableStreamDefaultReaderConstructor(JSContext* ctx, JSVal
 
   JSValue obj = JS_NewObjectClass(ctx, JSRT_ReadableStreamDefaultReaderClassID);
   JS_SetOpaque(obj, reader);
+
+  // Set the reader reference in the controller
+  if (!JS_IsUndefined(stream->controller)) {
+    JSRT_ReadableStreamDefaultController* controller =
+        JS_GetOpaque(stream->controller, JSRT_ReadableStreamDefaultControllerClassID);
+    if (controller) {
+      if (!JS_IsUndefined(controller->current_reader)) {
+        JS_FreeValue(ctx, controller->current_reader);
+      }
+      controller->current_reader = JS_DupValue(ctx, obj);
+    }
+  }
+
   return obj;
 }
 
@@ -460,7 +520,27 @@ static JSValue JSRT_ReadableStreamDefaultReaderGetClosed(JSContext* ctx, JSValue
 
   // If no promise has been created yet, create it based on current state
   if (JS_IsUninitialized(reader->closed_promise)) {
-    if (controller->errored) {
+    if (reader->closed) {
+      // Reader has been released, create a rejected promise with TypeError
+      JSValue global_obj = JS_GetGlobalObject(ctx);
+      JSValue promise_ctor = JS_GetPropertyStr(ctx, global_obj, "Promise");
+      JSValue reject_method = JS_GetPropertyStr(ctx, promise_ctor, "reject");
+      JSValue type_error_ctor = JS_GetPropertyStr(ctx, global_obj, "TypeError");
+      JSValue message = JS_NewString(ctx, "Reader was released");
+      JSValue error = JS_CallConstructor(ctx, type_error_ctor, 1, &message);
+      JSValue promise = JS_Call(ctx, reject_method, promise_ctor, 1, &error);
+
+      JS_FreeValue(ctx, reject_method);
+      JS_FreeValue(ctx, promise_ctor);
+      JS_FreeValue(ctx, type_error_ctor);
+      JS_FreeValue(ctx, message);
+      JS_FreeValue(ctx, error);
+      JS_FreeValue(ctx, global_obj);
+
+      reader->closed_promise = JS_DupValue(ctx, promise);
+      reader->closed_promise_pending = false;
+      return promise;
+    } else if (controller->errored) {
       // Stream is already errored, create a rejected promise
       JSValue promise_ctor = JS_GetPropertyStr(ctx, JS_GetGlobalObject(ctx), "Promise");
       JSValue reject_method = JS_GetPropertyStr(ctx, promise_ctor, "reject");
@@ -728,19 +808,35 @@ static JSValue JSRT_ReadableStreamDefaultReaderReleaseLock(JSContext* ctx, JSVal
   // Mark the reader as closed
   reader->closed = true;
 
-  // Reject the existing closed promise if it's pending
-  // According to the Streams spec, when a reader releases its lock, the closed promise should be rejected
-  if (reader->closed_promise_pending && !JS_IsUndefined(reader->closed_promise_reject)) {
-    // Create a TypeError for the rejection
-    JSValue error = JS_NewError(ctx);
-    JS_SetPropertyStr(ctx, error, "name", JS_NewString(ctx, "TypeError"));
-    JS_SetPropertyStr(ctx, error, "message", JS_NewString(ctx, "Reader was released"));
-    
+  // Check if we should reject the existing closed promise
+  // Only reject if the stream is not closed/errored (i.e., if the promise would never resolve naturally)
+  JSRT_ReadableStream* release_stream = JS_GetOpaque(reader->stream, JSRT_ReadableStreamClassID);
+  JSRT_ReadableStreamDefaultController* release_controller = NULL;
+  bool stream_will_resolve = false;
+
+  if (release_stream && !JS_IsUndefined(release_stream->controller)) {
+    release_controller = JS_GetOpaque(release_stream->controller, JSRT_ReadableStreamDefaultControllerClassID);
+    if (release_controller && (release_controller->closed || release_controller->errored)) {
+      stream_will_resolve = true;
+    }
+  }
+
+  if (reader->closed_promise_pending && !JS_IsUndefined(reader->closed_promise_reject) && !stream_will_resolve) {
+    // Only reject if the stream won't resolve the promise naturally
+    // Create a proper TypeError for the rejection
+    JSValue global_obj = JS_GetGlobalObject(ctx);
+    JSValue type_error_ctor = JS_GetPropertyStr(ctx, global_obj, "TypeError");
+    JSValue message = JS_NewString(ctx, "Reader was released");
+    JSValue error = JS_CallConstructor(ctx, type_error_ctor, 1, &message);
+
     // Call the reject function
     JSValue result = JS_Call(ctx, reader->closed_promise_reject, JS_UNDEFINED, 1, &error);
     JS_FreeValue(ctx, result);
     JS_FreeValue(ctx, error);
-    
+    JS_FreeValue(ctx, message);
+    JS_FreeValue(ctx, type_error_ctor);
+    JS_FreeValue(ctx, global_obj);
+
     reader->closed_promise_pending = false;
   }
 
@@ -759,6 +855,16 @@ static JSValue JSRT_ReadableStreamDefaultReaderReleaseLock(JSContext* ctx, JSVal
   if (!JS_IsUndefined(reader->closed_promise_reject)) {
     JS_FreeValue(ctx, reader->closed_promise_reject);
     reader->closed_promise_reject = JS_UNDEFINED;
+  }
+
+  // Clear the reader reference from the controller
+  if (!JS_IsUndefined(stream->controller)) {
+    JSRT_ReadableStreamDefaultController* controller =
+        JS_GetOpaque(stream->controller, JSRT_ReadableStreamDefaultControllerClassID);
+    if (controller && !JS_IsUndefined(controller->current_reader)) {
+      JS_FreeValue(ctx, controller->current_reader);
+      controller->current_reader = JS_UNDEFINED;
+    }
   }
 
   return JS_UNDEFINED;

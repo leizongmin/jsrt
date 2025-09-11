@@ -8,4 +8,7 @@ void JSRT_RuntimeSetupStdEncoding(JSRT_Runtime* rt);
 // Helper function for surrogate handling - converts JSValue string to UTF-8 with surrogate replacement
 char* JSRT_StringToUTF8WithSurrogateReplacement(JSContext* ctx, JSValue string_val, size_t* output_len);
 
+// UTF-8 validation function
+int JSRT_ValidateUTF8Sequence(const uint8_t* data, size_t len, const uint8_t** next);
+
 #endif

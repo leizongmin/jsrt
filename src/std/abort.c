@@ -17,6 +17,10 @@ static JSClassID JSRT_AbortSignalClassID;
 
 // Forward declare internal functions
 static void JSRT_AbortSignal_DoAbort(JSContext* ctx, JSValue signal_val, JSValue reason);
+static void JSRT_AbortSignal_AddDependent(JSContext* ctx, JSValue parent_val, JSValue dependent_val);
+static void JSRT_AbortSignal_FireEvent(JSContext* ctx, JSValue signal_val);
+static void JSRT_AbortSignal_FireEventsRecursive(JSContext* ctx, JSValue signal_val);
+static void JSRT_AbortSignal_MarkAbortedRecursive(JSContext* ctx, JSValue signal_val, JSValue reason);
 
 // Timeout callback structures and functions
 typedef struct {
@@ -52,6 +56,10 @@ typedef struct {
   JSValue event_target;  // EventTarget object this extends
   bool aborted;
   JSValue reason;
+  JSValue* dependents;     // Array of dependent signals created by AbortSignal.any()
+  int dependent_count;     // Number of dependent signals
+  int dependent_capacity;  // Capacity of dependents array
+  bool event_fired;        // Track if abort event has already been fired
 } JSRT_AbortSignal;
 
 static void JSRT_AbortSignalFinalize(JSRuntime* rt, JSValue val) {
@@ -60,6 +68,13 @@ static void JSRT_AbortSignalFinalize(JSRuntime* rt, JSValue val) {
     JS_FreeValueRT(rt, signal->event_target);
     if (!JS_IsUndefined(signal->reason)) {
       JS_FreeValueRT(rt, signal->reason);
+    }
+    // Free dependents array
+    if (signal->dependents) {
+      for (int i = 0; i < signal->dependent_count; i++) {
+        JS_FreeValueRT(rt, signal->dependents[i]);
+      }
+      free(signal->dependents);
     }
     free(signal);
   }
@@ -80,6 +95,10 @@ static JSValue JSRT_CreateAbortSignal(JSContext* ctx, bool aborted, JSValue reas
   JSRT_AbortSignal* signal = malloc(sizeof(JSRT_AbortSignal));
   signal->aborted = aborted;
   signal->reason = JS_DupValue(ctx, reason);
+  signal->dependents = NULL;
+  signal->dependent_count = 0;
+  signal->dependent_capacity = 0;
+  signal->event_fired = false;
 
   // Create EventTarget for the signal
   JSValue event_target_ctor = JS_GetPropertyStr(ctx, JS_GetGlobalObject(ctx), "EventTarget");
@@ -181,7 +200,12 @@ static JSValue JSRT_AbortSignalAbort(JSContext* ctx, JSValueConst this_val, int 
     reason = argv[0];
   } else {
     // Create a DOMException for the default reason
-    reason = JS_NewString(ctx, "AbortError");
+    JSValue dom_exception_ctor = JS_GetPropertyStr(ctx, JS_GetGlobalObject(ctx), "DOMException");
+    JSValue args[2] = {JS_NewString(ctx, "The operation was aborted."), JS_NewString(ctx, "AbortError")};
+    reason = JS_CallConstructor(ctx, dom_exception_ctor, 2, args);
+    JS_FreeValue(ctx, dom_exception_ctor);
+    JS_FreeValue(ctx, args[0]);
+    JS_FreeValue(ctx, args[1]);
   }
 
   JSValue signal = JSRT_CreateAbortSignal(ctx, true, reason);
@@ -241,6 +265,7 @@ static JSValue JSRT_AbortSignalTimeout(JSContext* ctx, JSValueConst this_val, in
 }
 
 static JSValue JSRT_AbortSignalAny(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
+  // Removed debug output
   if (argc < 1) {
     return JS_ThrowTypeError(ctx, "AbortSignal.any() requires 1 argument");
   }
@@ -324,37 +349,39 @@ static JSValue JSRT_AbortSignalAny(JSContext* ctx, JSValueConst this_val, int ar
     return JS_EXCEPTION;
   }
 
-  // Set up event listeners on each input signal using JavaScript closures
+  // Set up event listeners on each input signal using a ordering-aware approach
   for (int32_t i = 0; i < length; i++) {
     JSValue item = JS_GetPropertyUint32(ctx, signals_val, i);
     if (JS_IsException(item)) {
+      // Exception getting item, continue
       continue;
     }
 
     JSRT_AbortSignal* input_signal = JS_GetOpaque2(ctx, item, JSRT_AbortSignalClassID);
     if (!input_signal) {
+      // Invalid input signal, continue
       JS_FreeValue(ctx, item);
       continue;
     }
+    // Got valid input signal
 
     // Create a JavaScript function that captures both controller and input signal
-    // This gives the listener access to the input signal's reason property
     const char* js_listener_code =
         "(function(controller, inputSignal) {"
         "  return function(event) {"
-        "    var resultSignal = controller.signal;"
-        "    if (!resultSignal.aborted) {"
-        "      controller.abort(inputSignal.reason);"
-        "    }"
+        "    controller.abort(inputSignal.reason);"
         "  };"
         "})";
 
+    // JavaScript code ready
     JSValue closure_factory =
         JS_Eval(ctx, js_listener_code, strlen(js_listener_code), "<AbortSignal.any>", JS_EVAL_TYPE_GLOBAL);
     if (JS_IsException(closure_factory)) {
+      // Failed to create closure factory
       JS_FreeValue(ctx, item);
       continue;
     }
+    // Created closure factory
 
     // Call the factory with our controller AND the input signal to create the actual listener
     JSValue factory_args[] = {result_controller, item};
@@ -379,8 +406,18 @@ static JSValue JSRT_AbortSignalAny(JSContext* ctx, JSValueConst this_val, int ar
 
     // Check if addEventListener succeeded (no debug output in production)
     if (JS_IsException(add_result)) {
+      // addEventListener failed
       // Silent failure, continue with other signals
+    } else {
+      // addEventListener succeeded
     }
+
+    // CRITICAL: Register the result_signal as a dependent of this input signal
+    // This enables synchronous marking when the parent signal is aborted
+    // About to call JSRT_AbortSignal_AddDependent
+    JSRT_AbortSignal_AddDependent(ctx, item, result_signal);
+
+    // Dependency registered successfully
 
     // Clean up
     JS_FreeValue(ctx, addEventListener);
@@ -394,17 +431,91 @@ static JSValue JSRT_AbortSignalAny(JSContext* ctx, JSValueConst this_val, int ar
   return result_signal;
 }
 
-// Helper function to abort a signal programmatically (similar to controller.abort())
-static void JSRT_AbortSignal_DoAbort(JSContext* ctx, JSValue signal_val, JSValue reason) {
+// Simplified global flag to prevent infinite recursion
+static bool JSRT_AbortInProgress = false;
+
+// Helper function to add a dependent signal to a parent signal
+static void JSRT_AbortSignal_AddDependent(JSContext* ctx, JSValue parent_val, JSValue dependent_val) {
+  JSRT_AbortSignal* parent = JS_GetOpaque2(ctx, parent_val, JSRT_AbortSignalClassID);
+  if (!parent) {
+    return;  // Invalid parent
+  }
+
+  // Expand capacity if needed
+  if (parent->dependent_count >= parent->dependent_capacity) {
+    int new_capacity = parent->dependent_capacity == 0 ? 4 : parent->dependent_capacity * 2;
+    JSValue* new_dependents = realloc(parent->dependents, new_capacity * sizeof(JSValue));
+    if (!new_dependents) {
+      return;  // Memory allocation failed
+    }
+    parent->dependents = new_dependents;
+    parent->dependent_capacity = new_capacity;
+  }
+
+  // Add the dependent signal
+  parent->dependents[parent->dependent_count] = JS_DupValue(ctx, dependent_val);
+  parent->dependent_count++;
+}
+
+// Helper function to mark a signal as aborted without firing events
+static void JSRT_AbortSignal_MarkAborted(JSContext* ctx, JSValue signal_val, JSValue reason) {
   JSRT_AbortSignal* signal = JS_GetOpaque2(ctx, signal_val, JSRT_AbortSignalClassID);
   if (!signal || signal->aborted) {
     return;  // Already aborted or invalid
   }
 
-  // Set reason
+  // Set reason and mark as aborted (only this signal, not dependents)
   JS_FreeValue(ctx, signal->reason);
   signal->reason = JS_DupValue(ctx, reason);
   signal->aborted = true;
+}
+
+// Helper function to recursively mark a signal and all its dependents as aborted
+static void JSRT_AbortSignal_MarkAbortedRecursive(JSContext* ctx, JSValue signal_val, JSValue reason) {
+  JSRT_AbortSignal* signal = JS_GetOpaque2(ctx, signal_val, JSRT_AbortSignalClassID);
+  if (!signal || signal->aborted) {
+    return;  // Already aborted or invalid
+  }
+
+  // Set reason and mark as aborted
+  JS_FreeValue(ctx, signal->reason);
+  signal->reason = JS_DupValue(ctx, reason);
+  signal->aborted = true;
+
+  // Recursively mark all dependents
+  for (int i = 0; i < signal->dependent_count; i++) {
+    JSRT_AbortSignal_MarkAbortedRecursive(ctx, signal->dependents[i], reason);
+  }
+}
+
+// Helper function to fire events for a signal and all its dependents
+static void JSRT_AbortSignal_FireEventsRecursive(JSContext* ctx, JSValue signal_val) {
+  JSRT_AbortSignal* signal = JS_GetOpaque2(ctx, signal_val, JSRT_AbortSignalClassID);
+  if (!signal || !signal->aborted) {
+    return;  // Not aborted, nothing to fire
+  }
+
+  // Fire event for this signal
+  JSRT_AbortSignal_FireEvent(ctx, signal_val);
+
+  // Fire events for all dependents
+  for (int i = 0; i < signal->dependent_count; i++) {
+    JSRT_AbortSignal_FireEventsRecursive(ctx, signal->dependents[i]);
+  }
+}
+
+// Helper function to fire abort event for a signal (assumes already marked as aborted)
+static void JSRT_AbortSignal_FireEvent(JSContext* ctx, JSValue signal_val) {
+  JSRT_AbortSignal* signal = JS_GetOpaque2(ctx, signal_val, JSRT_AbortSignalClassID);
+  if (!signal || !signal->aborted || signal->event_fired) {
+    // Signal not aborted or event already fired, returning
+    return;  // Not aborted or already fired, nothing to fire
+  }
+
+  // Mark event as fired to prevent duplicate events
+  signal->event_fired = true;
+
+  // About to fire abort event
 
   // Create abort event with proper target
   JSValue event_ctor = JS_GetPropertyStr(ctx, JS_GetGlobalObject(ctx), "Event");
@@ -412,7 +523,6 @@ static void JSRT_AbortSignal_DoAbort(JSContext* ctx, JSValue signal_val, JSValue
   JS_FreeValue(ctx, event_ctor);
 
   // Set the event's internal target field to this signal
-  // We need to access the Event structure directly since target is read-only
   extern JSClassID JSRT_EventClassID;  // Declare the class ID from event.c
 
   // Get the Event structure and set its target field
@@ -450,6 +560,50 @@ static void JSRT_AbortSignal_DoAbort(JSContext* ctx, JSValue signal_val, JSValue
   JS_FreeValue(ctx, dispatchEvent);
   JS_FreeValue(ctx, result);
   JS_FreeValue(ctx, abort_event);
+}
+
+// Helper function to abort a signal programmatically (similar to controller.abort())
+static void JSRT_AbortSignal_DoAbort(JSContext* ctx, JSValue signal_val, JSValue reason) {
+  JSRT_AbortSignal* signal = JS_GetOpaque2(ctx, signal_val, JSRT_AbortSignalClassID);
+  if (!signal) {
+    return;  // Invalid signal
+  }
+
+  // CRITICAL: First-wins semantics - if already aborted, preserve original reason but still fire events
+  bool was_already_aborted = signal->aborted;
+  if (was_already_aborted) {
+    // Signal was already aborted - just fire the event without changing the reason
+    JSRT_AbortSignal_FireEvent(ctx, signal_val);
+    return;
+  }
+
+  // STEP 1: Mark this signal as aborted
+  JSRT_AbortSignal_MarkAborted(ctx, signal_val, reason);
+
+  // STEP 1b: Synchronously mark ALL transitive dependents to satisfy Test 11
+  // This must be done recursively to handle chained dependencies
+  // Mark all transitive dependents recursively
+  for (int i = 0; i < signal->dependent_count; i++) {
+    JSRT_AbortSignal_MarkAbortedRecursive(ctx, signal->dependents[i], reason);
+  }
+
+  // STEP 2: Fire event for this signal first
+  JSRT_AbortSignal_FireEvent(ctx, signal_val);
+
+  // STEP 3: Fire events for direct dependents (breadth-first)
+  for (int i = 0; i < signal->dependent_count; i++) {
+    JSRT_AbortSignal_FireEvent(ctx, signal->dependents[i]);
+  }
+
+  // STEP 4: Fire events for nested dependents recursively
+  for (int i = 0; i < signal->dependent_count; i++) {
+    JSRT_AbortSignal* dependent = JS_GetOpaque2(ctx, signal->dependents[i], JSRT_AbortSignalClassID);
+    if (dependent) {
+      for (int j = 0; j < dependent->dependent_count; j++) {
+        JSRT_AbortSignal_FireEventsRecursive(ctx, dependent->dependents[j]);
+      }
+    }
+  }
 }
 
 // JSRT_AbortAnyEventListener removed - now using JavaScript closures for better event integration

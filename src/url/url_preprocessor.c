@@ -10,12 +10,8 @@ char* preprocess_file_urls(const char* cleaned_url) {
   char* preprocessed_url = (char*)cleaned_url;  // Default: no preprocessing needed
   char* url_to_free = NULL;
 
-  fprintf(stderr, "DEBUG: cleaned_url before file preprocessing: [%s]\n", cleaned_url);
-
   // Handle "file:.//path" -> "file:path" normalization
-  fprintf(stderr, "DEBUG: Checking file:.// condition against: [%s]\n", cleaned_url);
   if (strncmp(cleaned_url, "file:.//", 8) == 0) {
-    fprintf(stderr, "DEBUG: file:.// condition matched, applying normalization\n");
     size_t new_len = strlen(cleaned_url) - 3;  // Remove the ".//"
     char* normalized = malloc(new_len + 1);
     strcpy(normalized, "file:");
@@ -25,7 +21,6 @@ char* preprocess_file_urls(const char* cleaned_url) {
   }
   // Handle "file:./path" -> "file:path" normalization
   else if (strncmp(cleaned_url, "file:./", 7) == 0) {
-    fprintf(stderr, "DEBUG: file:./ condition matched, applying normalization\n");
     size_t new_len = strlen(cleaned_url) - 2;  // Remove the "./"
     char* normalized = malloc(new_len + 1);
     strcpy(normalized, "file:");
@@ -36,7 +31,6 @@ char* preprocess_file_urls(const char* cleaned_url) {
   // Handle "file:/.//path" -> "file:///path" normalization
   // Note: After backslash normalization, "file:/.//p" becomes "file:/./p"
   else if (strncmp(cleaned_url, "file:/./", 8) == 0) {
-    fprintf(stderr, "DEBUG: file:/./ condition matched, applying normalization\n");
     size_t new_len = strlen(cleaned_url) + 2;  // Add two extra "/" to make "///"
     char* normalized = malloc(new_len + 1);
     strcpy(normalized, "file:///");
@@ -47,7 +41,6 @@ char* preprocess_file_urls(const char* cleaned_url) {
   // Handle Windows drive letter: "file:C:/path" -> "file:///C:/path"
   else if (strncmp(cleaned_url, "file:", 5) == 0 && strlen(cleaned_url) > 7 && isalpha(cleaned_url[5]) &&
            cleaned_url[6] == ':' && cleaned_url[7] == '/') {
-    fprintf(stderr, "DEBUG: Windows drive letter detected, normalizing to triple slash\n");
     size_t new_len = strlen(cleaned_url) + 3;  // Add "///"
     char* normalized = malloc(new_len + 1);
     strcpy(normalized, "file:///");
@@ -116,9 +109,7 @@ char* preprocess_url_string(const char* url, const char* base) {
     return NULL;
 
   // Strip leading and trailing ASCII whitespace, then remove all internal ASCII whitespace
-  fprintf(stderr, "DEBUG: Before strip_url_whitespace: [%s]\n", url);
   char* trimmed_url = strip_url_whitespace(url);
-  fprintf(stderr, "DEBUG: After strip_url_whitespace: [%s]\n", trimmed_url ? trimmed_url : "NULL");
   if (!trimmed_url) {
     return NULL;
   }

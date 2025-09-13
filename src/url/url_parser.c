@@ -13,8 +13,6 @@ int detect_url_scheme(const char* url, char** scheme, char** remainder) {
 
   // Check for scheme and handle special cases
   char* scheme_colon = strchr(url, ':');
-  fprintf(stderr, "DEBUG: Original ptr=[%s]\n", url);
-  fprintf(stderr, "DEBUG: scheme_colon found at position %ld\n", scheme_colon ? (scheme_colon - url) : -1);
 
   // URL schemes must start with a letter (per RFC 3986)
   // Paths starting with / should never be treated as having a scheme
@@ -24,10 +22,7 @@ int detect_url_scheme(const char* url, char** scheme, char** remainder) {
     *scheme = malloc(scheme_len + 1);
     strncpy(*scheme, url, scheme_len);
     (*scheme)[scheme_len] = '\0';
-    fprintf(stderr, "DEBUG: Extracted scheme=[%s]\n", *scheme);
-
     *remainder = scheme_colon + 1;
-    fprintf(stderr, "DEBUG: After moving past colon, ptr=[%s]\n", *remainder);
     return 0;
   }
 
@@ -61,9 +56,6 @@ char* parse_url_components(JSRT_URL* parsed, const char* scheme, char* ptr) {
   }
 
   // Handle different URL formats
-  fprintf(stderr, "DEBUG: URL format check, ptr=[%s]\n", ptr);
-  fprintf(stderr, "DEBUG: First 3 chars: [%c][%c][%c]\n", ptr[0], ptr[1], ptr[2]);
-  fprintf(stderr, "DEBUG: strncmp result: %d\n", strncmp(ptr, "//", 2));
 
   if (strncmp(ptr, "//", 2) == 0) {
     return parse_authority_based_url_with_position(parsed, scheme, ptr, is_special);
@@ -87,8 +79,6 @@ char* parse_url_components(JSRT_URL* parsed, const char* scheme, char* ptr) {
 
 // Parse authority-based URLs (scheme://authority/path) - returns position after authority
 char* parse_authority_based_url_with_position(JSRT_URL* parsed, const char* scheme, char* ptr, int is_special) {
-  fprintf(stderr, "DEBUG: Taking scheme:// path\n");
-
   // Check if this is a non-special scheme with empty authority (like "foo://")
   if (!is_special && (*(ptr + 2) == '\0' || *(ptr + 2) == '?' || *(ptr + 2) == '#')) {
     // For non-special schemes like "foo://", preserve "//" as part of the pathname
@@ -104,9 +94,6 @@ char* parse_authority_based_url_with_position(JSRT_URL* parsed, const char* sche
 
   // Standard format: scheme://authority/path
   ptr += 2;
-
-  // DEBUG: Print ptr after skipping //
-  fprintf(stderr, "DEBUG: After //: ptr='%s'\n", ptr);
 
   // Handle empty authority case: if next character is '/', parse next segment as hostname
   if (*ptr == '/') {
@@ -130,11 +117,8 @@ int parse_authority_based_url(JSRT_URL* parsed, const char* scheme, char* ptr, i
 
 // Parse URLs with empty authority (like scheme:///path)
 int parse_empty_authority_url(JSRT_URL* parsed, const char* scheme, char** ptr) {
-  fprintf(stderr, "DEBUG: Taking empty authority path\n");
-
   // Special case for file URLs: "file:///path" should have empty hostname and path="/path"
   if (strcmp(scheme, "file") == 0) {
-    fprintf(stderr, "DEBUG: File URL with triple slash - treating as path\n");
     // Set empty hostname and host
     free(parsed->hostname);
     parsed->hostname = strdup("");
@@ -151,12 +135,6 @@ int parse_empty_authority_url(JSRT_URL* parsed, const char* scheme, char** ptr) 
 
 // Parse URLs with standard authority section
 int parse_standard_authority_url(JSRT_URL* parsed, char** ptr) {
-  fprintf(stderr, "DEBUG: Taking standard authority parsing path\n");
-
-  // DEBUG: Print current ptr value
-  fprintf(stderr, "DEBUG: ptr value: '%s'\n", *ptr);
-  fprintf(stderr, "DEBUG: ptr[0]='%c' ptr[1]='%c' has_at=%d\n", (*ptr)[0], (*ptr)[1], strchr(*ptr, '@') ? 1 : 0);
-
   // Special case: for double colon @ pattern (::@...@...), handle directly
   if ((*ptr)[0] == ':' && (*ptr)[1] == ':' && strchr(*ptr, '@')) {
     return parse_double_colon_at_pattern(parsed, ptr);
@@ -167,8 +145,6 @@ int parse_standard_authority_url(JSRT_URL* parsed, char** ptr) {
 
 // Parse double colon @ pattern (::@host@host)
 int parse_double_colon_at_pattern(JSRT_URL* parsed, char** ptr) {
-  fprintf(stderr, "DEBUG: Double colon @ pattern detected for: %s\n", *ptr);
-
   // Set flag to indicate this special pattern for origin calculation
   parsed->double_colon_at_pattern = 1;
 
@@ -320,8 +296,6 @@ JSRT_URL* create_url_structure(void) {
 
 // Main URL parsing function (refactored)
 JSRT_URL* parse_absolute_url(const char* preprocessed_url) {
-  fprintf(stderr, "DEBUG: Final preprocessed_url: [%s]\n", preprocessed_url);
-
   JSRT_URL* parsed = create_url_structure();
   if (!parsed)
     return NULL;

@@ -30,13 +30,6 @@ void JSRT_FreeURL(JSRT_URL* url) {
 
 // Main URL parsing function - now delegates to the modular components
 JSRT_URL* JSRT_ParseURL(const char* url, const char* base) {
-#ifdef DEBUG_URL_NORMALIZATION
-  printf("DEBUG: JSRT_ParseURL called with URL: %s\n", url);
-#endif
-
-  // Unconditional debug print
-  fprintf(stderr, "DEBUG: JSRT_ParseURL called with URL: %s\n", url);
-
   if (!url)
     return NULL;
 

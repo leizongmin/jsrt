@@ -452,7 +452,7 @@ JSRT_URL* JSRT_ParseURL(const char* url, const char* base) {
   // Parse the URL components using proper WHATWG URL specification
   char* url_copy = strdup(cleaned_url);
   char* ptr = url_copy;
-  
+
   // Check for scheme and handle special cases like "http:foo.com"
   char* scheme_colon = strchr(ptr, ':');
   if (scheme_colon && scheme_colon > ptr) {
@@ -460,39 +460,39 @@ JSRT_URL* JSRT_ParseURL(const char* url, const char* base) {
     char* scheme = malloc(scheme_len + 1);
     strncpy(scheme, ptr, scheme_len);
     scheme[scheme_len] = '\0';
-    
+
     // Set protocol (scheme + ":")
     free(parsed->protocol);
     parsed->protocol = malloc(scheme_len + 2);
     snprintf(parsed->protocol, scheme_len + 2, "%s:", scheme);
-    
+
     // Check if this is a special scheme
     int is_special = is_special_scheme(scheme);
-    
+
     // Move past the colon
     ptr = scheme_colon + 1;
-    
+
     // Handle different URL formats
     if (strncmp(ptr, "//", 2) == 0) {
       // Standard format: scheme://authority/path
       ptr += 2;
-      
+
       // Parse authority section
       char* authority_end = ptr;
       while (*authority_end && *authority_end != '/' && *authority_end != '?' && *authority_end != '#') {
         authority_end++;
       }
-      
+
       if (authority_end > ptr) {
         size_t authority_len = authority_end - ptr;
         char* authority = malloc(authority_len + 1);
         strncpy(authority, ptr, authority_len);
         authority[authority_len] = '\0';
-        
+
         // Parse authority: [userinfo@]host[:port]
         char* at_pos = strchr(authority, '@');
         char* host_part = authority;
-        
+
         if (at_pos) {
           *at_pos = '\0';
           // Parse userinfo
@@ -509,14 +509,14 @@ JSRT_URL* JSRT_ParseURL(const char* url, const char* base) {
           }
           host_part = at_pos + 1;
         }
-        
+
         // Parse host and port
         char* port_colon = strrchr(host_part, ':');
-        if (port_colon && strchr(host_part, '[') == NULL) { // Not IPv6
+        if (port_colon && strchr(host_part, '[') == NULL) {  // Not IPv6
           *port_colon = '\0';
           free(parsed->hostname);
           parsed->hostname = strdup(host_part);
-          
+
           // Parse port, handling leading zeros
           char* port_str = port_colon + 1;
           if (strlen(port_str) > 0) {
@@ -524,12 +524,12 @@ JSRT_URL* JSRT_ParseURL(const char* url, const char* base) {
             while (*port_str == '0' && *(port_str + 1) != '\0') {
               port_str++;
             }
-            
+
             // Convert to number and back to remove leading zeros completely
             int port_num = atoi(port_str);
             char normalized_port[8];
             snprintf(normalized_port, sizeof(normalized_port), "%d", port_num);
-            
+
             // Check if port is default port or port 0 (which should be omitted)
             if (is_default_port(scheme, normalized_port) || port_num == 0) {
               free(parsed->port);
@@ -543,16 +543,17 @@ JSRT_URL* JSRT_ParseURL(const char* url, const char* base) {
           free(parsed->hostname);
           parsed->hostname = strdup(host_part);
         }
-        
+
         // Set host field
         free(parsed->host);
         if (strlen(parsed->port) > 0) {
           parsed->host = malloc(strlen(parsed->hostname) + strlen(parsed->port) + 2);
-          snprintf(parsed->host, strlen(parsed->hostname) + strlen(parsed->port) + 2, "%s:%s", parsed->hostname, parsed->port);
+          snprintf(parsed->host, strlen(parsed->hostname) + strlen(parsed->port) + 2, "%s:%s", parsed->hostname,
+                   parsed->port);
         } else {
           parsed->host = strdup(parsed->hostname);
         }
-        
+
         free(authority);
         ptr = authority_end;
       }
@@ -564,84 +565,88 @@ JSRT_URL* JSRT_ParseURL(const char* url, const char* base) {
       while (*authority_end && *authority_end != '/' && *authority_end != '?' && *authority_end != '#') {
         authority_end++;
       }
-      
+
       if (authority_end > ptr) {
         size_t hostname_len = authority_end - ptr;
         char* hostname = malloc(hostname_len + 1);
         strncpy(hostname, ptr, hostname_len);
         hostname[hostname_len] = '\0';
-        
+
         free(parsed->hostname);
         parsed->hostname = hostname;
         free(parsed->host);
         parsed->host = strdup(hostname);
-        
+
         ptr = authority_end;
       }
-      
+
       // Always ensure "/" path for special schemes when no path is specified
       if (*ptr == '\0' || (*ptr == '/' && *(ptr + 1) == '\0')) {
         free(parsed->pathname);
         parsed->pathname = strdup("/");
-        if (*ptr == '/') ptr++; // Skip the trailing slash
+        if (*ptr == '/')
+          ptr++;  // Skip the trailing slash
       }
     } else if (is_special) {
       // Special schemes: handle various formats like "http:example.com/" or "http:foo.com"
       char* slash_pos = strchr(ptr, '/');
       char* query_pos = strchr(ptr, '?');
       char* fragment_pos = strchr(ptr, '#');
-      
+
       // Find the first delimiter
-      char* first_delimiter = ptr + strlen(ptr); // Default to end
-      if (slash_pos && slash_pos < first_delimiter) first_delimiter = slash_pos;
-      if (query_pos && query_pos < first_delimiter) first_delimiter = query_pos;
-      if (fragment_pos && fragment_pos < first_delimiter) first_delimiter = fragment_pos;
-      
+      char* first_delimiter = ptr + strlen(ptr);  // Default to end
+      if (slash_pos && slash_pos < first_delimiter)
+        first_delimiter = slash_pos;
+      if (query_pos && query_pos < first_delimiter)
+        first_delimiter = query_pos;
+      if (fragment_pos && fragment_pos < first_delimiter)
+        first_delimiter = fragment_pos;
+
       if (first_delimiter > ptr) {
         // Extract hostname part
         size_t hostname_len = first_delimiter - ptr;
         char* hostname = malloc(hostname_len + 1);
         strncpy(hostname, ptr, hostname_len);
         hostname[hostname_len] = '\0';
-        
+
         free(parsed->hostname);
         parsed->hostname = hostname;
         free(parsed->host);
         parsed->host = strdup(hostname);
-        
+
         ptr = first_delimiter;
       }
-      
+
       // If no explicit path and this is end of string or start of path, ensure "/" path
       if (*ptr == '\0') {
         free(parsed->pathname);
         parsed->pathname = strdup("/");
-        ptr = ptr + strlen(ptr); // Move to end
+        ptr = ptr + strlen(ptr);  // Move to end
       } else if (*ptr == '/' && *(ptr + 1) == '\0') {
         free(parsed->pathname);
         parsed->pathname = strdup("/");
-        ptr++; // Skip the slash
+        ptr++;  // Skip the slash
       }
     } else {
       // Non-special scheme or has path/query/fragment
       // For non-special schemes, don't add "//"
       // The remaining part is the path
     }
-    
+
     free(scheme);
   }
-  
+
   // Parse path, query, fragment from remaining part
   char* query_pos = strchr(ptr, '?');
   char* fragment_pos = strchr(ptr, '#');
-  
+
   // Handle fragment first
   if (fragment_pos) {
     free(parsed->hash);
-    parsed->hash = strdup(fragment_pos); // Include the #
+    parsed->hash = strdup(fragment_pos);  // Include the #
     *fragment_pos = '\0';
   }
-  
+
   // Handle query
   if (query_pos) {
     char* search_end = fragment_pos ? fragment_pos : ptr + strlen(ptr);
@@ -652,7 +657,7 @@ JSRT_URL* JSRT_ParseURL(const char* url, const char* base) {
     parsed->search[search_len] = '\0';
     *query_pos = '\0';
   }
-  
+
   // Handle pathname
   if (strlen(ptr) > 0) {
     // Only update pathname if it hasn't been set by special case handling above
@@ -667,51 +672,48 @@ JSRT_URL* JSRT_ParseURL(const char* url, const char* base) {
       parsed->pathname = strdup("/");
     }
   }
-  
+
   // Special handling for file URLs with Windows drive letters
   // If hostname looks like a Windows drive (single letter + colon), move it to pathname
-  if (strcmp(parsed->protocol, "file:") == 0 && strlen(parsed->hostname) == 2 && 
-      isalpha(parsed->hostname[0]) && parsed->hostname[1] == ':') {
-    
+  if (strcmp(parsed->protocol, "file:") == 0 && strlen(parsed->hostname) == 2 && isalpha(parsed->hostname[0]) &&
+      parsed->hostname[1] == ':') {
     // Move drive letter from hostname to pathname
-    size_t new_pathname_len = strlen(parsed->pathname) + 3; // "/" + drive + existing path
+    size_t new_pathname_len = strlen(parsed->pathname) + 3;  // "/" + drive + existing path
     char* new_pathname = malloc(new_pathname_len);
     snprintf(new_pathname, new_pathname_len, "/%s%s", parsed->hostname, parsed->pathname);
-    
+
     free(parsed->pathname);
     parsed->pathname = new_pathname;
-    
+
     // Clear hostname and host
     free(parsed->hostname);
     parsed->hostname = strdup("");
     free(parsed->host);
     parsed->host = strdup("");
   }
-  
+
   // Compute origin
   free(parsed->origin);
   parsed->origin = compute_origin(parsed->protocol, parsed->hostname, parsed->port);
-  
+
   // Build href
   free(parsed->href);
   int is_special = is_special_scheme(parsed->protocol);
   size_t href_len = strlen(parsed->protocol) + strlen(parsed->host) + strlen(parsed->pathname) +
                     strlen(parsed->search) + strlen(parsed->hash) + 10;
   parsed->href = malloc(href_len);
-  
+
   if (is_special && strlen(parsed->host) > 0) {
-    snprintf(parsed->href, href_len, "%s//%s%s%s%s", parsed->protocol, parsed->host, 
-             parsed->pathname, parsed->search, parsed->hash);
+    snprintf(parsed->href, href_len, "%s//%s%s%s%s", parsed->protocol, parsed->host, parsed->pathname, parsed->search,
+             parsed->hash);
   } else if (strlen(parsed->host) > 0) {
-    snprintf(parsed->href, href_len, "%s//%s%s%s%s", parsed->protocol, parsed->host,
-             parsed->pathname, parsed->search, parsed->hash);
+    snprintf(parsed->href, href_len, "%s//%s%s%s%s", parsed->protocol, parsed->host, parsed->pathname, parsed->search,
+             parsed->hash);
   } else if (is_special) {
     // Special schemes with empty host (like file:///path) should include //
-    snprintf(parsed->href, href_len, "%s//%s%s%s", parsed->protocol, 
-             parsed->pathname, parsed->search, parsed->hash);
+    snprintf(parsed->href, href_len, "%s//%s%s%s", parsed->protocol, parsed->pathname, parsed->search, parsed->hash);
   } else {
-    snprintf(parsed->href, href_len, "%s%s%s%s", parsed->protocol, 
-             parsed->pathname, parsed->search, parsed->hash);
+    snprintf(parsed->href, href_len, "%s%s%s%s", parsed->protocol, parsed->pathname, parsed->search, parsed->hash);
   }
 
   free(url_copy);

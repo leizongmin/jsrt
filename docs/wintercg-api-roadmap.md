@@ -128,8 +128,16 @@
 
 **实现复杂度**：🔴 困难  
 **实际工作量**：1 天  
-**位置**：`src/url/` 目录（模块化实现）：`url_core.c`, `url_api.c`, `url_validation.c`, `url_normalize.c` 等  
-**技术实现**：自建URL解析器，支持协议、主机、端口、路径、查询、片段解析
+**位置**：`src/url/` 目录（模块化实现）
+- `url_core.c` - 核心URL解析逻辑
+- `url_api.c` - JavaScript API实现  
+- `url_validation.c` - 字符和格式验证
+- `url_normalize.c` - 反斜杠规范化和URL清理
+- `url_search_params.c` - URL参数处理
+- `url_search_params_api.c` - URLSearchParams API
+- `url_encoding.c` - URL编码处理
+- `url_ipv4.c` / `url_ipv6.c` - IP地址处理  
+**技术实现**：模块化URL解析器，支持完整的WHATWG URL规范，包括协议、主机、端口、路径、查询、片段解析
 
 #### 6. AbortController / AbortSignal
 **当前状态**：✅ 已完成  
@@ -382,8 +390,6 @@ src/std/
 ├── event.h (已完成)
 ├── abort.c (已完成)
 ├── abort.h (已完成)
-├── url.c (已完成)
-├── url.h (已完成)
 ├── clone.c (已完成)
 ├── clone.h (已完成)
 ├── crypto.c (已完成，WebCrypto增强版)
@@ -400,6 +406,18 @@ src/std/
 ├── formdata.h (已完成)
 ├── fetch.c (已完成)
 └── fetch.h (已完成)
+
+src/url/ (模块化URL实现)
+├── url_core.c (核心URL解析逻辑)
+├── url_api.c (JavaScript API实现)
+├── url_validation.c (字符和格式验证)
+├── url_normalize.c (反斜杠规范化和URL清理)
+├── url_search_params.c (URL参数处理)
+├── url_search_params_api.c (URLSearchParams API)
+├── url_encoding.c (URL编码处理)
+├── url_ipv4.c (IPv4地址处理)
+├── url_ipv6.c (IPv6地址处理)
+└── url.h (URL模块公共头文件)
 ```
 
 ## 🔧 技术实现注意事项

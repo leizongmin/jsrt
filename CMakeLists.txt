@@ -658,8 +658,8 @@ file(GLOB_RECURSE JSRT_UTIL_FILES "src/util/*.c")
 file(GLOB_RECURSE JSRT_HTTP_FILES "src/http/*.c")
 file(GLOB_RECURSE JSRT_WASM_FILES "src/wasm/*.c")
 
-# Remove the old monolithic url.c file
-list(REMOVE_ITEM JSRT_STD_FILES "${CMAKE_SOURCE_DIR}/src/std/url.c")
+# Remove the old monolithic url.c file (now using modular URL implementation in src/url/)
+# list(REMOVE_ITEM JSRT_STD_FILES "${CMAKE_SOURCE_DIR}/src/std/url.c")  # Old monolithic url.c removed, now using modular src/url/ implementation
 
 # For static OpenSSL builds, exclude modules that need runtime loading
 if(JSRT_STATIC_OPENSSL AND OPENSSL_LIBRARIES)

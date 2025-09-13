@@ -6,7 +6,7 @@
 #include <stdlib.h>
 #include <string.h>
 
-// Forward declare internal URL structure from std/url.c
+// Forward declare internal URL structure from url/url_core.c
 typedef struct {
   char* href;
   char* protocol;
@@ -21,7 +21,7 @@ typedef struct {
   char* origin;
 } internal_url_t;
 
-// Helper functions from std/url.c (simplified versions for internal use)
+// Helper functions from url/url_core.c (simplified versions for internal use)
 static char* strip_url_whitespace(const char* url) {
   if (!url)
     return NULL;
@@ -103,7 +103,7 @@ static int validate_url_characters(const char* url) {
   return 1;
 }
 
-// Simple URL parser adapted from std/url.c logic
+// Simple URL parser adapted from url/url_core.c logic
 static internal_url_t* parse_url_internal(const char* url) {
   char* trimmed_url = strip_url_whitespace(url);
   if (!trimmed_url)

@@ -118,14 +118,14 @@ With 75.0% pass rate already achieved, jsrt is positioned for **100% WPT complia
 **🎯 Phase 39: URL ASCII Whitespace Handling** (30 minutes)
 - **Task**: Fix URL constructor tab character handling per WHATWG spec
 - **Error Target**: `Parsing: <http://example\t.` 
-- **Location**: `src/std/url.c` - URL constructor string preprocessing
+- **Location**: `src/url/ (modular implementation)` - URL constructor string preprocessing
 - **Implementation**: Strip leading/trailing ASCII whitespace (spaces, tabs, newlines) before parsing
 - **Impact**: +1 test (28/32 = 87.5% pass rate)
 
 **🎯 Phase 40: URL Relative Resolution with Backslashes** (45 minutes)
 - **Task**: Fix URL parsing for backslash sequences in relative URLs
 - **Error Target**: `Origin parsing: <\\x\hello> against <http://example.org/foo/bar>: origin`
-- **Location**: `src/std/url.c` - relative URL resolution logic
+- **Location**: `src/url/ (modular implementation)` - relative URL resolution logic
 - **Implementation**: Properly handle backslash sequences according to WHATWG URL specification
 - **Impact**: +1 test (29/32 = 90.6% pass rate) - **🎉 TARGET: 100% WPT COMPLIANCE ACHIEVED**
 
@@ -199,13 +199,13 @@ for (int i = 0; i < signal_count; i++) {
 - [ ] Run targeted test: `python3 scripts/run-wpt.py --category abort`
 
 **Phase 39: URL ASCII Whitespace** (Target: 87.5%):
-- [ ] Locate URL constructor preprocessing in `src/std/url.c`
+- [ ] Locate URL constructor preprocessing in `src/url/ (modular implementation)`
 - [ ] Add ASCII whitespace stripping (tabs, spaces, newlines)
 - [ ] Test with URL containing tab characters
 - [ ] Run targeted test: `python3 scripts/run-wpt.py --category url/url-constructor`
 
 **Phase 40: URL Backslash Resolution** (Target: 100%):
-- [ ] Review URL relative resolution logic in `src/std/url.c`
+- [ ] Review URL relative resolution logic in `src/url/ (modular implementation)`
 - [ ] Implement proper backslash sequence handling per WHATWG spec
 - [ ] Test relative URL resolution with backslashes
 - [ ] Run targeted test: `python3 scripts/run-wpt.py --category url/url-origin`
@@ -239,7 +239,7 @@ for (int i = 0; i < signal_count; i++) {
 - ✅ **Promise-based API**: Writer.close() returns proper Promise for async operations
 - ✅ **URL edge case resolution**: Fixed empty string and whitespace-only URL parsing scenarios
 - **Implementation**:
-  - Enhanced `JSRT_ParseURL` with empty string detection in `src/std/url.c:292-301`
+  - Enhanced `JSRT_ParseURL` with empty string detection in `src/url/ (modular implementation):292-301`
   - Added `JSRT_WritableStreamDefaultWriterClose` function in `src/std/streams.c:724-773`
   - Registered close method in writer prototype at line 1005-1006
 - **Impact**: Fixed fundamental API gaps, maintained 75.0% pass rate while improving test progression quality
@@ -337,7 +337,7 @@ for (int i = 0; i < signal_count; i++) {
 - ✅ **Proper scheme detection**: Fixed scheme parsing to require at least one character before colon, preventing `:foo.com` from being treated as absolute URL
 - ✅ **Relative URL improvements**: URLs like `\t   :foo.com   \n` now correctly treated as relative URLs when base is provided
 - ✅ **Edge case handling**: Whitespace-only input and control character combinations properly processed
-- **Implementation**: Added `strip_url_whitespace` function in `src/std/url.c:202-225` and enhanced scheme detection logic at lines 244-261
+- **Implementation**: Added `strip_url_whitespace` function in `src/url/ (modular implementation):202-225` and enhanced scheme detection logic at lines 244-261
 - **Impact**: Fixed one major URL parsing edge case, improved handling of whitespace in URL inputs, maintained 75.0% pass rate
 
 ✅ **UTF-16LE/BE TextDecoder Implementation - COMPLETED (2025-09-06)**
@@ -353,14 +353,14 @@ for (int i = 0; i < signal_count; i++) {
 - ✅ **Proper href reconstruction**: URL constructor now rebuilds href from parsed components ensuring proper normalization
 - ✅ **Trailing slash handling**: URLs without explicit paths now properly include trailing slash (e.g., `http://example.org/`)
 - ✅ **Tab/newline stripping integration**: Control character stripping works with proper href reconstruction
-- **Implementation**: Added href reconstruction logic in `src/std/url.c:367-388` after URL parsing completion
+- **Implementation**: Added href reconstruction logic in `src/url/ (modular implementation):367-388` after URL parsing completion
 - **Impact**: URL href normalization now WPT-compliant for control character and path normalization edge cases
 
 ✅ **Non-Special URL Origin Fix - COMPLETED (2025-09-06)**
 - ✅ **Correct origin handling**: Non-special URL schemes (anything other than http/https/ftp/ws/wss) now properly return "null" origin
 - ✅ **Special scheme identification**: Only http, https, ftp, ws, wss schemes can have tuple origins per URL specification
 - ✅ **Credentials handling**: URLs with credentials in non-special schemes correctly parse with null origin
-- **Implementation**: Fixed `compute_origin` function in `src/std/url.c:115-121` to treat all non-special schemes as null origin
+- **Implementation**: Fixed `compute_origin` function in `src/url/ (modular implementation):115-121` to treat all non-special schemes as null origin
 - **Impact**: URL origin computation now WPT-compliant for custom and non-special URL schemes
 
 ### Previous Session Improvements (2025-09-06 Extended Session) - COMPREHENSIVE API ENHANCEMENTS
@@ -377,7 +377,7 @@ for (int i = 0; i < signal_count; i++) {
 - ✅ **Shared surrogate handling**: Created reusable `JSRT_StringToUTF8WithSurrogateReplacement` helper function
 - ✅ **Consistent encoding**: URLSearchParams constructor now uses same surrogate replacement logic as TextEncoder
 - ✅ **Duplicate key handling**: Object constructor properly merges keys that become identical after surrogate replacement
-- **Implementation**: Enhanced URLSearchParams processing in `src/std/url.c:1066-1090` with surrogate helper integration
+- **Implementation**: Enhanced URLSearchParams processing in `src/url/ (modular implementation):1066-1090` with surrogate helper integration
 - **Impact**: URLSearchParams surrogate replacement now working (minor ordering issues remain)
 
 ✅ **ReadableStream Controller Enhancement - COMPLETED (2025-09-06)**
@@ -408,7 +408,7 @@ for (int i = 0; i < signal_count; i++) {
 - ✅ **Credentials handling**: URL parsing now properly separates credentials (user:pass@) from hostname
 - ✅ **Correct origin calculation**: Origin property now excludes credentials as per URL specification
 - ✅ **Authority parsing**: Enhanced URL parsing to handle user:pass@host:port format correctly
-- **Implementation**: Enhanced URL parsing logic in `src/std/url.c:300-327` with credential extraction
+- **Implementation**: Enhanced URL parsing logic in `src/url/ (modular implementation):300-327` with credential extraction
 - **Impact**: Fixed origin calculation for URLs with credentials (e.g., "http://user:pass@foo:21" → origin: "http://foo:21")
 
 ### Previous Session Improvements (2025-09-06 Continued) - WPT TESTHARNESS & URL ENHANCEMENTS
@@ -424,14 +424,14 @@ for (int i = 0; i < signal_count; i++) {
 - ✅ **Control character removal**: URL constructor now strips tab (0x09), LF (0x0A), CR (0x0D) characters per URL spec
 - ✅ **Cross-platform compatibility**: Handles various newline formats correctly
 - ✅ **Manual testing verified**: `http://example\t.\norg` correctly becomes `http://example.org`
-- **Implementation**: Added `JSRT_StripURLControlCharacters` helper function in `src/std/url.c:391-410`
+- **Implementation**: Added `JSRT_StripURLControlCharacters` helper function in `src/url/ (modular implementation):391-410`
 - **Impact**: Improved URL parsing compliance with WPT specification requirements
 
 ✅ **URLSearchParams Surrogate Ordering Fix - COMPLETED (2025-09-06)**
 - ✅ **Insertion order preservation**: Object constructor now maintains first-occurrence order for keys after surrogate replacement
 - ✅ **Last value wins**: Duplicate keys (including after surrogate normalization) properly use last value while preserving original position
 - ✅ **Length-aware comparison**: Enhanced key comparison to handle strings with null bytes properly using memcmp
-- **Implementation**: Enhanced `JSRT_ParseSearchParamsFromRecord` in `src/std/url.c:1108-1163` with position-preserving duplicate handling
+- **Implementation**: Enhanced `JSRT_ParseSearchParamsFromRecord` in `src/url/ (modular implementation):1108-1163` with position-preserving duplicate handling
 - **Impact**: URLSearchParams surrogate test "2 unpaired surrogates (no trailing)" now passes correctly
 
 ### Previous Improvements (2025-09-06) - INFRASTRUCTURE & SYMBOL.ITERATOR FIXES
@@ -447,7 +447,7 @@ for (int i = 0; i < signal_count; i++) {
 - ✅ **WPT compliance**: Fixed "value is not iterable" error in URLSearchParams constructor tests
 - ✅ **for..of loop support**: URLSearchParams can now be used in for..of loops as per WHATWG spec
 - ✅ **Proper integration**: Symbol.iterator correctly points to entries() method
-- **Implementation**: Added proper Symbol.iterator setup in `src/std/url.c:1846-1857`
+- **Implementation**: Added proper Symbol.iterator setup in `src/url/ (modular implementation):1846-1857`
 - **Impact**: Resolved critical iterator protocol gap, enabled proper URLSearchParams iteration
 
 ### Previous Improvements (2025-09-06) - URLSEARCHPARAMS ITERATOR COMPLETION
@@ -543,7 +543,7 @@ Major improvements across multiple API categories achieved significant WPT compl
 - ✅ **Fixed NULL character handling**: URLSearchParams now correctly preserves embedded null bytes (\u0000) in parameter names and values
 - ✅ **JS_NewStringLen usage**: Fixed URLSearchParams iterator to use JS_NewStringLen instead of JS_NewString to preserve NULL characters
 - ✅ **Length-aware string processing**: Parameter storage properly tracks string lengths including null bytes
-- **Implementation**: Fixed iterator methods in `src/std/url.c:1816,1820,1823` to use JS_NewStringLen with length parameter
+- **Implementation**: Fixed iterator methods in `src/url/ (modular implementation):1816,1820,1823` to use JS_NewStringLen with length parameter
 - **Manual Testing**: NULL characters now preserved as `["\u0000","null-key"]` in URLSearchParams entries
 - **Impact**: URLSearchParams NULL character handling now WPT-compliant, advancing toward complete object constructor compliance
 
@@ -555,8 +555,8 @@ Major improvements across multiple API categories achieved significant WPT compl
 - ✅ **WPT compliance**: Fixed "Custom [Symbol.iterator]: assert_equals failed: expected b, got null" test failure  
 - ✅ **Proper iterator delegation**: URLSearchParams objects with custom iterators now use the custom iterator instead of internal parameter copying
 - **Implementation**: 
-  - Enhanced URLSearchParams constructor in `src/std/url.c:1270-1330` to check for custom Symbol.iterator
-  - Enabled iterator protocol in `JSRT_ParseSearchParamsFromSequence` function (`src/std/url.c:970-1080`)
+  - Enhanced URLSearchParams constructor in `src/url/ (modular implementation):1270-1330` to check for custom Symbol.iterator
+  - Enabled iterator protocol in `JSRT_ParseSearchParamsFromSequence` function (`src/url/ (modular implementation):970-1080`)
   - Added proper Symbol.iterator detection using global Symbol object access
 - **Manual Testing**: Custom iterator `params[Symbol.iterator] = function *() { yield ["a", "b"] }` now works correctly
 - **Impact**: URLSearchParams constructor test now **PASSING** - significant WPT compliance improvement
@@ -569,7 +569,7 @@ Major improvements across multiple API categories achieved significant WPT compl
 - ✅ **Non-special scheme absolute handling**: URLs like `"a:\t foo.com"` correctly parsed as absolute URLs with non-special schemes  
 - ✅ **WPT edge case compliance**: Fixed origin parsing for various scheme types and control character edge cases
 - **Implementation**:
-  - Added comprehensive scheme detection in `JSRT_ParseURL` (`src/std/url.c:209-239`)
+  - Added comprehensive scheme detection in `JSRT_ParseURL` (`src/url/ (modular implementation):209-239`)
   - Special schemes (`http`, `https`, `ftp`, `ws`, `wss`, `file`) require `://` to be absolute
   - Non-special schemes with just `:` are treated as absolute URLs with null origin
   - Enhanced relative URL detection to respect special scheme requirements
@@ -586,7 +586,7 @@ Major improvements across multiple API categories achieved significant WPT compl
 - ✅ **Relative URL improvements**: Edge cases like `"\t   :foo.com   \n"` now correctly treated as relative URLs
 - ✅ **Control character handling**: Proper handling of tabs, newlines, and other whitespace in URL inputs
 - **Implementation**:
-  - Added `strip_url_whitespace` helper function in `src/std/url.c:202-225`
+  - Added `strip_url_whitespace` helper function in `src/url/ (modular implementation):202-225`
   - Enhanced scheme detection logic in `JSRT_ParseURL` at lines 244-261
   - Fixed colon-only URLs (e.g., `:foo.com`) to be treated as relative, not absolute
   - Memory management for trimmed URL strings throughout parsing pipeline
@@ -731,7 +731,7 @@ static char* normalize_encoding_label(const char* label);
 ### Phase 2: URL and URLSearchParams (2 weeks) ✅ MOSTLY COMPLETED
 
 #### 2.1 URLSearchParams Improvements ✅ COMPLETED
-**Files modified**: `src/std/url.c`
+**Files modified**: `src/url/ (modular implementation)`
 **Issues resolved**:
 - ✅ Added `getAll()` method - returns array of all values for a parameter name
 - ✅ `has()` method was already implemented and working correctly
@@ -766,7 +766,7 @@ static JSValue JSRT_URLGetSearchParams(JSContext* ctx, JSValueConst this_val, in
 - ⚠️ `url/urlsearchparams-stringifier.any.js` - Minor WPT compatibility issues
 
 #### 2.2 URL Constructor and Origin
-**Files to modify**: `src/std/url.c`
+**Files to modify**: `src/url/ (modular implementation)`
 **Current issues**:
 - URL constructor parameter validation
 - Origin property implementation
@@ -1124,7 +1124,7 @@ void JSRT_RuntimeSetupStdDOM(JSRT_Runtime* rt);
 ### Latest Phase 4 Implementation ✅ COMPLETED (NEW)
 
 #### 4.1 URLSearchParams Advanced Features ✅ COMPLETED
-**Files modified**: `src/std/url.c`
+**Files modified**: `src/url/ (modular implementation)`
 **Issues resolved**:
 - ✅ **URL decoding/encoding**: Proper `%20` and `+` decoding in parameter names and values
 - ✅ **Constructor improvements**: Support for arrays, objects, and URLSearchParams copying
@@ -1150,7 +1150,7 @@ tail->next = new_param;  // Append to end, not prepend to start
 ```
 
 #### 4.2 URL Constructor and Origin ✅ COMPLETED
-**Files modified**: `src/std/url.c`
+**Files modified**: `src/url/ (modular implementation)`
 **Issues resolved**:
 - ✅ **URL validation**: Proper scheme validation and error handling
 - ✅ **Relative URL resolution**: Support for base URL parameter with proper resolution
@@ -1239,7 +1239,7 @@ if (input_len % 4 != 0) {
 **Test results**: ✅ `html/webappapis/atob/base64.any.js` - NOW PASSING
 
 #### 7.2 URLSearchParams Advanced Compliance ✅ COMPLETED
-**Files modified**: `src/std/url.c`
+**Files modified**: `src/url/ (modular implementation)`
 **Issues resolved**:
 - ✅ **Set method ordering**: Fixed `set()` to maintain insertion order of first occurrence
 - ✅ **URL encoding refinement**: Added `*` to non-encoded characters list for URLSearchParams
@@ -1333,7 +1333,7 @@ By focusing on agent-identified "quick wins," achieved significant progress in a
 Continuing the systematic high-impact strategy to push toward 50%+ pass rate:
 
 #### 8.1 URLSearchParams Null Character Encoding ✅ COMPLETED
-**Files modified**: `src/std/url.c`
+**Files modified**: `src/url/ (modular implementation)`
 **Issues resolved**:
 - ✅ **Null byte handling**: Fixed URLSearchParams toString() to properly encode `\0` characters as `%00`
 - ✅ **Length-aware string handling**: Updated parameter storage to track string lengths for embedded nulls
@@ -1360,7 +1360,7 @@ static char* url_encode_with_len(const char* str, size_t len) {
 ```
 
 #### 8.2 URLSearchParams-URL Integration ✅ COMPLETED
-**Files modified**: `src/std/url.c`  
+**Files modified**: `src/url/ (modular implementation)`  
 **Issues resolved**:
 - ✅ **URL search property setter**: Added `JSRT_URLSetSearch` to handle `url.search = "..."` assignments
 - ✅ **Cache invalidation**: When URL search changes, cached URLSearchParams is properly invalidated
@@ -1571,7 +1571,7 @@ The systematic approach of targeting agent-identified "quick wins" and fundament
 
 ### Phase 11: URL-URLSearchParams Integration ✅ COMPLETED (2025-09-05 Final Evening)
 
-**Files modified**: `src/std/url.c`
+**Files modified**: `src/url/ (modular implementation)`
 **Issues resolved**:
 - ✅ **Bidirectional URL-URLSearchParams integration**: URLSearchParams changes now properly update URL.search and URL.href
 - ✅ **Live URLSearchParams object**: URL.search setter updates the same URLSearchParams object (WPT requirement)
@@ -1630,7 +1630,7 @@ JS_SetPropertyStr(ctx, dom_exception_ctor, "prototype", JS_DupValue(ctx, dom_exc
 ```
 
 #### 12.2 URLSearchParams Constructor Logic Enhancement ✅ COMPLETED
-**Files modified**: `src/std/url.c`
+**Files modified**: `src/url/ (modular implementation)`
 **Issues resolved**:
 - ✅ **Function vs sequence detection**: Fixed logic to treat functions with enumerable properties as records
 - ✅ **DOMException.prototype handling**: Added specific TypeError for DOMException.prototype per WPT requirements
@@ -1813,7 +1813,7 @@ These targeted improvements are expected to improve the overall pass rate, with 
 ### Phase 16 - URL Character Validation & URLSearchParams Edge Cases ✅ COMPLETED (NEW)
 
 #### 16.1 URL Constructor Character Validation ✅ COMPLETED
-**Files modified**: `src/std/url.c`
+**Files modified**: `src/url/ (modular implementation)`
 **Issues resolved**:
 - ✅ **ASCII control character validation**: URL constructor now properly rejects tab (`\t`), LF (`\n`), and CR (`\r`) characters
 - ✅ **WPT compliance**: Added `validate_url_characters()` function per WPT specification requirements
@@ -1839,7 +1839,7 @@ if (!validate_url_characters(url_str)) {
 ```
 
 #### 16.2 URLSearchParams Array Constructor Validation ✅ COMPLETED
-**Files modified**: `src/std/url.c`
+**Files modified**: `src/url/ (modular implementation)`
 **Issues resolved**:
 - ✅ **Array element validation**: URLSearchParams constructor now properly validates that array elements have exactly 2 items
 - ✅ **TypeError for invalid pairs**: Single-element arrays like `[['single']]` now correctly throw "Iterator value a 0 is not an entry object"

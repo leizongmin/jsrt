@@ -29,7 +29,7 @@
 #include "std/process.h"
 #include "std/streams.h"
 #include "std/timer.h"
-#include "std/url.h"
+#include "url/url.h"
 #include "std/webassembly.h"
 #include "util/debug.h"
 #include "util/file.h"

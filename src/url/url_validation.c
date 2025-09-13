@@ -92,6 +92,13 @@ int validate_url_characters(const char* url) {
 
     // Check for backslashes - allow them in special schemes for normalization
     if (c == '\\') {
+      // Check if this backslash is in a fragment (after #)
+      char* fragment_pos = strchr(url, '#');
+      if (fragment_pos && p >= fragment_pos) {
+        // Backslashes in fragments are always allowed per WHATWG URL spec
+        continue;
+      }
+
       // Determine if this URL uses a special scheme that allows backslash normalization
       char* colon_pos = strchr(url, ':');
       int is_special = 0;
@@ -112,10 +119,9 @@ int validate_url_characters(const char* url) {
         // Allow all backslashes in file URLs for Windows paths
         continue;
       } else {
-        // For non-special schemes, only reject consecutive backslashes
-        if (p > url && *(p - 1) == '\\') {
-          return 0;  // Consecutive backslashes are invalid in non-special URLs
-        }
+        // For non-special schemes, allow backslashes to be percent-encoded
+        // Per WPT tests, backslashes should be percent-encoded, not rejected
+        continue;
       }
     }
 
@@ -148,6 +154,11 @@ int validate_url_characters(const char* url) {
 
 // Validate hostname characters according to WHATWG URL spec
 int validate_hostname_characters(const char* hostname) {
+  return validate_hostname_characters_allow_at(hostname, 0);
+}
+
+// Validate hostname characters with option to allow @ symbol
+int validate_hostname_characters_allow_at(const char* hostname, int allow_at) {
   if (!hostname)
     return 0;
 
@@ -156,9 +167,20 @@ int validate_hostname_characters(const char* hostname) {
 
     // Reject forbidden hostname characters per WHATWG URL spec
     // These characters are forbidden in hostnames: " # % / : < > ? @ [ \ ] ^
-    if (c == '"' || c == '#' || c == '%' || c == '/' || c == ':' || c == '<' || c == '>' || c == '?' || c == '@' ||
+    // But allow @ if allow_at flag is set (for double colon @ patterns)
+    if (c == '"' || c == '#' || c == '%' || c == '/' || c == '<' || c == '>' || c == '?' || (!allow_at && c == '@') ||
         c == '[' || c == '\\' || c == ']' || c == '^') {
       return 0;  // Invalid hostname character
+    }
+
+    // Special handling for colon in hostname
+    if (c == ':') {
+      // Allow colon only if this looks like a Windows drive letter: single letter + colon at end
+      if (strlen(hostname) == 2 && p == hostname + 1 && isalpha(hostname[0])) {
+        continue;  // Allow Windows drive letter pattern like "C:"
+      } else {
+        return 0;  // Invalid hostname character
+      }
     }
 
     // Reject ASCII control characters (including null bytes)
@@ -174,12 +196,30 @@ int validate_hostname_characters(const char* hostname) {
     // Reject Unicode control characters and non-ASCII characters
     // Check for UTF-8 encoded Unicode characters
     if (c >= 0x80) {
+      // Check for zero-width characters and other problematic Unicode
+      // Zero Width Space (U+200B): 0xE2 0x80 0x8B
+      if (c == 0xE2 && (unsigned char)*(p + 1) == 0x80) {
+        unsigned char third = (unsigned char)*(p + 2);
+        // Zero Width Space, Zero Width Non-Joiner, Zero Width Joiner, etc.
+        if (third == 0x8B || third == 0x8C || third == 0x8D || third == 0x8E || third == 0x8F || third == 0xAE ||
+            third == 0xAF) {
+          return 0;  // Zero-width characters not allowed
+        }
+      }
+
       // Check for soft hyphen (U+00AD) encoded as UTF-8: 0xC2 0xAD
       if (c == 0xC2 && (unsigned char)*(p + 1) == 0xAD) {
         return 0;  // Soft hyphen not allowed
       }
-      // Reject all non-ASCII characters in hostnames per WPT tests
-      // This includes Unicode characters like ☃ (snowman)
+
+      // Check for other problematic Unicode characters
+      // Word Joiner (U+2060): 0xE2 0x81 0xA0
+      if (c == 0xE2 && (unsigned char)*(p + 1) == 0x81 && (unsigned char)*(p + 2) == 0xA0) {
+        return 0;  // Word joiner not allowed
+      }
+
+      // For now, allow ASCII-compatible domain names, reject most Unicode
+      // This is stricter than full internationalized domain names but matches WPT expectations
       return 0;  // Non-ASCII characters not allowed in hostnames
     }
 

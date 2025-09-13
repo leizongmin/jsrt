@@ -51,8 +51,11 @@ typedef struct JSRT_URL {
   char* search;
   char* hash;
   char* origin;
-  JSValue search_params;  // Cached URLSearchParams object
-  JSContext* ctx;         // Context for managing search_params
+  JSValue search_params;        // Cached URLSearchParams object
+  JSContext* ctx;               // Context for managing search_params
+  int has_password_field;       // Flag to track if original URL had password field (even if empty)
+  int double_colon_at_pattern;  // Flag for double colon @ pattern (http::@host:port) - port ignored in origin
+  int opaque_path;              // Flag for URLs with opaque paths (no authority) like file:path
 } JSRT_URL;
 
 // URLSearchParams Iterator structure
@@ -68,10 +71,52 @@ typedef struct {
 JSRT_URL* JSRT_ParseURL(const char* url, const char* base);
 void JSRT_FreeURL(JSRT_URL* url);
 
+// URL preprocessing functions (url_preprocessor.c)
+char* preprocess_url_string(const char* url, const char* base);
+char* preprocess_file_urls(const char* cleaned_url);
+JSRT_URL* handle_protocol_relative(const char* cleaned_url, const char* base);
+JSRT_URL* handle_empty_url(const char* base);
+int is_relative_url(const char* cleaned_url, const char* base);
+
+// URL parsing functions (url_parser.c)
+JSRT_URL* parse_absolute_url(const char* preprocessed_url);
+int detect_url_scheme(const char* url, char** scheme, char** remainder);
+char* parse_url_components(JSRT_URL* parsed, const char* scheme, char* ptr);
+char* parse_authority_based_url_with_position(JSRT_URL* parsed, const char* scheme, char* ptr, int is_special);
+int parse_authority_based_url(JSRT_URL* parsed, const char* scheme, char* ptr, int is_special);
+int parse_empty_authority_url(JSRT_URL* parsed, const char* scheme, char** ptr);
+int parse_standard_authority_url(JSRT_URL* parsed, char** ptr);
+int parse_double_colon_at_pattern(JSRT_URL* parsed, char** ptr);
+int parse_normal_authority(JSRT_URL* parsed, char** ptr);
+JSRT_URL* create_url_structure(void);
+
+// URL building functions (url_builder.c)
+void build_href(JSRT_URL* parsed);
+void parse_path_query_fragment(JSRT_URL* parsed, char* ptr);
+char* normalize_url_component_for_href(const char* component, int is_special_scheme);
+char* build_url_string(const char* protocol, const char* username, const char* password, const char* host,
+                       const char* pathname, const char* search, const char* hash, int has_password_field);
+
+// Relative URL resolution functions (url_relative.c)
+JSRT_URL* resolve_relative_url(const char* url, const char* base);
+
+// Authority parsing functions (url_authority.c)
+int parse_authority(JSRT_URL* parsed, const char* authority_str);
+int parse_empty_userinfo_authority(JSRT_URL* parsed, const char* str);
+char* find_authority_end(const char* ptr, const char* rightmost_at);
+
+// Special scheme handling functions (url_scheme.c)
+int parse_special_scheme_without_slashes(JSRT_URL* parsed, char** ptr);
+int parse_special_scheme_single_slash(JSRT_URL* parsed, char** ptr);
+int parse_empty_authority_with_path(JSRT_URL* parsed, char** ptr);
+void ensure_special_scheme_default_path(JSRT_URL* parsed, char** ptr);
+void handle_file_url_drive_letters(JSRT_URL* parsed);
+
 // URL validation functions
 int is_valid_scheme(const char* scheme);
 int validate_url_characters(const char* url);
 int validate_hostname_characters(const char* hostname);
+int validate_hostname_characters_allow_at(const char* hostname, int allow_at);
 int validate_credentials(const char* credentials);
 
 // IP address functions
@@ -92,8 +137,11 @@ char* url_encode_with_len(const char* str, size_t len);
 char* url_encode(const char* str);
 char* url_component_encode(const char* str);
 char* url_fragment_encode(const char* str);
+char* url_fragment_encode_nonspecial(const char* str);
 char* url_nonspecial_path_encode(const char* str);
 char* url_userinfo_encode(const char* str);
+char* url_userinfo_encode_with_scheme(const char* str, int is_special_scheme);
+char* url_userinfo_encode_with_scheme_name(const char* str, const char* scheme);
 char* url_decode_with_length_and_output_len(const char* str, size_t len, size_t* output_len);
 char* url_decode_with_length(const char* str, size_t len);
 char* url_decode(const char* str);
@@ -102,7 +150,7 @@ char* url_decode_query_with_length_and_output_len(const char* str, size_t len, s
 // URL utility functions
 int is_default_port(const char* scheme, const char* port);
 int is_special_scheme(const char* protocol);
-char* compute_origin(const char* protocol, const char* hostname, const char* port);
+char* compute_origin(const char* protocol, const char* hostname, const char* port, int double_colon_at_pattern);
 int hex_to_int(char c);
 
 // URLSearchParams functions

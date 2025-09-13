@@ -121,7 +121,9 @@ test('URL Constructor - Backslash normalization for special schemes', () => {
       if (expected === null) {
         console.log(`    ✅ ${input} correctly threw: ${e.message}`);
       } else {
-        throw new Error(`Backslash normalization failed for "${input}": ${e.message}`);
+        throw new Error(
+          `Backslash normalization failed for "${input}": ${e.message}`
+        );
       }
     }
   });
@@ -150,7 +152,9 @@ test('URL Constructor - Port validation failures', () => {
     }
 
     if (!didThrow) {
-      throw new Error(`Invalid port URL "${input}" should throw error but did not`);
+      throw new Error(
+        `Invalid port URL "${input}" should throw error but did not`
+      );
     }
   });
 });
@@ -179,7 +183,9 @@ test('URL Constructor - Special scheme handling with whitespace', () => {
       console.log(`    Expected: ${expected}`);
       assert.strictEqual(url.href, expected);
     } catch (e) {
-      throw new Error(`Whitespace handling failed for "${input}": ${e.message}`);
+      throw new Error(
+        `Whitespace handling failed for "${input}": ${e.message}`
+      );
     }
   });
 });
@@ -232,15 +238,17 @@ test('URLSearchParams Constructor - Advanced constructor cases', () => {
   try {
     const params2 = new URLSearchParams('a=b%00c');
     const result2 = params2.get('a');
-    console.log(`    Percent null test - Expected: 'b\\0c', Got: '${result2}'`);
-    assert.strictEqual(result2, 'b\\0c');
+    console.log(
+      `    Percent null test - Expected: 'b\\0c', Got: length ${result2 ? result2.length : 'null'}`
+    );
+    assert.strictEqual(result2, 'b\0c');
   } catch (e) {
     throw new Error(`Percent-encoded null handling failed: ${e.message}`);
   }
 
   // Test object constructor (should support iteration)
   try {
-    const params3 = new URLSearchParams({a: '1', b: '2'});
+    const params3 = new URLSearchParams({ a: '1', b: '2' });
     console.log(`    Object constructor - Keys: ${Array.from(params3.keys())}`);
     assert.strictEqual(params3.get('a'), '1');
     assert.strictEqual(params3.get('b'), '2');
@@ -250,7 +258,10 @@ test('URLSearchParams Constructor - Advanced constructor cases', () => {
 
   // Test array constructor
   try {
-    const params4 = new URLSearchParams([['a', '1'], ['b', '2']]);
+    const params4 = new URLSearchParams([
+      ['a', '1'],
+      ['b', '2'],
+    ]);
     console.log(`    Array constructor - Keys: ${Array.from(params4.keys())}`);
     assert.strictEqual(params4.get('a'), '1');
     assert.strictEqual(params4.get('b'), '2');
@@ -263,17 +274,17 @@ test('URLSearchParams - Two-argument has() method', () => {
   console.log('  Testing two-argument has() method...');
 
   const params = new URLSearchParams('a=1&a=2&b=3');
-  
+
   // Standard has() should return true if key exists
   assert.strictEqual(params.has('a'), true);
-  
+
   // Two-argument has() should check for specific key-value pair
   // This is a newer API feature that might not be implemented yet
   try {
     const hasA1 = params.has('a', '1');
     const hasA3 = params.has('a', '3');
     console.log(`    has('a', '1'): ${hasA1}, has('a', '3'): ${hasA3}`);
-    
+
     if (typeof hasA1 !== 'undefined') {
       assert.strictEqual(hasA1, true);
       assert.strictEqual(hasA3, false);
@@ -290,10 +301,10 @@ test('URLSearchParams - Set() method order preservation', () => {
 
   const params = new URLSearchParams('a=1&b=2&c=3');
   params.set('a', 'B');
-  
+
   const result = params.toString();
   console.log(`    After set('a', 'B'): ${result}`);
-  
+
   // The order should be preserved - 'a' should remain in its original position
   const expected = 'a=B&b=2&c=3';
   assert.strictEqual(result, expected);
@@ -303,17 +314,17 @@ test('URLSearchParams - Size property', () => {
   console.log('  Testing size property...');
 
   const params = new URLSearchParams('a=1&b=2&c=3');
-  
+
   // Check if size property exists and is correct
   console.log(`    Size property: ${params.size}`);
-  
+
   if (typeof params.size !== 'undefined') {
     assert.strictEqual(params.size, 3);
-    
+
     // Test size after deletion
     params.delete('b');
     assert.strictEqual(params.size, 2);
-    
+
     // Test size after addition
     params.append('d', '4');
     assert.strictEqual(params.size, 3);
@@ -399,7 +410,9 @@ test('Relative URL Resolution - Triple slash cases', () => {
       console.log(`    Expected: ${expected}`);
       assert.strictEqual(url.href, expected);
     } catch (e) {
-      throw new Error(`Triple slash resolution failed for "${input}": ${e.message}`);
+      throw new Error(
+        `Triple slash resolution failed for "${input}": ${e.message}`
+      );
     }
   });
 });
@@ -489,7 +502,9 @@ test('File URL - Windows drive letter handling', () => {
       console.log(`    Expected: ${expected}`);
       assert.strictEqual(url.href, expected);
     } catch (e) {
-      throw new Error(`Windows drive letter failed for "${input}": ${e.message}`);
+      throw new Error(
+        `Windows drive letter failed for "${input}": ${e.message}`
+      );
     }
   });
 });
@@ -516,7 +531,9 @@ test('Invalid URLs - IPv6 validation', () => {
     }
 
     if (!didThrow) {
-      throw new Error(`Invalid IPv6 URL "${input}" should throw error but did not`);
+      throw new Error(
+        `Invalid IPv6 URL "${input}" should throw error but did not`
+      );
     }
   });
 });
@@ -542,7 +559,9 @@ test('Invalid URLs - Blob URL validation', () => {
     }
 
     if (!didThrow) {
-      throw new Error(`Invalid blob URL "${input}" should throw error but did not`);
+      throw new Error(
+        `Invalid blob URL "${input}" should throw error but did not`
+      );
     }
   });
 });
@@ -569,7 +588,9 @@ test('Invalid URLs - Unicode hostname validation', () => {
     }
 
     if (!didThrow) {
-      throw new Error(`Invalid Unicode hostname "${input}" should throw but did not`);
+      throw new Error(
+        `Invalid Unicode hostname "${input}" should throw but did not`
+      );
     }
   });
 });
@@ -583,17 +604,17 @@ test('Special Character Encoding - Userinfo and path encoding', () => {
     {
       input: 'foo:// !"$%&\'()*+,-.;<=>@[\\\\]^_`{|}~@host/',
       base: null,
-      expected: 'foo://%20!%22$%&\'()*+,-.;<=>@[%5C%5C]^_`{|}~@host/',
+      expected: "foo://%20!%22$%&'()*+,-.;<=>@[%5C%5C]^_`{|}~@host/",
     },
     {
       input: 'wss:// !"$%&\'()*+,-.;<=>@[]^_`{|}~@host/',
       base: null,
-      expected: 'wss://%20!%22$%&\'()*+,-.;<=>@[]^_`{|}~@host/',
+      expected: "wss://%20!%22$%&'()*+,-.;<=>@[]^_`{|}~@host/",
     },
     {
       input: 'foo://joe: !"$%&\'()*+,-.:;<=>@[\\\\]^_`{|}~@host/',
       base: null,
-      expected: 'foo://joe:%20!%22$%&\'()*+,-.:;<=>@[%5C%5C]^_`{|}~@host/',
+      expected: "foo://joe:%20!%22$%&'()*+,-.:;<=>@[%5C%5C]^_`{|}~@host/",
     },
   ];
 
@@ -605,7 +626,9 @@ test('Special Character Encoding - Userinfo and path encoding', () => {
       console.log(`    Expected: ${expected}`);
       assert.strictEqual(url.href, expected);
     } catch (e) {
-      throw new Error(`Special character encoding failed for "${input}": ${e.message}`);
+      throw new Error(
+        `Special character encoding failed for "${input}": ${e.message}`
+      );
     }
   });
 });

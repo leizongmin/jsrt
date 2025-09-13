@@ -70,9 +70,9 @@ char* url_component_encode(const char* str) {
     if (c == '%' && i + 2 < len && hex_to_int(str[i + 1]) >= 0 && hex_to_int(str[i + 2]) >= 0) {
       // Already percent-encoded sequence, keep as-is
       encoded_len += 3;
-    } else if (c < 32 || c == '"' || c == '<' || c == '>' || c == '\\' || c == '^' || c == '{' || c == '|' ||
+    } else if (c <= 32 || c == '"' || c == '<' || c == '>' || c == '\\' || c == '^' || c == '{' || c == '|' ||
                c == '}') {
-      // Only encode control characters and specific unsafe characters
+      // Encode control characters, space, and specific unsafe characters
       // Do NOT encode Unicode characters (>= 127) to preserve them in URLs per WPT
       encoded_len += 3;  // %XX
     } else {
@@ -91,9 +91,9 @@ char* url_component_encode(const char* str) {
       encoded[j++] = str[i + 1];
       encoded[j++] = str[i + 2];
       i += 2;  // Skip the next two characters
-    } else if (c < 32 || c == '"' || c == '<' || c == '>' || c == '\\' || c == '^' || c == '{' || c == '|' ||
+    } else if (c <= 32 || c == '"' || c == '<' || c == '>' || c == '\\' || c == '^' || c == '{' || c == '|' ||
                c == '}') {
-      // Only encode control characters and specific unsafe characters
+      // Encode control characters, space, and specific unsafe characters
       // Preserve Unicode characters (>= 127) and single quotes per WPT
       encoded[j++] = '%';
       encoded[j++] = hex_chars[c >> 4];
@@ -121,9 +121,10 @@ char* url_fragment_encode(const char* str) {
     if (c == '%' && i + 2 < len && hex_to_int(str[i + 1]) >= 0 && hex_to_int(str[i + 2]) >= 0) {
       // Already percent-encoded sequence, keep as-is
       encoded_len += 3;
-    } else if (c <= 32 || c >= 127 || c == '"' || c == '<' || c == '>' || c == '\\' || c == '^' || c == '{' ||
-               c == '|' || c == '}' || c == '`') {
+    } else if (c <= 32 || c >= 127 || c == '"' || c == '<' || c == '>' || c == '^' || c == '{' || c == '|' ||
+               c == '}' || c == '`') {
       // Need to percent-encode unsafe characters including backtick for fragments
+      // Note: backslashes (\) are allowed in fragments per WPT tests
       encoded_len += 3;  // %XX
     } else {
       encoded_len++;
@@ -141,9 +142,10 @@ char* url_fragment_encode(const char* str) {
       encoded[j++] = str[i + 1];
       encoded[j++] = str[i + 2];
       i += 2;  // Skip the next two characters
-    } else if (c <= 32 || c >= 127 || c == '"' || c == '<' || c == '>' || c == '\\' || c == '^' || c == '{' ||
-               c == '|' || c == '}' || c == '`') {
+    } else if (c <= 32 || c >= 127 || c == '"' || c == '<' || c == '>' || c == '^' || c == '{' || c == '|' ||
+               c == '}' || c == '`') {
       // Need to percent-encode unsafe characters including backtick for fragments
+      // Note: backslashes (\) are allowed in fragments per WPT tests
       encoded[j++] = '%';
       encoded[j++] = hex_chars[c >> 4];
       encoded[j++] = hex_chars[c & 15];
@@ -205,22 +207,39 @@ char* url_nonspecial_path_encode(const char* str) {
 
 // Userinfo encoding per WHATWG URL spec (less aggressive than url_encode_with_len)
 // According to WPT tests, some characters like & and ( should not be percent-encoded in userinfo
-char* url_userinfo_encode(const char* str) {
+// URL userinfo encoding with scheme awareness
+char* url_userinfo_encode_with_scheme_name(const char* str, const char* scheme) {
   if (!str)
     return NULL;
 
   size_t len = strlen(str);
   size_t encoded_len = 0;
 
+  // Determine encoding rules for ']' character based on scheme
+  int encode_closing_bracket = 1;  // Default: encode ']'
+
+  if (scheme) {
+    // Remove trailing colon if present
+    char* scheme_clean = strdup(scheme);
+    if (strlen(scheme_clean) > 0 && scheme_clean[strlen(scheme_clean) - 1] == ':') {
+      scheme_clean[strlen(scheme_clean) - 1] = '\0';
+    }
+
+    // WebSocket schemes and non-special schemes: don't encode ']'
+    if (strcmp(scheme_clean, "ws") == 0 || strcmp(scheme_clean, "wss") == 0 || !is_special_scheme(scheme)) {
+      encode_closing_bracket = 0;
+    }
+
+    free(scheme_clean);
+  }
+
   // Calculate encoded length
   for (size_t i = 0; i < len; i++) {
     unsigned char c = (unsigned char)str[i];
-    // Characters allowed in userinfo without encoding (per WPT tests)
-    // Based on WPT test expectations, most printable characters should be preserved
     if ((c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z') || (c >= '0' && c <= '9') || c == '-' || c == '_' ||
         c == '.' || c == '~' || c == '*' || c == '&' || c == '(' || c == ')' || c == '!' || c == '$' || c == '\'' ||
-        c == ',' || c == ';' || c == '=' || c == '+' || c == '"' || c == '%' || c == '<' || c == '>' || c == '@' ||
-        c == '[' || c == '\\' || c == ']' || c == '^' || c == '`' || c == '{' || c == '|' || c == '}') {
+        c == ',' || c == ';' || c == '=' || c == '+' || c == '%' || c == '<' || c == '>' || c == '@' || c == ':' ||
+        c == '[' || c == '^' || c == '`' || c == '{' || c == '|' || c == '}' || (!encode_closing_bracket && c == ']')) {
       encoded_len++;
     } else {
       encoded_len += 3;  // %XX
@@ -232,11 +251,10 @@ char* url_userinfo_encode(const char* str) {
 
   for (size_t i = 0; i < len; i++) {
     unsigned char c = (unsigned char)str[i];
-    // Characters allowed in userinfo without encoding
     if ((c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z') || (c >= '0' && c <= '9') || c == '-' || c == '_' ||
         c == '.' || c == '~' || c == '*' || c == '&' || c == '(' || c == ')' || c == '!' || c == '$' || c == '\'' ||
-        c == ',' || c == ';' || c == '=' || c == '+' || c == '"' || c == '%' || c == '<' || c == '>' || c == '@' ||
-        c == '[' || c == '\\' || c == ']' || c == '^' || c == '`' || c == '{' || c == '|' || c == '}') {
+        c == ',' || c == ';' || c == '=' || c == '+' || c == '%' || c == '<' || c == '>' || c == '@' || c == ':' ||
+        c == '[' || c == '^' || c == '`' || c == '{' || c == '|' || c == '}' || (!encode_closing_bracket && c == ']')) {
       encoded[j++] = c;
     } else {
       encoded[j++] = '%';
@@ -247,6 +265,17 @@ char* url_userinfo_encode(const char* str) {
 
   encoded[j] = '\0';
   return encoded;
+}
+
+// Backward compatibility wrapper
+char* url_userinfo_encode_with_scheme(const char* str, int is_special_scheme) {
+  return url_userinfo_encode_with_scheme_name(str, is_special_scheme ? "http" : "foo");
+}
+
+// Original function for compatibility
+char* url_userinfo_encode(const char* str) {
+  // Default to non-special scheme behavior for backward compatibility
+  return url_userinfo_encode_with_scheme(str, 0);
 }
 
 // URL decode function for query parameters (+ becomes space)
@@ -416,4 +445,56 @@ char* url_decode_with_length(const char* str, size_t len) {
 char* url_decode(const char* str) {
   size_t len = strlen(str);
   return url_decode_with_length(str, len);
+}
+
+// Fragment encoding for non-special schemes (spaces are preserved)
+char* url_fragment_encode_nonspecial(const char* str) {
+  if (!str)
+    return NULL;
+
+  size_t len = strlen(str);
+  size_t encoded_len = 0;
+
+  // Calculate encoded length - preserve spaces for non-special schemes
+  for (size_t i = 0; i < len; i++) {
+    unsigned char c = (unsigned char)str[i];
+    // Check if character needs encoding per URL spec
+    if (c == '%' && i + 2 < len && hex_to_int(str[i + 1]) >= 0 && hex_to_int(str[i + 2]) >= 0) {
+      // Already percent-encoded sequence, keep as-is
+      encoded_len += 3;
+    } else if (c < 32 || c >= 127 || c == '"' || c == '<' || c == '>' || c == '^' || c == '{' || c == '|' || c == '}' ||
+               c == '`') {
+      // Need to percent-encode unsafe characters
+      // Note: spaces (32) are preserved for non-special schemes
+      encoded_len += 3;  // %XX
+    } else {
+      encoded_len++;
+    }
+  }
+
+  char* encoded = malloc(encoded_len + 1);
+  size_t j = 0;
+
+  for (size_t i = 0; i < len; i++) {
+    unsigned char c = (unsigned char)str[i];
+    if (c == '%' && i + 2 < len && hex_to_int(str[i + 1]) >= 0 && hex_to_int(str[i + 2]) >= 0) {
+      // Already percent-encoded sequence, copy as-is
+      encoded[j++] = str[i];
+      encoded[j++] = str[i + 1];
+      encoded[j++] = str[i + 2];
+      i += 2;  // Skip the next two characters
+    } else if (c < 32 || c >= 127 || c == '"' || c == '<' || c == '>' || c == '^' || c == '{' || c == '|' || c == '}' ||
+               c == '`') {
+      // Need to percent-encode unsafe characters
+      // Note: spaces (32) are preserved for non-special schemes
+      encoded[j++] = '%';
+      encoded[j++] = hex_chars[c >> 4];
+      encoded[j++] = hex_chars[c & 15];
+    } else {
+      encoded[j++] = c;
+    }
+  }
+
+  encoded[j] = '\0';
+  return encoded;
 }

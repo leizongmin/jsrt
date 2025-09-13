@@ -270,7 +270,9 @@ static JSValue JSRT_URLGetHash(JSContext* ctx, JSValueConst this_val, int argc, 
   }
 
   // Return the percent-encoded hash as per URL specification
-  char* encoded_hash = url_fragment_encode(url->hash);
+  // Use scheme-appropriate encoding for fragments
+  int is_special = is_special_scheme(url->protocol);
+  char* encoded_hash = is_special ? url_fragment_encode(url->hash) : url_fragment_encode_nonspecial(url->hash);
   if (!encoded_hash)
     return JS_NewString(ctx, "");  // Return empty string instead of exception
 
@@ -358,15 +360,45 @@ static JSValue JSRT_URLSearchParamsConstructor(JSContext* ctx, JSValueConst new_
         return JS_ThrowTypeError(ctx, "Invalid FormData argument to URLSearchParams constructor");
       }
     }
-    // Check if it's an iterable or array-like sequence
+    // Check if it's an iterable or array-like sequence vs a record (plain object)
     else if (!JS_IsString(init)) {
-      search_params = JSRT_ParseSearchParamsFromSequence(ctx, init);
-      if (!search_params) {
-        // If an exception is already pending (e.g., TypeError for invalid pairs), return it
-        if (JS_HasException(ctx)) {
-          return JS_EXCEPTION;
+      // Check if it's an array or has Symbol.iterator (sequence/iterable)
+      JSValue global = JS_GetGlobalObject(ctx);
+      JSValue symbol_obj = JS_GetPropertyStr(ctx, global, "Symbol");
+      JSValue iterator_symbol = JS_GetPropertyStr(ctx, symbol_obj, "iterator");
+      JS_FreeValue(ctx, symbol_obj);
+      JS_FreeValue(ctx, global);
+
+      bool is_array = JS_IsArray(ctx, init);
+      bool has_iterator = false;
+
+      if (!JS_IsUndefined(iterator_symbol)) {
+        JSAtom iterator_atom = JS_ValueToAtom(ctx, iterator_symbol);
+        has_iterator = JS_HasProperty(ctx, init, iterator_atom);
+        JS_FreeAtom(ctx, iterator_atom);
+      }
+      JS_FreeValue(ctx, iterator_symbol);
+
+      if (is_array || has_iterator) {
+        // It's an array or iterable - use sequence parser
+        search_params = JSRT_ParseSearchParamsFromSequence(ctx, init);
+        if (!search_params) {
+          // If an exception is already pending (e.g., TypeError for invalid pairs), return it
+          if (JS_HasException(ctx)) {
+            return JS_EXCEPTION;
+          }
+          return JS_ThrowTypeError(ctx, "Invalid sequence argument to URLSearchParams constructor");
         }
-        return JS_ThrowTypeError(ctx, "Invalid sequence argument to URLSearchParams constructor");
+      } else {
+        // It's a plain object - use record parser
+        search_params = JSRT_ParseSearchParamsFromRecord(ctx, init);
+        if (!search_params) {
+          // If an exception is already pending, return it
+          if (JS_HasException(ctx)) {
+            return JS_EXCEPTION;
+          }
+          return JS_ThrowTypeError(ctx, "Invalid record argument to URLSearchParams constructor");
+        }
       }
     }
     // Otherwise, treat as string

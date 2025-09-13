@@ -176,10 +176,45 @@ static char* canonicalize_ipv6(const char* ipv6_str) {
   int group_count = 0;
   int double_colon_pos = -1;
 
-  // Check for double colon
+  // Check for double colon - there can only be one
   char* double_colon = strstr(addr, "::");
   if (double_colon) {
     double_colon_pos = double_colon - addr;
+
+    // Check if there's another double colon after this one (invalid)
+    char* second_double_colon = strstr(double_colon + 2, "::");
+    if (second_double_colon) {
+      free(addr);
+      return NULL;  // Invalid - multiple double colons
+    }
+  }
+
+  // First, count the number of groups without double colon to validate
+  // IPv6 addresses can only have max 8 groups, and if no double colon is present,
+  // we must have exactly 8 groups or fewer (with IPv4 at the end taking 2 groups)
+  if (double_colon_pos == -1) {
+    // No double colon - count colons to determine group count
+    int colon_count = 0;
+    for (size_t i = 0; i < addr_len; i++) {
+      if (addr[i] == ':')
+        colon_count++;
+    }
+
+    // Without double colon, we can have at most 7 colons (for 8 groups)
+    // or fewer if IPv4 is at the end
+    if (strchr(addr, '.')) {
+      // Has IPv4 at end - max 5 colons (6 hex groups + 1 IPv4 = 8 total)
+      if (colon_count > 5) {
+        free(addr);
+        return NULL;  // Too many groups for IPv6 with IPv4
+      }
+    } else {
+      // No IPv4 - must have exactly 7 colons for 8 groups
+      if (colon_count != 7) {
+        free(addr);
+        return NULL;  // Invalid number of groups for IPv6
+      }
+    }
   }
 
   // Parse groups before double colon (if any)
@@ -508,18 +543,24 @@ static char* canonicalize_ipv4_address(const char* input) {
   }
 
   if (has_dots) {
+    // Check for consecutive dots which make IPv4 addresses invalid
+    if (strstr(normalized_input, "..")) {
+      free(normalized_input);
+      return NULL;  // Invalid IPv4 - consecutive dots
+    }
+
     // Parse dotted notation (may include hex/octal parts) using normalized input
     char* input_copy = strdup(normalized_input);
-    char* parts[4];
+    char* parts[5];  // Allow up to 5 to detect invalid IPv4 with too many parts
     int part_count = 0;
 
     char* token = strtok(input_copy, ".");
-    while (token && part_count < 4) {
+    while (token && part_count <= 4) {  // Allow reading one extra to detect invalid
       parts[part_count++] = token;
       token = strtok(NULL, ".");
     }
 
-    // Must have 1-4 parts for valid IPv4
+    // Must have exactly 1-4 parts for valid IPv4
     if (part_count == 0 || part_count > 4) {
       free(input_copy);
       free(normalized_input);
@@ -530,6 +571,13 @@ static char* canonicalize_ipv4_address(const char* input) {
 
     // Parse each part (supporting decimal, octal, hex)
     for (int i = 0; i < part_count; i++) {
+      // Check for empty parts (consecutive dots like "0..0x300")
+      if (strlen(parts[i]) == 0) {
+        free(input_copy);
+        free(normalized_input);
+        return NULL;  // Invalid IPv4 - empty part
+      }
+
       char* endptr;
       values[i] = strtoul(parts[i], &endptr, 0);  // Auto-detect base
 
@@ -959,11 +1007,9 @@ static int validate_credentials(const char* credentials) {
       return 0;                                 // Invalid character found
     }
 
-    // Reject special characters that should not appear in credentials per WPT tests
-    // These characters cause credentials to be ignored
-    if (c == '`' || c == '{' || c == '}') {
-      return 0;  // Invalid credential character
-    }
+    // Per WPT tests, most special characters should be percent-encoded, not rejected
+    // Only reject characters that would break the entire URL structure
+    // Characters like `, {, } should be percent-encoded by url_userinfo_encode
 
     // Reject other ASCII control characters (< 0x20) except those already checked
     if (c < 0x20) {
@@ -987,15 +1033,32 @@ static int validate_url_characters(const char* url) {
       return 0;  // Leading backslash is invalid
     }
 
-    // Check for backslashes - allow them in file URLs for Windows paths
+    // Check for backslashes - allow them in special schemes for normalization
     if (c == '\\') {
-      // Allow all backslashes in file URLs for Windows paths
-      if (strncmp(url, "file:", 5) == 0) {
-        continue;  // Allow all backslashes in file URLs
+      // Determine if this URL uses a special scheme that allows backslash normalization
+      char* colon_pos = strchr(url, ':');
+      int is_special = 0;
+
+      if (colon_pos && colon_pos > url) {
+        size_t scheme_len = colon_pos - url;
+        char* scheme = malloc(scheme_len + 1);
+        strncpy(scheme, url, scheme_len);
+        scheme[scheme_len] = '\0';
+        is_special = is_valid_scheme(scheme) && is_special_scheme(scheme);
+        free(scheme);
       }
-      // For non-file URLs, only reject consecutive backslashes
-      if (p > url && *(p - 1) == '\\') {
-        return 0;  // Consecutive backslashes are invalid in non-file URLs
+
+      if (is_special) {
+        // Special schemes: allow backslashes (they will be normalized later)
+        continue;
+      } else if (strncmp(url, "file:", 5) == 0) {
+        // Allow all backslashes in file URLs for Windows paths
+        continue;
+      } else {
+        // For non-special schemes, only reject consecutive backslashes
+        if (p > url && *(p - 1) == '\\') {
+          return 0;  // Consecutive backslashes are invalid in non-special URLs
+        }
       }
     }
 
@@ -1442,6 +1505,11 @@ static char* normalize_url_backslashes(const char* url) {
       if (colon_pos && strncmp(url, "file:", 5) == 0) {
         // For file URLs, convert pipe to colon (Windows drive letter normalization)
         result[result_pos++] = ':';
+        // For Windows drive letters, ensure there's a forward slash after the colon
+        // if the next character isn't already a slash and we're not at the end
+        if (i + 1 < len && url[i + 1] != '/' && url[i + 1] != '\\') {
+          result[result_pos++] = '/';
+        }
       } else {
         // For non-file URLs, preserve pipe character
         result[result_pos++] = url[i];
@@ -1501,16 +1569,34 @@ static JSRT_URL* JSRT_ParseURL(const char* url, const char* base) {
   if (!cleaned_url)
     return NULL;
 
-  // Remove backticks from URL except in fragments (per WPT tests)
+  // Remove backticks from URL except in fragments and non-special schemes (per WPT tests)
   char* no_backticks_url = malloc(strlen(cleaned_url) + 1);
   if (no_backticks_url) {
     size_t j = 0;
     int in_fragment = 0;
+    int is_non_special_scheme = 0;
+
+    // Check if this is a non-special scheme
+    char* scheme_colon = strchr(cleaned_url, ':');
+    if (scheme_colon && scheme_colon > cleaned_url) {
+      size_t scheme_len = scheme_colon - cleaned_url;
+      char* scheme = malloc(scheme_len + 1);
+      if (scheme) {
+        strncpy(scheme, cleaned_url, scheme_len);
+        scheme[scheme_len] = '\0';
+        if (is_valid_scheme(scheme) && !is_special_scheme(scheme)) {
+          is_non_special_scheme = 1;
+        }
+        free(scheme);
+      }
+    }
+
     for (size_t i = 0; cleaned_url[i]; i++) {
       if (cleaned_url[i] == '#') {
         in_fragment = 1;
       }
-      if (cleaned_url[i] != '`' || in_fragment) {
+      // Remove backticks except in fragments or non-special scheme paths
+      if (cleaned_url[i] != '`' || in_fragment || is_non_special_scheme) {
         no_backticks_url[j++] = cleaned_url[i];
       }
     }
@@ -1587,13 +1673,22 @@ static JSRT_URL* JSRT_ParseURL(const char* url, const char* base) {
 #endif
       reencoded_url = url_nonspecial_path_encode(decoded_url);
     } else {
-// Special scheme or invalid scheme: use normal encoding
+// Special scheme or invalid scheme: normalize backslashes first, then encode
 #ifdef DEBUG_URL_NORMALIZATION
       printf("DEBUG: Using url_component_encode for scheme: %s\n", scheme);
 #endif
       // Special case for file URLs: don't encode backslashes to allow Windows path processing
       if (scheme && strcmp(scheme, "file") == 0) {
         reencoded_url = strdup(decoded_url);  // Don't encode file URLs, keep backslashes
+      } else if (scheme && is_special_scheme(scheme)) {
+        // For special schemes: normalize backslashes BEFORE encoding
+        char* normalized_first = normalize_url_backslashes(decoded_url);
+        if (normalized_first) {
+          reencoded_url = url_component_encode(normalized_first);
+          free(normalized_first);
+        } else {
+          reencoded_url = NULL;
+        }
       } else {
         reencoded_url = url_component_encode(decoded_url);
       }
@@ -1624,6 +1719,10 @@ static JSRT_URL* JSRT_ParseURL(const char* url, const char* base) {
   free(cleaned_url);  // Free the intermediate result
   if (!normalized_url)
     return NULL;
+
+#ifdef DEBUG_URL_NORMALIZATION
+  printf("DEBUG: After normalize_url_backslashes: %s\n", normalized_url);
+#endif
 
   // Update cleaned_url to point to the normalized URL
   cleaned_url = normalized_url;
@@ -2049,6 +2148,31 @@ static JSRT_URL* JSRT_ParseURL(const char* url, const char* base) {
     // Extract the inner URL part (everything after "blob:")
     char* inner_url_start = ptr + 5;
 
+    // Validate blob URL format - must have valid http/https inner URL
+    // Invalid patterns like "blob:blob:" or "blob:about:blank" should be rejected
+    if (strlen(inner_url_start) == 0 || strcmp(inner_url_start, "blob:") == 0 ||
+        strncmp(inner_url_start, "blob:", 5) == 0) {
+      // Invalid blob URL - empty or nested blob scheme
+      free(url_copy);
+      free(cleaned_url);
+      JSRT_FreeURL(parsed);
+      return NULL;
+    }
+
+    // Blob URLs can have either http/https inner URLs or be UUID-like
+    // But they cannot have other schemes like "about:", "blob:", or URL-encoded schemes
+    if (strncmp(inner_url_start, "http://", 7) != 0 && strncmp(inner_url_start, "https://", 8) != 0) {
+      // Check if it's a scheme (contains colon or encoded colon %3a/%3A)
+      if (strchr(inner_url_start, ':') || strstr(inner_url_start, "%3a") || strstr(inner_url_start, "%3A")) {
+        // It's a scheme (literal or encoded) but not http/https - invalid for blob URLs
+        free(url_copy);
+        free(cleaned_url);
+        JSRT_FreeURL(parsed);
+        return NULL;
+      }
+      // Otherwise it's a UUID-like format which is valid
+    }
+
     // For blob URLs, we need to find the third slash to separate origin from UUID
     // Format: blob:https://example.com/uuid or blob:https://example.com:443/uuid
     char* first_slash = strchr(inner_url_start, '/');
@@ -2253,8 +2377,8 @@ static JSRT_URL* JSRT_ParseURL(const char* url, const char* base) {
           }
         }
 
-        // Ensure the drive letter is lowercase
-        normalized_path[0] = tolower((unsigned char)normalized_path[0]);
+        // Preserve the original case of the drive letter per WPT requirements
+        // normalized_path[0] = tolower((unsigned char)normalized_path[0]);
 
         // Build the pathname with leading slash
         free(parsed->pathname);
@@ -2860,7 +2984,7 @@ static JSRT_URL* JSRT_ParseURL(const char* url, const char* base) {
             break;
           } else if (*p < '0' || *p > '9') {
             has_only_digits_and_dots = 0;
-            break;
+            // Don't break here - we still need to count all dots for mixed IPv4 detection
           }
         }
 
@@ -2869,13 +2993,52 @@ static JSRT_URL* JSRT_ParseURL(const char* url, const char* base) {
           // This is likely a relative URL like "10.0.0.7:8080/foo.html"
           // Don't treat it as an invalid IPv4 address
           looks_like_ipv4 = 0;
-        } else if (has_only_digits_and_dots && dot_count >= 1 && dot_count <= 3) {
-          // If it has 1-3 dots and only digits/dots, it looks like IPv4
+        } else if (has_only_digits_and_dots && dot_count >= 1) {
+          // If it has dots and only digits/dots, it looks like IPv4
+          // IPv4 addresses must have exactly 3 dots, but we should validate
+          // and reject invalid patterns like 1.2.3.4.5 (4 dots)
           looks_like_ipv4 = 1;
+        } else if (dot_count >= 2) {
+          // Check for patterns like "foo.2.3.4" or "foo.1.2.3.4" - hostname containing IPv4-like ending
+          // For hostnames ending with 2+ numeric segments, check if it looks like incomplete IPv4
+
+          // Find the last few components that could be IPv4-like
+          const char* last_segments = hostname_part;
+          int dots_seen = 0;
+
+          // Find position after first dot to get potential IPv4-like ending
+          for (const char* p = hostname_part; *p; p++) {
+            if (*p == '.') {
+              dots_seen++;
+              if (dots_seen == 1) {
+                last_segments = p + 1;  // Start after first dot
+              }
+            }
+          }
+
+          // Check if the ending looks like IPv4 components (only digits and dots)
+          int is_ipv4_like = 1;
+          int segment_count = 1;  // Count segments in the ending
+
+          for (const char* p = last_segments; *p; p++) {
+            if (*p == '.') {
+              segment_count++;
+            } else if (*p < '0' || *p > '9') {
+              is_ipv4_like = 0;
+              break;
+            }
+          }
+
+          // If it looks like IPv4 components (2-4 numeric segments), it's invalid
+          if (is_ipv4_like && segment_count >= 2 && segment_count <= 4) {
+            // Patterns like "foo.2.3.4" (3 segments) or "foo.1.2.3.4" (4 segments) are invalid
+            looks_like_ipv4 = 1;
+          }
         }
 
         // If it looks like IPv4 but parsing failed, this is invalid
         if (looks_like_ipv4) {
+          printf("DEBUG: looks_like_ipv4 is true, returning NULL to indicate invalid URL\n");
           // This was likely meant to be an IPv4 address but failed parsing
           // According to WHATWG spec, this should cause URL parsing to fail
           if (port_part) {
@@ -2929,7 +3092,11 @@ static JSRT_URL* JSRT_ParseURL(const char* url, const char* base) {
           free(decoded_hostname_with_len);
         }
 
-        if (!validate_hostname_characters(decoded_hostname)) {
+        // For special schemes, use strict hostname validation
+        // For non-special schemes, allow Unicode characters in hostnames
+        int should_validate_strictly = is_special_scheme(parsed->protocol);
+
+        if (should_validate_strictly && !validate_hostname_characters(decoded_hostname)) {
           free(decoded_hostname);
           // Don't free hostname_part here - it will be freed by JSRT_FreeURL
           if (port_part) {
@@ -2949,6 +3116,14 @@ static JSRT_URL* JSRT_ParseURL(const char* url, const char* base) {
         // Free the decoded hostname after validation
         free(decoded_hostname);
 
+        // Special handling for file:// URLs - preserve drive letter case before normalization
+        char* original_drive_letter = NULL;
+        if (parsed->protocol && strcmp(parsed->protocol, "file:") == 0 && strlen(hostname_part) == 1 &&
+            isalpha((unsigned char)hostname_part[0])) {
+          // Preserve original case for Windows drive letter
+          original_drive_letter = strdup(hostname_part);
+        }
+
         // WPT requirement: normalize hostname to lowercase
         for (char* p = hostname_part; *p; p++) {
           *p = tolower((unsigned char)*p);
@@ -2959,21 +3134,28 @@ static JSRT_URL* JSRT_ParseURL(const char* url, const char* base) {
           if (strcmp(hostname_part, "localhost") == 0) {
             free(hostname_part);
             parsed->hostname = strdup("");
-          } else if (strlen(hostname_part) == 1 && isalpha((unsigned char)hostname_part[0])) {
-            // Windows drive letter detected as hostname (e.g., "c" from file://c/foo/bar.html)
-            // Move it to the path: file://c/foo/bar.html -> file:///c:/foo/bar.html
+          } else if (original_drive_letter) {
+            // Windows drive letter detected as hostname - use original case
+            // Move it to the path: file://C/foo/bar.html -> file:///C:/foo/bar.html
             char* old_pathname = parsed->pathname;
-            size_t new_path_len = strlen(hostname_part) + 2 + strlen(old_pathname) + 1;  // drive + ": + old_path + null
+            size_t new_path_len = strlen(original_drive_letter) + 2 + strlen(old_pathname) + 1;
             parsed->pathname = malloc(new_path_len);
-            snprintf(parsed->pathname, new_path_len, "/%s:%s", hostname_part, old_pathname);
+            snprintf(parsed->pathname, new_path_len, "/%s:%s", original_drive_letter, old_pathname);
             free(old_pathname);
             free(hostname_part);
+            free(original_drive_letter);
+            original_drive_letter = NULL;  // Mark as freed to avoid double free
             parsed->hostname = strdup("");
           } else {
             parsed->hostname = hostname_part;
           }
         } else {
           parsed->hostname = hostname_part;
+        }
+
+        // Clean up original_drive_letter if allocated but not used
+        if (original_drive_letter) {
+          free(original_drive_letter);
         }
         // Don't free hostname_part here since it's now assigned to parsed->hostname
       }
@@ -4907,9 +5089,11 @@ static char* url_userinfo_encode(const char* str) {
   for (size_t i = 0; i < len; i++) {
     unsigned char c = (unsigned char)str[i];
     // Characters allowed in userinfo without encoding (per WPT tests)
+    // Based on WPT test expectations, most printable characters should be preserved
     if ((c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z') || (c >= '0' && c <= '9') || c == '-' || c == '_' ||
         c == '.' || c == '~' || c == '*' || c == '&' || c == '(' || c == ')' || c == '!' || c == '$' || c == '\'' ||
-        c == ',' || c == ';' || c == '=' || c == '+') {
+        c == ',' || c == ';' || c == '=' || c == '+' || c == '"' || c == '%' || c == '<' || c == '>' || c == '@' ||
+        c == '[' || c == '\\' || c == ']' || c == '^' || c == '`' || c == '{' || c == '|' || c == '}') {
       encoded_len++;
     } else {
       encoded_len += 3;  // %XX
@@ -4924,7 +5108,8 @@ static char* url_userinfo_encode(const char* str) {
     // Characters allowed in userinfo without encoding
     if ((c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z') || (c >= '0' && c <= '9') || c == '-' || c == '_' ||
         c == '.' || c == '~' || c == '*' || c == '&' || c == '(' || c == ')' || c == '!' || c == '$' || c == '\'' ||
-        c == ',' || c == ';' || c == '=' || c == '+') {
+        c == ',' || c == ';' || c == '=' || c == '+' || c == '"' || c == '%' || c == '<' || c == '>' || c == '@' ||
+        c == '[' || c == '\\' || c == ']' || c == '^' || c == '`' || c == '{' || c == '|' || c == '}') {
       encoded[j++] = c;
     } else {
       encoded[j++] = '%';

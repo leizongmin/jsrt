@@ -652,10 +652,14 @@ endif()
 
 # build jsrt
 file(GLOB_RECURSE JSRT_STD_FILES "src/std/*.c")
+file(GLOB_RECURSE JSRT_URL_FILES "src/url/*.c")
 file(GLOB_RECURSE JSRT_CRYPTO_FILES "src/crypto/*.c")
 file(GLOB_RECURSE JSRT_UTIL_FILES "src/util/*.c")
 file(GLOB_RECURSE JSRT_HTTP_FILES "src/http/*.c")
 file(GLOB_RECURSE JSRT_WASM_FILES "src/wasm/*.c")
+
+# Remove the old monolithic url.c file
+list(REMOVE_ITEM JSRT_STD_FILES "${CMAKE_SOURCE_DIR}/src/std/url.c")
 
 # For static OpenSSL builds, exclude modules that need runtime loading
 if(JSRT_STATIC_OPENSSL AND OPENSSL_LIBRARIES)
@@ -696,6 +700,7 @@ endif()
 
 set(JSRT_LIB_FILES
     ${JSRT_STD_FILES}
+    ${JSRT_URL_FILES}
     ${JSRT_CRYPTO_FILES}
     ${JSRT_UTIL_FILES}
     ${JSRT_HTTP_FILES}

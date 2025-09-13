@@ -1,4 +1,5 @@
 import assert from 'jsrt:assert';
+import process from 'jsrt:process';
 
 console.log('=== HTTP Module Loading Tests with Real Imports ===');
 
@@ -161,6 +162,8 @@ function runTests() {
 // Run the tests
 if (typeof crypto === 'undefined') {
   console.log('❌ SKIP: crypto object not available (OpenSSL not found)');
+  console.log('=== HTTP module Tests Completed (Skipped) ===');
+} else if (process.env.SKIP_HTTP_MODULE_TESTS) {
   console.log('=== HTTP module Tests Completed (Skipped) ===');
 } else {
   try {

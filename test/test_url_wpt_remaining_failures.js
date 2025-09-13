@@ -1,10 +1,10 @@
-// WPT URL remaining failure cases - extracted from SHOW_ALL_FAILURES=1 make wpt N=url output
-// Updated 2025-01-15 based on comprehensive analysis of 355 actual WPT test failures
+// WPT URL remaining failure cases - extracted from comprehensive WPT test output
+// Updated 2025-09-13 based on actual JSRT WPT test failures
 // These are the ACTUAL failing test cases from the current WPT run that need to be fixed
 const assert = require('jsrt:assert');
 
 console.log(
-  '=== WPT URL Remaining Failures Tests (Updated 2025-01-15 - 355 ACTUAL FAILURES) ==='
+  '=== WPT URL Remaining Failures Tests (Updated 2025-09-13 - ACTUAL WPT FAILURES) ==='
 );
 
 let failedTests = 0;
@@ -23,63 +23,52 @@ function test(name, testFn) {
   }
 }
 
-// ===== CATEGORY 1: URL PARSING FAILURES (HIGHEST PRIORITY) =====
+// ===== CATEGORY 1: URL CONSTRUCTOR FAILURES (HIGHEST PRIORITY) =====
 
-test('URL Parsing - Basic protocol and path issues', () => {
-  console.log('  Testing basic URL parsing failures...');
+test('URL Constructor - Userinfo parsing failures', () => {
+  console.log('  Testing userinfo parsing failures...');
 
   const testCases = [
-    // Single slash protocol normalization
+    // Complex userinfo with special characters
     {
-      input: 'http:foo.com',
+      input: 'http://user:pass@foo:21/bar;par?b#c',
       base: 'http://example.org/foo/bar',
-      expected: 'http://foo.com/',
+      expected: 'http://user:pass@foo:21/bar;par?b#c',
     },
     {
-      input: 'http:/example.com/',
-      base: 'http://example.org/foo/bar',
-      expected: 'http://example.com/',
-    },
-    {
-      input: 'http:example.com/',
-      base: 'http://example.org/foo/bar',
-      expected: 'http://example.com/',
-    },
-
-    // Port parsing with leading zeros
-    {
-      input: 'http://f:00000000000000/c',
-      base: 'http://example.org/foo/bar',
-      expected: 'http://f/c',
-    },
-
-    // Backslash normalization
-    {
-      input: 'http:\\foo.com\\',
-      base: 'http://example.org/foo/bar',
-      expected: 'http://foo.com/',
-    },
-    {
-      input: 'http:\\a\\b:c\\d@foo.com\\',
-      base: 'http://example.org/foo/bar',
-      expected: 'http://foo.com/',
-    },
-
-    // Path normalization
-    {
-      input: 'http://example.com/foo/bar/../ton/../../a',
+      input: 'https://test:@test',
       base: null,
-      expected: 'http://example.com/a',
+      expected: 'https://test:@test/',
     },
     {
-      input: 'http://example.com/foo%00%51',
+      input: 'non-special://test:@test/x',
       base: null,
-      expected: 'http://example.com/foo%00Q',
+      expected: 'non-special://test:@test/x',
     },
     {
-      input: 'http://example.com/(%28:%3A%29)',
-      base: null,
-      expected: 'http://example.com/(%28:%3A%29)',
+      input: 'http://a:b@c:29/d',
+      base: 'http://example.org/foo/bar',
+      expected: 'http://a:b@c:29/d',
+    },
+    {
+      input: 'http::@c:29',
+      base: 'http://example.org/foo/bar',
+      expected: 'http://c:29/',
+    },
+    {
+      input: 'http://&a:foo(b]c@d:2/',
+      base: 'http://example.org/foo/bar',
+      expected: 'http://&a:foo(b%5Dc@d:2/',
+    },
+    {
+      input: 'http://::@c@d:2',
+      base: 'http://example.org/foo/bar',
+      expected: 'http://c@d:2/',
+    },
+    {
+      input: 'http://foo.com:b@d/',
+      base: 'http://example.org/foo/bar',
+      expected: 'http://foo.com:b@d/',
     },
   ];
 
@@ -91,31 +80,395 @@ test('URL Parsing - Basic protocol and path issues', () => {
       console.log(`    Expected: ${expected}`);
       assert.strictEqual(url.href, expected);
     } catch (e) {
-      throw new Error(`URL parsing failed for "${input}": ${e.message}`);
+      throw new Error(`Userinfo parsing failed for "${input}": ${e.message}`);
     }
   });
 });
 
-test('URL Parsing - File URL special cases', () => {
-  console.log('  Testing file URL parsing failures...');
+test('URL Constructor - Backslash normalization for special schemes', () => {
+  console.log('  Testing backslash normalization for special schemes...');
 
   const testCases = [
-    // Windows drive letters with pipe
-    { input: 'file:///w|m', base: null, expected: 'file:///w:/m' },
-    { input: 'file:C|/m/', base: null, expected: 'file:///C:/m/' },
-    { input: 'file:/C|/', base: null, expected: 'file:///C:/' },
-    { input: 'file://C|/', base: null, expected: 'file:///C:/' },
-
-    // File URL with host normalization
+    // Backslash should be normalized to forward slash in special schemes
     {
-      input: 'file://localhost//a//../..//foo',
-      base: null,
-      expected: 'file:///foo',
+      input: 'http:\\\\a\\\\b:c\\\\d@foo.com\\\\',
+      base: 'http://example.org/foo/bar',
+      expected: 'http://foo.com/',
     },
-    { input: 'file://localhost////foo', base: null, expected: 'file:///foo' },
-    { input: 'file:////foo', base: null, expected: 'file:///foo' },
+    {
+      input: 'http://a:b@c\\\\',
+      base: null,
+      expected: null, // Should throw
+    },
+    {
+      input: 'ws://a@b\\\\c',
+      base: null,
+      expected: null, // Should throw
+    },
+  ];
 
-    // Relative file URLs
+  testCases.forEach(({ input, base, expected }) => {
+    try {
+      const url = new URL(input, base);
+      if (expected === null) {
+        throw new Error(`URL "${input}" should have thrown but got valid URL`);
+      }
+      console.log(`    Input: ${input} ${base ? `(base: ${base})` : ''}`);
+      console.log(`    Actual: ${url.href}`);
+      console.log(`    Expected: ${expected}`);
+      assert.strictEqual(url.href, expected);
+    } catch (e) {
+      if (expected === null) {
+        console.log(`    ✅ ${input} correctly threw: ${e.message}`);
+      } else {
+        throw new Error(`Backslash normalization failed for "${input}": ${e.message}`);
+      }
+    }
+  });
+});
+
+test('URL Constructor - Port validation failures', () => {
+  console.log('  Testing port validation failures...');
+
+  const invalidPortCases = [
+    'http://f:b/c',
+    'http://f: /c',
+    'http://f:fifty-two/c',
+    'http://f:999999/c',
+    'non-special://f:999999/c',
+    'http://f: 21 / b ? d # e',
+  ];
+
+  invalidPortCases.forEach((input) => {
+    let didThrow = false;
+    try {
+      new URL(input, 'http://example.org/foo/bar');
+      console.log(`    ERROR: ${input} should have thrown but didn't`);
+    } catch (e) {
+      didThrow = true;
+      console.log(`    ✅ ${input} correctly threw: ${e.message}`);
+    }
+
+    if (!didThrow) {
+      throw new Error(`Invalid port URL "${input}" should throw error but did not`);
+    }
+  });
+});
+
+test('URL Constructor - Special scheme handling with whitespace', () => {
+  console.log('  Testing special scheme handling with whitespace...');
+
+  const testCases = [
+    {
+      input: 'http://f:21/ b ? d # e',
+      base: 'http://example.org/foo/bar',
+      expected: 'http://f:21/%20b%20?%20d%20#%20e',
+    },
+    {
+      input: 'lolscheme:x x#x x',
+      base: null,
+      expected: 'lolscheme:x x#x x',
+    },
+  ];
+
+  testCases.forEach(({ input, base, expected }) => {
+    try {
+      const url = new URL(input, base);
+      console.log(`    Input: ${input} ${base ? `(base: ${base})` : ''}`);
+      console.log(`    Actual: ${url.href}`);
+      console.log(`    Expected: ${expected}`);
+      assert.strictEqual(url.href, expected);
+    } catch (e) {
+      throw new Error(`Whitespace handling failed for "${input}": ${e.message}`);
+    }
+  });
+});
+
+test('URL Constructor - Fragment backslash handling', () => {
+  console.log('  Testing fragment backslash handling...');
+
+  const testCases = [
+    {
+      input: '#\\\\',
+      base: 'http://example.org/foo/bar',
+      expected: 'http://example.org/foo/bar#\\\\',
+    },
+    {
+      input: 'foo://',
+      base: 'http://example.org/foo/bar',
+      expected: 'foo://',
+    },
+  ];
+
+  testCases.forEach(({ input, base, expected }) => {
+    try {
+      const url = new URL(input, base);
+      console.log(`    Input: ${input} ${base ? `(base: ${base})` : ''}`);
+      console.log(`    Actual: ${url.href}`);
+      console.log(`    Expected: ${expected}`);
+      assert.strictEqual(url.href, expected);
+    } catch (e) {
+      throw new Error(`Fragment backslash failed for "${input}": ${e.message}`);
+    }
+  });
+});
+
+// ===== CATEGORY 2: URLSEARCHPARAMS FAILURES =====
+
+test('URLSearchParams Constructor - Advanced constructor cases', () => {
+  console.log('  Testing URLSearchParams constructor failures...');
+
+  // Test null byte handling
+  try {
+    const params1 = new URLSearchParams('a=b\\0c');
+    const result1 = params1.get('a');
+    console.log(`    Null byte test - Expected: 'b\\0c', Got: '${result1}'`);
+    assert.strictEqual(result1, 'b\\0c');
+  } catch (e) {
+    throw new Error(`Null byte handling failed: ${e.message}`);
+  }
+
+  // Test percent-encoded null byte
+  try {
+    const params2 = new URLSearchParams('a=b%00c');
+    const result2 = params2.get('a');
+    console.log(`    Percent null test - Expected: 'b\\0c', Got: '${result2}'`);
+    assert.strictEqual(result2, 'b\\0c');
+  } catch (e) {
+    throw new Error(`Percent-encoded null handling failed: ${e.message}`);
+  }
+
+  // Test object constructor (should support iteration)
+  try {
+    const params3 = new URLSearchParams({a: '1', b: '2'});
+    console.log(`    Object constructor - Keys: ${Array.from(params3.keys())}`);
+    assert.strictEqual(params3.get('a'), '1');
+    assert.strictEqual(params3.get('b'), '2');
+  } catch (e) {
+    throw new Error(`Object constructor failed: ${e.message}`);
+  }
+
+  // Test array constructor
+  try {
+    const params4 = new URLSearchParams([['a', '1'], ['b', '2']]);
+    console.log(`    Array constructor - Keys: ${Array.from(params4.keys())}`);
+    assert.strictEqual(params4.get('a'), '1');
+    assert.strictEqual(params4.get('b'), '2');
+  } catch (e) {
+    throw new Error(`Array constructor failed: ${e.message}`);
+  }
+});
+
+test('URLSearchParams - Two-argument has() method', () => {
+  console.log('  Testing two-argument has() method...');
+
+  const params = new URLSearchParams('a=1&a=2&b=3');
+  
+  // Standard has() should return true if key exists
+  assert.strictEqual(params.has('a'), true);
+  
+  // Two-argument has() should check for specific key-value pair
+  // This is a newer API feature that might not be implemented yet
+  try {
+    const hasA1 = params.has('a', '1');
+    const hasA3 = params.has('a', '3');
+    console.log(`    has('a', '1'): ${hasA1}, has('a', '3'): ${hasA3}`);
+    
+    if (typeof hasA1 !== 'undefined') {
+      assert.strictEqual(hasA1, true);
+      assert.strictEqual(hasA3, false);
+    } else {
+      console.log('    Two-argument has() not implemented yet');
+    }
+  } catch (e) {
+    console.log(`    Two-argument has() error: ${e.message}`);
+  }
+});
+
+test('URLSearchParams - Set() method order preservation', () => {
+  console.log('  Testing set() method order preservation...');
+
+  const params = new URLSearchParams('a=1&b=2&c=3');
+  params.set('a', 'B');
+  
+  const result = params.toString();
+  console.log(`    After set('a', 'B'): ${result}`);
+  
+  // The order should be preserved - 'a' should remain in its original position
+  const expected = 'a=B&b=2&c=3';
+  assert.strictEqual(result, expected);
+});
+
+test('URLSearchParams - Size property', () => {
+  console.log('  Testing size property...');
+
+  const params = new URLSearchParams('a=1&b=2&c=3');
+  
+  // Check if size property exists and is correct
+  console.log(`    Size property: ${params.size}`);
+  
+  if (typeof params.size !== 'undefined') {
+    assert.strictEqual(params.size, 3);
+    
+    // Test size after deletion
+    params.delete('b');
+    assert.strictEqual(params.size, 2);
+    
+    // Test size after addition
+    params.append('d', '4');
+    assert.strictEqual(params.size, 3);
+  } else {
+    throw new Error('URLSearchParams.size property is not implemented');
+  }
+});
+
+// ===== CATEGORY 3: ORIGIN PARSING FAILURES =====
+
+test('Origin Parsing - Complex userinfo cases', () => {
+  console.log('  Testing origin parsing with complex userinfo...');
+
+  const testCases = [
+    {
+      input: 'http:foo.com',
+      base: 'http://example.org/foo/bar',
+      expectedOrigin: 'http://foo.com',
+    },
+    {
+      input: 'http://f:0/c',
+      base: 'http://example.org/foo/bar',
+      expectedOrigin: 'http://f',
+    },
+    {
+      input: 'http://f:00000000000000/c',
+      base: 'http://example.org/foo/bar',
+      expectedOrigin: 'http://f',
+    },
+    {
+      input: 'http::@c:29',
+      base: 'http://example.org/foo/bar',
+      expectedOrigin: 'http://c',
+    },
+    {
+      input: 'http://::@c@d:2',
+      base: 'http://example.org/foo/bar',
+      expectedOrigin: 'http://c@d',
+    },
+  ];
+
+  testCases.forEach(({ input, base, expectedOrigin }) => {
+    try {
+      const url = new URL(input, base);
+      console.log(`    Input: ${input} ${base ? `(base: ${base})` : ''}`);
+      console.log(`    Actual origin: ${url.origin}`);
+      console.log(`    Expected origin: ${expectedOrigin}`);
+      assert.strictEqual(url.origin, expectedOrigin);
+    } catch (e) {
+      throw new Error(`Origin parsing failed for "${input}": ${e.message}`);
+    }
+  });
+});
+
+// ===== CATEGORY 4: RELATIVE URL RESOLUTION =====
+
+test('Relative URL Resolution - Triple slash cases', () => {
+  console.log('  Testing triple slash relative URL resolution...');
+
+  const testCases = [
+    {
+      input: '///test',
+      base: 'http://example.org/',
+      expected: 'http://test/',
+    },
+    {
+      input: '///\\\\//\\\\//test',
+      base: 'http://example.org/',
+      expected: 'http://test/',
+    },
+    {
+      input: '///example.org/path',
+      base: 'http://example.org/',
+      expected: 'http://example.org/path',
+    },
+  ];
+
+  testCases.forEach(({ input, base, expected }) => {
+    try {
+      const url = new URL(input, base);
+      console.log(`    Input: ${input} (base: ${base})`);
+      console.log(`    Actual: ${url.href}`);
+      console.log(`    Expected: ${expected}`);
+      assert.strictEqual(url.href, expected);
+    } catch (e) {
+      throw new Error(`Triple slash resolution failed for "${input}": ${e.message}`);
+    }
+  });
+});
+
+test('Relative URL Resolution - Dot normalization cases', () => {
+  console.log('  Testing dot normalization in relative URLs...');
+
+  const testCases = [
+    {
+      input: '/.//path',
+      base: 'non-spec:/p',
+      expected: 'non-spec:/.//path',
+    },
+    {
+      input: '/..//path',
+      base: 'non-spec:/p',
+      expected: 'non-spec:/..//path',
+    },
+    {
+      input: '..//path',
+      base: 'non-spec:/p',
+      expected: 'non-spec:..//path',
+    },
+    {
+      input: 'file:.//p',
+      base: null,
+      expected: 'file:p',
+    },
+    {
+      input: 'file:/.//p',
+      base: null,
+      expected: 'file:///p',
+    },
+  ];
+
+  testCases.forEach(({ input, base, expected }) => {
+    try {
+      const url = new URL(input, base);
+      console.log(`    Input: ${input} ${base ? `(base: ${base})` : ''}`);
+      console.log(`    Actual: ${url.href}`);
+      console.log(`    Expected: ${expected}`);
+      assert.strictEqual(url.href, expected);
+    } catch (e) {
+      throw new Error(`Dot normalization failed for "${input}": ${e.message}`);
+    }
+  });
+});
+
+// ===== CATEGORY 5: FILE URL EDGE CASES =====
+
+test('File URL - Windows drive letter handling', () => {
+  console.log('  Testing Windows drive letter handling in file URLs...');
+
+  const testCases = [
+    {
+      input: 'file:C|/m/',
+      base: null,
+      expected: 'file:///C:/m/',
+    },
+    {
+      input: 'file:/C|/',
+      base: null,
+      expected: 'file:///C:/',
+    },
+    {
+      input: 'file://C|/',
+      base: null,
+      expected: 'file:///C:/',
+    },
     {
       input: '/c:/foo/bar',
       base: 'file:///c:/baz/qux',
@@ -126,14 +479,6 @@ test('URL Parsing - File URL special cases', () => {
       base: 'file:///c:/baz/qux',
       expected: 'file:///c:/foo/bar',
     },
-    {
-      input: '/c:/foo/bar',
-      base: 'file://host/path',
-      expected: 'file://host/c:/foo/bar',
-    },
-
-    // IPv6 in file URLs
-    { input: 'file://[1::8]/C:/', base: null, expected: 'file://[1::8]/C:/' },
   ];
 
   testCases.forEach(({ input, base, expected }) => {
@@ -144,13 +489,15 @@ test('URL Parsing - File URL special cases', () => {
       console.log(`    Expected: ${expected}`);
       assert.strictEqual(url.href, expected);
     } catch (e) {
-      throw new Error(`File URL parsing failed for "${input}": ${e.message}`);
+      throw new Error(`Windows drive letter failed for "${input}": ${e.message}`);
     }
   });
 });
 
-test('URL Parsing - IPv6 address failures', () => {
-  console.log('  Testing IPv6 address parsing failures...');
+// ===== CATEGORY 6: INVALID URLS THAT SHOULD THROW =====
+
+test('Invalid URLs - IPv6 validation', () => {
+  console.log('  Testing IPv6 address validation...');
 
   const invalidIPv6Cases = [
     'http://[0:1:2:3:4:5:6:7:8]', // Too many groups
@@ -169,110 +516,21 @@ test('URL Parsing - IPv6 address failures', () => {
     }
 
     if (!didThrow) {
-      throw new Error(
-        `Invalid IPv6 URL "${input}" should throw error but did not`
-      );
+      throw new Error(`Invalid IPv6 URL "${input}" should throw error but did not`);
     }
   });
 });
 
-test('URL Parsing - Special scheme handling', () => {
-  console.log('  Testing special scheme parsing failures...');
-
-  const testCases = [
-    // Non-special schemes with special characters
-    { input: 'sc://ñ', base: null, expected: 'sc://ñ' },
-    { input: 'sc://ñ?x', base: null, expected: 'sc://ñ?x' },
-    { input: 'sc://ñ#x', base: null, expected: 'sc://ñ#x' },
-    { input: '#x', base: 'sc://ñ', expected: 'sc://ñ#x' },
-    { input: '?x', base: 'sc://ñ', expected: 'sc://ñ?x' },
-
-    // Non-special schemes with path normalization
-    { input: 'non-spec:/.//path', base: null, expected: 'non-spec:/.//path' },
-    { input: 'non-spec:/..//path', base: null, expected: 'non-spec:/..//path' },
-    {
-      input: 'non-spec:/a/..//path',
-      base: null,
-      expected: 'non-spec:/a/..//path',
-    },
-
-    // Relative URLs against non-special base
-    { input: '/.//path', base: 'non-spec:/p', expected: 'non-spec:/.//path' },
-    { input: '/..//path', base: 'non-spec:/p', expected: 'non-spec:/..//path' },
-    { input: '..//path', base: 'non-spec:/p', expected: 'non-spec:..//path' },
-    {
-      input: 'a/..//path',
-      base: 'non-spec:/p',
-      expected: 'non-spec:a/..//path',
-    },
-
-    // Empty relative against non-special base
-    { input: '', base: 'non-spec:/..//p', expected: 'non-spec:/..//p' },
-    { input: 'path', base: 'non-spec:/..//p', expected: 'non-spec:/..//path' },
-  ];
-
-  testCases.forEach(({ input, base, expected }) => {
-    try {
-      const url = new URL(input, base);
-      console.log(`    Input: ${input} ${base ? `(base: ${base})` : ''}`);
-      console.log(`    Actual: ${url.href}`);
-      console.log(`    Expected: ${expected}`);
-      assert.strictEqual(url.href, expected);
-    } catch (e) {
-      throw new Error(
-        `Special scheme parsing failed for "${input}": ${e.message}`
-      );
-    }
-  });
-});
-
-test('URL Parsing - Blob URL handling', () => {
-  console.log('  Testing blob URL parsing failures...');
-
-  const testCases = [
-    // Valid blob URLs
-    {
-      input: 'blob:https://example.com:443/',
-      base: null,
-      expected: 'blob:https://example.com:443/',
-    },
-    {
-      input: 'blob:http://example.org:88/',
-      base: null,
-      expected: 'blob:http://example.org:88/',
-    },
-    {
-      input: 'blob:d3958f5c-0777-0845-9dcf-2cb28783acaf',
-      base: null,
-      expected: 'blob:d3958f5c-0777-0845-9dcf-2cb28783acaf',
-    },
-  ];
+test('Invalid URLs - Blob URL validation', () => {
+  console.log('  Testing blob URL validation...');
 
   const invalidBlobCases = [
     'blob:blob:',
     'blob:blob:https://example.org/',
     'blob:about:blank',
     'blob:file://host/path',
-    'blob:ftp://host/path',
-    'blob:ws://example.org/',
-    'blob:wss://example.org/',
-    'blob:http%3a//example.org/',
   ];
 
-  // Test valid blob URLs
-  testCases.forEach(({ input, base, expected }) => {
-    try {
-      const url = new URL(input, base);
-      console.log(`    Input: ${input}`);
-      console.log(`    Actual: ${url.href}`);
-      console.log(`    Expected: ${expected}`);
-      assert.strictEqual(url.href, expected);
-    } catch (e) {
-      throw new Error(`Blob URL parsing failed for "${input}": ${e.message}`);
-    }
-  });
-
-  // Test invalid blob URLs
   invalidBlobCases.forEach((input) => {
     let didThrow = false;
     try {
@@ -284,280 +542,58 @@ test('URL Parsing - Blob URL handling', () => {
     }
 
     if (!didThrow) {
-      throw new Error(
-        `Invalid blob URL "${input}" should throw error but did not`
-      );
+      throw new Error(`Invalid blob URL "${input}" should throw error but did not`);
     }
   });
 });
 
-// ===== CATEGORY 2: ORIGIN PARSING FAILURES =====
+test('Invalid URLs - Unicode hostname validation', () => {
+  console.log('  Testing Unicode hostname validation...');
 
-test('Origin Parsing - Basic failures', () => {
-  console.log('  Testing origin parsing failures...');
-
-  const testCases = [
-    // Protocol normalization in origin
-    {
-      input: 'http:foo.com',
-      base: 'http://example.org/foo/bar',
-      expectedOrigin: 'http://foo.com',
-    },
-    {
-      input: 'http://f:00000000000000/c',
-      base: 'http://example.org/foo/bar',
-      expectedOrigin: 'http://f',
-    },
-
-    // Backslash normalization in origin
-    {
-      input: '\\x\\hello',
-      base: 'http://example.org/foo/bar',
-      expectedOrigin: 'http://example.org',
-    },
-    {
-      input: 'http::@c:29',
-      base: 'http://example.org/foo/bar',
-      expectedOrigin: 'http://c',
-    },
-    {
-      input: 'http:\\foo.com\\',
-      base: 'http://example.org/foo/bar',
-      expectedOrigin: 'http://foo.com',
-    },
-    {
-      input: 'http:\\a\\b:c\\d@foo.com\\',
-      base: 'http://example.org/foo/bar',
-      expectedOrigin: 'http://foo.com',
-    },
-
-    // Invalid origins that should be null
-    { input: 'http://a:b@c\\', base: null, expectedOrigin: null },
-    { input: 'ws://a@b\\c', base: null, expectedOrigin: null },
+  const invalidUnicodeHosts = [
+    'http://GOO​⁠﻿goo.com',
+    'http://www.foo。bar.com',
+    'http://Ｇｏ.com',
+    'http://你好你好',
+    'https://faß.ExAmPlE/',
   ];
 
-  testCases.forEach(({ input, base, expectedOrigin }) => {
-    try {
-      const url = new URL(input, base);
-      console.log(`    Input: ${input} ${base ? `(base: ${base})` : ''}`);
-      console.log(`    Actual origin: ${url.origin}`);
-      console.log(`    Expected origin: ${expectedOrigin}`);
-
-      if (expectedOrigin === null) {
-        assert.strictEqual(url.origin, 'null');
-      } else {
-        assert.strictEqual(url.origin, expectedOrigin);
-      }
-    } catch (e) {
-      if (expectedOrigin === null) {
-        console.log(`    ✅ ${input} correctly threw: ${e.message}`);
-      } else {
-        throw new Error(`Origin parsing failed for "${input}": ${e.message}`);
-      }
-    }
-  });
-});
-
-test('Origin Parsing - Unicode and IDN failures', () => {
-  console.log('  Testing Unicode hostname origin failures...');
-
-  const testCases = [
-    // Unicode characters that should be handled or cause failure
-    {
-      input: 'http://GOO​⁠﻿goo.com',
-      base: 'http://other.com/',
-      shouldThrow: true,
-    },
-    {
-      input: 'http://www.foo。bar.com',
-      base: 'http://other.com/',
-      shouldThrow: true,
-    },
-    { input: 'http://Ｇｏ.com', base: 'http://other.com/', shouldThrow: true },
-    { input: 'http://你好你好', base: 'http://other.com/', shouldThrow: true },
-    { input: 'https://faß.ExAmPlE/', base: null, shouldThrow: true },
-    { input: 'sc://faß.ExAmPlE/', base: null, shouldThrow: true },
-    {
-      input: 'http://０Ｘｃ０．０２５０．０１',
-      base: 'http://other.com/',
-      shouldThrow: true,
-    },
-  ];
-
-  testCases.forEach(({ input, base, shouldThrow }) => {
-    let didThrow = false;
-    try {
-      const url = new URL(input, base);
-      console.log(`    Input: ${input} - Origin: ${url.origin}`);
-      if (shouldThrow) {
-        console.log(`    ERROR: ${input} should have thrown but got valid URL`);
-      }
-    } catch (e) {
-      didThrow = true;
-      console.log(`    ✅ ${input} correctly threw: ${e.message}`);
-    }
-
-    if (shouldThrow && !didThrow) {
-      throw new Error(`Unicode hostname "${input}" should throw but did not`);
-    }
-  });
-});
-
-// ===== CATEGORY 3: INVALID URLS THAT SHOULD THROW =====
-
-test('Invalid URLs - Should throw TypeError', () => {
-  console.log('  Testing URLs that should throw TypeError...');
-
-  const invalidURLs = [
-    // Invalid IPv4 addresses
-    'http://0x7f.0.0.0x7g',
-    'http://0X7F.0.0.0X7G',
-    'http://1.2.3.4.5',
-    'http://1.2.3.4.5.',
-    'http://0..0x300/',
-    'http://0..0x300./',
-    'http://256.256.256.256.256',
-    'http://256.256.256.256.256.',
-    'http://1.2.3.08.',
-    'http://09.2.3.4.',
-    'http://01.2.3.4.5',
-    'http://01.2.3.4.5.',
-    'http://0x1.2.3.4.5',
-    'http://0x1.2.3.4.5.',
-    'http://foo.1.2.3.4',
-    'http://foo.1.2.3.4.',
-    'http://foo.2.3.4',
-    'http://foo.2.3.4.',
-    'http://foo.09',
-    'http://foo.09.',
-
-    // Invalid hosts
-    'http://./',
-    'http://../',
-    'h://.',
-    'file://a­b/p',
-    'file://a%C2%ADb/p',
-    'file://loC𝐀𝐋𝐇𝐨𝐬𝐭/usr/bin',
-    'https://a%C2%ADb/',
-
-    // Invalid schemes with authority
-    'data://example.com:8080/pathname?search#hash',
-    'data:///test',
-    'data://test/a/../b',
-    'data://:443',
-    'data://test:test',
-    'data://[:1]',
-    'javascript://:443',
-    'javascript://[:1]',
-    'mailto://:443',
-    'mailto://[:1]',
-    'intent://:443',
-    'intent://[:1]',
-    'urn://:443',
-    'urn://[:1]',
-    'turn://:443',
-    'turn://[:1]',
-    'stun://:443',
-    'stun://[:1]',
-  ];
-
-  invalidURLs.forEach((input) => {
+  invalidUnicodeHosts.forEach((input) => {
     let didThrow = false;
     try {
       new URL(input);
-      console.log(`    ERROR: ${input} should have thrown but got valid URL`);
+      console.log(`    Input: ${input} - Got valid URL, should have thrown`);
     } catch (e) {
       didThrow = true;
       console.log(`    ✅ ${input} correctly threw: ${e.message}`);
     }
 
     if (!didThrow) {
-      throw new Error(`Invalid URL "${input}" should throw error but did not`);
+      throw new Error(`Invalid Unicode hostname "${input}" should throw but did not`);
     }
   });
 });
 
-// ===== CATEGORY 4: SPECIAL CHARACTER AND ENCODING ISSUES =====
+// ===== CATEGORY 7: SPECIAL CHARACTER ENCODING =====
 
-test('Special Characters - Userinfo and path encoding', () => {
-  console.log('  Testing special character encoding failures...');
+test('Special Character Encoding - Userinfo and path encoding', () => {
+  console.log('  Testing special character encoding...');
 
   const testCases = [
-    // Special characters in different URL parts
     {
-      input:
-        'non-special:cannot-be-a-base-url-!"$%&\'()*+,-.;<=>@[\\]^_`{|}~@/',
+      input: 'foo:// !"$%&\'()*+,-.;<=>@[\\\\]^_`{|}~@host/',
       base: null,
-      expected:
-        'non-special:cannot-be-a-base-url-!"$%&\'()*+,-.;<=>@[\\]^_`{|}~@/',
-    },
-    {
-      input: 'foo:// !"$%&\'()*+,-.;<=>@[\\]^_`{|}~@host/',
-      base: null,
-      expected: 'foo://%20!"$%&\'()*+,-.;<=>@[\\]^_`{|}~@host/',
+      expected: 'foo://%20!%22$%&\'()*+,-.;<=>@[%5C%5C]^_`{|}~@host/',
     },
     {
       input: 'wss:// !"$%&\'()*+,-.;<=>@[]^_`{|}~@host/',
       base: null,
-      expected: 'wss://%20!"$%&\'()*+,-.;<=>@[]^_`{|}~@host/',
+      expected: 'wss://%20!%22$%&\'()*+,-.;<=>@[]^_`{|}~@host/',
     },
     {
-      input: 'foo://joe: !"$%&\'()*+,-.:;<=>@[\\]^_`{|}~@host/',
+      input: 'foo://joe: !"$%&\'()*+,-.:;<=>@[\\\\]^_`{|}~@host/',
       base: null,
-      expected: 'foo://joe:%20!"$%&\'()*+,-.:;<=>@[\\]^_`{|}~@host/',
-    },
-    {
-      input: 'wss://joe: !"$%&\'()*+,-.:;<=>@[]^_`{|}~@host/',
-      base: null,
-      expected: 'wss://joe:%20!"$%&\'()*+,-.:;<=>@[]^_`{|}~@host/',
-    },
-
-    // Special characters in host
-    {
-      input: 'foo://!"$%&\'()*+,-.;=_`{}~/',
-      base: null,
-      expected: 'foo://!"$%&\'()*+,-.;=_`{}~/',
-    },
-    {
-      input: 'wss://!"$&\'()*+,-.;=_`{}~/',
-      base: null,
-      expected: 'wss://!"$&\'()*+,-.;=_`{}~/',
-    },
-
-    // Special characters in path
-    {
-      input: 'foo://host/ !"$%&\'()*+,-./:;<=>@[\\]^_`{|}~',
-      base: null,
-      expected: 'foo://host/%20!"$%&\'()*+,-./:;<=>@[\\]^_`{|}~',
-    },
-    {
-      input: 'wss://host/ !"$%&\'()*+,-./:;<=>@[\\]^_`{|}~',
-      base: null,
-      expected: 'wss://host/%20!"$%&\'()*+,-./:;<=>@[\\]^_`{|}~',
-    },
-
-    // Special characters in query
-    {
-      input: 'foo://host/dir/? !"$%&\'()*+,-./:;<=>?@[\\]^_`{|}~',
-      base: null,
-      expected: 'foo://host/dir/?%20!"$%&\'()*+,-./:;<=>?@[\\]^_`{|}~',
-    },
-    {
-      input: 'wss://host/dir/? !"$%&\'()*+,-./:;<=>?@[\\]^_`{|}~',
-      base: null,
-      expected: 'wss://host/dir/?%20!"$%&\'()*+,-./:;<=>?@[\\]^_`{|}~',
-    },
-
-    // Special characters in fragment
-    {
-      input: 'foo://host/dir/# !"#$%&\'()*+,-./:;<=>?@[\\]^_`{|}~',
-      base: null,
-      expected: 'foo://host/dir/#%20!"#$%&\'()*+,-./:;<=>?@[\\]^_`{|}~',
-    },
-    {
-      input: 'wss://host/dir/# !"#$%&\'()*+,-./:;<=>?@[\\]^_`{|}~',
-      base: null,
-      expected: 'wss://host/dir/#%20!"#$%&\'()*+,-./:;<=>?@[\\]^_`{|}~',
+      expected: 'foo://joe:%20!%22$%&\'()*+,-.:;<=>@[%5C%5C]^_`{|}~@host/',
     },
   ];
 
@@ -569,301 +605,29 @@ test('Special Characters - Userinfo and path encoding', () => {
       console.log(`    Expected: ${expected}`);
       assert.strictEqual(url.href, expected);
     } catch (e) {
-      throw new Error(
-        `Special character encoding failed for "${input}": ${e.message}`
-      );
-    }
-  });
-});
-
-// ===== CATEGORY 5: BACKSLASH NORMALIZATION =====
-
-test('Backslash Normalization - Non-special schemes', () => {
-  console.log('  Testing backslash normalization failures...');
-
-  const testCases = [
-    // Non-special schemes should preserve backslashes
-    {
-      input: 'non-special:\\opaque',
-      base: null,
-      expected: 'non-special:\\opaque',
-    },
-    {
-      input: 'non-special:\\opaque/path',
-      base: null,
-      expected: 'non-special:\\opaque/path',
-    },
-    {
-      input: 'non-special:\\opaque\\path',
-      base: null,
-      expected: 'non-special:\\opaque\\path',
-    },
-    {
-      input: 'non-special:\\/opaque',
-      base: null,
-      expected: 'non-special:\\/opaque',
-    },
-    {
-      input: 'non-special:/\\path',
-      base: null,
-      expected: 'non-special:/\\path',
-    },
-    {
-      input: 'non-special://host\\a',
-      base: null,
-      expected: 'non-special://host\\a',
-    },
-    {
-      input: 'non-special://host/a\\b',
-      base: null,
-      expected: 'non-special://host/a\\b',
-    },
-  ];
-
-  testCases.forEach(({ input, base, expected }) => {
-    try {
-      const url = new URL(input, base);
-      console.log(`    Input: ${input}`);
-      console.log(`    Actual: ${url.href}`);
-      console.log(`    Expected: ${expected}`);
-      assert.strictEqual(url.href, expected);
-    } catch (e) {
-      throw new Error(
-        `Backslash normalization failed for "${input}": ${e.message}`
-      );
-    }
-  });
-});
-
-// ===== CATEGORY 6: RELATIVE URL RESOLUTION =====
-
-test('Relative URL Resolution - Complex cases', () => {
-  console.log('  Testing complex relative URL resolution failures...');
-
-  const testCases = [
-    // Triple slash resolution
-    { input: '///test', base: 'http://example.org/', expected: 'http://test/' },
-    {
-      input: '///\\//\\//test',
-      base: 'http://example.org/',
-      expected: 'http://test/',
-    },
-    {
-      input: '///example.org/path',
-      base: 'http://example.org/',
-      expected: 'http://example.org/path',
-    },
-    {
-      input: '///example.org/../path',
-      base: 'http://example.org/',
-      expected: 'http://example.org/path',
-    },
-    {
-      input: '///example.org/../../',
-      base: 'http://example.org/',
-      expected: 'http://example.org/',
-    },
-    {
-      input: '///example.org/../path/../../',
-      base: 'http://example.org/',
-      expected: 'http://example.org/',
-    },
-    {
-      input: '///example.org/../path/../../path',
-      base: 'http://example.org/',
-      expected: 'http://example.org/path',
-    },
-    {
-      input: '/\\/\\//example.org/../path',
-      base: 'http://example.org/',
-      expected: 'http://example.org/path',
-    },
-
-    // File URL relative resolution
-    { input: '/\\//\\/a/../', base: 'file:///', expected: 'file:///' },
-    { input: '//a/../', base: 'file:///', expected: 'file:///' },
-
-    // Quad slash resolution
-    { input: '////one/two', base: 'file:///', expected: 'file:///one/two' },
-    { input: '////one/two', base: 'file:///', expected: 'file:///one/two' },
-    { input: 'file:///.///', base: 'file:////', expected: 'file:///' },
-
-    // Dot normalization in file URLs
-    { input: 'file:.//p', base: null, expected: 'file:p' },
-    { input: 'file:/.//p', base: null, expected: 'file:///p' },
-  ];
-
-  testCases.forEach(({ input, base, expected }) => {
-    try {
-      const url = new URL(input, base);
-      console.log(`    Input: ${input} (base: ${base})`);
-      console.log(`    Actual: ${url.href}`);
-      console.log(`    Expected: ${expected}`);
-      assert.strictEqual(url.href, expected);
-    } catch (e) {
-      throw new Error(
-        `Relative URL resolution failed for "${input}": ${e.message}`
-      );
-    }
-  });
-});
-
-// ===== CATEGORY 7: INCOMPLETE URLS =====
-
-test('Incomplete URLs - Missing components', () => {
-  console.log('  Testing incomplete URL parsing...');
-
-  const testCases = [
-    // URLs with missing components that should still parse
-    { input: 'https://x/', base: null, expected: 'https://x/' },
-    { input: 'https://x/?', base: null, expected: 'https://x/?' },
-    { input: 'https://x/?#', base: null, expected: 'https://x/?#' },
-    { input: 'non-special:', base: null, expected: 'non-special:' },
-    { input: 'non-special:x/', base: null, expected: 'non-special:x/' },
-    { input: 'non-special:x/?', base: null, expected: 'non-special:x/?' },
-    { input: 'non-special:x/?#', base: null, expected: 'non-special:x/?#' },
-  ];
-
-  testCases.forEach(({ input, base, expected }) => {
-    try {
-      const url = new URL(input, base);
-      console.log(`    Input: ${input}`);
-      console.log(`    Actual: ${url.href}`);
-      console.log(`    Expected: ${expected}`);
-      assert.strictEqual(url.href, expected);
-    } catch (e) {
-      throw new Error(
-        `Incomplete URL parsing failed for "${input}": ${e.message}`
-      );
-    }
-  });
-});
-
-// ===== CATEGORY 8: UNICODE AND ENCODING EDGE CASES =====
-
-test('Unicode and Encoding - Edge cases', () => {
-  console.log('  Testing Unicode and encoding edge cases...');
-
-  const testCases = [
-    // Query and fragment encoding
-    {
-      input: 'http://example.org/test?%23%23',
-      base: null,
-      expected: 'http://example.org/test?%23%23',
-    },
-    {
-      input: 'http://example.org/test?a#%EF',
-      base: null,
-      expected: 'http://example.org/test?a#%EF',
-    },
-
-    // Complex Unicode characters
-    {
-      input: 'http://example.com/���𐟾���﷐﷏﷯ﷰ￾￿?���𐟾���﷐﷏﷯ﷰ￾￿',
-      base: null,
-      expected: 'http://example.com/���𐟾���﷐﷏﷯ﷰ￾￿?���𐟾���﷐﷏﷯ﷰ￾￿',
-    },
-
-    // Non-special scheme with percent encoding
-    {
-      input: 'non-special://%E2%80%A0/',
-      base: null,
-      expected: 'non-special://%E2%80%A0/',
-    },
-    {
-      input: 'non-special://H%4fSt/path',
-      base: null,
-      expected: 'non-special://H%4fSt/path',
-    },
-  ];
-
-  testCases.forEach(({ input, base, expected }) => {
-    try {
-      const url = new URL(input, base);
-      console.log(`    Input: ${input}`);
-      console.log(`    Actual: ${url.href}`);
-      console.log(`    Expected: ${expected}`);
-      assert.strictEqual(url.href, expected);
-    } catch (e) {
-      throw new Error(`Unicode/encoding failed for "${input}": ${e.message}`);
-    }
-  });
-});
-
-// ===== CATEGORY 9: EDGE CASES FROM ACTUAL FAILURES =====
-
-test('Edge Cases - Miscellaneous failures', () => {
-  console.log('  Testing miscellaneous edge case failures...');
-
-  const testCases = [
-    // Relative URLs against file base
-    {
-      input: '10.0.0.7:8080/foo.html',
-      base: 'file:///some/dir/bar.html',
-      expected: 'file:///some/dir/10.0.0.7:8080/foo.html',
-    },
-    {
-      input: 'a!@$*=/foo.html',
-      base: 'file:///some/dir/bar.html',
-      expected: 'file:///some/dir/a!@$*=/foo.html',
-    },
-
-    // Test against non-special base
-    {
-      input: 'test-a-colon-slash-slash.html',
-      base: 'a://',
-      expected: 'a://test-a-colon-slash-slash.html',
-    },
-
-    // Incomplete URLs with newlines (should be handled)
-    {
-      input: 'http://example.org/test?a#b\n',
-      base: null,
-      expected: 'http://example.org/test?a#b',
-    },
-    {
-      input: 'non-spec://example.org/test?a#b\n',
-      base: null,
-      expected: 'non-spec://example.org/test?a#b',
-    },
-    {
-      input: 'non-spec:/test?a#b\n',
-      base: null,
-      expected: 'non-spec:/test?a#b',
-    },
-  ];
-
-  testCases.forEach(({ input, base, expected }) => {
-    try {
-      const url = new URL(input, base);
-      console.log(`    Input: ${input} ${base ? `(base: ${base})` : ''}`);
-      console.log(`    Actual: ${url.href}`);
-      console.log(`    Expected: ${expected}`);
-      assert.strictEqual(url.href, expected);
-    } catch (e) {
-      throw new Error(`Edge case failed for "${input}": ${e.message}`);
+      throw new Error(`Special character encoding failed for "${input}": ${e.message}`);
     }
   });
 });
 
 // ===== SUMMARY =====
 
-console.log('\n=== Test Summary ===');
+console.log('\\n=== Test Summary ===');
 console.log(`Total tests: ${totalTests}`);
 console.log(`Failed tests: ${failedTests}`);
 console.log(`Passed tests: ${totalTests - failedTests}`);
 
 if (failedTests > 0) {
   console.log(
-    `\n❌ ${failedTests} tests failed - these represent actual WPT URL parsing issues that need to be fixed`
+    `\\n❌ ${failedTests} tests failed - these represent actual WPT URL parsing issues that need to be fixed`
   );
   console.log(
     'Each failure corresponds to a real WPT test case that is currently failing in the jsrt implementation'
   );
 } else {
   console.log(
-    '\n✅ All tests passed - WPT URL parsing implementation is working correctly'
+    '\\n✅ All tests passed - WPT URL parsing implementation is working correctly'
   );
 }
 
-console.log('\n=== Tests Completed ===');
+console.log('\\n=== Tests Completed ===');

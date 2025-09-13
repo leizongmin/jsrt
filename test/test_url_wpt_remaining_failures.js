@@ -1,10 +1,25 @@
-// WPT URL remaining failure cases - extracted from comprehensive WPT test output
-// Updated 2025-09-13 based on actual JSRT WPT test failures
-// These are the ACTUAL failing test cases from the current WPT run that need to be fixed
+// WPT URL remaining failure cases - extracted from actual WPT test failures
+// Updated 2025-09-13 based on ACTUAL JSRT WPT test failures
+// These test cases SHOULD FAIL when run, representing current WPT compatibility issues
+// Each failing test case corresponds to a real WPT test that jsrt is currently failing
+// IMPORTANT: These tests are designed to FAIL - they test WPT-expected behavior vs current jsrt behavior
+//
+// Based on latest WPT run showing 5 failing test files out of 10:
+// - url/url-constructor.any.js (8 specific failures)
+// - url/url-origin.any.js (6 specific failures)
+// - url/urlsearchparams-constructor.any.js (10 specific failures)
+// - url/urlsearchparams-has.any.js (2 specific failures)
+// - url/urlsearchparams-stringifier.any.js (unknown count)
 const assert = require('jsrt:assert');
 
 console.log(
-  '=== WPT URL Remaining Failures Tests (Updated 2025-09-13 - ACTUAL WPT FAILURES) ==='
+  '=== WPT URL Remaining Failures Tests - THESE SHOULD FAIL (Updated 2025-09-13) ==='
+);
+console.log(
+  'These tests represent actual WPT failures - they test expected WPT behavior vs current jsrt implementation'
+);
+console.log(
+  'Each failure shows a compatibility issue that needs to be fixed in the jsrt URL implementation\n'
 );
 
 let failedTests = 0;
@@ -29,26 +44,27 @@ test('URL Constructor - Userinfo parsing failures', () => {
   console.log('  Testing userinfo parsing failures...');
 
   const testCases = [
-    // Complex userinfo with special characters
-    {
-      input: 'http://user:pass@foo:21/bar;par?b#c',
-      base: 'http://example.org/foo/bar',
-      expected: 'http://user:pass@foo:21/bar;par?b#c',
-    },
+    // ACTUAL WPT FAILURE: "Parsing: <https://test:@test> without base: href"
+    // WPT expects: https://test@test/ (empty password should be omitted from href)
+    // Current jsrt likely produces: https://test:@test/ (keeps the empty password colon)
     {
       input: 'https://test:@test',
       base: null,
-      expected: 'https://test:@test/',
+      expected: 'https://test@test/', // WPT expectation - no colon for empty password
     },
+    // ACTUAL WPT FAILURE: "Parsing: <non-special://test:@test/x> without base: href"
+    // WPT expects: non-special://test@test/x (empty password should be omitted)
+    // Current jsrt likely produces: non-special://test:@test/x
     {
       input: 'non-special://test:@test/x',
       base: null,
-      expected: 'non-special://test:@test/x',
+      expected: 'non-special://test@test/x', // WPT expectation - no colon for empty password
     },
+    // More userinfo edge cases that should fail
     {
-      input: 'http://a:b@c:29/d',
-      base: 'http://example.org/foo/bar',
-      expected: 'http://a:b@c:29/d',
+      input: 'https://user:@host',
+      base: null,
+      expected: 'https://user@host/', // Empty password should omit colon
     },
     {
       input: 'http::@c:29',
@@ -56,14 +72,31 @@ test('URL Constructor - Userinfo parsing failures', () => {
       expected: 'http://c:29/',
     },
     {
-      input: 'http://&a:foo(b]c@d:2/',
-      base: 'http://example.org/foo/bar',
-      expected: 'http://&a:foo(b%5Dc@d:2/',
-    },
-    {
       input: 'http://::@c@d:2',
       base: 'http://example.org/foo/bar',
       expected: 'http://c@d:2/',
+    },
+    // LATEST WPT FAILURE: Backslash parsing - unclear exact expectation
+    {
+      input: '\\\\x\\hello',
+      base: 'http://example.org/foo/bar',
+      expected: 'http://example.org/x/hello', // TODO: Verify WPT expectation
+    },
+    // Complex userinfo with special characters (existing tests)
+    {
+      input: 'http://user:pass@foo:21/bar;par?b#c',
+      base: 'http://example.org/foo/bar',
+      expected: 'http://user:pass@foo:21/bar;par?b#c',
+    },
+    {
+      input: 'http://a:b@c:29/d',
+      base: 'http://example.org/foo/bar',
+      expected: 'http://a:b@c:29/d',
+    },
+    {
+      input: 'http://&a:foo(b]c@d:2/',
+      base: 'http://example.org/foo/bar',
+      expected: 'http://&a:foo(b%5Dc@d:2/',
     },
     {
       input: 'http://foo.com:b@d/',
@@ -129,9 +162,36 @@ test('URL Constructor - Backslash normalization for special schemes', () => {
   });
 });
 
-test('URL Constructor - Port validation failures', () => {
-  console.log('  Testing port validation failures...');
+test('URL Constructor - Port and zero-port handling failures', () => {
+  console.log('  Testing port and zero-port handling failures...');
 
+  // ACTUAL WPT FAILURES: Zero port handling
+  const zeroPortCases = [
+    {
+      input: 'http://f:0/c',
+      base: 'http://example.org/foo/bar',
+      expected: 'http://f/c', // Port 0 should be omitted for http
+    },
+    {
+      input: 'http://f:00000000000000/c',
+      base: 'http://example.org/foo/bar',
+      expected: 'http://f/c', // Leading zeros should be stripped, port 0 omitted
+    },
+  ];
+
+  zeroPortCases.forEach(({ input, base, expected }) => {
+    try {
+      const url = new URL(input, base);
+      console.log(`    Input: ${input} ${base ? `(base: ${base})` : ''}`);
+      console.log(`    Actual: ${url.href}`);
+      console.log(`    Expected: ${expected}`);
+      assert.strictEqual(url.href, expected);
+    } catch (e) {
+      throw new Error(`Zero port handling failed for "${input}": ${e.message}`);
+    }
+  });
+
+  // Invalid port cases that should throw
   const invalidPortCases = [
     'http://f:b/c',
     'http://f: /c',
@@ -159,12 +219,18 @@ test('URL Constructor - Port validation failures', () => {
   });
 });
 
-test('URL Constructor - Special scheme handling with whitespace', () => {
-  console.log('  Testing special scheme handling with whitespace...');
+test('URL Constructor - Special scheme and relative URL failures', () => {
+  console.log('  Testing special scheme and relative URL failures...');
 
   const testCases = [
+    // ACTUAL WPT FAILURES: These exact cases are failing
     {
-      input: 'http://f:21/ b ? d # e',
+      input: 'http:foo.com',
+      base: 'http://example.org/foo/bar',
+      expected: 'http://foo.com/',
+    },
+    {
+      input: 'http://f:21/ b ? d # e ',
       base: 'http://example.org/foo/bar',
       expected: 'http://f:21/%20b%20?%20d%20#%20e',
     },
@@ -172,6 +238,11 @@ test('URL Constructor - Special scheme handling with whitespace', () => {
       input: 'lolscheme:x x#x x',
       base: null,
       expected: 'lolscheme:x x#x x',
+    },
+    {
+      input: '  \t', // Whitespace-only input
+      base: 'http://example.org/foo/bar',
+      expected: 'http://example.org/foo/bar',
     },
   ];
 
@@ -224,29 +295,57 @@ test('URL Constructor - Fragment backslash handling', () => {
 test('URLSearchParams Constructor - Advanced constructor cases', () => {
   console.log('  Testing URLSearchParams constructor failures...');
 
-  // Test null byte handling
+  // LATEST WPT FAILURE: DOMException constructor handling - CURRENTLY FAILING AGAIN
+  try {
+    // This should throw due to branding checks but is currently not throwing
+    const shouldThrow = () => {
+      const params = new URLSearchParams(DOMException?.prototype || {});
+    };
+    console.log('    Testing DOMException constructor case...');
+    // If DOMException exists, this should throw
+    if (typeof DOMException !== 'undefined') {
+      let didThrow = false;
+      try {
+        shouldThrow();
+      } catch (e) {
+        didThrow = true;
+        console.log(
+          `    ✅ DOMException constructor correctly threw: ${e.message}`
+        );
+      }
+      if (!didThrow) {
+        throw new Error('DOMException constructor should have thrown');
+      }
+    }
+  } catch (e) {
+    throw new Error(`DOMException constructor test failed: ${e.message}`);
+  }
+
+  // LATEST WPT FAILURE: Literal null byte handling - CURRENTLY FAILING
   try {
     const params1 = new URLSearchParams('a=b\\0c');
     const result1 = params1.get('a');
-    console.log(`    Null byte test - Expected: 'b\\0c', Got: '${result1}'`);
+    console.log(`    Literal null test - Expected: 'b\\0c', Got: '${result1}'`);
+    // WPT expects 'b\0c' but we're getting null - this is the current failure
     assert.strictEqual(result1, 'b\\0c');
   } catch (e) {
-    throw new Error(`Null byte handling failed: ${e.message}`);
+    throw new Error(`Literal null byte handling failed: ${e.message}`);
   }
 
-  // Test percent-encoded null byte
+  // LATEST WPT FAILURE: Percent-encoded null byte - CURRENTLY FAILING
   try {
     const params2 = new URLSearchParams('a=b%00c');
     const result2 = params2.get('a');
     console.log(
-      `    Percent null test - Expected: 'b\\0c', Got: length ${result2 ? result2.length : 'null'}`
+      `    Percent null test - Expected: 'b\\0c', Got: length ${result2 ? result2.length : 'null'}, value: '${result2}'`
     );
+    // WPT expects 'b\0c' but we're getting null - this is the current failure
     assert.strictEqual(result2, 'b\0c');
   } catch (e) {
     throw new Error(`Percent-encoded null handling failed: ${e.message}`);
   }
 
-  // Test object constructor (should support iteration)
+  // LATEST WPT FAILURE: Object constructor - CURRENTLY FAILING with "value is not iterable"
   try {
     const params3 = new URLSearchParams({ a: '1', b: '2' });
     console.log(`    Object constructor - Keys: ${Array.from(params3.keys())}`);
@@ -256,7 +355,7 @@ test('URLSearchParams Constructor - Advanced constructor cases', () => {
     throw new Error(`Object constructor failed: ${e.message}`);
   }
 
-  // Test array constructor
+  // LATEST WPT FAILURE: Array constructor - CURRENTLY FAILING with "value is not iterable"
   try {
     const params4 = new URLSearchParams([
       ['a', '1'],
@@ -268,6 +367,25 @@ test('URLSearchParams Constructor - Advanced constructor cases', () => {
   } catch (e) {
     throw new Error(`Array constructor failed: ${e.message}`);
   }
+
+  // LATEST WPT FAILURE: Custom Symbol.iterator - CURRENTLY FAILING, getting null
+  try {
+    const iterableObject = {
+      *[Symbol.iterator]() {
+        yield ['a', 'b'];
+        yield ['c', 'd'];
+      },
+    };
+    const params5 = new URLSearchParams(iterableObject);
+    console.log(
+      `    Custom iterator - Expected 'b', Got: '${params5.get('a')}'`
+    );
+    // WPT expects 'b' but we're getting null - this is the current failure
+    assert.strictEqual(params5.get('a'), 'b');
+    assert.strictEqual(params5.get('c'), 'd');
+  } catch (e) {
+    throw new Error(`Custom Symbol.iterator failed: ${e.message}`);
+  }
 });
 
 test('URLSearchParams - Two-argument has() method', () => {
@@ -278,21 +396,35 @@ test('URLSearchParams - Two-argument has() method', () => {
   // Standard has() should return true if key exists
   assert.strictEqual(params.has('a'), true);
 
-  // Two-argument has() should check for specific key-value pair
-  // This is a newer API feature that might not be implemented yet
+  // LATEST WPT FAILURE: Two-argument has() - CURRENTLY FAILING
+  // This is a newer API feature that the WPT expects to work
   try {
     const hasA1 = params.has('a', '1');
     const hasA3 = params.has('a', '3');
     console.log(`    has('a', '1'): ${hasA1}, has('a', '3'): ${hasA3}`);
 
-    if (typeof hasA1 !== 'undefined') {
-      assert.strictEqual(hasA1, true);
-      assert.strictEqual(hasA3, false);
-    } else {
-      console.log('    Two-argument has() not implemented yet');
-    }
+    // WPT expects these to work correctly but they're currently failing
+    assert.strictEqual(
+      hasA1,
+      true,
+      'Two-argument has() should return true for existing key-value pair'
+    );
+    assert.strictEqual(
+      hasA3,
+      false,
+      'Two-argument has() should return false for non-existing key-value pair'
+    );
+
+    // LATEST WPT FAILURE: Two-argument has() with undefined second arg - CURRENTLY FAILING
+    const hasAUndefined = params.has('a', undefined);
+    console.log(`    has('a', undefined): ${hasAUndefined}`);
+    assert.strictEqual(
+      hasAUndefined,
+      false,
+      'Two-argument has() with undefined should return false'
+    );
   } catch (e) {
-    console.log(`    Two-argument has() error: ${e.message}`);
+    throw new Error(`Two-argument has() method failed: ${e.message}`);
   }
 });
 
@@ -339,6 +471,7 @@ test('Origin Parsing - Complex userinfo cases', () => {
   console.log('  Testing origin parsing with complex userinfo...');
 
   const testCases = [
+    // ACTUAL WPT FAILURES: These exact cases are failing in origin parsing
     {
       input: 'http:foo.com',
       base: 'http://example.org/foo/bar',
@@ -353,6 +486,11 @@ test('Origin Parsing - Complex userinfo cases', () => {
       input: 'http://f:00000000000000/c',
       base: 'http://example.org/foo/bar',
       expectedOrigin: 'http://f',
+    },
+    {
+      input: '\\\\x\\hello', // LATEST WPT FAILURE: Backslash handling
+      base: 'http://example.org/foo/bar',
+      expectedOrigin: 'http://example.org',
     },
     {
       input: 'http::@c:29',
@@ -509,7 +647,56 @@ test('File URL - Windows drive letter handling', () => {
   });
 });
 
-// ===== CATEGORY 6: INVALID URLS THAT SHOULD THROW =====
+// ===== CATEGORY 6: URLSEARCHPARAMS STRINGIFIER FAILURES =====
+
+test('URLSearchParams - Stringifier edge cases', () => {
+  console.log('  Testing URLSearchParams stringifier edge cases...');
+
+  // The WPT test url/urlsearchparams-stringifier.any.js is failing but details are not shown
+  // This indicates likely internal errors or edge cases in toString() implementation
+
+  const testCases = [
+    // Test various edge cases that might cause stringifier issues
+    {
+      init: 'a=1&b=2&c=3',
+      expected: 'a=1&b=2&c=3',
+      description: 'Basic stringification',
+    },
+    {
+      init: 'a=b%20c&d=e%26f',
+      expected: 'a=b+c&d=e%26f', // Space encoded as +, & encoded as %26
+      description: 'URL encoding in values',
+    },
+    {
+      init: [
+        ['a', 'b c'],
+        ['d', 'e&f'],
+      ],
+      expected: 'a=b+c&d=e%26f',
+      description: 'Array constructor with special chars',
+    },
+    {
+      init: '',
+      expected: '',
+      description: 'Empty params',
+    },
+  ];
+
+  testCases.forEach(({ init, expected, description }) => {
+    try {
+      const params = new URLSearchParams(init);
+      const result = params.toString();
+      console.log(
+        `    ${description} - Expected: '${expected}', Got: '${result}'`
+      );
+      assert.strictEqual(result, expected);
+    } catch (e) {
+      throw new Error(`${description} failed: ${e.message}`);
+    }
+  });
+});
+
+// ===== CATEGORY 7: INVALID URLS THAT SHOULD THROW =====
 
 test('Invalid URLs - IPv6 validation', () => {
   console.log('  Testing IPv6 address validation...');
@@ -595,7 +782,7 @@ test('Invalid URLs - Unicode hostname validation', () => {
   });
 });
 
-// ===== CATEGORY 7: SPECIAL CHARACTER ENCODING =====
+// ===== CATEGORY 8: SPECIAL CHARACTER ENCODING =====
 
 test('Special Character Encoding - Userinfo and path encoding', () => {
   console.log('  Testing special character encoding...');
@@ -646,6 +833,25 @@ if (failedTests > 0) {
   );
   console.log(
     'Each failure corresponds to a real WPT test case that is currently failing in the jsrt implementation'
+  );
+  console.log('\\nFailing WPT test files (LATEST COUNT):');
+  console.log(
+    '  - url/url-constructor.any.js (8 failures) - userinfo, backslash, port, whitespace parsing'
+  );
+  console.log(
+    '  - url/url-origin.any.js (6 failures) - origin parsing for same cases'
+  );
+  console.log(
+    '  - url/urlsearchparams-constructor.any.js (10 failures) - DOMException, null bytes, iteration'
+  );
+  console.log(
+    '  - url/urlsearchparams-has.any.js (2 failures) - two-argument has() method'
+  );
+  console.log(
+    '  - url/urlsearchparams-stringifier.any.js (unknown failures) - internal errors/crashes'
+  );
+  console.log(
+    '\\nTotal failing WPT test files: 5 out of 10 URL-related test files'
   );
 } else {
   console.log(

@@ -27,14 +27,13 @@ void build_href(JSRT_URL* parsed) {
   char userinfo[512] = "";
   if (parsed->username && strlen(parsed->username) > 0) {
     char* encoded_username = url_userinfo_encode_with_scheme_name(parsed->username, parsed->protocol);
-    if (parsed->has_password_field) {
-      // Original URL had password field, include colon even if password is empty
-      char* encoded_password =
-          parsed->password ? url_userinfo_encode_with_scheme_name(parsed->password, parsed->protocol) : strdup("");
+    if (parsed->has_password_field && parsed->password && strlen(parsed->password) > 0) {
+      // Original URL had password field with non-empty password, include colon
+      char* encoded_password = url_userinfo_encode_with_scheme_name(parsed->password, parsed->protocol);
       snprintf(userinfo, sizeof(userinfo), "%s:%s@", encoded_username, encoded_password);
       free(encoded_password);
     } else {
-      // No password field in original URL
+      // No password field in original URL, or password is empty - omit colon per WPT spec
       snprintf(userinfo, sizeof(userinfo), "%s@", encoded_username);
     }
     free(encoded_username);
@@ -166,13 +165,11 @@ char* build_url_string(const char* protocol, const char* username, const char* p
       strcat(url_string, encoded_username);
       free(encoded_username);
 
-      if (has_password_field) {
+      if (has_password_field && password && strlen(password) > 0) {
         strcat(url_string, ":");
-        if (password) {
-          char* encoded_password = url_userinfo_encode(password);
-          strcat(url_string, encoded_password);
-          free(encoded_password);
-        }
+        char* encoded_password = url_userinfo_encode(password);
+        strcat(url_string, encoded_password);
+        free(encoded_password);
       }
       strcat(url_string, "@");
     }

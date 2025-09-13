@@ -124,8 +124,17 @@ JSRT_URL* resolve_relative_url(const char* url, const char* base) {
       result->search = strdup("");
     }
 
+    // Special case: empty URL should resolve to base URL unchanged
+    if (strlen(path_copy) == 0) {
+      // Empty relative URL: preserve base pathname and search, clear hash (unless already set)
+      result->pathname = strdup(base_url->pathname);
+      if (strlen(result->search) == 0) {
+        free(result->search);
+        result->search = strdup(base_url->search ? base_url->search : "");
+      }
+    }
     // For non-special schemes, handle relative paths differently
-    if (!is_special) {
+    else if (!is_special) {
       // Non-special schemes: simple concatenation without directory resolution
       // According to WHATWG URL spec, non-special schemes preserve relative paths as-is
       result->pathname = strdup(path_copy);

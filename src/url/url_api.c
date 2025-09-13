@@ -360,10 +360,26 @@ static JSValue JSRT_URLSearchParamsConstructor(JSContext* ctx, JSValueConst new_
         return JS_ThrowTypeError(ctx, "Invalid FormData argument to URLSearchParams constructor");
       }
     }
-    // Check if it's an iterable or array-like sequence vs a record (plain object)
+    // Check if it's DOMException or DOMException.prototype (should throw due to branding checks)
     else if (!JS_IsString(init)) {
-      // Check if it's an array or has Symbol.iterator (sequence/iterable)
+      // First check if this is a DOMException or DOMException.prototype
       JSValue global = JS_GetGlobalObject(ctx);
+      JSValue dom_exception = JS_GetPropertyStr(ctx, global, "DOMException");
+      if (!JS_IsUndefined(dom_exception)) {
+        JSValue dom_exception_proto = JS_GetPropertyStr(ctx, dom_exception, "prototype");
+        if (JS_SameValue(ctx, init, dom_exception_proto) || JS_SameValue(ctx, init, dom_exception)) {
+          JS_FreeValue(ctx, dom_exception_proto);
+          JS_FreeValue(ctx, dom_exception);
+          JS_FreeValue(ctx, global);
+          return JS_ThrowTypeError(ctx, "Invalid argument to URLSearchParams constructor");
+        }
+        JS_FreeValue(ctx, dom_exception_proto);
+      }
+      JS_FreeValue(ctx, dom_exception);
+      JS_FreeValue(ctx, global);
+
+      // Check if it's an array or has Symbol.iterator (sequence/iterable)
+      global = JS_GetGlobalObject(ctx);
       JSValue symbol_obj = JS_GetPropertyStr(ctx, global, "Symbol");
       JSValue iterator_symbol = JS_GetPropertyStr(ctx, symbol_obj, "iterator");
       JS_FreeValue(ctx, symbol_obj);

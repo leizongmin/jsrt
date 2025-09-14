@@ -317,11 +317,14 @@ static JSValue JSRT_URLSearchParamsToString(JSContext* ctx, JSValueConst this_va
     return JS_NewString(ctx, "");
   }
 
-  // Calculate total length needed
+  // Calculate total length needed accounting for URL encoding expansion
+  // In worst case, every byte could become %XX (3 bytes), plus separators
   size_t total_len = 0;
   JSRT_URLSearchParam* param = search_params->params;
   while (param) {
-    total_len += param->name_len + param->value_len + 2;  // +2 for '=' and '&'
+    // Worst case: every character in name and value becomes %XX (3x expansion)
+    // Plus '=' and '&' separators (which don't need encoding in query strings)
+    total_len += (param->name_len * 3) + (param->value_len * 3) + 2;
     param = param->next;
   }
 
@@ -329,13 +332,23 @@ static JSValue JSRT_URLSearchParamsToString(JSContext* ctx, JSValueConst this_va
     return JS_NewString(ctx, "");
   }
 
+  // Add extra buffer for safety
+  total_len += 1;  // For null terminator
   char* result = malloc(total_len);
+  if (!result) {
+    return JS_ThrowOutOfMemory(ctx);
+  }
   char* ptr = result;
   param = search_params->params;
   int first = 1;
 
   while (param) {
+    // Check bounds before writing separator
     if (!first) {
+      if (ptr >= result + total_len - 1) {
+        free(result);
+        return JS_ThrowInternalError(ctx, "Buffer overflow in URLSearchParams toString");
+      }
       *ptr++ = '&';
     }
     first = 0;
@@ -344,17 +357,34 @@ static JSValue JSRT_URLSearchParamsToString(JSContext* ctx, JSValueConst this_va
     char* encoded_name = url_encode_with_len(param->name, param->name_len);
     if (encoded_name) {
       size_t encoded_name_len = strlen(encoded_name);
+      // Check bounds before copying encoded name
+      if (ptr + encoded_name_len >= result + total_len - 1) {
+        free(encoded_name);
+        free(result);
+        return JS_ThrowInternalError(ctx, "Buffer overflow in URLSearchParams toString");
+      }
       memcpy(ptr, encoded_name, encoded_name_len);
       ptr += encoded_name_len;
       free(encoded_name);
     }
 
+    // Check bounds before writing '='
+    if (ptr >= result + total_len - 1) {
+      free(result);
+      return JS_ThrowInternalError(ctx, "Buffer overflow in URLSearchParams toString");
+    }
     *ptr++ = '=';
 
     // Encode value
     char* encoded_value = url_encode_with_len(param->value, param->value_len);
     if (encoded_value) {
       size_t encoded_value_len = strlen(encoded_value);
+      // Check bounds before copying encoded value
+      if (ptr + encoded_value_len >= result + total_len - 1) {
+        free(encoded_value);
+        free(result);
+        return JS_ThrowInternalError(ctx, "Buffer overflow in URLSearchParams toString");
+      }
       memcpy(ptr, encoded_value, encoded_value_len);
       ptr += encoded_value_len;
       free(encoded_value);

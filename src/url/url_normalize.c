@@ -176,10 +176,7 @@ char* normalize_port(const char* port_str, const char* protocol) {
     return strdup("");
   }
 
-  // According to WHATWG URL spec, port 0 should be omitted
-  if (port_num == 0) {
-    return strdup("");
-  }
+  // Port 0 is a valid port and should be preserved (only default ports are omitted)
 
   // Return normalized port as string
   char* result = malloc(16);  // Enough for any valid port number

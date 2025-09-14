@@ -197,10 +197,29 @@ int is_relative_url(const char* cleaned_url, const char* base) {
           scheme[scheme_len] = ':';
           scheme[scheme_len + 1] = '\0';
 
-          // Per WHATWG URL spec: URLs with scheme are always absolute
-          // Special schemes like "http:foo.com" should be parsed as absolute URLs
-          free(scheme);
-          return 0;  // Any URL with a scheme is absolute
+          // Check if this is a special scheme without authority
+          // For special schemes like "http:foo.com", these should be treated as relative paths
+          int is_special = is_special_scheme(scheme);
+
+          if (is_special) {
+            // Special case: if the URL contains '@' after the scheme, it indicates userinfo
+            // and should be treated as absolute, not relative
+            // Example: "http::@c:29" should be absolute, not relative
+            const char* remainder = p + 1;  // Skip the ':'
+            if (strchr(remainder, '@')) {
+              // Contains '@' - this is an absolute URL with userinfo
+              free(scheme);
+              return 0;
+            }
+
+            // Special schemes without :// and without @ are relative (e.g., "http:foo.com" → relative path "foo.com")
+            free(scheme);
+            return 1;
+          } else {
+            // Non-special schemes with just colon are absolute (e.g., "mailto:test" → absolute)
+            free(scheme);
+            return 0;
+          }
         } else if (*p == '/' || *p == '?' || *p == '#') {
           // No scheme found before path/query/fragment
           break;

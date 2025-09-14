@@ -48,6 +48,20 @@ char* preprocess_file_urls(const char* cleaned_url) {
     preprocessed_url = normalized;
     url_to_free = normalized;
   }
+  // Handle Windows drive letter with pipe: "file:C|/path" -> "file:///C:/path"
+  else if (strncmp(cleaned_url, "file:", 5) == 0 && strlen(cleaned_url) > 7 && isalpha(cleaned_url[5]) &&
+           cleaned_url[6] == '|' && cleaned_url[7] == '/') {
+    size_t new_len = strlen(cleaned_url) + 3;  // Add "///" and account for | -> : conversion
+    char* normalized = malloc(new_len + 1);
+    strcpy(normalized, "file:///");
+    // Copy drive letter and convert | to :
+    normalized[8] = cleaned_url[5];       // Drive letter
+    normalized[9] = ':';                  // Convert | to :
+    normalized[10] = '\0';                // Null terminate
+    strcat(normalized, cleaned_url + 7);  // Copy rest starting from the slash
+    preprocessed_url = normalized;
+    url_to_free = normalized;
+  }
 
   return url_to_free ? url_to_free : strdup(cleaned_url);
 }
@@ -148,6 +162,15 @@ char* preprocess_url_string(const char* url, const char* base) {
     return NULL;
   }
 
+  // Skip single-slash normalization since they should now be treated as relative URLs
+  // per WPT test expectations (e.g., "http:/example.com/" with base -> relative)
+  // char* final_url = normalize_single_slash_schemes(normalized_url);
+  // free(normalized_url);
+  // if (!final_url) {
+  //   return NULL;
+  // }
+  // return final_url;
+
   return normalized_url;
 }
 
@@ -202,13 +225,21 @@ int is_relative_url(const char* cleaned_url, const char* base) {
           int is_special = is_special_scheme(scheme);
 
           if (is_special) {
-            // Special schemes without :// are treated as relative paths
-            // This includes cases like:
-            // - "http:foo.com" → relative path "foo.com"
-            // - "http::@c:29" → relative path ":@c:29"
-            // Per WHATWG URL spec, scheme-only URLs with special schemes are relative
-            free(scheme);
-            return 1;
+            // Check if it's a single-slash special scheme URL like "ftp:/example.com/"
+            // According to WPT tests, these should be treated as relative URLs when there's a base
+            if (*(p + 1) == '/' && *(p + 2) != '/') {
+              // Single slash after scheme for special schemes -> relative URL when base exists
+              // Examples: "http:/example.com/" with base -> relative path "example.com/"
+              free(scheme);
+              return 1;  // Relative URL (changed from 0 to 1 for WPT compliance)
+            } else {
+              // Special schemes without authority (like "http:foo.com") are relative paths
+              // This includes cases like:
+              // - "http:foo.com" → relative path "foo.com"
+              // - "http::@c:29" → relative path ":@c:29"
+              free(scheme);
+              return 1;  // Relative URL
+            }
           } else {
             // Non-special schemes with just colon are absolute (e.g., "mailto:test" → absolute)
             free(scheme);
@@ -227,4 +258,47 @@ int is_relative_url(const char* cleaned_url, const char* base) {
 
   // Without base URL, only absolute URLs with scheme+authority are not relative
   return 0;
+}
+
+// Normalize single-slash special schemes to double-slash format
+// Examples: "ftp:/example.com/" -> "ftp://example.com/"
+char* normalize_single_slash_schemes(const char* url) {
+  if (!url)
+    return NULL;
+
+  size_t url_len = strlen(url);
+
+  // Look for pattern "scheme:/" where scheme is special
+  for (size_t i = 0; i < url_len - 2; i++) {
+    if (url[i] == ':' && url[i + 1] == '/' && url[i + 2] != '/') {
+      // Found "scheme:/" pattern, check if scheme is special
+      size_t scheme_len = i;
+      char* scheme = malloc(scheme_len + 2);  // +1 for ':', +1 for '\0'
+      strncpy(scheme, url, scheme_len);
+      scheme[scheme_len] = ':';
+      scheme[scheme_len + 1] = '\0';
+
+      if (is_special_scheme(scheme)) {
+        // Special scheme with single slash - normalize to double slash
+        size_t new_len = url_len + 1;  // +1 for extra slash
+        char* normalized = malloc(new_len + 1);
+
+        // Copy scheme and colon
+        strncpy(normalized, url, i + 1);
+        // Add extra slash
+        normalized[i + 1] = '/';
+        // Copy the rest starting from the single slash
+        strcpy(normalized + i + 2, url + i + 1);
+
+        free(scheme);
+        return normalized;
+      }
+
+      free(scheme);
+      break;  // Only check first scheme found
+    }
+  }
+
+  // No normalization needed, return copy
+  return strdup(url);
 }

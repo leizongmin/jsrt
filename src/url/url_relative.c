@@ -211,8 +211,28 @@ JSRT_URL* resolve_relative_url(const char* url, const char* base) {
   // Build href - different logic for special vs non-special schemes
   if (is_special_scheme(result->protocol)) {
     // Special schemes: use origin-based construction (for authority-based URLs)
-    size_t href_len =
-        strlen(result->origin) + strlen(encoded_pathname) + strlen(encoded_search) + strlen(encoded_hash) + 1;
+
+    // Calculate the buffer size more carefully
+    size_t href_len = strlen(result->protocol) + strlen(encoded_pathname) + strlen(encoded_search) +
+                      strlen(encoded_hash) + 10;  // Base + safety buffer
+
+    // Add space for "//" if needed
+    href_len += 2;
+
+    // Add space for host part (extract from origin, excluding protocol://)
+    if (result->origin && strlen(result->origin) > 0) {
+      char* protocol_and_slashes_temp = malloc(strlen(result->protocol) + 3);
+      sprintf(protocol_and_slashes_temp, "%s//", result->protocol);
+      size_t prefix_len = strlen(protocol_and_slashes_temp);
+      size_t origin_len = strlen(result->origin);
+
+      // Only add host part length if origin is longer than protocol prefix
+      if (origin_len > prefix_len) {
+        const char* host_part = result->origin + prefix_len;
+        href_len += strlen(host_part);
+      }
+      free(protocol_and_slashes_temp);
+    }
 
     // Add space for username:password@ if present
     if ((result->username && strlen(result->username) > 0) || (result->password && strlen(result->password) > 0)) {
@@ -248,8 +268,11 @@ JSRT_URL* resolve_relative_url(const char* url, const char* base) {
       strcat(result->href, "@");
 
       // Add the host part (origin without "protocol://")
-      const char* host_part = result->origin + strlen(protocol_and_slashes);
-      strcat(result->href, host_part);
+      size_t prefix_len = strlen(protocol_and_slashes);
+      if (strlen(result->origin) > prefix_len) {
+        const char* host_part = result->origin + prefix_len;
+        strcat(result->href, host_part);
+      }
 
       free(protocol_and_slashes);
     } else {

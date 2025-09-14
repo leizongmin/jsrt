@@ -48,27 +48,81 @@ int parse_authority(JSRT_URL* parsed, const char* authority_str) {
   }
 
   // Parse host and port
-  char* port_colon = strrchr(host_part, ':');
+  char* port_colon = NULL;
+  int is_ipv6_with_port = 0;
+
+  // Check if this is IPv6 with port: [ipv6]:port format
+  if (host_part[0] == '[') {
+    char* close_bracket = strchr(host_part, ']');
+    if (close_bracket && *(close_bracket + 1) == ':') {
+      // IPv6 with port: [ipv6]:port
+      port_colon = close_bracket + 1;
+      is_ipv6_with_port = 1;
+    }
+  } else {
+    // Regular hostname - find rightmost colon for port
+    port_colon = strrchr(host_part, ':');
+  }
+
   // For file URLs, single letter + colon should be treated as drive letter, not port
   int is_file_drive = 0;
-  if (strcmp(parsed->protocol, "file:") == 0 && port_colon && (port_colon - host_part) == 1 && isalpha(host_part[0])) {
+  if (strcmp(parsed->protocol, "file:") == 0 && port_colon && !is_ipv6_with_port && (port_colon - host_part) == 1 &&
+      isalpha(host_part[0])) {
     is_file_drive = 1;
   }
 
-  if (port_colon && strchr(host_part, '[') == NULL && !is_file_drive) {  // Not IPv6 and not file drive
+  // For file URLs, only allow drive letters, not real ports
+  if (strcmp(parsed->protocol, "file:") == 0 && port_colon && !is_file_drive) {
+    // file URL with port that's not a drive letter is invalid
+    goto cleanup_and_return_error;
+  }
+
+  if (port_colon && !is_file_drive) {  // Has port and not file drive
     *port_colon = '\0';
     free(parsed->hostname);
-    // For file URLs, convert pipe to colon in hostname
-    if (strcmp(parsed->protocol, "file:") == 0 && strchr(host_part, '|')) {
-      size_t len = strlen(host_part);
-      char* converted_host = malloc(len + 1);
-      for (size_t i = 0; i < len; i++) {
-        converted_host[i] = (host_part[i] == '|') ? ':' : host_part[i];
+
+    // Handle IPv6 addresses - extract the part inside brackets
+    if (is_ipv6_with_port) {
+      // For IPv6, host_part is like "[::1]" - we need to extract just the IPv6 part
+      if (host_part[0] == '[') {
+        char* close_bracket = strchr(host_part, ']');
+        if (close_bracket) {
+          size_t ipv6_len = close_bracket - host_part - 1;  // Length without brackets
+          char* ipv6_part = malloc(ipv6_len + 1);
+          strncpy(ipv6_part, host_part + 1, ipv6_len);  // Skip opening bracket
+          ipv6_part[ipv6_len] = '\0';
+
+          // Canonicalize the IPv6 address
+          char* canonical_ipv6 = canonicalize_ipv6(ipv6_part);
+          if (canonical_ipv6) {
+            // Format as [canonical_ipv6] for hostname
+            parsed->hostname = malloc(strlen(canonical_ipv6) + 3);
+            snprintf(parsed->hostname, strlen(canonical_ipv6) + 3, "[%s]", canonical_ipv6);
+            free(canonical_ipv6);
+          } else {
+            // Invalid IPv6 address
+            parsed->hostname = strdup(host_part);  // Keep original for error handling
+          }
+          free(ipv6_part);
+        } else {
+          parsed->hostname = strdup(host_part);
+        }
+      } else {
+        parsed->hostname = strdup(host_part);
       }
-      converted_host[len] = '\0';
-      parsed->hostname = converted_host;
     } else {
-      parsed->hostname = strdup(host_part);
+      // For file URLs, convert pipe to colon in hostname
+      if (strcmp(parsed->protocol, "file:") == 0 && strchr(host_part, '|')) {
+        size_t len = strlen(host_part);
+        char* converted_host = malloc(len + 1);
+        for (size_t i = 0; i < len; i++) {
+          converted_host[i] = (host_part[i] == '|') ? ':' : host_part[i];
+        }
+        converted_host[len] = '\0';
+        parsed->hostname = converted_host;
+      } else {
+        parsed->hostname = strdup(host_part);
+      }
     }
 
     // Validate hostname characters (including Unicode validation)
@@ -127,7 +181,32 @@ int parse_authority(JSRT_URL* parsed, const char* authority_str) {
   } else {
     free(parsed->hostname);
 
-    if (strcmp(parsed->protocol, "file:") == 0 && strchr(host_part, '|')) {
+    // Handle IPv6 addresses without port
+    if (host_part[0] == '[' && strchr(host_part, ']')) {
+      char* close_bracket = strchr(host_part, ']');
+      if (close_bracket && *(close_bracket + 1) == '\0') {
+        // IPv6 without port: [ipv6]
+        size_t ipv6_len = close_bracket - host_part - 1;  // Length without brackets
+        char* ipv6_part = malloc(ipv6_len + 1);
+        strncpy(ipv6_part, host_part + 1, ipv6_len);  // Skip opening bracket
+        ipv6_part[ipv6_len] = '\0';
+
+        // Canonicalize the IPv6 address
+        char* canonical_ipv6 = canonicalize_ipv6(ipv6_part);
+        if (canonical_ipv6) {
+          // Format as [canonical_ipv6] for hostname
+          parsed->hostname = malloc(strlen(canonical_ipv6) + 3);
+          snprintf(parsed->hostname, strlen(canonical_ipv6) + 3, "[%s]", canonical_ipv6);
+          free(canonical_ipv6);
+        } else {
+          // Invalid IPv6 address
+          parsed->hostname = strdup(host_part);  // Keep original for error handling
+        }
+        free(ipv6_part);
+      } else {
+        parsed->hostname = strdup(host_part);
+      }
+    } else if (strcmp(parsed->protocol, "file:") == 0 && strchr(host_part, '|')) {
       size_t len = strlen(host_part);
       char* converted_host = malloc(len + 1);
       for (size_t i = 0; i < len; i++) {

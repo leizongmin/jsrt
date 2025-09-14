@@ -342,6 +342,34 @@ JSRT_URL* parse_absolute_url(const char* preprocessed_url) {
     return NULL;
   }
 
+  // Validate scheme according to WHATWG URL spec
+  if (!is_valid_scheme(scheme)) {
+    free(scheme);
+    free(url_copy);
+    JSRT_FreeURL(parsed);
+    return NULL;
+  }
+
+  // Special validation for special schemes without proper authority
+  if (is_special_scheme(scheme)) {
+    // Special schemes like http, https, ftp MUST have authority (start with //)
+    // If remainder doesn't start with // or doesn't have content after scheme:
+    if (!remainder || strlen(remainder) == 0) {
+      // Case like "http:" - special scheme with no remainder at all
+      free(scheme);
+      free(url_copy);
+      JSRT_FreeURL(parsed);
+      return NULL;
+    } else if (strncmp(remainder, "//", 2) != 0) {
+      // Case like "http:something" without // - this should fail for special schemes
+      // Exception: "http:///" is valid (empty authority)
+      free(scheme);
+      free(url_copy);
+      JSRT_FreeURL(parsed);
+      return NULL;
+    }
+  }
+
   // Set protocol (scheme + ":")
   free(parsed->protocol);
   parsed->protocol = malloc(strlen(scheme) + 2);

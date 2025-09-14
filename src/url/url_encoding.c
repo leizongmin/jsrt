@@ -506,3 +506,54 @@ char* url_fragment_encode_nonspecial(const char* str) {
   encoded[j] = '\0';
   return encoded;
 }
+
+// Path encoding for special schemes (encodes non-ASCII characters including Unicode)
+char* url_path_encode_special(const char* str) {
+  if (!str)
+    return NULL;
+
+  size_t len = strlen(str);
+  size_t encoded_len = 0;
+
+  // Calculate encoded length
+  for (size_t i = 0; i < len; i++) {
+    unsigned char c = (unsigned char)str[i];
+    // Check if character needs encoding per URL spec
+    if (c == '%' && i + 2 < len && hex_to_int(str[i + 1]) >= 0 && hex_to_int(str[i + 2]) >= 0) {
+      // Already percent-encoded sequence, keep as-is
+      encoded_len += 3;
+    } else if (c < 33 || c > 126 || c == '"' || c == '<' || c == '>' || c == '\\' || c == '^' || c == '{' || c == '|' ||
+               c == '}' || c == '`') {
+      // Need to percent-encode control characters, non-ASCII, and specific unsafe characters
+      // This includes Unicode characters (> 126) which should be percent-encoded in paths
+      encoded_len += 3;  // %XX
+    } else {
+      encoded_len++;
+    }
+  }
+
+  char* encoded = malloc(encoded_len + 1);
+  size_t j = 0;
+
+  for (size_t i = 0; i < len; i++) {
+    unsigned char c = (unsigned char)str[i];
+    if (c == '%' && i + 2 < len && hex_to_int(str[i + 1]) >= 0 && hex_to_int(str[i + 2]) >= 0) {
+      // Already percent-encoded sequence, copy as-is
+      encoded[j++] = str[i];
+      encoded[j++] = str[i + 1];
+      encoded[j++] = str[i + 2];
+      i += 2;  // Skip the next two characters
+    } else if (c < 33 || c > 126 || c == '"' || c == '<' || c == '>' || c == '\\' || c == '^' || c == '{' || c == '|' ||
+               c == '}' || c == '`') {
+      // Need to percent-encode control characters, non-ASCII, and specific unsafe characters
+      encoded[j++] = '%';
+      encoded[j++] = hex_chars[c >> 4];
+      encoded[j++] = hex_chars[c & 15];
+    } else {
+      encoded[j++] = c;
+    }
+  }
+
+  encoded[j] = '\0';
+  return encoded;
+}

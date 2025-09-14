@@ -251,197 +251,54 @@ char* normalize_url_backslashes(const char* url) {
   if (!url)
     return NULL;
 
-  // Check if URL has a scheme - if not, still normalize backslashes for relative URLs
-  // because they might be used with special scheme bases
-  char* colon_pos = strchr(url, ':');
-  if (!colon_pos || colon_pos == url) {
-    // No scheme or invalid scheme position - still normalize backslashes for relative URLs
-    // This ensures ///\//\//test becomes //////test, then normalizes to //test
-    colon_pos = NULL;  // Mark as no scheme for later logic
-  }
-
   size_t len = strlen(url);
   char* result = malloc(len + 1);
   if (!result)
     return NULL;
 
-  // Check if this is a non-special scheme
-  int is_non_special = 0;
+  // Simple backslash normalization for special schemes per WHATWG URL standard
+  // For special schemes, all backslashes in scheme, authority, and path are converted to forward slashes
+  // For non-special schemes, backslashes are preserved as-is
 
+  char* colon_pos = strchr(url, ':');
+  int is_special = 0;
+
+  // Determine if this is a special scheme
   if (colon_pos && colon_pos > url) {
     size_t scheme_len = colon_pos - url;
-    char* scheme = malloc(scheme_len + 1);
-    strncpy(scheme, url, scheme_len);
-    scheme[scheme_len] = '\0';
-
-    if (is_valid_scheme(scheme) && !is_special_scheme(scheme)) {
-      is_non_special = 1;
+    char scheme[16];
+    if (scheme_len < sizeof(scheme)) {
+      strncpy(scheme, url, scheme_len);
+      scheme[scheme_len] = '\0';
+      is_special = is_special_scheme(scheme);
     }
-    free(scheme);
+  } else if (!colon_pos || colon_pos == url) {
+    // Relative URLs (no colon or colon at start) are treated as special schemes
+    // for backslash normalization since they will be resolved against a base URL
+    is_special = 1;
   }
-  // Note: For relative URLs (colon_pos == NULL), is_non_special remains 0,
-  // so they will be treated as special schemes for backslash normalization
 
-  // Find fragment and query positions to avoid normalizing backslashes in them
+  // Find fragment position - backslashes after # are never normalized
   char* fragment_pos = strchr(url, '#');
-  char* query_pos = strchr(url, '?');
-
-  // Determine where to stop normalizing (fragment comes first, then query)
-  size_t stop_pos = len;
-  if (fragment_pos) {
-    stop_pos = fragment_pos - url;
-  } else if (query_pos) {
-    stop_pos = query_pos - url;
-  }
+  size_t stop_pos = fragment_pos ? (fragment_pos - url) : len;
 
   size_t result_pos = 0;
   for (size_t i = 0; i < len; i++) {
     if (i < stop_pos && url[i] == '\\') {
-      // For non-special schemes, backslashes should NOT be normalized to forward slashes
-      // According to WHATWG URL spec, non-special schemes preserve backslashes as-is
-      if (is_non_special && colon_pos && i > (colon_pos - url)) {
-        // For non-special schemes, preserve backslashes in the path
-        result[result_pos++] = '\\';
-      } else {
-        // For all special schemes including file:, convert backslash to forward slash
-        // But avoid creating consecutive slashes in path contexts, EXCEPT for relative URLs
-        // starting with \\ which should become scheme-relative URLs starting with //
-        if (result_pos > 0 && result[result_pos - 1] == '/') {
-          // Check if this is a relative URL starting with \\ (should become //)
-          if (!colon_pos && result_pos == 1 && i == 1) {
-            // This is the second backslash in \\... at the beginning - preserve it as //
-            result[result_pos++] = '/';
-          }
-          // Check if this is the authority section of a scheme (like http:\\)
-          else if (colon_pos && i == (colon_pos - url) + 2) {
-            // This is the second backslash right after scheme:\ - should become ://
-            result[result_pos++] = '/';
-          } else {
-            // For special schemes, preserve consecutive slashes in paths from backslash conversion
-            // The WHATWG URL spec requires backslashes to be converted to slashes without
-            // removing consecutive slashes in the path portion (needed for WPT compliance)
-            if (colon_pos) {
-              size_t scheme_len = colon_pos - url;
-              int is_special_scheme_flag = 0;
-
-              // Check if this is a special scheme
-              if (scheme_len == 4 && strncmp(url, "http", 4) == 0)
-                is_special_scheme_flag = 1;
-              else if (scheme_len == 5 && strncmp(url, "https", 5) == 0)
-                is_special_scheme_flag = 1;
-              else if (scheme_len == 3 && strncmp(url, "ftp", 3) == 0)
-                is_special_scheme_flag = 1;
-              else if (scheme_len == 4 && strncmp(url, "file", 4) == 0)
-                is_special_scheme_flag = 1;
-              else if (scheme_len == 2 && strncmp(url, "ws", 2) == 0)
-                is_special_scheme_flag = 1;
-              else if (scheme_len == 3 && strncmp(url, "wss", 3) == 0)
-                is_special_scheme_flag = 1;
-
-              if (is_special_scheme_flag) {
-                // For special schemes, preserve consecutive slashes from backslash conversion
-                result[result_pos++] = '/';
-              } else {
-                // For non-special schemes, skip consecutive slashes
-                continue;
-              }
-            } else {
-              // No scheme context, skip consecutive slashes
-              continue;
-            }
-          }
-        } else {
-          result[result_pos++] = '/';
-        }
-      }
-    } else if (i < stop_pos && url[i] == '/') {
-      // Handle slash normalization
-      if (result_pos > 0 && result[result_pos - 1] == '/') {
-        // Consecutive slashes found
-        if (is_non_special && colon_pos && i > (colon_pos - url)) {
-          // For non-special schemes, preserve consecutive slashes in paths
-          result[result_pos++] = '/';
-        } else {
-          // For special schemes, normalize consecutive slashes in paths but preserve authority "//"
-          // Only skip slashes if we're NOT in the authority section (scheme://)
-          // Authority section should always have exactly "//" after the scheme
-
-          // Check if we're at the beginning of the URL and this might be scheme-relative
-          if (!colon_pos && result_pos <= 2) {
-            // No scheme and we're at the beginning - preserve leading "//" for scheme-relative URLs
-            // But for cases like ///test, only preserve the first two slashes (scheme-relative)
-            if (result_pos < 2) {
-              result[result_pos++] = '/';
-            } else {
-              // This is the third or later slash at the beginning - skip it for scheme-relative normalization
-              continue;
-            }
-          } else if (colon_pos) {
-            // We have a scheme - check if we're building the authority "//" part
-            size_t colon_offset = colon_pos - url;
-            size_t chars_after_colon = result_pos - colon_offset - 1;  // -1 for the colon itself
-
-            // Check if this is a file URL which might need 3 slashes
-            size_t scheme_len = colon_offset;
-            int is_file_scheme = (scheme_len == 4 && strncmp(url, "file", 4) == 0);
-
-            if (chars_after_colon < 2) {
-              // We're building the "//" authority part - always preserve these first 2 slashes
-              result[result_pos++] = '/';
-            } else if (is_file_scheme && chars_after_colon == 2) {
-              // Special case: file URLs can have a third slash for local files
-              result[result_pos++] = '/';
-            } else {
-              // We're in a path or other section - normalize consecutive slashes
-              // Skip this extra slash (for cases like "path//file" -> "path/file")
-              continue;
-            }
-          } else {
-            // We're in a path or other section
-            if (is_non_special) {
-              // Non-special schemes preserve consecutive slashes in paths
-              result[result_pos++] = '/';
-            } else {
-              // For relative URLs (no scheme), preserve consecutive slashes
-              // because we don't know the final scheme yet
-              if (!colon_pos) {
-                result[result_pos++] = '/';
-              } else {
-                // Special schemes: preserve consecutive slashes in paths
-                // The WHATWG URL spec says backslashes should be converted to slashes
-                // without removing consecutive slashes in the path portion
-                // This is needed for WPT compliance (e.g., /\@ becomes //@, not /@)
-                result[result_pos++] = '/';
-              }
-            }
-          }
-        }
-      } else {
-        // Not a consecutive slash, add it normally
+      if (is_special) {
+        // Special schemes: convert backslashes to forward slashes
         result[result_pos++] = '/';
+      } else {
+        // Non-special schemes: preserve backslashes
+        result[result_pos++] = '\\';
       }
     } else if (i < stop_pos && url[i] == '|') {
-      // Handle pipe character normalization for file URLs
-      // Per WHATWG URL spec: pipe characters should be normalized to colons in file URLs
-      // Apply to both absolute file URLs and relative URLs (which might be used with file bases)
-      if ((colon_pos && strncmp(url, "file:", 5) == 0) || (!colon_pos)) {
-        // Check if this looks like a Windows drive letter pattern (letter followed by |)
-        // Valid patterns: C|, /C|, :C| (for file:C| URLs)
-        if (i > 0 && isalpha(url[i - 1]) && (i == 1 || url[i - 2] == '/' || url[i - 2] == ':')) {
-          // For file URLs or relative URLs, convert pipe to colon (Windows drive letter normalization)
-          result[result_pos++] = ':';
-          // For Windows drive letters, ensure there's a forward slash after the colon
-          // if the next character isn't already a slash and we're not at the end
-          if (i + 1 < len && url[i + 1] != '/' && url[i + 1] != '\\') {
-            result[result_pos++] = '/';
-          }
-        } else {
-          // Not a drive letter pattern, preserve pipe character
-          result[result_pos++] = url[i];
-        }
+      // Handle pipe to colon normalization for Windows drive letters
+      // This applies to file URLs and relative URLs that might become file URLs
+      if (i > 0 && isalpha(url[i - 1]) && ((colon_pos && strncmp(url, "file:", 5) == 0) || !colon_pos)) {
+        result[result_pos++] = ':';
       } else {
-        // For non-file URLs, preserve pipe character
-        result[result_pos++] = url[i];
+        result[result_pos++] = '|';
       }
     } else {
       // Preserve other characters

@@ -105,6 +105,22 @@ void parse_path_query_fragment(JSRT_URL* parsed, char* ptr) {
   char* query_pos = strchr(ptr, '?');
   char* fragment_pos = strchr(ptr, '#');
 
+  // Calculate all positions and lengths BEFORE modifying the string
+  size_t original_len = strlen(ptr);
+  char* search_end = NULL;
+  size_t search_len = 0;
+
+  if (query_pos) {
+    search_end = fragment_pos ? fragment_pos : ptr + original_len;
+    search_len = search_end - query_pos;
+
+    // Validate that search_len is reasonable
+    if (search_len > original_len || search_end < query_pos) {
+      // Invalid calculation, skip query processing
+      query_pos = NULL;
+    }
+  }
+
   // Handle fragment first
   if (fragment_pos) {
     free(parsed->hash);
@@ -113,9 +129,7 @@ void parse_path_query_fragment(JSRT_URL* parsed, char* ptr) {
   }
 
   // Handle query
-  if (query_pos) {
-    char* search_end = fragment_pos ? fragment_pos : ptr + strlen(ptr);
-    size_t search_len = search_end - query_pos;
+  if (query_pos && search_len > 0) {
     char* raw_search = malloc(search_len + 1);
     strncpy(raw_search, query_pos, search_len);
     raw_search[search_len] = '\0';
@@ -131,7 +145,19 @@ void parse_path_query_fragment(JSRT_URL* parsed, char* ptr) {
     // Only update pathname if it hasn't been set by special case handling above
     if (strcmp(parsed->pathname, "/") == 0 || strcmp(parsed->pathname, "") == 0) {
       free(parsed->pathname);
-      parsed->pathname = strdup(ptr);
+
+      // First decode any existing percent-encoding, then re-encode according to URL standard
+      char* decoded_path = url_decode(ptr);
+
+      // Re-encode the path with proper UTF-8 percent-encoding
+      // For special schemes, use standard component encoding
+      if (is_special_scheme(parsed->protocol)) {
+        parsed->pathname = url_path_encode_special(decoded_path);
+      } else {
+        parsed->pathname = url_nonspecial_path_encode(decoded_path);
+      }
+
+      free(decoded_path);
     }
   } else {
     // Empty pathname handling:

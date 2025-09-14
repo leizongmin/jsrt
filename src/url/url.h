@@ -132,6 +132,7 @@ char* strip_url_whitespace(const char* url);
 char* remove_all_ascii_whitespace(const char* url);
 char* normalize_spaces_in_path(const char* path);
 char* normalize_url_backslashes(const char* url);
+char* normalize_single_slash_schemes(const char* url);
 
 // URL encoding/decoding functions
 char* url_encode_with_len(const char* str, size_t len);
@@ -140,6 +141,7 @@ char* url_component_encode(const char* str);
 char* url_fragment_encode(const char* str);
 char* url_fragment_encode_nonspecial(const char* str);
 char* url_nonspecial_path_encode(const char* str);
+char* url_path_encode_special(const char* str);
 char* url_userinfo_encode(const char* str);
 char* url_userinfo_encode_with_scheme(const char* str, int is_special_scheme);
 char* url_userinfo_encode_with_scheme_name(const char* str, const char* scheme);

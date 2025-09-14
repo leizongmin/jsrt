@@ -49,6 +49,52 @@ char* canonicalize_ipv6(const char* ipv6_str) {
     return NULL;
   }
 
+  // Count colon-separated groups to validate IPv6 format
+  // A valid IPv6 address can have at most 8 groups (16-bit each)
+  // Groups are separated by colons, so max 7 colons in normal form
+  // Exception: with :: compression, we can have more flexibility
+  int initial_group_count = 1;
+  int double_colon_count = 0;
+  const char* p = addr;
+
+  while (*p) {
+    if (*p == ':') {
+      if (*(p + 1) == ':') {
+        double_colon_count++;
+        if (double_colon_count > 1) {
+          // Multiple :: sequences are invalid
+          free(addr);
+          return NULL;
+        }
+        p += 2;  // Skip ::
+      } else {
+        initial_group_count++;
+        p++;
+      }
+    } else {
+      p++;
+    }
+  }
+
+  // Validate group count
+  // Check if IPv4 is present - it counts as 2 groups
+  int has_ipv4 = strchr(addr, '.') != NULL;
+  int effective_group_count = initial_group_count;
+  if (has_ipv4) {
+    // IPv4 address counts as 2 groups, but we already counted it as 1 in initial_group_count
+    effective_group_count += 1;
+  }
+
+  if (double_colon_count == 0 && effective_group_count != 8) {
+    // Without compression (::), must have exactly 8 groups (counting IPv4 as 2)
+    free(addr);
+    return NULL;
+  } else if (double_colon_count == 1 && effective_group_count > 8) {
+    // With compression (::), cannot have more than 8 groups total
+    free(addr);
+    return NULL;
+  }
+
   // Check for invalid characters (anything other than hex digits, colons, and dots for IPv4)
   for (size_t i = 0; i < addr_len; i++) {
     char c = addr[i];
@@ -90,8 +136,9 @@ char* canonicalize_ipv6(const char* ipv6_str) {
     // Without double colon, we can have at most 7 colons (for 8 groups)
     // or fewer if IPv4 is at the end
     if (strchr(addr, '.')) {
-      // Has IPv4 at end - max 5 colons (6 hex groups + 1 IPv4 = 8 total)
-      if (colon_count > 5) {
+      // Has IPv4 at end - max 6 colons (6 hex groups + 1 IPv4 group = 8 total)
+      // Examples: ::ffff:192.0.2.1 (1 colon), 0:0:0:0:0:0:13.1.68.3 (6 colons)
+      if (colon_count > 6) {
         free(addr);
         return NULL;  // Too many groups for IPv6 with IPv4
       }
@@ -135,8 +182,9 @@ char* canonicalize_ipv6(const char* ipv6_str) {
         int a, b, c, d;
         char extra;
         // Use sscanf with %c to detect any trailing characters (like dots)
-        if (sscanf(ipv4_start, "%d.%d.%d.%d%c", &a, &b, &c, &d, &extra) == 4 && a >= 0 && a <= 255 && b >= 0 &&
-            b <= 255 && c >= 0 && c <= 255 && d >= 0 && d <= 255) {
+        int parsed = sscanf(ipv4_start, "%d.%d.%d.%d%c", &a, &b, &c, &d, &extra);
+        // Only accept exactly 4 parsed values - any extra characters make it invalid
+        if (parsed == 4 && a >= 0 && a <= 255 && b >= 0 && b <= 255 && c >= 0 && c <= 255 && d >= 0 && d <= 255) {
           // Convert IPv4 to two 16-bit groups
           uint16_t high = (a << 8) | b;
           uint16_t low = (c << 8) | d;
@@ -234,8 +282,9 @@ char* canonicalize_ipv6(const char* ipv6_str) {
         int a, b, c, d;
         char extra;
         // Use sscanf with %c to detect any trailing characters (like dots)
-        if (sscanf(ipv4_start, "%d.%d.%d.%d%c", &a, &b, &c, &d, &extra) == 4 && a >= 0 && a <= 255 && b >= 0 &&
-            b <= 255 && c >= 0 && c <= 255 && d >= 0 && d <= 255) {
+        int parsed = sscanf(ipv4_start, "%d.%d.%d.%d%c", &a, &b, &c, &d, &extra);
+        // Only accept exactly 4 parsed values - any extra characters make it invalid
+        if (parsed == 4 && a >= 0 && a <= 255 && b >= 0 && b <= 255 && c >= 0 && c <= 255 && d >= 0 && d <= 255) {
           uint16_t high = (a << 8) | b;
           uint16_t low = (c << 8) | d;
           if (group_count < 8)

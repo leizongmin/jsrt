@@ -162,12 +162,27 @@ int validate_hostname_characters_allow_at(const char* hostname, int allow_at) {
   if (!hostname)
     return 0;
 
+  // Check for IPv6 address format: starts with [ and ends with ]
+  size_t len = strlen(hostname);
+  int is_ipv6 = (len >= 3 && hostname[0] == '[' && hostname[len - 1] == ']');
+
+  if (is_ipv6) {
+    // For IPv6 addresses, use full IPv6 validation including structure checks
+    char* canonicalized = canonicalize_ipv6(hostname);
+    if (!canonicalized) {
+      return 0;  // Invalid IPv6 address structure
+    }
+    free(canonicalized);
+    return 1;  // Valid IPv6 address
+  }
+
   for (const char* p = hostname; *p; p++) {
     unsigned char c = (unsigned char)*p;
 
     // Reject forbidden hostname characters per WHATWG URL spec
     // These characters are forbidden in hostnames: " # % / : < > ? @ [ \ ] ^
     // But allow @ if allow_at flag is set (for double colon @ patterns)
+    // Note: [ and ] are allowed for IPv6 addresses, handled above
     if (c == '"' || c == '#' || c == '%' || c == '/' || c == '<' || c == '>' || c == '?' || (!allow_at && c == '@') ||
         c == '[' || c == '\\' || c == ']' || c == '^') {
       return 0;  // Invalid hostname character

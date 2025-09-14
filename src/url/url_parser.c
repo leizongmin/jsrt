@@ -58,6 +58,7 @@ char* parse_url_components(JSRT_URL* parsed, const char* scheme, char* ptr) {
   // Handle different URL formats
 
   if (strncmp(ptr, "//", 2) == 0) {
+    parsed->has_authority_syntax = 1;  // Mark as authority-based syntax
     return parse_authority_based_url_with_position(parsed, scheme, ptr, is_special);
   } else if (is_special && *ptr == '/' && *(ptr + 1) != '/') {
     // Special case: "http:/example.com/" should become "http://example.com/"
@@ -81,8 +82,17 @@ char* parse_url_components(JSRT_URL* parsed, const char* scheme, char* ptr) {
 char* parse_authority_based_url_with_position(JSRT_URL* parsed, const char* scheme, char* ptr, int is_special) {
   // Check if this is a non-special scheme with empty authority (like "foo://")
   if (!is_special && (*(ptr + 2) == '\0' || *(ptr + 2) == '?' || *(ptr + 2) == '#')) {
-    // For non-special schemes like "foo://", preserve "//" as part of the pathname
-    return ptr;  // Return original position to be parsed as pathname
+    // For non-special schemes like "foo://", set empty host and empty pathname
+    free(parsed->hostname);
+    parsed->hostname = strdup("");
+    free(parsed->host);
+    parsed->host = strdup("");
+    free(parsed->pathname);
+    parsed->pathname = strdup("");     // Keep pathname empty for foo://
+    parsed->has_authority_syntax = 1;  // Mark as authority-based syntax
+
+    // Return pointer after "//" - no further path parsing needed
+    return ptr + 2;  // Skip "//" and return position for path parsing
   }
 
   // Special case for file URLs: "file:.//p" should be treated as path, not authority
@@ -148,12 +158,24 @@ int parse_double_colon_at_pattern(JSRT_URL* parsed, char** ptr) {
   // Set flag to indicate this special pattern for origin calculation
   parsed->double_colon_at_pattern = 1;
 
-  // For patterns like ::@host@host, use first @ and handle manually to match WPT expectations
-  char* first_at = strchr(*ptr, '@');
-  char* authority_end = find_authority_end(*ptr, first_at);
+  // For patterns like ::@c@d:2, use last @ to separate userinfo from host per WPT spec
+  char* last_at = NULL;
+  char* temp_ptr = *ptr;
+  while (*temp_ptr) {
+    if (*temp_ptr == '@') {
+      last_at = temp_ptr;
+    }
+    temp_ptr++;
+  }
 
-  // Parse userinfo (everything before first @)
-  size_t userinfo_len = first_at - *ptr;
+  if (!last_at) {
+    return -1;  // No @ found, should not happen
+  }
+
+  char* authority_end = find_authority_end(*ptr, last_at);
+
+  // Parse userinfo (everything before last @)
+  size_t userinfo_len = last_at - *ptr;
   char* userinfo = malloc(userinfo_len + 1);
   strncpy(userinfo, *ptr, userinfo_len);
   userinfo[userinfo_len] = '\0';
@@ -174,8 +196,8 @@ int parse_double_colon_at_pattern(JSRT_URL* parsed, char** ptr) {
   }
   free(userinfo);
 
-  // Parse host part (everything after first @, before authority_end)
-  char* host_start = first_at + 1;
+  // Parse host part (everything after last @, before authority_end)
+  char* host_start = last_at + 1;
   size_t host_len = authority_end - host_start;
   char* host_part = malloc(host_len + 1);
   strncpy(host_part, host_start, host_len);
@@ -235,10 +257,17 @@ int parse_double_colon_at_pattern(JSRT_URL* parsed, char** ptr) {
 
 // Parse normal authority section
 int parse_normal_authority(JSRT_URL* parsed, char** ptr) {
-  // Scan the entire remaining string to find the rightmost '@' symbol
+  // First find the authority boundary (before first '/', '?', or '#')
+  char* authority_boundary = *ptr;
+  while (*authority_boundary && *authority_boundary != '/' && *authority_boundary != '?' &&
+         *authority_boundary != '#') {
+    authority_boundary++;
+  }
+
+  // Scan only within the authority section to find the rightmost '@' symbol
   char* rightmost_at = NULL;
   char* temp_ptr = *ptr;
-  while (*temp_ptr) {
+  while (temp_ptr < authority_boundary) {
     if (*temp_ptr == '@') {
       rightmost_at = temp_ptr;
     }
@@ -290,6 +319,7 @@ JSRT_URL* create_url_structure(void) {
   parsed->has_password_field = 0;
   parsed->double_colon_at_pattern = 0;
   parsed->opaque_path = 0;
+  parsed->has_authority_syntax = 0;
 
   return parsed;
 }
@@ -339,6 +369,12 @@ JSRT_URL* parse_absolute_url(const char* preprocessed_url) {
 
   // Handle file URL Windows drive letters
   handle_file_url_drive_letters(parsed);
+
+  // Ensure special schemes have "/" as pathname if empty
+  if (is_special_scheme(parsed->protocol) && strcmp(parsed->pathname, "") == 0) {
+    free(parsed->pathname);
+    parsed->pathname = strdup("/");
+  }
 
   // Compute origin
   free(parsed->origin);

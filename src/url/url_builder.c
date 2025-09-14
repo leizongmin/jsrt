@@ -25,18 +25,40 @@ void build_href(JSRT_URL* parsed) {
 
   // Build userinfo part with proper encoding
   char userinfo[512] = "";
-  if (parsed->username && strlen(parsed->username) > 0) {
-    char* encoded_username = url_userinfo_encode_with_scheme_name(parsed->username, parsed->protocol);
+  if ((parsed->username && strlen(parsed->username) > 0) ||
+      (parsed->has_password_field && parsed->password && strlen(parsed->password) > 0)) {
+    // Either username exists or password exists
+    char* encoded_username =
+        url_userinfo_encode_with_scheme_name(parsed->username ? parsed->username : "", parsed->protocol);
+
     if (parsed->has_password_field && parsed->password && strlen(parsed->password) > 0) {
-      // Original URL had password field with non-empty password, include colon
+      // Password exists, include colon and password
       char* encoded_password = url_userinfo_encode_with_scheme_name(parsed->password, parsed->protocol);
       snprintf(userinfo, sizeof(userinfo), "%s:%s@", encoded_username, encoded_password);
       free(encoded_password);
     } else {
-      // No password field in original URL, or password is empty - omit colon per WPT spec
+      // No password or password is empty - omit colon per WPT spec
       snprintf(userinfo, sizeof(userinfo), "%s@", encoded_username);
     }
     free(encoded_username);
+  }
+
+  // Build final host with normalized port
+  char* final_host;
+  if (parsed->hostname && strlen(parsed->hostname) > 0) {
+    char* normalized_port = normalize_port(parsed->port, parsed->protocol);
+    if (normalized_port && strlen(normalized_port) > 0) {
+      // Host includes port
+      size_t host_len = strlen(parsed->hostname) + strlen(normalized_port) + 2;
+      final_host = malloc(host_len);
+      snprintf(final_host, host_len, "%s:%s", parsed->hostname, normalized_port);
+    } else {
+      // Host without port
+      final_host = strdup(parsed->hostname);
+    }
+    free(normalized_port);
+  } else {
+    final_host = strdup(parsed->host ? parsed->host : "");
   }
 
   // Use encoded values for href construction
@@ -45,21 +67,30 @@ void build_href(JSRT_URL* parsed) {
   char* final_search = url_component_encode(parsed->search);
   char* final_hash = is_special ? url_fragment_encode(parsed->hash) : url_fragment_encode_nonspecial(parsed->hash);
 
-  if (is_special && strlen(parsed->host) > 0) {
-    snprintf(parsed->href, href_len, "%s//%s%s%s%s%s", parsed->protocol, userinfo, parsed->host, final_pathname,
+  if (is_special && strlen(final_host) > 0) {
+    snprintf(parsed->href, href_len, "%s//%s%s%s%s%s", parsed->protocol, userinfo, final_host, final_pathname,
              final_search, final_hash);
-  } else if (strlen(parsed->host) > 0) {
-    snprintf(parsed->href, href_len, "%s//%s%s%s%s%s", parsed->protocol, userinfo, parsed->host, final_pathname,
+  } else if (strlen(final_host) > 0) {
+    snprintf(parsed->href, href_len, "%s//%s%s%s%s%s", parsed->protocol, userinfo, final_host, final_pathname,
              final_search, final_hash);
   } else if (is_special && !parsed->opaque_path) {
     // Special schemes with empty host (like file:///path) should include //
     snprintf(parsed->href, href_len, "%s//%s%s%s", parsed->protocol, final_pathname, final_search, final_hash);
+  } else if (parsed->has_authority_syntax) {
+    // Non-special schemes that started with // should preserve authority syntax
+    // For empty pathname (like foo://), don't add extra slash
+    if (strlen(final_pathname) == 0) {
+      snprintf(parsed->href, href_len, "%s//%s%s", parsed->protocol, final_search, final_hash);
+    } else {
+      snprintf(parsed->href, href_len, "%s//%s%s%s", parsed->protocol, final_pathname, final_search, final_hash);
+    }
   } else {
     // Non-special schemes or opaque paths (no authority)
     snprintf(parsed->href, href_len, "%s%s%s%s", parsed->protocol, final_pathname, final_search, final_hash);
   }
 
   // Clean up encoded strings
+  free(final_host);
   free(final_pathname);
   free(final_search);
   free(final_hash);
@@ -85,10 +116,13 @@ void parse_path_query_fragment(JSRT_URL* parsed, char* ptr) {
   if (query_pos) {
     char* search_end = fragment_pos ? fragment_pos : ptr + strlen(ptr);
     size_t search_len = search_end - query_pos;
+    char* raw_search = malloc(search_len + 1);
+    strncpy(raw_search, query_pos, search_len);
+    raw_search[search_len] = '\0';
+
     free(parsed->search);
-    parsed->search = malloc(search_len + 1);
-    strncpy(parsed->search, query_pos, search_len);
-    parsed->search[search_len] = '\0';
+    parsed->search = url_component_encode(raw_search);
+    free(raw_search);
     *query_pos = '\0';
   }
 
@@ -99,11 +133,18 @@ void parse_path_query_fragment(JSRT_URL* parsed, char* ptr) {
       free(parsed->pathname);
       parsed->pathname = strdup(ptr);
     }
-  } else if (is_special_scheme(parsed->protocol)) {
-    // Special schemes should have "/" as default path if empty
+  } else {
+    // Empty pathname handling:
+    // - Special schemes should default to "/" if pathname is empty
+    // - Non-special schemes with authority syntax (foo://) should keep pathname empty
     if (strcmp(parsed->pathname, "") == 0) {
-      free(parsed->pathname);
-      parsed->pathname = strdup("/");
+      if (is_special_scheme(parsed->protocol) && !parsed->has_authority_syntax) {
+        // Special schemes without authority syntax get "/" as default pathname
+        free(parsed->pathname);
+        parsed->pathname = strdup("/");
+      }
+      // Non-special schemes with authority syntax (foo://) keep empty pathname
+      // Special schemes with authority syntax also keep their existing empty pathname
     }
   }
 }

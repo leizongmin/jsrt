@@ -1,4 +1,5 @@
 #include <ctype.h>
+#include <string.h>
 #include "url.h"
 
 // Resolve relative URL against base URL
@@ -52,6 +53,25 @@ JSRT_URL* resolve_relative_url(const char* url, const char* base) {
   result->search_params = JS_UNDEFINED;
   result->ctx = NULL;
 
+  // Handle scheme-only relative URLs like "http:foo.com"
+  // Only special schemes should be treated as relative paths with the scheme stripped
+  char* colon_pos = strchr(url, ':');
+  if (colon_pos && colon_pos > url && ((url[0] >= 'a' && url[0] <= 'z') || (url[0] >= 'A' && url[0] <= 'Z')) &&
+      strstr(url, "://") == NULL) {
+    // Extract scheme to check if it's special
+    size_t scheme_len = colon_pos - url;
+    char* scheme = malloc(scheme_len + 2);  // +1 for ':', +1 for '\0'
+    strncpy(scheme, url, scheme_len);
+    scheme[scheme_len] = ':';
+    scheme[scheme_len + 1] = '\0';
+
+    // Only strip scheme for special schemes
+    if (is_special_scheme(scheme)) {
+      url = colon_pos + 1;  // Skip the scheme and colon
+    }
+    free(scheme);
+  }
+
   // Handle URLs that start with a fragment (e.g., "#fragment" or ":#")
   char* fragment_pos = strchr(url, '#');
   if (fragment_pos != NULL) {
@@ -70,6 +90,7 @@ JSRT_URL* resolve_relative_url(const char* url, const char* base) {
     result->pathname = strdup(base_url->pathname);
     result->search = strdup(url);  // Include the '?'
     result->hash = strdup("");
+    // TODO: Windows path \\x\hello parsing - complex implementation needed
   } else if (url[0] == '/') {
     // Absolute path - parse the path to separate pathname, search, and hash
     char* path_copy = strdup(url);

@@ -11,14 +11,15 @@ static JSValue JSRT_URLSearchParamsGet(JSContext* ctx, JSValueConst this_val, in
     return JS_EXCEPTION;
   }
 
-  const char* name = JS_ToCString(ctx, argv[0]);
+  size_t name_len;
+  const char* name = JS_ToCStringLen(ctx, &name_len, argv[0]);
   if (!name) {
     return JS_EXCEPTION;
   }
 
   JSRT_URLSearchParam* param = search_params->params;
   while (param) {
-    if (param->name_len == strlen(name) && memcmp(param->name, name, param->name_len) == 0) {
+    if (param->name_len == name_len && memcmp(param->name, name, name_len) == 0) {
       JS_FreeCString(ctx, name);
       return JS_NewStringLen(ctx, param->value, param->value_len);
     }
@@ -40,7 +41,8 @@ static JSValue JSRT_URLSearchParamsGetAll(JSContext* ctx, JSValueConst this_val,
     return JS_EXCEPTION;
   }
 
-  const char* name = JS_ToCString(ctx, argv[0]);
+  size_t name_len;
+  const char* name = JS_ToCStringLen(ctx, &name_len, argv[0]);
   if (!name) {
     return JS_EXCEPTION;
   }
@@ -50,7 +52,7 @@ static JSValue JSRT_URLSearchParamsGetAll(JSContext* ctx, JSValueConst this_val,
 
   JSRT_URLSearchParam* param = search_params->params;
   while (param) {
-    if (param->name_len == strlen(name) && memcmp(param->name, name, param->name_len) == 0) {
+    if (param->name_len == name_len && memcmp(param->name, name, name_len) == 0) {
       JSValue value = JS_NewStringLen(ctx, param->value, param->value_len);
       JS_SetPropertyUint32(ctx, result_array, index++, value);
     }
@@ -72,16 +74,14 @@ static JSValue JSRT_URLSearchParamsSet(JSContext* ctx, JSValueConst this_val, in
     return JS_EXCEPTION;
   }
 
-  const char* name = JS_ToCString(ctx, argv[0]);
-  const char* value = JS_ToCString(ctx, argv[1]);
+  size_t name_len, value_len;
+  const char* name = JS_ToCStringLen(ctx, &name_len, argv[0]);
+  const char* value = JS_ToCStringLen(ctx, &value_len, argv[1]);
   if (!name || !value) {
     JS_FreeCString(ctx, name);
     JS_FreeCString(ctx, value);
     return JS_EXCEPTION;
   }
-
-  size_t name_len = strlen(name);
-  size_t value_len = strlen(value);
 
   // Find the first parameter with the same name and update it
   // Remove any subsequent parameters with the same name
@@ -134,15 +134,16 @@ static JSValue JSRT_URLSearchParamsAppend(JSContext* ctx, JSValueConst this_val,
     return JS_EXCEPTION;
   }
 
-  const char* name = JS_ToCString(ctx, argv[0]);
-  const char* value = JS_ToCString(ctx, argv[1]);
+  size_t name_len, value_len;
+  const char* name = JS_ToCStringLen(ctx, &name_len, argv[0]);
+  const char* value = JS_ToCStringLen(ctx, &value_len, argv[1]);
   if (!name || !value) {
     JS_FreeCString(ctx, name);
     JS_FreeCString(ctx, value);
     return JS_EXCEPTION;
   }
 
-  JSRT_AddSearchParamWithLength(search_params, name, strlen(name), value, strlen(value));
+  JSRT_AddSearchParamWithLength(search_params, name, name_len, value, value_len);
   update_parent_url_href(search_params);
 
   JS_FreeCString(ctx, name);
@@ -161,7 +162,8 @@ static JSValue JSRT_URLSearchParamsHas(JSContext* ctx, JSValueConst this_val, in
     return JS_EXCEPTION;
   }
 
-  const char* name = JS_ToCString(ctx, argv[0]);
+  size_t name_len;
+  const char* name = JS_ToCStringLen(ctx, &name_len, argv[0]);
   if (!name) {
     return JS_EXCEPTION;
   }
@@ -171,17 +173,20 @@ static JSValue JSRT_URLSearchParamsHas(JSContext* ctx, JSValueConst this_val, in
   int check_value = 0;
 
   // If second argument is provided, check both name and value
+  // Special case: if second argument is undefined, treat it as "don't check value"
   if (argc >= 2) {
-    value = JS_ToCString(ctx, argv[1]);
-    if (!value) {
-      JS_FreeCString(ctx, name);
-      return JS_EXCEPTION;
+    if (JS_IsUndefined(argv[1])) {
+      // undefined means "ignore value, just check name exists"
+      check_value = 0;
+    } else {
+      value = JS_ToCStringLen(ctx, &value_len, argv[1]);
+      if (!value) {
+        JS_FreeCString(ctx, name);
+        return JS_EXCEPTION;
+      }
+      check_value = 1;
     }
-    value_len = strlen(value);
-    check_value = 1;
   }
-
-  size_t name_len = strlen(name);
   JSRT_URLSearchParam* param = search_params->params;
   while (param) {
     if (param->name_len == name_len && memcmp(param->name, name, name_len) == 0) {
@@ -220,23 +225,53 @@ static JSValue JSRT_URLSearchParamsDelete(JSContext* ctx, JSValueConst this_val,
     return JS_EXCEPTION;
   }
 
-  const char* name = JS_ToCString(ctx, argv[0]);
+  size_t name_len;
+  const char* name = JS_ToCStringLen(ctx, &name_len, argv[0]);
   if (!name) {
     return JS_EXCEPTION;
   }
 
-  size_t name_len = strlen(name);
+  const char* value = NULL;
+  size_t value_len = 0;
+  int check_value = 0;
+
+  // If second argument is provided, delete only matching name-value pairs
+  if (argc >= 2) {
+    value = JS_ToCStringLen(ctx, &value_len, argv[1]);
+    if (!value) {
+      JS_FreeCString(ctx, name);
+      return JS_EXCEPTION;
+    }
+    check_value = 1;
+  }
+
   JSRT_URLSearchParam** current = &search_params->params;
   int removed = 0;
 
   while (*current) {
     if ((*current)->name_len == name_len && memcmp((*current)->name, name, name_len) == 0) {
-      JSRT_URLSearchParam* to_remove = *current;
-      *current = (*current)->next;
-      free(to_remove->name);
-      free(to_remove->value);
-      free(to_remove);
-      removed = 1;
+      if (check_value) {
+        // Check if value also matches
+        if ((*current)->value_len == value_len && memcmp((*current)->value, value, value_len) == 0) {
+          JSRT_URLSearchParam* to_remove = *current;
+          *current = (*current)->next;
+          free(to_remove->name);
+          free(to_remove->value);
+          free(to_remove);
+          removed = 1;
+        } else {
+          // Name matches but value doesn't, continue to next
+          current = &(*current)->next;
+        }
+      } else {
+        // Only checking name, remove this entry
+        JSRT_URLSearchParam* to_remove = *current;
+        *current = (*current)->next;
+        free(to_remove->name);
+        free(to_remove->value);
+        free(to_remove);
+        removed = 1;
+      }
     } else {
       current = &(*current)->next;
     }
@@ -247,6 +282,9 @@ static JSValue JSRT_URLSearchParamsDelete(JSContext* ctx, JSValueConst this_val,
   }
 
   JS_FreeCString(ctx, name);
+  if (value) {
+    JS_FreeCString(ctx, value);
+  }
   return JS_UNDEFINED;
 }
 
@@ -442,8 +480,8 @@ void JSRT_RegisterURLSearchParamsMethods(JSContext* ctx, JSValue proto) {
   JS_SetPropertyStr(ctx, proto, "getAll", JS_NewCFunction(ctx, JSRT_URLSearchParamsGetAll, "getAll", 1));
   JS_SetPropertyStr(ctx, proto, "set", JS_NewCFunction(ctx, JSRT_URLSearchParamsSet, "set", 2));
   JS_SetPropertyStr(ctx, proto, "append", JS_NewCFunction(ctx, JSRT_URLSearchParamsAppend, "append", 2));
-  JS_SetPropertyStr(ctx, proto, "has", JS_NewCFunction(ctx, JSRT_URLSearchParamsHas, "has", 1));
-  JS_SetPropertyStr(ctx, proto, "delete", JS_NewCFunction(ctx, JSRT_URLSearchParamsDelete, "delete", 1));
+  JS_SetPropertyStr(ctx, proto, "has", JS_NewCFunction(ctx, JSRT_URLSearchParamsHas, "has", 2));
+  JS_SetPropertyStr(ctx, proto, "delete", JS_NewCFunction(ctx, JSRT_URLSearchParamsDelete, "delete", 2));
   JS_SetPropertyStr(ctx, proto, "toString", JS_NewCFunction(ctx, JSRT_URLSearchParamsToString, "toString", 0));
 
   // Add iterator methods
@@ -459,11 +497,8 @@ void JSRT_RegisterURLSearchParamsMethods(JSContext* ctx, JSValue proto) {
   JS_FreeValue(ctx, global);
 
   if (!JS_IsUndefined(iterator_symbol)) {
-    JSAtom iterator_atom = JS_ValueToAtom(ctx, iterator_symbol);
-    JS_DefineProperty(ctx, proto, iterator_atom,
-                      JS_NewCFunction(ctx, JSRT_URLSearchParamsSymbolIterator, "[Symbol.iterator]", 0), JS_UNDEFINED,
-                      JS_UNDEFINED, JS_PROP_CONFIGURABLE | JS_PROP_WRITABLE);
-    JS_FreeAtom(ctx, iterator_atom);
+    JSValue iterator_method = JS_NewCFunction(ctx, JSRT_URLSearchParamsSymbolIterator, "[Symbol.iterator]", 0);
+    JS_SetProperty(ctx, proto, JS_ValueToAtom(ctx, iterator_symbol), iterator_method);
   }
   JS_FreeValue(ctx, iterator_symbol);
 

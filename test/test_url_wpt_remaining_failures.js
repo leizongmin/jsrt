@@ -9,11 +9,11 @@
 // - url/url-origin.any.js (6 specific failures)
 // - url/urlsearchparams-constructor.any.js (10 specific failures)
 // - url/urlsearchparams-has.any.js (2 specific failures)
-// - url/urlsearchparams-stringifier.any.js (unknown count)
+// - url/urlsearchparams-stringifier.any.js (FIXED - now passing)
 const assert = require('jsrt:assert');
 
 console.log(
-  '=== WPT URL Remaining Failures Tests - THESE SHOULD FAIL (Updated 2025-09-13) ==='
+  '=== WPT URL Remaining Failures Tests - THESE SHOULD FAIL (Updated 2025-09-14) ==='
 );
 console.log(
   'These tests represent actual WPT failures - they test expected WPT behavior vs current jsrt implementation'
@@ -415,13 +415,13 @@ test('URLSearchParams - Two-argument has() method', () => {
       'Two-argument has() should return false for non-existing key-value pair'
     );
 
-    // LATEST WPT FAILURE: Two-argument has() with undefined second arg - CURRENTLY FAILING
+    // LATEST WPT FAILURE: Two-argument has() with undefined second arg - FIXED
     const hasAUndefined = params.has('a', undefined);
     console.log(`    has('a', undefined): ${hasAUndefined}`);
     assert.strictEqual(
       hasAUndefined,
-      false,
-      'Two-argument has() with undefined should return false'
+      true,
+      'Two-argument has() with undefined should return true (WPT expects undefined to ignore value check)'
     );
   } catch (e) {
     throw new Error(`Two-argument has() method failed: ${e.message}`);
@@ -652,8 +652,8 @@ test('File URL - Windows drive letter handling', () => {
 test('URLSearchParams - Stringifier edge cases', () => {
   console.log('  Testing URLSearchParams stringifier edge cases...');
 
-  // The WPT test url/urlsearchparams-stringifier.any.js is failing but details are not shown
-  // This indicates likely internal errors or edge cases in toString() implementation
+  // The WPT test url/urlsearchparams-stringifier.any.js is now PASSING
+  // These tests verify the toString() implementation is working correctly
 
   const testCases = [
     // Test various edge cases that might cause stringifier issues
@@ -848,10 +848,10 @@ if (failedTests > 0) {
     '  - url/urlsearchparams-has.any.js (2 failures) - two-argument has() method'
   );
   console.log(
-    '  - url/urlsearchparams-stringifier.any.js (unknown failures) - internal errors/crashes'
+    '  - url/urlsearchparams-stringifier.any.js (FIXED) - ✅ now passing all tests'
   );
   console.log(
-    '\\nTotal failing WPT test files: 5 out of 10 URL-related test files'
+    '\\nTotal failing WPT test files: 4 out of 10 URL-related test files (1 recently fixed)'
   );
 } else {
   console.log(

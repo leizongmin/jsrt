@@ -113,8 +113,8 @@ int parse_authority(JSRT_URL* parsed, const char* authority_str) {
       if (colon)
         *colon = '\0';
 
-      // Check if port is default port or port 0 (which should be omitted)
-      if (is_default_port(scheme, normalized_port) || port_num == 0) {
+      // Check if port is default port (port 0 should be kept as per WHATWG spec)
+      if (is_default_port(scheme, normalized_port)) {
         free(parsed->port);
         parsed->port = strdup("");
       } else {

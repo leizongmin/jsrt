@@ -176,6 +176,11 @@ char* normalize_port(const char* port_str, const char* protocol) {
     return strdup("");
   }
 
+  // According to WHATWG URL spec, port 0 should be omitted
+  if (port_num == 0) {
+    return strdup("");
+  }
+
   // Return normalized port as string
   char* result = malloc(16);  // Enough for any valid port number
   snprintf(result, 16, "%ld", port_num);
@@ -302,12 +307,54 @@ char* normalize_url_backslashes(const char* url) {
         result[result_pos++] = '\\';
       } else {
         // For all special schemes including file:, convert backslash to forward slash
-        result[result_pos++] = '/';
+        // But avoid creating consecutive slashes in path contexts, EXCEPT for relative URLs
+        // starting with \\ which should become scheme-relative URLs starting with //
+        if (result_pos > 0 && result[result_pos - 1] == '/') {
+          // Check if this is a relative URL starting with \\ (should become //)
+          if (!colon_pos && result_pos == 1 && i == 1) {
+            // This is the second backslash in \\... at the beginning - preserve it as //
+            result[result_pos++] = '/';
+          }
+          // Check if this is the authority section of a scheme (like http:\\)
+          else if (colon_pos && i == (colon_pos - url) + 2) {
+            // This is the second backslash right after scheme:\ - should become ://
+            result[result_pos++] = '/';
+          } else {
+            // For special schemes, preserve consecutive slashes in paths from backslash conversion
+            // The WHATWG URL spec requires backslashes to be converted to slashes without
+            // removing consecutive slashes in the path portion (needed for WPT compliance)
+            if (colon_pos) {
+              size_t scheme_len = colon_pos - url;
+              int is_special_scheme_flag = 0;
 
-        // Only skip additional consecutive backslashes, not forward slashes
-        // This preserves significant forward slashes in URLs like file:///
-        while (i + 1 < len && url[i + 1] == '\\') {
-          i++;
+              // Check if this is a special scheme
+              if (scheme_len == 4 && strncmp(url, "http", 4) == 0)
+                is_special_scheme_flag = 1;
+              else if (scheme_len == 5 && strncmp(url, "https", 5) == 0)
+                is_special_scheme_flag = 1;
+              else if (scheme_len == 3 && strncmp(url, "ftp", 3) == 0)
+                is_special_scheme_flag = 1;
+              else if (scheme_len == 4 && strncmp(url, "file", 4) == 0)
+                is_special_scheme_flag = 1;
+              else if (scheme_len == 2 && strncmp(url, "ws", 2) == 0)
+                is_special_scheme_flag = 1;
+              else if (scheme_len == 3 && strncmp(url, "wss", 3) == 0)
+                is_special_scheme_flag = 1;
+
+              if (is_special_scheme_flag) {
+                // For special schemes, preserve consecutive slashes from backslash conversion
+                result[result_pos++] = '/';
+              } else {
+                // For non-special schemes, skip consecutive slashes
+                continue;
+              }
+            } else {
+              // No scheme context, skip consecutive slashes
+              continue;
+            }
+          }
+        } else {
+          result[result_pos++] = '/';
         }
       }
     } else if (i < stop_pos && url[i] == '/') {
@@ -363,9 +410,11 @@ char* normalize_url_backslashes(const char* url) {
               if (!colon_pos) {
                 result[result_pos++] = '/';
               } else {
-                // Special schemes normalize consecutive slashes in paths
-                // Skip this extra slash (for cases like "path//file" -> "path/file")
-                continue;
+                // Special schemes: preserve consecutive slashes in paths
+                // The WHATWG URL spec says backslashes should be converted to slashes
+                // without removing consecutive slashes in the path portion
+                // This is needed for WPT compliance (e.g., /\@ becomes //@, not /@)
+                result[result_pos++] = '/';
               }
             }
           }
@@ -466,16 +515,21 @@ char* compute_origin(const char* protocol, const char* hostname, const char* por
     return strdup("null");
   }
 
+  // Use normalized port for origin computation
+  char* normalized_port = normalize_port(port, protocol);
+
   char* origin;
-  if (is_default_port(scheme, port) || !port || strlen(port) == 0 || double_colon_at_pattern) {
-    // Omit default port or when double colon @ pattern detected (http::@host:port)
+  if (!normalized_port || strlen(normalized_port) == 0) {
+    // Omit default port, port 0, or when no port is specified
     origin = malloc(strlen(protocol) + strlen(hostname) + 4);
     sprintf(origin, "%s//%s", protocol, hostname);
   } else {
-    // Include custom port
-    origin = malloc(strlen(protocol) + strlen(hostname) + strlen(port) + 5);
-    sprintf(origin, "%s//%s:%s", protocol, hostname, port);
+    // Include custom non-default port (even if double_colon_at_pattern is present)
+    origin = malloc(strlen(protocol) + strlen(hostname) + strlen(normalized_port) + 5);
+    sprintf(origin, "%s//%s:%s", protocol, hostname, normalized_port);
   }
+
+  free(normalized_port);
 
   free(scheme);
   return origin;

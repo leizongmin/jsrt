@@ -156,41 +156,62 @@ int is_relative_url(const char* cleaned_url, const char* base) {
   if (!cleaned_url)
     return 0;
 
+  // Debug: print what we're checking
+  // printf("DEBUG is_relative_url: checking '%s' with base '%s'\n", cleaned_url, base ? base : "NULL");
+
   // Check for scheme-relative URLs (starting with //)
   if (strncmp(cleaned_url, "//", 2) == 0) {
+    // printf("DEBUG: Found scheme-relative URL (starts with //)\n");
     return 1;
   }
 
-  // Check if URL has a scheme
-  int has_scheme = 0;
-  if (cleaned_url[0] &&
-      ((cleaned_url[0] >= 'a' && cleaned_url[0] <= 'z') || (cleaned_url[0] >= 'A' && cleaned_url[0] <= 'Z'))) {
-    // Look for "://" pattern first
-    char* scheme_end = strstr(cleaned_url, "://");
-    if (scheme_end) {
-      has_scheme = 1;
-    } else {
-      // Look for single colon
+  // Check if URL has a scheme and authority (://) - these are absolute
+  char* authority_pattern = strstr(cleaned_url, "://");
+  if (authority_pattern) {
+    // printf("DEBUG: Found authority pattern (://), treating as absolute\n");
+    return 0;  // Absolute URL with authority
+  }
+
+  // If we have a base URL, check for special relative URL patterns
+  if (base) {
+    // URLs starting with "/" are always relative
+    if (cleaned_url[0] == '/') {
+      return 1;
+    }
+
+    // URLs starting with "?", "#" are always relative
+    if (cleaned_url[0] == '?' || cleaned_url[0] == '#') {
+      return 1;
+    }
+
+    // Check if URL has a special scheme without authority (like "http:foo.com")
+    // Only special schemes should be treated as relative according to WHATWG URL spec
+    if (cleaned_url[0] &&
+        ((cleaned_url[0] >= 'a' && cleaned_url[0] <= 'z') || (cleaned_url[0] >= 'A' && cleaned_url[0] <= 'Z'))) {
       for (const char* p = cleaned_url; *p; p++) {
         if (*p == ':') {
-          has_scheme = 1;
-          break;
+          // Found a scheme, extract it to check if it's special
+          size_t scheme_len = p - cleaned_url;
+          char* scheme = malloc(scheme_len + 2);  // +1 for ':', +1 for '\0'
+          strncpy(scheme, cleaned_url, scheme_len);
+          scheme[scheme_len] = ':';
+          scheme[scheme_len + 1] = '\0';
+
+          // Per WHATWG URL spec: URLs with scheme are always absolute
+          // Special schemes like "http:foo.com" should be parsed as absolute URLs
+          free(scheme);
+          return 0;  // Any URL with a scheme is absolute
         } else if (*p == '/' || *p == '?' || *p == '#') {
+          // No scheme found before path/query/fragment
           break;
         }
       }
     }
-  }
 
-  // If no scheme and we have base, it's relative
-  if (!has_scheme && base) {
+    // Any other URL with base is relative if it doesn't have scheme+authority
     return 1;
   }
 
-  // Path-relative URLs
-  if (base && (cleaned_url[0] == '/' || (!has_scheme && cleaned_url[0] != '\0'))) {
-    return 1;
-  }
-
+  // Without base URL, only absolute URLs with scheme+authority are not relative
   return 0;
 }

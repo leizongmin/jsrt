@@ -115,21 +115,59 @@ static JSValue JSRT_URLGetUsername(JSContext* ctx, JSValueConst this_val, int ar
   JSRT_URL* url = JS_GetOpaque2(ctx, this_val, JSRT_URLClassID);
   if (!url)
     return JS_EXCEPTION;
-  return JS_NewString(ctx, url->username ? url->username : "");
+
+  if (!url->username || strlen(url->username) == 0) {
+    return JS_NewString(ctx, "");
+  }
+
+  // Username property should return percent-encoded value
+  char* encoded_username = url_userinfo_encode_with_scheme_name(url->username, url->protocol);
+  JSValue result = JS_NewString(ctx, encoded_username ? encoded_username : "");
+  free(encoded_username);
+  return result;
 }
 
 static JSValue JSRT_URLGetPassword(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
   JSRT_URL* url = JS_GetOpaque2(ctx, this_val, JSRT_URLClassID);
   if (!url)
     return JS_EXCEPTION;
-  return JS_NewString(ctx, url->password ? url->password : "");
+
+  if (!url->password || strlen(url->password) == 0) {
+    return JS_NewString(ctx, "");
+  }
+
+  // Password property should return percent-encoded value
+  char* encoded_password = url_userinfo_encode_with_scheme_name(url->password, url->protocol);
+  JSValue result = JS_NewString(ctx, encoded_password ? encoded_password : "");
+  free(encoded_password);
+  return result;
 }
 
 static JSValue JSRT_URLGetHost(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
   JSRT_URL* url = JS_GetOpaque2(ctx, this_val, JSRT_URLClassID);
   if (!url)
     return JS_EXCEPTION;
-  return JS_NewString(ctx, url->host);
+
+  // Build host with normalized port
+  if (url->hostname && strlen(url->hostname) > 0) {
+    char* normalized_port = normalize_port(url->port, url->protocol);
+    if (normalized_port && strlen(normalized_port) > 0) {
+      // Host includes port
+      size_t host_len = strlen(url->hostname) + strlen(normalized_port) + 2;
+      char* final_host = malloc(host_len);
+      snprintf(final_host, host_len, "%s:%s", url->hostname, normalized_port);
+      JSValue result = JS_NewString(ctx, final_host);
+      free(final_host);
+      free(normalized_port);
+      return result;
+    } else {
+      // Host without port (port 0 or default port)
+      free(normalized_port);
+      return JS_NewString(ctx, url->hostname);
+    }
+  }
+
+  return JS_NewString(ctx, url->host ? url->host : "");
 }
 
 static JSValue JSRT_URLGetHostname(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
@@ -143,7 +181,15 @@ static JSValue JSRT_URLGetPort(JSContext* ctx, JSValueConst this_val, int argc, 
   JSRT_URL* url = JS_GetOpaque2(ctx, this_val, JSRT_URLClassID);
   if (!url)
     return JS_EXCEPTION;
-  return JS_NewString(ctx, url->port);
+
+  // Return normalized port (empty string for port 0 and default ports)
+  char* normalized_port = normalize_port(url->port, url->protocol);
+  if (!normalized_port)
+    return JS_NewString(ctx, "");  // Return empty string for invalid ports
+
+  JSValue result = JS_NewString(ctx, normalized_port);
+  free(normalized_port);
+  return result;
 }
 
 static JSValue JSRT_URLGetPathname(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
@@ -338,36 +384,17 @@ static JSClassDef JSRT_URLSearchParamsClass = {
 static JSValue JSRT_URLSearchParamsConstructor(JSContext* ctx, JSValueConst new_target, int argc, JSValueConst* argv) {
   JSRT_URLSearchParams* search_params;
 
-  if (argc >= 1 && !JS_IsUndefined(argv[0])) {
+  if (argc >= 1 && !JS_IsUndefined(argv[0]) && !JS_IsNull(argv[0])) {
     JSValue init = argv[0];
 
-    // Check if it's already a URLSearchParams object
-    if (JS_GetOpaque2(ctx, init, JSRT_URLSearchParamsClassID)) {
-      JSRT_URLSearchParams* src = JS_GetOpaque2(ctx, init, JSRT_URLSearchParamsClassID);
-      search_params = JSRT_CreateEmptySearchParams();
-
-      // Copy all parameters
-      JSRT_URLSearchParam* param = src->params;
-      while (param) {
-        JSRT_AddSearchParam(search_params, param->name, param->value);
-        param = param->next;
-      }
-    }
-    // Check if it's a FormData object
-    else if (JS_GetOpaque2(ctx, init, JSRT_FormDataClassID)) {
-      search_params = JSRT_ParseSearchParamsFromFormData(ctx, init);
-      if (!search_params) {
-        return JS_ThrowTypeError(ctx, "Invalid FormData argument to URLSearchParams constructor");
-      }
-    }
-    // Check if it's DOMException or DOMException.prototype (should throw due to branding checks)
-    else if (!JS_IsString(init)) {
-      // First check if this is a DOMException or DOMException.prototype
+    // First check if this is a DOMException or DOMException.prototype (should throw due to branding checks)
+    if (!JS_IsString(init)) {
       JSValue global = JS_GetGlobalObject(ctx);
       JSValue dom_exception = JS_GetPropertyStr(ctx, global, "DOMException");
       if (!JS_IsUndefined(dom_exception)) {
         JSValue dom_exception_proto = JS_GetPropertyStr(ctx, dom_exception, "prototype");
-        if (JS_SameValue(ctx, init, dom_exception_proto) || JS_SameValue(ctx, init, dom_exception)) {
+        if (JS_SameValue(ctx, init, dom_exception_proto)) {
+          // Only DOMException.prototype should throw, not DOMException itself
           JS_FreeValue(ctx, dom_exception_proto);
           JS_FreeValue(ctx, dom_exception);
           JS_FreeValue(ctx, global);
@@ -379,6 +406,7 @@ static JSValue JSRT_URLSearchParamsConstructor(JSContext* ctx, JSValueConst new_
       JS_FreeValue(ctx, global);
 
       // Check if it's an array or has Symbol.iterator (sequence/iterable)
+      // This check must come BEFORE type-specific checks to handle custom iterators
       global = JS_GetGlobalObject(ctx);
       JSValue symbol_obj = JS_GetPropertyStr(ctx, global, "Symbol");
       JSValue iterator_symbol = JS_GetPropertyStr(ctx, symbol_obj, "iterator");
@@ -396,7 +424,7 @@ static JSValue JSRT_URLSearchParamsConstructor(JSContext* ctx, JSValueConst new_
       JS_FreeValue(ctx, iterator_symbol);
 
       if (is_array || has_iterator) {
-        // It's an array or iterable - use sequence parser
+        // It's an array or iterable (including URLSearchParams with custom iterator) - use sequence parser
         search_params = JSRT_ParseSearchParamsFromSequence(ctx, init);
         if (!search_params) {
           // If an exception is already pending (e.g., TypeError for invalid pairs), return it
@@ -405,15 +433,36 @@ static JSValue JSRT_URLSearchParamsConstructor(JSContext* ctx, JSValueConst new_
           }
           return JS_ThrowTypeError(ctx, "Invalid sequence argument to URLSearchParams constructor");
         }
+      }
+      // Check if it's already a URLSearchParams object (without custom iterator)
+      else if (JS_GetOpaque2(ctx, init, JSRT_URLSearchParamsClassID)) {
+        JSRT_URLSearchParams* src = JS_GetOpaque2(ctx, init, JSRT_URLSearchParamsClassID);
+        search_params = JSRT_CreateEmptySearchParams();
+
+        // Copy all parameters
+        JSRT_URLSearchParam* param = src->params;
+        while (param) {
+          JSRT_AddSearchParam(search_params, param->name, param->value);
+          param = param->next;
+        }
+      }
+      // Check if it's a FormData object
+      else if (JS_GetOpaque2(ctx, init, JSRT_FormDataClassID)) {
+        search_params = JSRT_ParseSearchParamsFromFormData(ctx, init);
+        if (!search_params) {
+          return JS_ThrowTypeError(ctx, "Invalid FormData argument to URLSearchParams constructor");
+        }
       } else {
-        // It's a plain object - use record parser
+        // Check if this is a plain object (record type)
+        // Plain objects should be treated as records where each enumerable property
+        // becomes a key-value pair in the URLSearchParams
         search_params = JSRT_ParseSearchParamsFromRecord(ctx, init);
         if (!search_params) {
-          // If an exception is already pending, return it
+          // If parsing as record failed, check if an exception is already pending
           if (JS_HasException(ctx)) {
             return JS_EXCEPTION;
           }
-          return JS_ThrowTypeError(ctx, "Invalid record argument to URLSearchParams constructor");
+          return JS_ThrowTypeError(ctx, "value is not iterable");
         }
       }
     }

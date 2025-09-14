@@ -56,6 +56,7 @@ typedef struct JSRT_URL {
   int has_password_field;       // Flag to track if original URL had password field (even if empty)
   int double_colon_at_pattern;  // Flag for double colon @ pattern (http::@host:port) - port ignored in origin
   int opaque_path;              // Flag for URLs with opaque paths (no authority) like file:path
+  int has_authority_syntax;     // Flag for URLs that started with "//" (authority-based syntax)
 } JSRT_URL;
 
 // URLSearchParams Iterator structure

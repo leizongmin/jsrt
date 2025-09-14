@@ -215,8 +215,10 @@ char* url_userinfo_encode_with_scheme_name(const char* str, const char* scheme) 
   size_t len = strlen(str);
   size_t encoded_len = 0;
 
-  // Determine encoding rules for ']' character based on scheme
+  // Determine encoding rules based on scheme
   int encode_closing_bracket = 1;  // Default: encode ']'
+  int encode_at_symbol = 1;        // Default: encode '@'
+  int encode_colon = 1;            // Default: encode ':'
 
   if (scheme) {
     // Remove trailing colon if present
@@ -225,9 +227,11 @@ char* url_userinfo_encode_with_scheme_name(const char* str, const char* scheme) 
       scheme_clean[strlen(scheme_clean) - 1] = '\0';
     }
 
-    // WebSocket schemes and non-special schemes: don't encode ']'
+    // WebSocket schemes and non-special schemes: don't encode ']', '@', and ':'
     if (strcmp(scheme_clean, "ws") == 0 || strcmp(scheme_clean, "wss") == 0 || !is_special_scheme(scheme)) {
       encode_closing_bracket = 0;
+      encode_at_symbol = 0;
+      encode_colon = 0;
     }
 
     free(scheme_clean);
@@ -238,8 +242,10 @@ char* url_userinfo_encode_with_scheme_name(const char* str, const char* scheme) 
     unsigned char c = (unsigned char)str[i];
     if ((c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z') || (c >= '0' && c <= '9') || c == '-' || c == '_' ||
         c == '.' || c == '~' || c == '*' || c == '&' || c == '(' || c == ')' || c == '!' || c == '$' || c == '\'' ||
-        c == ',' || c == ';' || c == '=' || c == '+' || c == '%' || c == '<' || c == '>' || c == '@' || c == ':' ||
-        c == '[' || c == '^' || c == '`' || c == '{' || c == '|' || c == '}' || (!encode_closing_bracket && c == ']')) {
+        c == ',' || c == ';' || c == '=' || c == '+' || c == '%' || c == '<' || c == '>' || c == '[' || c == '^' ||
+        c == '`' || c == '{' || c == '|' || c == '}' || (!encode_closing_bracket && c == ']') ||
+        (!encode_at_symbol && c == '@') || (!encode_colon && c == ':')) {
+      // Note: @, :, ] encoding depends on scheme
       encoded_len++;
     } else {
       encoded_len += 3;  // %XX
@@ -253,8 +259,10 @@ char* url_userinfo_encode_with_scheme_name(const char* str, const char* scheme) 
     unsigned char c = (unsigned char)str[i];
     if ((c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z') || (c >= '0' && c <= '9') || c == '-' || c == '_' ||
         c == '.' || c == '~' || c == '*' || c == '&' || c == '(' || c == ')' || c == '!' || c == '$' || c == '\'' ||
-        c == ',' || c == ';' || c == '=' || c == '+' || c == '%' || c == '<' || c == '>' || c == '@' || c == ':' ||
-        c == '[' || c == '^' || c == '`' || c == '{' || c == '|' || c == '}' || (!encode_closing_bracket && c == ']')) {
+        c == ',' || c == ';' || c == '=' || c == '+' || c == '%' || c == '<' || c == '>' || c == '[' || c == '^' ||
+        c == '`' || c == '{' || c == '|' || c == '}' || (!encode_closing_bracket && c == ']') ||
+        (!encode_at_symbol && c == '@') || (!encode_colon && c == ':')) {
+      // Note: @, :, ] encoding depends on scheme
       encoded[j++] = c;
     } else {
       encoded[j++] = '%';
@@ -462,10 +470,10 @@ char* url_fragment_encode_nonspecial(const char* str) {
     if (c == '%' && i + 2 < len && hex_to_int(str[i + 1]) >= 0 && hex_to_int(str[i + 2]) >= 0) {
       // Already percent-encoded sequence, keep as-is
       encoded_len += 3;
-    } else if (c < 32 || c >= 127 || c == '"' || c == '<' || c == '>' || c == '^' || c == '{' || c == '|' || c == '}' ||
-               c == '`') {
-      // Need to percent-encode unsafe characters
-      // Note: spaces (32) are preserved for non-special schemes
+    } else if (c <= 32 || c >= 127 || c == '"' || c == '<' || c == '>' || c == '^' || c == '{' || c == '|' ||
+               c == '}' || c == '`') {
+      // Need to percent-encode unsafe characters including spaces
+      // WPT tests expect spaces to be encoded even for non-special schemes
       encoded_len += 3;  // %XX
     } else {
       encoded_len++;
@@ -483,10 +491,10 @@ char* url_fragment_encode_nonspecial(const char* str) {
       encoded[j++] = str[i + 1];
       encoded[j++] = str[i + 2];
       i += 2;  // Skip the next two characters
-    } else if (c < 32 || c >= 127 || c == '"' || c == '<' || c == '>' || c == '^' || c == '{' || c == '|' || c == '}' ||
-               c == '`') {
-      // Need to percent-encode unsafe characters
-      // Note: spaces (32) are preserved for non-special schemes
+    } else if (c <= 32 || c >= 127 || c == '"' || c == '<' || c == '>' || c == '^' || c == '{' || c == '|' ||
+               c == '}' || c == '`') {
+      // Need to percent-encode unsafe characters including spaces
+      // WPT tests expect spaces to be encoded even for non-special schemes
       encoded[j++] = '%';
       encoded[j++] = hex_chars[c >> 4];
       encoded[j++] = hex_chars[c & 15];

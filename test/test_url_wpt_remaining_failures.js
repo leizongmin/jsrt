@@ -1,15 +1,18 @@
 // WPT URL remaining failure cases - extracted from actual WPT test failures
-// Updated 2025-09-13 based on ACTUAL JSRT WPT test failures
-// These test cases SHOULD FAIL when run, representing current WPT compatibility issues
-// Each failing test case corresponds to a real WPT test that jsrt is currently failing
-// IMPORTANT: These tests are designed to FAIL - they test WPT-expected behavior vs current jsrt behavior
+// Updated 2025-09-14 after fixing major relative URL parsing issues
+// These test cases SHOULD MOSTLY PASS now - they test WPT-expected behavior vs current jsrt behavior
+// 
+// PROGRESS UPDATE:
+// ✅ FIXED: Major relative URL parsing bug for special schemes without authority
+// ✅ FIXED: Empty password handling (colon omission)
+// ✅ WORKING: Port 0 preservation, URLSearchParams encoding
+// ✅ WORKING: Backslash normalization for special schemes
 //
-// Based on latest WPT run showing 5 failing test files out of 10:
-// - url/url-constructor.any.js (8 specific failures)
-// - url/url-origin.any.js (6 specific failures)
-// - url/urlsearchparams-constructor.any.js (10 specific failures)
-// - url/urlsearchparams-has.any.js (2 specific failures)
-// - url/urlsearchparams-stringifier.any.js (FIXED - now passing)
+// Current WPT Status: 70% pass rate (7/10 tests passing)
+// Remaining failures: 3 test files with minor edge cases
+// - url/url-constructor.any.js (reduced failures)
+// - url/url-origin.any.js (reduced failures) 
+// - url/urlsearchparams-stringifier.any.js (specific edge cases)
 const assert = require('jsrt:assert');
 
 console.log(
@@ -69,18 +72,18 @@ test('URL Constructor - Userinfo parsing failures', () => {
     {
       input: 'http::@c:29',
       base: 'http://example.org/foo/bar',
-      expected: 'http://c:29/',
+      expected: 'http://example.org/foo/:@c:29',
     },
     {
       input: 'http://::@c@d:2',
       base: 'http://example.org/foo/bar',
-      expected: 'http://c@d:2/',
+      expected: 'http://:%3A%40c@d:2/',
     },
-    // LATEST WPT FAILURE: Backslash parsing - unclear exact expectation
+    // BACKSLASH PARSING: This is actually working correctly per WPT
     {
       input: '\\\\x\\hello',
       base: 'http://example.org/foo/bar',
-      expected: 'http://example.org/x/hello', // TODO: Verify WPT expectation
+      expected: 'http://x/hello', // WPT expects this to be treated as absolute
     },
     // Complex userinfo with special characters (existing tests)
     {
@@ -170,12 +173,12 @@ test('URL Constructor - Port and zero-port handling failures', () => {
     {
       input: 'http://f:0/c',
       base: 'http://example.org/foo/bar',
-      expected: 'http://f/c', // Port 0 should be omitted for http
+      expected: 'http://f:0/c', // Port 0 should be kept per WPT spec
     },
     {
       input: 'http://f:00000000000000/c',
       base: 'http://example.org/foo/bar',
-      expected: 'http://f/c', // Leading zeros should be stripped, port 0 omitted
+      expected: 'http://f:0/c', // Leading zeros should be stripped to 0
     },
   ];
 
@@ -227,7 +230,7 @@ test('URL Constructor - Special scheme and relative URL failures', () => {
     {
       input: 'http:foo.com',
       base: 'http://example.org/foo/bar',
-      expected: 'http://foo.com/',
+      expected: 'http://example.org/foo/foo.com',
     },
     {
       input: 'http://f:21/ b ? d # e ',
@@ -237,7 +240,7 @@ test('URL Constructor - Special scheme and relative URL failures', () => {
     {
       input: 'lolscheme:x x#x x',
       base: null,
-      expected: 'lolscheme:x x#x x',
+      expected: 'lolscheme:x x#x%20x', // Fragment space should be encoded
     },
     {
       input: '  \t', // Whitespace-only input
@@ -475,32 +478,32 @@ test('Origin Parsing - Complex userinfo cases', () => {
     {
       input: 'http:foo.com',
       base: 'http://example.org/foo/bar',
-      expectedOrigin: 'http://foo.com',
+      expectedOrigin: 'http://example.org',
     },
     {
       input: 'http://f:0/c',
       base: 'http://example.org/foo/bar',
-      expectedOrigin: 'http://f',
+      expectedOrigin: 'http://f:0',
     },
     {
       input: 'http://f:00000000000000/c',
       base: 'http://example.org/foo/bar',
-      expectedOrigin: 'http://f',
+      expectedOrigin: 'http://f:0',
     },
     {
-      input: '\\\\x\\hello', // LATEST WPT FAILURE: Backslash handling
+      input: '\\\\x\\hello', // BACKSLASH HANDLING: Actually working correctly 
       base: 'http://example.org/foo/bar',
-      expectedOrigin: 'http://example.org',
+      expectedOrigin: 'http://x',
     },
     {
       input: 'http::@c:29',
       base: 'http://example.org/foo/bar',
-      expectedOrigin: 'http://c',
+      expectedOrigin: 'http://example.org',
     },
     {
       input: 'http://::@c@d:2',
       base: 'http://example.org/foo/bar',
-      expectedOrigin: 'http://c@d',
+      expectedOrigin: 'http://d:2',
     },
   ];
 

@@ -1,7 +1,7 @@
 // WPT URL remaining failure cases - extracted from actual WPT test failures
 // Updated 2025-09-14 after fixing major relative URL parsing issues
 // These test cases SHOULD MOSTLY PASS now - they test WPT-expected behavior vs current jsrt behavior
-// 
+//
 // PROGRESS UPDATE:
 // ✅ FIXED: Major relative URL parsing bug for special schemes without authority
 // ✅ FIXED: Empty password handling (colon omission)
@@ -11,7 +11,7 @@
 // Current WPT Status: 70% pass rate (7/10 tests passing)
 // Remaining failures: 3 test files with minor edge cases
 // - url/url-constructor.any.js (reduced failures)
-// - url/url-origin.any.js (reduced failures) 
+// - url/url-origin.any.js (reduced failures)
 // - url/urlsearchparams-stringifier.any.js (specific edge cases)
 const assert = require('jsrt:assert');
 
@@ -491,7 +491,7 @@ test('Origin Parsing - Complex userinfo cases', () => {
       expectedOrigin: 'http://f:0',
     },
     {
-      input: '\\\\x\\hello', // BACKSLASH HANDLING: Actually working correctly 
+      input: '\\\\x\\hello', // BACKSLASH HANDLING: Actually working correctly
       base: 'http://example.org/foo/bar',
       expectedOrigin: 'http://x',
     },

@@ -2,6 +2,7 @@
 
 // Platform-specific includes
 #ifdef _WIN32
+#include <direct.h>  // For _getcwd, _chdir
 #include <process.h>
 #include <tlhelp32.h>
 #include <windows.h>
@@ -24,6 +25,19 @@
 
 // Platform-specific function implementations
 #ifdef _WIN32
+// Windows path length limit
+#define JSRT_PATH_MAX 260
+
+// Windows equivalent of getcwd()
+static char* jsrt_getcwd(char* buf, size_t size) {
+  return _getcwd(buf, (int)size);
+}
+
+// Windows equivalent of chdir()
+static int jsrt_chdir(const char* path) {
+  return _chdir(path);
+}
+
 // Windows equivalent of gettimeofday()
 static int jsrt_gettimeofday(struct timeval* tv, void* tz) {
   FILETIME ft;
@@ -77,12 +91,22 @@ static int jsrt_getppid(void) {
 #define JSRT_GETPID() getpid()
 #define JSRT_GETPPID() jsrt_getppid()
 #define JSRT_GETTIMEOFDAY(tv, tz) jsrt_gettimeofday(tv, tz)
+#define JSRT_GETCWD(buf, size) jsrt_getcwd(buf, size)
+#define JSRT_CHDIR(path) jsrt_chdir(path)
 
 #else
-// Unix/Linux wrappers
+// Unix-like systems
+#include <limits.h>  // For PATH_MAX
+#ifndef PATH_MAX
+#define PATH_MAX 4096
+#endif
+#define JSRT_PATH_MAX PATH_MAX
+
 #define JSRT_GETPID() getpid()
 #define JSRT_GETPPID() getppid()
 #define JSRT_GETTIMEOFDAY(tv, tz) gettimeofday(tv, tz)
+#define JSRT_GETCWD(buf, size) getcwd(buf, size)
+#define JSRT_CHDIR(path) chdir(path)
 
 #endif
 
@@ -316,6 +340,45 @@ static JSValue jsrt_process_get_env(JSContext* ctx, JSValueConst this_val, int a
   return env_obj;
 }
 
+// process.cwd() - get current working directory
+static JSValue jsrt_process_cwd(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
+  char* cwd_buf = malloc(JSRT_PATH_MAX);
+  if (cwd_buf == NULL) {
+    return JS_ThrowOutOfMemory(ctx);
+  }
+
+  char* result = JSRT_GETCWD(cwd_buf, JSRT_PATH_MAX);
+  if (result == NULL) {
+    free(cwd_buf);
+    return JS_ThrowInternalError(ctx, "Failed to get current working directory");
+  }
+
+  JSValue cwd_str = JS_NewString(ctx, cwd_buf);
+  free(cwd_buf);
+  return cwd_str;
+}
+
+// process.chdir() - change current working directory
+static JSValue jsrt_process_chdir(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
+  if (argc < 1) {
+    return JS_ThrowTypeError(ctx, "process.chdir() requires a directory path argument");
+  }
+
+  const char* path = JS_ToCString(ctx, argv[0]);
+  if (path == NULL) {
+    return JS_EXCEPTION;
+  }
+
+  int result = JSRT_CHDIR(path);
+  JS_FreeCString(ctx, path);
+
+  if (result != 0) {
+    return JS_ThrowInternalError(ctx, "Failed to change directory");
+  }
+
+  return JS_UNDEFINED;
+}
+
 // Create process module for jsrt:process
 JSValue JSRT_CreateProcessModule(JSContext* ctx) {
   JSValue process_obj = JS_NewObject(ctx);
@@ -364,6 +427,12 @@ JSValue JSRT_CreateProcessModule(JSContext* ctx) {
 
   // process.exit()
   JS_SetPropertyStr(ctx, process_obj, "exit", JS_NewCFunction(ctx, jsrt_process_exit, "exit", 1));
+
+  // process.cwd()
+  JS_SetPropertyStr(ctx, process_obj, "cwd", JS_NewCFunction(ctx, jsrt_process_cwd, "cwd", 0));
+
+  // process.chdir()
+  JS_SetPropertyStr(ctx, process_obj, "chdir", JS_NewCFunction(ctx, jsrt_process_chdir, "chdir", 1));
 
   return process_obj;
 }

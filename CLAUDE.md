@@ -95,6 +95,7 @@ make clean && make
 ### Code Style Requirements
 - ✅ **MANDATORY**: Run `make clang-format` before every commit
 - ✅ **MANDATORY**: Ensure `make test` passes without failures
+- ✅ **MANDATORY**: Keep source files under 500 lines - split into smaller modules if exceeded
 - ✅ Follow existing patterns and conventions in the codebase
 - ❌ Never commit without formatting and testing
 

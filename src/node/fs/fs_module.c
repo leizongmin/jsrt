@@ -28,6 +28,17 @@ JSValue JSRT_InitNodeFs(JSContext* ctx) {
   JS_SetPropertyStr(ctx, fs_module, "mkdirSync", JS_NewCFunction(ctx, js_fs_mkdir_sync, "mkdirSync", 2));
   JS_SetPropertyStr(ctx, fs_module, "unlinkSync", JS_NewCFunction(ctx, js_fs_unlink_sync, "unlinkSync", 1));
 
+  // File descriptor operations
+  JS_SetPropertyStr(ctx, fs_module, "openSync", JS_NewCFunction(ctx, js_fs_open_sync, "openSync", 3));
+  JS_SetPropertyStr(ctx, fs_module, "closeSync", JS_NewCFunction(ctx, js_fs_close_sync, "closeSync", 1));
+  JS_SetPropertyStr(ctx, fs_module, "readSync", JS_NewCFunction(ctx, js_fs_read_sync, "readSync", 5));
+  JS_SetPropertyStr(ctx, fs_module, "writeSync", JS_NewCFunction(ctx, js_fs_write_sync, "writeSync", 5));
+
+  // File permissions and attributes
+  JS_SetPropertyStr(ctx, fs_module, "chmodSync", JS_NewCFunction(ctx, js_fs_chmod_sync, "chmodSync", 2));
+  JS_SetPropertyStr(ctx, fs_module, "chownSync", JS_NewCFunction(ctx, js_fs_chown_sync, "chownSync", 3));
+  JS_SetPropertyStr(ctx, fs_module, "utimesSync", JS_NewCFunction(ctx, js_fs_utimes_sync, "utimesSync", 3));
+
   // Asynchronous file operations
   JS_SetPropertyStr(ctx, fs_module, "readFile", JS_NewCFunction(ctx, js_fs_read_file, "readFile", 2));
   JS_SetPropertyStr(ctx, fs_module, "writeFile", JS_NewCFunction(ctx, js_fs_write_file, "writeFile", 3));

@@ -7,6 +7,8 @@
 #include <stdlib.h>
 #include <string.h>
 #include <sys/stat.h>
+#include <fcntl.h>     // For open flags
+#include <utime.h>     // For utime function
 #ifdef _WIN32
 #include <direct.h>  // For _mkdir on Windows
 #include <io.h>      // For access function
@@ -44,6 +46,17 @@ JSValue js_fs_copy_file_sync(JSContext* ctx, JSValueConst this_val, int argc, JS
 JSValue js_fs_rename_sync(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv);
 JSValue js_fs_rmdir_sync(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv);
 JSValue js_fs_access_sync(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv);
+
+// File descriptor operations
+JSValue js_fs_open_sync(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv);
+JSValue js_fs_close_sync(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv);
+JSValue js_fs_read_sync(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv);
+JSValue js_fs_write_sync(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv);
+
+// File permissions and attributes
+JSValue js_fs_chmod_sync(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv);
+JSValue js_fs_chown_sync(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv);
+JSValue js_fs_utimes_sync(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv);
 
 // Asynchronous file operations (declared in fs_async.c as static)
 // These functions are not exposed in the header as they are only used internally

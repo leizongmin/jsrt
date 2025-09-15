@@ -435,3 +435,311 @@ JSValue js_fs_access_sync(JSContext* ctx, JSValueConst this_val, int argc, JSVal
   JS_FreeCString(ctx, path);
   return JS_UNDEFINED;
 }
+
+// fs.openSync(path, flags[, mode])
+JSValue js_fs_open_sync(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
+  if (argc < 2) {
+    return JS_ThrowTypeError(ctx, "path and flags are required");
+  }
+
+  const char* path = JS_ToCString(ctx, argv[0]);
+  if (!path) {
+    return JS_EXCEPTION;
+  }
+
+  const char* flags_str = JS_ToCString(ctx, argv[1]);
+  if (!flags_str) {
+    JS_FreeCString(ctx, path);
+    return JS_EXCEPTION;
+  }
+
+  // Convert flags string to system flags
+  int flags = 0;
+  if (strcmp(flags_str, "r") == 0) {
+    flags = O_RDONLY;
+  } else if (strcmp(flags_str, "r+") == 0) {
+    flags = O_RDWR;
+  } else if (strcmp(flags_str, "w") == 0) {
+    flags = O_WRONLY | O_CREAT | O_TRUNC;
+  } else if (strcmp(flags_str, "w+") == 0) {
+    flags = O_RDWR | O_CREAT | O_TRUNC;
+  } else if (strcmp(flags_str, "a") == 0) {
+    flags = O_WRONLY | O_CREAT | O_APPEND;
+  } else if (strcmp(flags_str, "a+") == 0) {
+    flags = O_RDWR | O_CREAT | O_APPEND;
+  } else {
+    JS_FreeCString(ctx, path);
+    JS_FreeCString(ctx, flags_str);
+    return JS_ThrowTypeError(ctx, "Invalid flags");
+  }
+
+  mode_t mode = 0644;  // Default mode
+  if (argc > 2 && JS_IsNumber(argv[2])) {
+    int32_t mode_int;
+    JS_ToInt32(ctx, &mode_int, argv[2]);
+    mode = mode_int;
+  }
+
+  int fd = open(path, flags, mode);
+  if (fd < 0) {
+    JSValue error = create_fs_error(ctx, errno, "open", path);
+    JS_FreeCString(ctx, path);
+    JS_FreeCString(ctx, flags_str);
+    return JS_Throw(ctx, error);
+  }
+
+  JS_FreeCString(ctx, path);
+  JS_FreeCString(ctx, flags_str);
+  return JS_NewInt32(ctx, fd);
+}
+
+// fs.closeSync(fd)
+JSValue js_fs_close_sync(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
+  if (argc < 1) {
+    return JS_ThrowTypeError(ctx, "fd is required");
+  }
+
+  int32_t fd;
+  if (JS_ToInt32(ctx, &fd, argv[0]) < 0) {
+    return JS_EXCEPTION;
+  }
+
+  if (close(fd) < 0) {
+    JSValue error = create_fs_error(ctx, errno, "close", NULL);
+    return JS_Throw(ctx, error);
+  }
+
+  return JS_UNDEFINED;
+}
+
+// fs.readSync(fd, buffer, offset, length, position)
+JSValue js_fs_read_sync(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
+  if (argc < 4) {
+    return JS_ThrowTypeError(ctx, "fd, buffer, offset, and length are required");
+  }
+
+  int32_t fd;
+  if (JS_ToInt32(ctx, &fd, argv[0]) < 0) {
+    return JS_EXCEPTION;
+  }
+
+  // For now, we'll work with a simple buffer approach
+  // In a full implementation, we'd integrate with the Buffer class
+  int32_t offset, length;
+  if (JS_ToInt32(ctx, &offset, argv[2]) < 0 || JS_ToInt32(ctx, &length, argv[3]) < 0) {
+    return JS_EXCEPTION;
+  }
+
+  if (offset < 0 || length < 0) {
+    return JS_ThrowRangeError(ctx, "offset and length must be non-negative");
+  }
+
+  // Handle position parameter (optional)
+  off_t position = -1;
+  if (argc > 4 && !JS_IsNull(argv[4])) {
+    int32_t pos;
+    if (JS_ToInt32(ctx, &pos, argv[4]) < 0) {
+      return JS_EXCEPTION;
+    }
+    position = pos;
+  }
+
+  // Allocate buffer for reading
+  char* buffer = malloc(length);
+  if (!buffer) {
+    return JS_ThrowOutOfMemory(ctx);
+  }
+
+  ssize_t bytes_read;
+  if (position >= 0) {
+    // Read from specific position
+    bytes_read = pread(fd, buffer, length, position);
+  } else {
+    // Read from current position
+    bytes_read = read(fd, buffer, length);
+  }
+
+  if (bytes_read < 0) {
+    free(buffer);
+    JSValue error = create_fs_error(ctx, errno, "read", NULL);
+    return JS_Throw(ctx, error);
+  }
+
+  // Create buffer result - for now return as string, should be Buffer
+  JSValue result = create_buffer_from_data(ctx, (uint8_t*)buffer, bytes_read);
+  free(buffer);
+  
+  return JS_NewInt32(ctx, bytes_read);
+}
+
+// fs.writeSync(fd, buffer[, offset[, length[, position]]])
+JSValue js_fs_write_sync(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
+  if (argc < 2) {
+    return JS_ThrowTypeError(ctx, "fd and data are required");
+  }
+
+  int32_t fd;
+  if (JS_ToInt32(ctx, &fd, argv[0]) < 0) {
+    return JS_EXCEPTION;
+  }
+
+  // Get data to write
+  const char* data = NULL;
+  size_t data_len = 0;
+  
+  if (JS_IsString(argv[1])) {
+    data = JS_ToCString(ctx, argv[1]);
+    if (data) {
+      data_len = strlen(data);
+    }
+  } else {
+    // TODO: Handle Buffer objects properly
+    return JS_ThrowTypeError(ctx, "data must be string or Buffer");
+  }
+
+  if (!data) {
+    return JS_EXCEPTION;
+  }
+
+  // Handle optional parameters
+  int32_t offset = 0, length = data_len;
+  if (argc > 2 && !JS_IsUndefined(argv[2])) {
+    if (JS_ToInt32(ctx, &offset, argv[2]) < 0) {
+      JS_FreeCString(ctx, data);
+      return JS_EXCEPTION;
+    }
+  }
+  
+  if (argc > 3 && !JS_IsUndefined(argv[3])) {
+    if (JS_ToInt32(ctx, &length, argv[3]) < 0) {
+      JS_FreeCString(ctx, data);
+      return JS_EXCEPTION;
+    }
+  }
+
+  // Validate parameters
+  if (offset < 0 || length < 0 || offset + length > (int32_t)data_len) {
+    JS_FreeCString(ctx, data);
+    return JS_ThrowRangeError(ctx, "Invalid offset or length");
+  }
+
+  // Handle position parameter (optional)
+  off_t position = -1;
+  if (argc > 4 && !JS_IsNull(argv[4])) {
+    int32_t pos;
+    if (JS_ToInt32(ctx, &pos, argv[4]) < 0) {
+      JS_FreeCString(ctx, data);
+      return JS_EXCEPTION;
+    }
+    position = pos;
+  }
+
+  ssize_t bytes_written;
+  if (position >= 0) {
+    // Write to specific position
+    bytes_written = pwrite(fd, data + offset, length, position);
+  } else {
+    // Write to current position
+    bytes_written = write(fd, data + offset, length);
+  }
+
+  JS_FreeCString(ctx, data);
+
+  if (bytes_written < 0) {
+    JSValue error = create_fs_error(ctx, errno, "write", NULL);
+    return JS_Throw(ctx, error);
+  }
+
+  return JS_NewInt32(ctx, bytes_written);
+}
+
+// fs.chmodSync(path, mode)
+JSValue js_fs_chmod_sync(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
+  if (argc < 2) {
+    return JS_ThrowTypeError(ctx, "path and mode are required");
+  }
+
+  const char* path = JS_ToCString(ctx, argv[0]);
+  if (!path) {
+    return JS_EXCEPTION;
+  }
+
+  int32_t mode;
+  if (JS_ToInt32(ctx, &mode, argv[1]) < 0) {
+    JS_FreeCString(ctx, path);
+    return JS_EXCEPTION;
+  }
+
+  if (chmod(path, mode) < 0) {
+    JSValue error = create_fs_error(ctx, errno, "chmod", path);
+    JS_FreeCString(ctx, path);
+    return JS_Throw(ctx, error);
+  }
+
+  JS_FreeCString(ctx, path);
+  return JS_UNDEFINED;
+}
+
+// fs.chownSync(path, uid, gid)
+JSValue js_fs_chown_sync(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
+  if (argc < 3) {
+    return JS_ThrowTypeError(ctx, "path, uid, and gid are required");
+  }
+
+  const char* path = JS_ToCString(ctx, argv[0]);
+  if (!path) {
+    return JS_EXCEPTION;
+  }
+
+  int32_t uid, gid;
+  if (JS_ToInt32(ctx, &uid, argv[1]) < 0 || JS_ToInt32(ctx, &gid, argv[2]) < 0) {
+    JS_FreeCString(ctx, path);
+    return JS_EXCEPTION;
+  }
+
+#ifdef _WIN32
+  // On Windows, chown is typically not supported
+  JS_FreeCString(ctx, path);
+  return JS_ThrowError(ctx, "chown is not supported on Windows");
+#else
+  if (chown(path, uid, gid) < 0) {
+    JSValue error = create_fs_error(ctx, errno, "chown", path);
+    JS_FreeCString(ctx, path);
+    return JS_Throw(ctx, error);
+  }
+
+  JS_FreeCString(ctx, path);
+  return JS_UNDEFINED;
+#endif
+}
+
+// fs.utimesSync(path, atime, mtime)
+JSValue js_fs_utimes_sync(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
+  if (argc < 3) {
+    return JS_ThrowTypeError(ctx, "path, atime, and mtime are required");
+  }
+
+  const char* path = JS_ToCString(ctx, argv[0]);
+  if (!path) {
+    return JS_EXCEPTION;
+  }
+
+  double atime, mtime;
+  if (JS_ToFloat64(ctx, &atime, argv[1]) < 0 || JS_ToFloat64(ctx, &mtime, argv[2]) < 0) {
+    JS_FreeCString(ctx, path);
+    return JS_EXCEPTION;
+  }
+
+  struct utimbuf times;
+  times.actime = (time_t)atime; 
+  times.modtime = (time_t)mtime;
+
+  if (utime(path, &times) < 0) {
+    JSValue error = create_fs_error(ctx, errno, "utime", path);
+    JS_FreeCString(ctx, path);
+    return JS_Throw(ctx, error);
+  }
+
+  JS_FreeCString(ctx, path);
+  return JS_UNDEFINED;
+}

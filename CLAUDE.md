@@ -92,6 +92,37 @@ make test
 make clean && make
 ```
 
+## AI Assistant Behavior Guidelines
+
+### Critical Rules for Code Modifications
+
+#### Before Making Changes
+- ✅ **MANDATORY**: Understand existing code logic completely before modification
+- ✅ **MANDATORY**: Run baseline tests to establish current state (`make test`, `make wpt N=url`)
+- ✅ **MANDATORY**: Record exact numbers (pass/fail counts) for comparison
+- ❌ **NEVER**: Modify code without understanding its purpose and impact
+
+#### During Modifications
+- ✅ **MANDATORY**: Make minimal, targeted changes only
+- ✅ **MANDATORY**: Test each change immediately after implementation
+- ✅ **MANDATORY**: Verify actual results match expected outcomes
+- ❌ **NEVER**: Make multiple unrelated changes simultaneously
+- ❌ **NEVER**: Assume changes work without verification
+
+#### After Modifications
+- ✅ **MANDATORY**: Run full test suite and compare with baseline
+- ✅ **MANDATORY**: Report exact numbers and changes accurately
+- ✅ **MANDATORY**: If results are worse, immediately revert changes
+- ❌ **NEVER**: Report success without concrete evidence
+- ❌ **NEVER**: Claim improvement when metrics show degradation
+
+#### Reporting Guidelines
+- ✅ **ALWAYS**: Report exact test numbers (e.g., "653 failures" not "many failures")
+- ✅ **ALWAYS**: Compare before/after metrics explicitly
+- ✅ **ALWAYS**: Admit mistakes immediately when discovered
+- ❌ **NEVER**: Use vague terms like "improved" without specific metrics
+- ❌ **NEVER**: Continue with false claims when evidence contradicts
+
 ### Code Style Requirements
 - ✅ **MANDATORY**: Run `make clang-format` before every commit
 - ✅ **MANDATORY**: Ensure `make test` passes without failures

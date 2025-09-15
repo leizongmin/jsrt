@@ -9,6 +9,7 @@
 #include "../util/jsutils.h"
 #include "../util/ssl_client.h"
 #include "../util/url_parser.h"
+#include "../util/user_agent.h"
 #include "parser.h"
 
 typedef struct jsrt_header_entry {
@@ -115,7 +116,8 @@ static char* build_http_request(const char* method, const char* path, const char
 
   // Add default headers if not provided
   if (!has_user_agent) {
-    len += snprintf(request + len, request_size - len, "User-Agent: jsrt/1.0\r\n");
+    const char* user_agent = jsrt_get_static_user_agent();
+    len += snprintf(request + len, request_size - len, "User-Agent: %s\r\n", user_agent);
   }
 
   len += snprintf(request + len, request_size - len, "Connection: close\r\n");

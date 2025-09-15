@@ -3,6 +3,7 @@
 #include <uv.h>
 #include "../../deps/llhttp/build/llhttp.h"
 #include "../url/url.h"
+#include "../util/user_agent.h"
 #include "node_modules.h"
 
 // Forward declarations for URL and querystring parsing
@@ -114,7 +115,12 @@ static JSValue parse_http_request(JSContext* ctx, const char* data) {
   // Mock headers
   JSValue headers = JS_NewObject(ctx);
   JS_SetPropertyStr(ctx, headers, "host", JS_NewString(ctx, "localhost"));
-  JS_SetPropertyStr(ctx, headers, "user-agent", JS_NewString(ctx, "jsrt"));
+
+  // Use dynamic user-agent from process.versions
+  char* user_agent = jsrt_generate_user_agent(ctx);
+  JS_SetPropertyStr(ctx, headers, "user-agent", JS_NewString(ctx, user_agent));
+  free(user_agent);
+
   JS_SetPropertyStr(ctx, req_obj, "headers", headers);
 
   free(line);
@@ -165,9 +171,12 @@ static JSValue js_http_response_write(JSContext* ctx, JSValueConst this_val, int
       res->status_message = strdup("OK");
 
     char status_line[1024];
+    // Use dynamic user-agent for Server header
+    char* server_header = jsrt_generate_user_agent(ctx);
     snprintf(status_line, sizeof(status_line),
-             "HTTP/1.1 %d %s\r\nContent-Type: text/plain\r\nConnection: close\r\nServer: jsrt/1.0\r\n\r\n",
-             res->status_code, res->status_message);
+             "HTTP/1.1 %d %s\r\nContent-Type: text/plain\r\nConnection: close\r\nServer: %s\r\n\r\n", res->status_code,
+             res->status_message, server_header);
+    free(server_header);
 
     // Write headers to socket
     if (!JS_IsUndefined(res->socket)) {

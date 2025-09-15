@@ -2,6 +2,7 @@
 #include "debug.h"
 #include "ssl_client.h"
 #include "url_parser.h"
+#include "user_agent.h"
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -131,23 +132,26 @@ static char* build_http_request(const char* method, const char* path, const char
   if (!request)
     return NULL;
 
+  // Use static user-agent since we don't have JavaScript context here
+  const char* user_agent = jsrt_get_static_user_agent();
+
   int len;
   if (port == 80 || port == 443) {
     len = snprintf(request, request_size,
                    "%s %s HTTP/1.1\r\n"
                    "Host: %s\r\n"
                    "Connection: close\r\n"
-                   "User-Agent: jsrt/1.0\r\n"
+                   "User-Agent: %s\r\n"
                    "\r\n",
-                   method, path, host);
+                   method, path, host, user_agent);
   } else {
     len = snprintf(request, request_size,
                    "%s %s HTTP/1.1\r\n"
                    "Host: %s:%d\r\n"
                    "Connection: close\r\n"
-                   "User-Agent: jsrt/1.0\r\n"
+                   "User-Agent: %s\r\n"
                    "\r\n",
-                   method, path, host, port);
+                   method, path, host, port, user_agent);
   }
 
   if (len >= (int)request_size) {

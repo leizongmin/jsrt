@@ -11,6 +11,7 @@
 
 #include "../util/debug.h"
 #include "../util/jsutils.h"
+#include "../util/user_agent.h"
 
 // Forward declare class IDs
 static JSClassID JSRT_HeadersClassID;
@@ -624,7 +625,9 @@ static JSValue JSRT_Fetch(JSContext* ctx, JSValueConst this_val, int argc, JSVal
 
   // Set default headers
   if (!JSRT_HeadersGet(fetch_ctx->request_headers, "user-agent")) {
-    JSRT_HeadersSet(fetch_ctx->request_headers, "user-agent", "jsrt/1.0");
+    char* user_agent = jsrt_generate_user_agent(ctx);
+    JSRT_HeadersSet(fetch_ctx->request_headers, "user-agent", user_agent);
+    free(user_agent);
   }
   if (!JSRT_HeadersGet(fetch_ctx->request_headers, "connection")) {
     JSRT_HeadersSet(fetch_ctx->request_headers, "connection", "close");

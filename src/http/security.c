@@ -1,8 +1,8 @@
 #include "security.h"
-
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include "../util/user_agent.h"
 
 // Default allowed domains
 static const char* DEFAULT_ALLOWED_DOMAINS[] = {"esm.run",          "esm.sh",    "cdn.skypack.dev",
@@ -78,7 +78,7 @@ JSRT_HttpConfig* jsrt_http_config_init(void) {
   g_http_config->allowed_domains_count = 0;
   g_http_config->max_module_size = 10 * 1024 * 1024;  // 10MB default
   g_http_config->timeout_ms = 30000;                  // 30 seconds
-  g_http_config->user_agent = "jsrt/1.0";
+  g_http_config->user_agent = jsrt_get_static_user_agent();
 
   // Read configuration from environment variables
   const char* enabled = getenv("JSRT_HTTP_MODULES_ENABLED");
@@ -144,7 +144,7 @@ void jsrt_http_config_free(JSRT_HttpConfig* config) {
     free(config->allowed_domains);
   }
 
-  if (config->user_agent && strcmp(config->user_agent, "jsrt/1.0") != 0) {
+  if (config->user_agent && strcmp(config->user_agent, jsrt_get_static_user_agent()) != 0) {
     free((char*)config->user_agent);
   }
 

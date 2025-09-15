@@ -27,7 +27,8 @@ JSValue js_process_get_env(JSContext* ctx, JSValueConst this_val, int argc, JSVa
         size_t var_len = strlen(env_var);
         char* var_copy = malloc(var_len + 1);
         if (var_copy) {
-          strcpy(var_copy, env_var);
+          strncpy(var_copy, env_var, var_len);
+          var_copy[var_len] = '\0';
           char* equals_copy = var_copy + (equals - env_var);
           *equals_copy = '\0';  // Split key and value
           char* key = var_copy;

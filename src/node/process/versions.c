@@ -34,7 +34,7 @@ JSValue js_process_get_version(JSContext* ctx, JSValueConst this_val, int argc, 
     // Add 'v' prefix to version for Node.js compatibility
     char* prefixed_version = malloc(strlen(version) + 2);
     if (prefixed_version) {
-      sprintf(prefixed_version, "v%s", version);
+      snprintf(prefixed_version, strlen(version) + 2, "v%s", version);
       JSValue result = JS_NewString(ctx, prefixed_version);
       free(prefixed_version);
       return result;

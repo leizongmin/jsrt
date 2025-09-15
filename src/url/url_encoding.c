@@ -520,8 +520,22 @@ char* url_path_encode_special(const char* str) {
     unsigned char c = (unsigned char)str[i];
     // Check if character needs encoding per URL spec
     if (c == '%' && i + 2 < len && hex_to_int(str[i + 1]) >= 0 && hex_to_int(str[i + 2]) >= 0) {
-      // Already percent-encoded sequence, keep as-is
-      encoded_len += 3;
+      // Percent-encoded sequence found, check if it should be decoded
+      unsigned char decoded_byte = (unsigned char)((hex_to_int(str[i + 1]) << 4) | hex_to_int(str[i + 2]));
+
+      // Decode unreserved characters: ALPHA / DIGIT / "-" / "_" / "~"
+      // NOTE: "." is NOT decoded because %2e (dot) should not be normalized in paths per WHATWG spec
+      if ((decoded_byte >= 'A' && decoded_byte <= 'Z') || (decoded_byte >= 'a' && decoded_byte <= 'z') ||
+          (decoded_byte >= '0' && decoded_byte <= '9') || decoded_byte == '-' || decoded_byte == '_' ||
+          decoded_byte == '~') {
+        // This will be decoded to 1 character
+        encoded_len += 1;
+        i += 2;  // Skip the hex digits
+      } else {
+        // Keep as 3-character percent sequence
+        encoded_len += 3;
+        i += 2;  // Skip the hex digits
+      }
     } else if (c < 33 || c > 126 || c == '"' || c == '<' || c == '>' || c == '\\' || c == '^' || c == '{' || c == '|' ||
                c == '}' || c == '`') {
       // Need to percent-encode control characters, non-ASCII, and specific unsafe characters
@@ -538,11 +552,24 @@ char* url_path_encode_special(const char* str) {
   for (size_t i = 0; i < len; i++) {
     unsigned char c = (unsigned char)str[i];
     if (c == '%' && i + 2 < len && hex_to_int(str[i + 1]) >= 0 && hex_to_int(str[i + 2]) >= 0) {
-      // Already percent-encoded sequence, copy as-is
-      encoded[j++] = str[i];
-      encoded[j++] = str[i + 1];
-      encoded[j++] = str[i + 2];
-      i += 2;  // Skip the next two characters
+      // Percent-encoded sequence found, check if it should be decoded
+      unsigned char decoded_byte = (unsigned char)((hex_to_int(str[i + 1]) << 4) | hex_to_int(str[i + 2]));
+
+      // Decode unreserved characters: ALPHA / DIGIT / "-" / "_" / "~"
+      // NOTE: "." is NOT decoded because %2e (dot) should not be normalized in paths per WHATWG spec
+      if ((decoded_byte >= 'A' && decoded_byte <= 'Z') || (decoded_byte >= 'a' && decoded_byte <= 'z') ||
+          (decoded_byte >= '0' && decoded_byte <= '9') || decoded_byte == '-' || decoded_byte == '_' ||
+          decoded_byte == '~') {
+        // This is an unreserved character, decode it
+        encoded[j++] = decoded_byte;
+        i += 2;  // Skip the hex digits
+      } else {
+        // Keep percent-encoded for reserved or unsafe characters
+        encoded[j++] = str[i];
+        encoded[j++] = str[i + 1];
+        encoded[j++] = str[i + 2];
+        i += 2;  // Skip the next two characters
+      }
     } else if (c < 33 || c > 126 || c == '"' || c == '<' || c == '>' || c == '\\' || c == '^' || c == '{' || c == '|' ||
                c == '}' || c == '`') {
       // Need to percent-encode control characters, non-ASCII, and specific unsafe characters

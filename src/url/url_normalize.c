@@ -22,8 +22,28 @@ char* normalize_dot_segments(const char* path) {
   *out_ptr = '\0';
 
   while (*input != '\0') {
-    // A: If input begins with "../" or "./", remove prefix
+    // A: If input begins with "../" or "./", remove prefix and handle ".." case
     if (strncmp(input, "../", 3) == 0) {
+      // "../" should also remove the last segment from the output (like "/../")
+      // Remove last segment from output
+      if (out_ptr > output) {
+        // Move back past the current trailing slash if there is one
+        if (*(out_ptr - 1) == '/') {
+          out_ptr--;
+        }
+        // Find and remove the last segment
+        while (out_ptr > output && *(out_ptr - 1) != '/') {
+          out_ptr--;
+        }
+        // If we're not at root and don't have a trailing slash, ensure we have one
+        if (out_ptr > output && *(out_ptr - 1) == '/') {
+          // Keep the existing slash
+        } else if (out_ptr == output) {
+          // We're at the root, add a slash
+          *out_ptr++ = '/';
+        }
+        *out_ptr = '\0';
+      }
       input += 3;
       continue;
     }
@@ -48,18 +68,26 @@ char* normalize_dot_segments(const char* path) {
 
     // C: If input begins with "/../" or "/.." (at end), replace with "/" and remove last segment
     if (strncmp(input, "/../", 4) == 0 || (strncmp(input, "/..", 3) == 0 && input[3] == '\0')) {
-      // Remove last segment from output
+      // Remove last segment from output (everything back to and including the previous '/')
       if (out_ptr > output) {
-        out_ptr--;  // Back up from current position
+        // Move back past the current trailing slash if there is one
+        if (*(out_ptr - 1) == '/') {
+          out_ptr--;
+        }
+        // Find and remove the last segment
         while (out_ptr > output && *(out_ptr - 1) != '/') {
           out_ptr--;
         }
+        // If we found a '/', keep it, otherwise we're at the root
+        if (out_ptr == output || *(out_ptr - 1) != '/') {
+          *out_ptr++ = '/';  // Ensure we have a leading slash
+        }
+        *out_ptr = '\0';
+      } else {
+        // Output is empty, just add "/"
+        *out_ptr++ = '/';
         *out_ptr = '\0';
       }
-
-      // Add "/" to output
-      *out_ptr++ = '/';
-      *out_ptr = '\0';
 
       // Skip the input pattern
       if (input[3] == '\0') {
@@ -88,25 +116,11 @@ char* normalize_dot_segments(const char* path) {
     }
   }
 
-  // Clean up multiple consecutive slashes (e.g., "//parent" -> "/parent")
-  char* final_output = output;
-  char* read_ptr = output;
-  char* write_ptr = output;
+  // For URL paths, consecutive slashes are significant and should be preserved
+  // According to WHATWG URL spec, paths like "//@" should remain as "//@", not "/@"
+  // Only normalize dot segments, but preserve the rest of the path structure
 
-  while (*read_ptr != '\0') {
-    *write_ptr = *read_ptr;
-    if (*read_ptr == '/') {
-      // Skip consecutive slashes
-      while (*(read_ptr + 1) == '/') {
-        read_ptr++;
-      }
-    }
-    read_ptr++;
-    write_ptr++;
-  }
-  *write_ptr = '\0';
-
-  return final_output;
+  return output;
 }
 
 // Strip leading and trailing ASCII whitespace from URL string
@@ -252,7 +266,8 @@ char* normalize_url_backslashes(const char* url) {
     return NULL;
 
   size_t len = strlen(url);
-  char* result = malloc(len + 1);
+  // Allocate extra space in case backslashes create empty path segments
+  char* result = malloc(len * 2 + 1);
   if (!result)
     return NULL;
 
@@ -282,11 +297,33 @@ char* normalize_url_backslashes(const char* url) {
   char* fragment_pos = strchr(url, '#');
   size_t stop_pos = fragment_pos ? (fragment_pos - url) : len;
 
+  // Track if we're in the path section
+  int in_path_section = 0;
+  char* double_slash = colon_pos ? strstr(url, "://") : NULL;
+  char* authority_end = NULL;
+
+  if (double_slash) {
+    // Find end of authority section (first / after ://)
+    char* auth_start = double_slash + 3;
+    authority_end = strchr(auth_start, '/');
+  }
+
   size_t result_pos = 0;
   for (size_t i = 0; i < len; i++) {
+    // Determine if we're in the path section
+    if (authority_end) {
+      in_path_section = (url + i >= authority_end);
+    } else if (colon_pos) {
+      // No authority, path starts after scheme:
+      in_path_section = (url + i > colon_pos);
+    } else {
+      // No scheme, entire URL is path
+      in_path_section = 1;
+    }
+
     if (i < stop_pos && url[i] == '\\') {
       if (is_special) {
-        // Special schemes: convert backslashes to forward slashes
+        // Convert backslash to forward slash according to WHATWG URL spec
         result[result_pos++] = '/';
       } else {
         // Non-special schemes: preserve backslashes
@@ -294,11 +331,13 @@ char* normalize_url_backslashes(const char* url) {
       }
     } else if (i < stop_pos && url[i] == '|') {
       // Handle pipe to colon normalization for Windows drive letters
-      // This applies to file URLs and relative URLs that might become file URLs
-      if (i > 0 && isalpha(url[i - 1]) && ((colon_pos && strncmp(url, "file:", 5) == 0) || !colon_pos)) {
+      // Extended pattern matching for better drive letter detection
+      if (i > 0 && isalpha(url[i - 1]) &&
+          (i + 1 < len && (url[i + 1] == '/' || url[i + 1] == '\\' || url[i + 1] == '|'))) {
+        // Convert pipe to colon for drive letter patterns
         result[result_pos++] = ':';
       } else {
-        result[result_pos++] = '|';
+        result[result_pos++] = '|';  // Preserve pipe - will be percent-encoded later
       }
     } else {
       // Preserve other characters
@@ -306,7 +345,10 @@ char* normalize_url_backslashes(const char* url) {
     }
   }
   result[result_pos] = '\0';
-  return result;
+
+  // Reallocate to actual size to save memory
+  char* final_result = realloc(result, result_pos + 1);
+  return final_result ? final_result : result;
 }
 
 // Check if port is default for the given scheme

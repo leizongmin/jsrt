@@ -62,6 +62,33 @@ char* preprocess_file_urls(const char* cleaned_url) {
     preprocessed_url = normalized;
     url_to_free = normalized;
   }
+  // Handle Windows drive letter paths with backslashes that should NOT be resolved against base
+  // "file:c:\foo\bar.html" should become "file:///c:/foo/bar.html", not resolved against base
+  else if (strncmp(cleaned_url, "file:", 5) == 0 && strlen(cleaned_url) > 7 && isalpha(cleaned_url[5]) &&
+           (cleaned_url[6] == ':' || cleaned_url[6] == '|') && cleaned_url[7] == '\\') {
+    // This is a Windows drive letter with backslash - normalize it
+    size_t input_len = strlen(cleaned_url);
+    char* normalized = malloc(input_len + 10);  // Extra space for normalization
+    strcpy(normalized, "file:///");
+
+    // Add drive letter and colon
+    size_t pos = 8;
+    normalized[pos++] = cleaned_url[5];  // Drive letter
+    normalized[pos++] = ':';             // Convert | or : to :
+
+    // Copy and normalize the rest of the path (starting from position 7, which is the backslash)
+    for (size_t i = 7; i < input_len; i++) {
+      if (cleaned_url[i] == '\\') {
+        normalized[pos++] = '/';
+      } else {
+        normalized[pos++] = cleaned_url[i];
+      }
+    }
+    normalized[pos] = '\0';
+
+    preprocessed_url = normalized;
+    url_to_free = normalized;
+  }
 
   return url_to_free ? url_to_free : strdup(cleaned_url);
 }
@@ -165,6 +192,7 @@ char* preprocess_url_string(const char* url, const char* base) {
   // Apply single-slash normalization for absolute URLs only
   // Relative URLs with matching schemes should not be normalized here
   char* final_url = normalized_url;
+
   if (!base || !is_relative_url(normalized_url, base)) {
     // This is an absolute URL - apply single-slash normalization
     final_url = normalize_single_slash_schemes(normalized_url);
@@ -275,6 +303,16 @@ int is_relative_url(const char* cleaned_url, const char* base) {
           break;
         }
       }
+    }
+
+    // Check for Windows drive letter patterns (C|/path) which should be absolute file URLs
+    // BUT ONLY if this is actually intended as a file path, not a scheme
+    // According to WHATWG URL spec, "c:/foo" should be treated as scheme "c:" with path "/foo"
+    // Only treat as Windows drive if we're in a file URL context
+    if (strlen(cleaned_url) >= 3 && isalpha(cleaned_url[0]) && (cleaned_url[1] == '|' || cleaned_url[1] == ':') &&
+        cleaned_url[2] == '/' && base && strncmp(base, "file:", 5) == 0) {
+      // This is a Windows drive letter in file URL context - should be treated as absolute file URL
+      return 0;
     }
 
     // Any other URL with base is relative if it doesn't have scheme+authority

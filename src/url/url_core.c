@@ -56,6 +56,40 @@ JSRT_URL* JSRT_ParseURL(const char* url, const char* base) {
     return result;
   }
 
+  // Check for Windows drive letter patterns and file URLs that need scheme normalization
+  if (strlen(preprocessed_url) >= 3) {
+    // Case 1: Bare Windows drive letter like "C:/foo"
+    // According to WHATWG URL spec, this should be treated as scheme "C:" with path "/foo"
+    // ONLY convert to file URL if we have no base or if base is a file URL
+    if (isalpha(preprocessed_url[0]) && (preprocessed_url[1] == '|' || preprocessed_url[1] == ':') &&
+        preprocessed_url[2] == '/') {
+      // Check if this already has a scheme (looks for colon before the drive letter)
+      char* scheme_colon = strchr(preprocessed_url, ':');
+      if (!scheme_colon || scheme_colon == &preprocessed_url[1]) {
+        // Only convert to file URL if we have no base, or base is a file URL
+        if (!base || strncmp(base, "file:", 5) == 0) {
+          // No base or file base - add file: prefix
+          char* file_url = malloc(strlen("file:///") + strlen(preprocessed_url) + 1);
+          strcpy(file_url, "file:///");
+          strcat(file_url, preprocessed_url);
+          free(preprocessed_url);
+          preprocessed_url = file_url;
+        }
+        // Otherwise, let it be parsed as scheme "c:" with path "/foo"
+      }
+    }
+    // Case 2: File URLs with Windows paths like "file:c:\foo" -> normalize to "file:///c:/"
+    else if (strncmp(preprocessed_url, "file:", 5) == 0 && strlen(preprocessed_url) > 7 &&
+             isalpha(preprocessed_url[5]) && preprocessed_url[6] == ':') {
+      // This is a file URL with Windows drive letter - ensure it's absolute
+      char* file_url = malloc(strlen("file:///") + strlen(preprocessed_url + 5) + 1);
+      strcpy(file_url, "file:///");
+      strcat(file_url, preprocessed_url + 5);  // Skip "file:" prefix
+      free(preprocessed_url);
+      preprocessed_url = file_url;
+    }
+  }
+
   // Apply file URL specific preprocessing
   char* file_preprocessed_url = preprocess_file_urls(preprocessed_url);
   free(preprocessed_url);

@@ -374,6 +374,13 @@ JSRT_URL* parse_absolute_url(const char* preprocessed_url) {
     return NULL;
   }
 
+  // Normalize scheme to lowercase per WHATWG URL spec
+  if (scheme) {
+    for (size_t i = 0; scheme[i] != '\0'; i++) {
+      scheme[i] = tolower(scheme[i]);
+    }
+  }
+
   // Validate scheme according to WHATWG URL spec
   if (!is_valid_scheme(scheme)) {
     free(scheme);
@@ -385,7 +392,7 @@ JSRT_URL* parse_absolute_url(const char* preprocessed_url) {
   // Special validation for special schemes without proper authority
   if (is_special_scheme(scheme)) {
     // Special schemes like http, https, ftp MUST have authority (start with //)
-    // If remainder doesn't start with // or doesn't have content after scheme:
+    // Exception: file: URLs can have various formats
     if (!remainder || strlen(remainder) == 0) {
       // Case like "http:" - special scheme with no remainder at all
       free(scheme);
@@ -394,18 +401,24 @@ JSRT_URL* parse_absolute_url(const char* preprocessed_url) {
       return NULL;
     } else if (strncmp(remainder, "//", 2) != 0) {
       // Case like "http:something" without // - this should fail for special schemes
-      // Exception: "http:///" is valid (empty authority)
-      free(scheme);
-      free(url_copy);
-      JSRT_FreeURL(parsed);
-      return NULL;
+      // Exception: file: URLs allow "file:path" format
+      if (strcmp(scheme, "file") != 0) {
+        free(scheme);
+        free(url_copy);
+        JSRT_FreeURL(parsed);
+        return NULL;
+      }
     }
   }
 
-  // Set protocol (scheme + ":")
+  // Set protocol (scheme + ":") - normalize scheme to lowercase
   free(parsed->protocol);
   parsed->protocol = malloc(strlen(scheme) + 2);
   snprintf(parsed->protocol, strlen(scheme) + 2, "%s:", scheme);
+  // Normalize scheme to lowercase per WHATWG URL spec
+  for (size_t i = 0; parsed->protocol[i] != ':' && parsed->protocol[i] != '\0'; i++) {
+    parsed->protocol[i] = tolower(parsed->protocol[i]);
+  }
 
   // Parse URL components and get pointer to path/query/fragment section
   char* path_start = parse_url_components(parsed, scheme, remainder);

@@ -8,6 +8,7 @@ import json
 import os
 import subprocess
 import sys
+import tempfile
 from pathlib import Path
 from typing import Dict, List, Optional, Tuple
 
@@ -200,11 +201,19 @@ class JSRTTestRunner:
     
     def create_test_wrapper(self, test_path: Path) -> Path:
         """Create a wrapper script that includes the WPT test harness and the test."""
-        wrapper_dir = Path('/tmp/jsrt-wpt-tests')
+        # Use cross-platform temporary directory
+        temp_base = Path(tempfile.gettempdir())
+        wrapper_dir = temp_base / 'jsrt-wpt-tests'
         wrapper_dir.mkdir(exist_ok=True)
         
-        # Create a unique wrapper file name
-        wrapper_name = f"wrapper_{test_path.stem}_{hash(str(test_path)) % 10000}.js"
+        # Create a unique wrapper file name using stronger uniqueness guarantees
+        import time
+        import hashlib
+        
+        # Use SHA256 hash of full path + timestamp for better uniqueness
+        path_hash = hashlib.sha256(str(test_path).encode()).hexdigest()[:16]
+        timestamp = int(time.time() * 1000000)  # microsecond precision
+        wrapper_name = f"wrapper_{test_path.stem}_{path_hash}_{timestamp}.js"
         wrapper_path = wrapper_dir / wrapper_name
         
         # Read the original test
@@ -369,6 +378,17 @@ globalThis.fetch = function(url) {{
         """Run WPT tests for specified categories."""
         if categories is None:
             categories = list(WINTERCG_TESTS.keys())
+        
+        # Clean up any leftover wrapper files to ensure clean state
+        temp_base = Path(tempfile.gettempdir())
+        wrapper_dir = temp_base / 'jsrt-wpt-tests'
+        if wrapper_dir.exists():
+            import shutil
+            try:
+                shutil.rmtree(wrapper_dir)
+                self.log("Cleaned up previous wrapper files for test isolation")
+            except Exception as e:
+                self.log(f"Warning: Could not clean wrapper directory: {e}")
         
         print(f"Running WPT tests for categories: {', '.join(categories)}")
         print(f"Using jsrt: {self.jsrt_path}")

@@ -137,6 +137,11 @@ int parse_authority(JSRT_URL* parsed, const char* authority_str) {
       free(parsed->hostname);
       parsed->hostname = ipv4_canonical;
     } else {
+      // Not an IPv4 address - normalize hostname case to lowercase
+      // This is required for DNS hostnames per WHATWG URL spec
+      for (size_t i = 0; parsed->hostname[i]; i++) {
+        parsed->hostname[i] = tolower(parsed->hostname[i]);
+      }
     }
 
     // Special handling for file URLs with localhost
@@ -246,6 +251,11 @@ int parse_authority(JSRT_URL* parsed, const char* authority_str) {
       free(parsed->hostname);
       parsed->hostname = ipv4_canonical;
     } else {
+      // Not an IPv4 address - normalize hostname case to lowercase
+      // This is required for DNS hostnames per WHATWG URL spec
+      for (size_t i = 0; parsed->hostname[i]; i++) {
+        parsed->hostname[i] = tolower(parsed->hostname[i]);
+      }
     }
 
     // Special handling for file URLs with localhost

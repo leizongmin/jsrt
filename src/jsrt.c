@@ -9,9 +9,12 @@
 #include <uv.h>
 
 #include "runtime.h"
-#include "std/process.h"
 #include "util/file.h"
 #include "util/http_client.h"
+
+// External references to global variables (defined in node/process/module.c)
+extern int jsrt_argc;
+extern char** jsrt_argv;
 
 // Forward declarations
 static bool is_url(const char* str);
@@ -89,8 +92,8 @@ static JSRT_ReadFileResult download_url(const char* url) {
 
 int JSRT_CmdRunFile(const char* filename, int argc, char** argv) {
   // Store command line arguments for process module
-  g_jsrt_argc = argc;
-  g_jsrt_argv = argv;
+  jsrt_argc = argc;
+  jsrt_argv = argv;
   int ret = 0;
   JSRT_Runtime* rt = JSRT_RuntimeNew();
 
@@ -137,8 +140,8 @@ end:
 
 int JSRT_CmdRunStdin(int argc, char** argv) {
   // Store command line arguments for process module
-  g_jsrt_argc = argc;
-  g_jsrt_argv = argv;
+  jsrt_argc = argc;
+  jsrt_argv = argv;
   int ret = 0;
   JSRT_Runtime* rt = JSRT_RuntimeNew();
 
@@ -206,8 +209,8 @@ end:
 
 int JSRT_CmdRunEval(const char* code, int argc, char** argv) {
   // Store command line arguments for process module
-  g_jsrt_argc = argc;
-  g_jsrt_argv = argv;
+  jsrt_argc = argc;
+  jsrt_argv = argv;
   int ret = 0;
   JSRT_Runtime* rt = JSRT_RuntimeNew();
 
@@ -312,8 +315,8 @@ int JSRT_CmdRunEmbeddedBytecode(const char* executable_path, int argc, char** ar
   }
 
   // Now that we have the bytecode, initialize the runtime
-  g_jsrt_argc = argc;
-  g_jsrt_argv = argv;
+  jsrt_argc = argc;
+  jsrt_argv = argv;
   int ret = 0;
   JSRT_Runtime* rt = JSRT_RuntimeNew();
   if (!rt) {

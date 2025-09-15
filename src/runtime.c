@@ -11,6 +11,8 @@
 
 #include "crypto/crypto.h"
 #include "http/fetch.h"
+#include "node/process/process.h"
+#include "node/process/process_node.h"
 #include "std/abort.h"
 #include "std/base64.h"
 #include "std/blob.h"
@@ -26,7 +28,6 @@
 #include "std/module.h"
 #include "std/navigator.h"
 #include "std/performance.h"
-#include "std/process.h"
 #include "std/streams.h"
 #include "std/timer.h"
 #include "std/webassembly.h"
@@ -325,6 +326,9 @@ bool JSRT_RuntimeRunTicket(JSRT_Runtime* rt) {
     JSRT_RuntimeFreeValue(rt, e);
     return false;
   }
+
+  // Execute nextTick callbacks after processing pending jobs
+  jsrt_process_execute_next_tick(rt->ctx);
 
   return true;
 }

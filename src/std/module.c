@@ -30,13 +30,13 @@ static char* jsrt_realpath(const char* path, char* resolved_path) {
 
 #include "../http/module_loader.h"
 #include "../http/security.h"
+#include "../node/process/process.h"
 #include "../util/debug.h"
 #include "../util/file.h"
 #include "../util/json.h"
 #include "../util/path.h"
 #include "assert.h"
 #include "ffi.h"
-#include "process.h"
 
 // ==== Cross-platform Path Handling Functions ====
 
@@ -210,13 +210,9 @@ static int js_std_assert_init(JSContext* ctx, JSModuleDef* m) {
 }
 
 // Module init function for jsrt:process ES module
-static int js_std_process_init(JSContext* ctx, JSModuleDef* m) {
-  JSValue process_module = JSRT_CreateProcessModule(ctx);
-  if (JS_IsException(process_module)) {
-    return -1;
-  }
-  JS_SetModuleExport(ctx, m, "default", process_module);
-  return 0;
+static int js_std_process_module_init(JSContext* ctx, JSModuleDef* m) {
+  // Use the unified process module
+  return js_unified_process_init(ctx, m);
 }
 
 // Module init function for jsrt:ffi ES module
@@ -680,8 +676,8 @@ JSModuleDef* JSRT_ModuleLoader(JSContext* ctx, const char* module_name, void* op
     }
 
     if (strcmp(std_module, "process") == 0) {
-      // Create jsrt:process module with init function
-      JSModuleDef* m = JS_NewCModule(ctx, module_name, js_std_process_init);
+      // Create jsrt:process module with standard process implementation
+      JSModuleDef* m = JS_NewCModule(ctx, module_name, js_std_process_module_init);
       if (m) {
         JS_AddModuleExport(ctx, m, "default");
       }
@@ -921,7 +917,7 @@ static JSValue js_require(JSContext* ctx, JSValueConst this_val, int argc, JSVal
     }
 
     if (strcmp(std_module, "process") == 0) {
-      JSValue result = JSRT_CreateProcessModule(ctx);
+      JSValue result = jsrt_get_process_module(ctx);
       JS_FreeCString(ctx, module_name);
       free(esm_context_path);
       return result;

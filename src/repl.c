@@ -225,10 +225,10 @@ static bool jsrt_process_repl_shortcut(const char* input) {
 
 int JSRT_CmdRunREPL(int argc, char** argv) {
   // Store command line arguments for process module
-  extern int g_jsrt_argc;
-  extern char** g_jsrt_argv;
-  g_jsrt_argc = argc;
-  g_jsrt_argv = argv;
+  extern int jsrt_argc;
+  extern char** jsrt_argv;
+  jsrt_argc = argc;
+  jsrt_argv = argv;
 
   // Initialize runtime
   JSRT_Runtime* rt = JSRT_RuntimeNew();

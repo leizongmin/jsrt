@@ -27,10 +27,17 @@ int is_special_scheme(const char* protocol) {
   if (!protocol || strlen(protocol) == 0)
     return 0;
 
-  // Remove colon if present
+  // Remove colon if present and convert to lowercase for comparison
   char* scheme = strdup(protocol);
   if (strlen(scheme) > 0 && scheme[strlen(scheme) - 1] == ':') {
     scheme[strlen(scheme) - 1] = '\0';
+  }
+
+  // Convert scheme to lowercase for case-insensitive comparison
+  for (size_t i = 0; i < strlen(scheme); i++) {
+    if (scheme[i] >= 'A' && scheme[i] <= 'Z') {
+      scheme[i] = scheme[i] + ('a' - 'A');
+    }
   }
 
   const char* special_schemes[] = {"http", "https", "ws", "wss", "file", "ftp", NULL};

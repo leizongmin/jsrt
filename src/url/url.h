@@ -144,6 +144,7 @@ char* url_fragment_encode(const char* str);
 char* url_fragment_encode_nonspecial(const char* str);
 char* url_nonspecial_path_encode(const char* str);
 char* url_path_encode_special(const char* str);
+char* url_path_encode_file(const char* str);
 char* url_userinfo_encode(const char* str);
 char* url_userinfo_encode_with_scheme(const char* str, int is_special_scheme);
 char* url_userinfo_encode_with_scheme_name(const char* str, const char* scheme);

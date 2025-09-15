@@ -338,24 +338,24 @@ char* canonicalize_ipv6(const char* ipv6_str) {
   // Build the canonical form (without brackets for hostname storage)
   char* result = malloc(64);
   result[0] = '\0';
+  size_t result_len = 0;
+  const size_t max_len = 40;  // Maximum IPv6 string length
 
   int i = 0;
   while (i < 8) {
     if (i == best_start && best_len > 1) {
       // Use :: compression
       if (i == 0) {
-        strcat(result, "::");
+        result_len += snprintf(result + result_len, max_len - result_len, "::");
       } else {
-        strcat(result, "::");
+        result_len += snprintf(result + result_len, max_len - result_len, "::");
       }
       i += best_len;
     } else {
       if (i > 0 && !(i == best_start + best_len && best_len > 1)) {
-        strcat(result, ":");
+        result_len += snprintf(result + result_len, max_len - result_len, ":");
       }
-      char group_str[8];
-      snprintf(group_str, sizeof(group_str), "%x", groups[i]);
-      strcat(result, group_str);
+      result_len += snprintf(result + result_len, max_len - result_len, "%x", groups[i]);
       i++;
     }
   }

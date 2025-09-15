@@ -503,12 +503,14 @@ char* compute_origin(const char* protocol, const char* hostname, const char* por
   char* origin;
   if (!normalized_port || strlen(normalized_port) == 0) {
     // Omit default port, port 0, or when no port is specified
-    origin = malloc(strlen(protocol) + strlen(hostname) + 4);
-    sprintf(origin, "%s//%s", protocol, hostname);
+    size_t origin_len = strlen(protocol) + strlen(hostname) + 4;
+    origin = malloc(origin_len);
+    snprintf(origin, origin_len, "%s//%s", protocol, hostname);
   } else {
     // Include custom non-default port (even if double_colon_at_pattern is present)
-    origin = malloc(strlen(protocol) + strlen(hostname) + strlen(normalized_port) + 5);
-    sprintf(origin, "%s//%s:%s", protocol, hostname, normalized_port);
+    size_t origin_len = strlen(protocol) + strlen(hostname) + strlen(normalized_port) + 5;
+    origin = malloc(origin_len);
+    snprintf(origin, origin_len, "%s//%s:%s", protocol, hostname, normalized_port);
   }
 
   free(normalized_port);

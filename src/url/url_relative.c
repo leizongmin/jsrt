@@ -171,11 +171,12 @@ JSRT_URL* resolve_relative_url(const char* url, const char* base) {
         sprintf(result->pathname, "/%s", path_copy);
       } else {
         // Copy base directory and append relative path
-        size_t dir_len = last_slash - base_pathname;                 // Length up to but not including last slash
-        result->pathname = malloc(dir_len + strlen(path_copy) + 3);  // dir + '/' + relative_path + '\0'
+        size_t dir_len = last_slash - base_pathname;         // Length up to but not including last slash
+        size_t total_len = dir_len + strlen(path_copy) + 3;  // dir + '/' + relative_path + '\0'
+        result->pathname = malloc(total_len);
         strncpy(result->pathname, base_pathname, dir_len);
         result->pathname[dir_len] = '/';
-        strcpy(result->pathname + dir_len + 1, path_copy);
+        snprintf(result->pathname + dir_len + 1, total_len - dir_len - 1, "%s", path_copy);
       }
     }
 
@@ -261,24 +262,24 @@ JSRT_URL* resolve_relative_url(const char* url, const char* base) {
       char* protocol_and_slashes = malloc(strlen(result->protocol) + 3);
       sprintf(protocol_and_slashes, "%s//", result->protocol);
 
-      strcpy(result->href, protocol_and_slashes);
+      size_t written = snprintf(result->href, href_len, "%s", protocol_and_slashes);
 
       if (result->username && strlen(result->username) > 0) {
-        strcat(result->href, result->username);
+        written += snprintf(result->href + written, href_len - written, "%s", result->username);
       }
       if (result->has_password_field) {
-        strcat(result->href, ":");
+        written += snprintf(result->href + written, href_len - written, ":");
         if (result->password) {
-          strcat(result->href, result->password);
+          written += snprintf(result->href + written, href_len - written, "%s", result->password);
         }
       }
-      strcat(result->href, "@");
+      written += snprintf(result->href + written, href_len - written, "@");
 
       // Add the host part (origin without "protocol://")
       size_t prefix_len = strlen(protocol_and_slashes);
       if (strlen(result->origin) > prefix_len) {
         const char* host_part = result->origin + prefix_len;
-        strcat(result->href, host_part);
+        written += snprintf(result->href + written, href_len - written, "%s", host_part);
       }
 
       free(protocol_and_slashes);
@@ -286,16 +287,15 @@ JSRT_URL* resolve_relative_url(const char* url, const char* base) {
       // Special handling for file URLs which have null origin
       if (strcmp(result->protocol, "file:") == 0) {
         // File URLs: build as file:// + pathname + search + hash
-        strcpy(result->href, result->protocol);
-        strcat(result->href, "//");
+        size_t written = snprintf(result->href, href_len, "%s//", result->protocol);
+        written += snprintf(result->href + written, href_len - written, "%s%s%s", encoded_pathname, encoded_search,
+                            encoded_hash);
       } else {
-        strcpy(result->href, result->origin);
+        size_t written = snprintf(result->href, href_len, "%s", result->origin);
+        written += snprintf(result->href + written, href_len - written, "%s%s%s", encoded_pathname, encoded_search,
+                            encoded_hash);
       }
     }
-
-    strcat(result->href, encoded_pathname);
-    strcat(result->href, encoded_search);
-    strcat(result->href, encoded_hash);
   } else {
     // Non-special schemes: check if it has authority (host)
     if (result->host && strlen(result->host) > 0) {
@@ -304,22 +304,15 @@ JSRT_URL* resolve_relative_url(const char* url, const char* base) {
                         strlen(encoded_search) + strlen(encoded_hash) + 1;
       result->href = malloc(href_len);
 
-      strcpy(result->href, result->protocol);
-      strcat(result->href, "//");
-      strcat(result->href, result->host);
-      strcat(result->href, encoded_pathname);
-      strcat(result->href, encoded_search);
-      strcat(result->href, encoded_hash);
+      snprintf(result->href, href_len, "%s//%s%s%s%s", result->protocol, result->host, encoded_pathname, encoded_search,
+               encoded_hash);
     } else {
       // No authority: use direct protocol + pathname + search + hash construction (opaque)
       size_t href_len =
           strlen(result->protocol) + strlen(encoded_pathname) + strlen(encoded_search) + strlen(encoded_hash) + 1;
       result->href = malloc(href_len);
 
-      strcpy(result->href, result->protocol);
-      strcat(result->href, encoded_pathname);
-      strcat(result->href, encoded_search);
-      strcat(result->href, encoded_hash);
+      snprintf(result->href, href_len, "%s%s%s%s", result->protocol, encoded_pathname, encoded_search, encoded_hash);
     }
   }
 

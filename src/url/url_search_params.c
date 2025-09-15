@@ -60,11 +60,13 @@ void update_parent_url_href(JSRT_URLSearchParams* search_params) {
       char* encoded_name = url_encode_with_len(param->name, param->name_len);
       char* encoded_value = url_encode_with_len(param->value, param->value_len);
 
-      if (!first)
-        strcat(new_search_str, "&");
-      strcat(new_search_str, encoded_name);
-      strcat(new_search_str, "=");
-      strcat(new_search_str, encoded_value);
+      if (!first) {
+        size_t current_len = strlen(new_search_str);
+        size_t remaining = total_len - current_len;
+        snprintf(new_search_str + current_len, remaining, "&%s=%s", encoded_name, encoded_value);
+      } else {
+        snprintf(new_search_str, total_len, "%s=%s", encoded_name, encoded_value);
+      }
 
       free(encoded_name);
       free(encoded_value);
@@ -76,8 +78,9 @@ void update_parent_url_href(JSRT_URLSearchParams* search_params) {
   // Update URL's search component
   free(url->search);
   if (strlen(new_search_str) > 0) {
-    url->search = malloc(strlen(new_search_str) + 2);  // +1 for '?', +1 for '\0'
-    sprintf(url->search, "?%s", new_search_str);
+    size_t search_len = strlen(new_search_str) + 2;  // +1 for '?', +1 for '\0'
+    url->search = malloc(search_len);
+    snprintf(url->search, search_len, "?%s", new_search_str);
   } else {
     url->search = strdup("");
   }
@@ -93,17 +96,14 @@ void update_parent_url_href(JSRT_URLSearchParams* search_params) {
   }
 
   url->href = malloc(href_len + 1);
-  strcpy(url->href, url->protocol);
-  strcat(url->href, "//");
-  strcat(url->href, url->host);
-  strcat(url->href, url->pathname);
+  int written = snprintf(url->href, href_len + 1, "%s//%s%s", url->protocol, url->host, url->pathname);
 
   if (url->search && strlen(url->search) > 0) {
-    strcat(url->href, url->search);
+    written += snprintf(url->href + written, href_len + 1 - written, "%s", url->search);
   }
 
   if (url->hash && strlen(url->hash) > 0) {
-    strcat(url->href, url->hash);
+    snprintf(url->href + written, href_len + 1 - written, "%s", url->hash);
   }
 
   free(new_search_str);

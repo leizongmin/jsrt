@@ -69,9 +69,9 @@ JSRT_URL* JSRT_ParseURL(const char* url, const char* base) {
         // Only convert to file URL if we have no base, or base is a file URL
         if (!base || strncmp(base, "file:", 5) == 0) {
           // No base or file base - add file: prefix
-          char* file_url = malloc(strlen("file:///") + strlen(preprocessed_url) + 1);
-          strcpy(file_url, "file:///");
-          strcat(file_url, preprocessed_url);
+          size_t file_url_len = strlen("file:///") + strlen(preprocessed_url) + 1;
+          char* file_url = malloc(file_url_len);
+          snprintf(file_url, file_url_len, "file:///%s", preprocessed_url);
           free(preprocessed_url);
           preprocessed_url = file_url;
         }
@@ -82,9 +82,9 @@ JSRT_URL* JSRT_ParseURL(const char* url, const char* base) {
     else if (strncmp(preprocessed_url, "file:", 5) == 0 && strlen(preprocessed_url) > 7 &&
              isalpha(preprocessed_url[5]) && preprocessed_url[6] == ':') {
       // This is a file URL with Windows drive letter - ensure it's absolute
-      char* file_url = malloc(strlen("file:///") + strlen(preprocessed_url + 5) + 1);
-      strcpy(file_url, "file:///");
-      strcat(file_url, preprocessed_url + 5);  // Skip "file:" prefix
+      size_t file_url_len = strlen("file:///") + strlen(preprocessed_url + 5) + 1;
+      char* file_url = malloc(file_url_len);
+      snprintf(file_url, file_url_len, "file:///%s", preprocessed_url + 5);  // Skip "file:" prefix
       free(preprocessed_url);
       preprocessed_url = file_url;
     }

@@ -253,8 +253,7 @@ static JSValue JSRT_URLSetSearch(JSContext* ctx, JSValueConst this_val, int argc
   } else {
     size_t len = strlen(new_search);
     url->search = malloc(len + 2);
-    url->search[0] = '?';
-    strcpy(url->search + 1, new_search);
+    snprintf(url->search, len + 2, "?%s", new_search);
   }
 
   // Update cached URLSearchParams object if it exists
@@ -290,17 +289,14 @@ static JSValue JSRT_URLSetSearch(JSContext* ctx, JSValueConst this_val, int argc
   }
 
   url->href = malloc(href_len + 1);
-  strcpy(url->href, url->protocol);
-  strcat(url->href, "//");
-  strcat(url->href, url->host);
-  strcat(url->href, url->pathname);
+  int written = snprintf(url->href, href_len + 1, "%s//%s%s", url->protocol, url->host, url->pathname);
 
   if (url->search && strlen(url->search) > 0) {
-    strcat(url->href, url->search);
+    written += snprintf(url->href + written, href_len + 1 - written, "%s", url->search);
   }
 
   if (url->hash && strlen(url->hash) > 0) {
-    strcat(url->href, url->hash);
+    snprintf(url->href + written, href_len + 1 - written, "%s", url->hash);
   }
 
   JS_FreeCString(ctx, new_search);

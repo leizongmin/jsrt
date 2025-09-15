@@ -228,31 +228,31 @@ char* build_url_string(const char* protocol, const char* username, const char* p
     total_len += strlen(hash);
 
   char* url_string = malloc(total_len);
-  strcpy(url_string, protocol);
+  int written = snprintf(url_string, total_len, "%s", protocol);
 
   // Add authority if host exists
   if (host && strlen(host) > 0) {
-    strcat(url_string, "//");
+    written += snprintf(url_string + written, total_len - written, "//");
 
     // Add userinfo if exists
     if (username && strlen(username) > 0) {
       char* encoded_username = url_userinfo_encode(username);
-      strcat(url_string, encoded_username);
+      written += snprintf(url_string + written, total_len - written, "%s", encoded_username);
       free(encoded_username);
 
       if (has_password_field && password && strlen(password) > 0) {
-        strcat(url_string, ":");
+        written += snprintf(url_string + written, total_len - written, ":");
         char* encoded_password = url_userinfo_encode(password);
-        strcat(url_string, encoded_password);
+        written += snprintf(url_string + written, total_len - written, "%s", encoded_password);
         free(encoded_password);
       }
-      strcat(url_string, "@");
+      written += snprintf(url_string + written, total_len - written, "@");
     }
 
-    strcat(url_string, host);
+    written += snprintf(url_string + written, total_len - written, "%s", host);
   } else if (is_special && pathname && pathname[0] == '/') {
     // Special schemes with no host but absolute path need //
-    strcat(url_string, "//");
+    written += snprintf(url_string + written, total_len - written, "//");
   }
 
   // Add pathname with scheme-specific encoding
@@ -276,14 +276,14 @@ char* build_url_string(const char* protocol, const char* username, const char* p
   // Add search
   if (search && strlen(search) > 0) {
     char* encoded_search = url_component_encode(search);
-    strcat(url_string, encoded_search);
+    written += snprintf(url_string + written, total_len - written, "%s", encoded_search);
     free(encoded_search);
   }
 
   // Add hash
   if (hash && strlen(hash) > 0) {
     char* encoded_hash = is_special ? url_fragment_encode(hash) : url_fragment_encode_nonspecial(hash);
-    strcat(url_string, encoded_hash);
+    snprintf(url_string + written, total_len - written, "%s", encoded_hash);
     free(encoded_hash);
   }
 

@@ -12,10 +12,9 @@ char* preprocess_file_urls(const char* cleaned_url) {
 
   // Handle "file:.//path" -> "file:path" normalization
   if (strncmp(cleaned_url, "file:.//", 8) == 0) {
-    size_t new_len = strlen(cleaned_url) - 3;  // Remove the ".//"
+    size_t new_len = strlen(cleaned_url) - 3;  // Remove the "./"
     char* normalized = malloc(new_len + 1);
-    strcpy(normalized, "file:");
-    strcat(normalized, cleaned_url + 8);  // Skip "file:.//"
+    snprintf(normalized, new_len + 1, "file:%s", cleaned_url + 8);  // Skip "file:./"
     preprocessed_url = normalized;
     url_to_free = normalized;
   }
@@ -23,8 +22,7 @@ char* preprocess_file_urls(const char* cleaned_url) {
   else if (strncmp(cleaned_url, "file:./", 7) == 0) {
     size_t new_len = strlen(cleaned_url) - 2;  // Remove the "./"
     char* normalized = malloc(new_len + 1);
-    strcpy(normalized, "file:");
-    strcat(normalized, cleaned_url + 7);  // Skip "file:./"
+    snprintf(normalized, new_len + 1, "file:%s", cleaned_url + 7);  // Skip "file:./"
     preprocessed_url = normalized;
     url_to_free = normalized;
   }
@@ -33,8 +31,7 @@ char* preprocess_file_urls(const char* cleaned_url) {
   else if (strncmp(cleaned_url, "file:/./", 8) == 0) {
     size_t new_len = strlen(cleaned_url) + 2;  // Add two extra "/" to make "///"
     char* normalized = malloc(new_len + 1);
-    strcpy(normalized, "file:///");
-    strcat(normalized, cleaned_url + 8);  // Skip "file:/./"
+    snprintf(normalized, new_len + 1, "file:///%s", cleaned_url + 8);  // Skip "file:/./"
     preprocessed_url = normalized;
     url_to_free = normalized;
   }
@@ -44,8 +41,7 @@ char* preprocess_file_urls(const char* cleaned_url) {
            isalpha(cleaned_url[5]) && cleaned_url[6] == ':' && cleaned_url[7] == '/') {
     size_t new_len = strlen(cleaned_url) + 3;  // Add "///"
     char* normalized = malloc(new_len + 1);
-    strcpy(normalized, "file:///");
-    strcat(normalized, cleaned_url + 5);  // Skip "file:"
+    snprintf(normalized, new_len + 1, "file:///%s", cleaned_url + 5);  // Skip "file:"
     preprocessed_url = normalized;
     url_to_free = normalized;
   }
@@ -64,7 +60,7 @@ char* preprocess_file_urls(const char* cleaned_url) {
 
     size_t input_len = strlen(cleaned_url);
     char* normalized = malloc(input_len + 10);  // Extra space for normalization
-    strcpy(normalized, "file:///");
+    size_t written = snprintf(normalized, input_len + 10, "file:///");
 
     // Add drive letter and colon (preserve original case)
     size_t pos = 8;
@@ -101,7 +97,7 @@ char* preprocess_file_urls(const char* cleaned_url) {
     // NO pipe-to-colon conversion for double pipes
     size_t input_len = strlen(cleaned_url);
     char* normalized = malloc(input_len + 10);  // Extra space for normalization
-    strcpy(normalized, "file:///");
+    size_t written = snprintf(normalized, input_len + 10, "file:///");
 
     // Copy everything from position 5 onwards (drive letter + pipes + path)
     size_t pos = 8;
@@ -127,7 +123,7 @@ char* preprocess_file_urls(const char* cleaned_url) {
     // This is a Windows drive letter with backslash - normalize it
     size_t input_len = strlen(cleaned_url);
     char* normalized = malloc(input_len + 10);  // Extra space for normalization
-    strcpy(normalized, "file:///");
+    size_t written = snprintf(normalized, input_len + 10, "file:///");
 
     // Add drive letter and colon (preserve original case)
     size_t pos = 8;
@@ -184,8 +180,7 @@ JSRT_URL* handle_protocol_relative(const char* cleaned_url, const char* base) {
     if (!full_url) {
       return NULL;
     }
-    strcpy(full_url, "file:");
-    strcat(full_url, cleaned_url);
+    snprintf(full_url, strlen("file:") + strlen(cleaned_url) + 1, "file:%s", cleaned_url);
 
     JSRT_URL* result = JSRT_ParseURL(full_url, NULL);
     free(full_url);
@@ -421,7 +416,7 @@ char* normalize_single_slash_schemes(const char* url) {
         normalized[i + 1] = '/';
         normalized[i + 2] = '/';
         // Copy the rest starting after the colon
-        strcpy(normalized + i + 3, url + i + 1);
+        snprintf(normalized + i + 3, new_len - i - 2, "%s", url + i + 1);
 
         free(scheme);
         return normalized;
@@ -457,7 +452,7 @@ char* normalize_single_slash_schemes(const char* url) {
           normalized[i + 1] = '/';
           normalized[i + 2] = '/';
           // Copy the rest starting from the single slash
-          strcpy(normalized + i + 3, url + i + 1);
+          snprintf(normalized + i + 3, new_len - i - 2, "%s", url + i + 1);
         } else {
           // Other special schemes: normalize to double slash
           size_t new_len = url_len + 1;  // +1 for extra slash
@@ -468,7 +463,7 @@ char* normalize_single_slash_schemes(const char* url) {
           // Add extra slash
           normalized[i + 1] = '/';
           // Copy the rest starting from the single slash
-          strcpy(normalized + i + 2, url + i + 1);
+          snprintf(normalized + i + 2, new_len - i - 1, "%s", url + i + 1);
         }
 
         free(scheme);

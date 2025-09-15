@@ -266,6 +266,12 @@ int parse_authority(JSRT_URL* parsed, const char* authority_str) {
     }
   }
 
+  // Validate that special schemes (except file:) have non-empty hostnames
+  // Per WHATWG URL spec, special schemes like http, https, ws, wss, ftp require hosts
+  if (is_special_scheme(parsed->protocol) && strcmp(parsed->protocol, "file:") != 0 && strlen(parsed->hostname) == 0) {
+    goto cleanup_and_return_error;  // Empty host for special scheme (not file:) is invalid
+  }
+
   // Set host field
   free(parsed->host);
   if (strlen(parsed->port) > 0) {

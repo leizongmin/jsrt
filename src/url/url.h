@@ -127,6 +127,8 @@ char* canonicalize_ipv6(const char* ipv6_str);
 // URL normalization functions
 char* normalize_fullwidth_characters(const char* input);
 char* normalize_dot_segments(const char* path);
+char* decode_percent_encoded_dots(const char* path);
+char* normalize_dot_segments_with_percent_decoding(const char* path);
 char* normalize_port(const char* port_str, const char* protocol);
 char* strip_url_whitespace(const char* url);
 char* remove_all_ascii_whitespace(const char* url);

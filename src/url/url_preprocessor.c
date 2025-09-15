@@ -38,9 +38,10 @@ char* preprocess_file_urls(const char* cleaned_url) {
     preprocessed_url = normalized;
     url_to_free = normalized;
   }
-  // Handle Windows drive letter: "file:C:/path" -> "file:///C:/path"
-  else if (strncmp(cleaned_url, "file:", 5) == 0 && strlen(cleaned_url) > 7 && isalpha(cleaned_url[5]) &&
-           cleaned_url[6] == ':' && cleaned_url[7] == '/') {
+  // Handle Windows drive letter: "file:C:/path" -> "file:///C:/path" (case-insensitive)
+  else if (strlen(cleaned_url) > 7 &&
+           (strncmp(cleaned_url, "file:", 5) == 0 || strncmp(cleaned_url, "File:", 5) == 0) &&
+           isalpha(cleaned_url[5]) && cleaned_url[6] == ':' && cleaned_url[7] == '/') {
     size_t new_len = strlen(cleaned_url) + 3;  // Add "///"
     char* normalized = malloc(new_len + 1);
     strcpy(normalized, "file:///");
@@ -49,23 +50,51 @@ char* preprocess_file_urls(const char* cleaned_url) {
     url_to_free = normalized;
   }
   // Handle Windows drive letter with pipe: "file:C|/path" -> "file:///C:/path"
-  else if (strncmp(cleaned_url, "file:", 5) == 0 && strlen(cleaned_url) > 7 && isalpha(cleaned_url[5]) &&
-           cleaned_url[6] == '|' && cleaned_url[7] == '/') {
-    size_t new_len = strlen(cleaned_url) + 3;  // Add "///" and account for | -> : conversion
-    char* normalized = malloc(new_len + 1);
+  // Also handles cases like "file:C|////path" with multiple slashes (case-insensitive)
+  else if (strlen(cleaned_url) > 7 &&
+           (strncmp(cleaned_url, "file:", 5) == 0 || strncmp(cleaned_url, "File:", 5) == 0) &&
+           isalpha(cleaned_url[5]) && cleaned_url[6] == '|') {
+    // Find the start of the path after the drive letter and any slashes/backslashes
+    size_t path_start = 7;
+    while (path_start < strlen(cleaned_url) && (cleaned_url[path_start] == '/' || cleaned_url[path_start] == '\\')) {
+      path_start++;
+    }
+
+    size_t input_len = strlen(cleaned_url);
+    char* normalized = malloc(input_len + 10);  // Extra space for normalization
     strcpy(normalized, "file:///");
-    // Copy drive letter and convert | to :
-    normalized[8] = cleaned_url[5];       // Drive letter
-    normalized[9] = ':';                  // Convert | to :
-    normalized[10] = '\0';                // Null terminate
-    strcat(normalized, cleaned_url + 7);  // Copy rest starting from the slash
+
+    // Add drive letter and colon
+    size_t pos = 8;
+    normalized[pos++] = cleaned_url[5];  // Drive letter
+    normalized[pos++] = ':';             // Convert | to :
+
+    // Add a single slash before the path content (not before the remaining slashes)
+    if (path_start < input_len) {
+      normalized[pos++] = '/';
+
+      // Copy and normalize the rest of the path, converting backslashes to forward slashes
+      for (size_t i = path_start; i < input_len; i++) {
+        if (cleaned_url[i] == '\\') {
+          normalized[pos++] = '/';
+        } else {
+          normalized[pos++] = cleaned_url[i];
+        }
+      }
+    } else {
+      // No path content after drive letter - just add a trailing slash
+      normalized[pos++] = '/';
+    }
+    normalized[pos] = '\0';
+
     preprocessed_url = normalized;
     url_to_free = normalized;
   }
   // Handle Windows drive letter paths with backslashes that should NOT be resolved against base
-  // "file:c:\foo\bar.html" should become "file:///c:/foo/bar.html", not resolved against base
-  else if (strncmp(cleaned_url, "file:", 5) == 0 && strlen(cleaned_url) > 7 && isalpha(cleaned_url[5]) &&
-           (cleaned_url[6] == ':' || cleaned_url[6] == '|') && cleaned_url[7] == '\\') {
+  // "file:c:\foo\bar.html" should become "file:///c:/foo/bar.html", not resolved against base (case-insensitive)
+  else if (strlen(cleaned_url) > 7 &&
+           (strncmp(cleaned_url, "file:", 5) == 0 || strncmp(cleaned_url, "File:", 5) == 0) &&
+           isalpha(cleaned_url[5]) && (cleaned_url[6] == ':' || cleaned_url[6] == '|') && cleaned_url[7] == '\\') {
     // This is a Windows drive letter with backslash - normalize it
     size_t input_len = strlen(cleaned_url);
     char* normalized = malloc(input_len + 10);  // Extra space for normalization
@@ -279,6 +308,17 @@ int is_relative_url(const char* cleaned_url, const char* base) {
               // Special schemes without authority (like "http:foo.com") - check scheme compatibility
               // Same scheme as base: relative path
               // Different scheme from base: absolute URL
+
+              // Special case: file URLs with Windows drive letters are always absolute
+              // Example: "file:c:\foo\bar.html" should be absolute even with file: base
+              if (strcmp(scheme, "file:") == 0 && scheme_len + 3 < strlen(cleaned_url) &&
+                  isalpha(cleaned_url[scheme_len + 1]) &&
+                  (cleaned_url[scheme_len + 2] == ':' || cleaned_url[scheme_len + 2] == '|')) {
+                // This is file: followed by drive letter - always absolute
+                free(scheme);
+                return 0;
+              }
+
               JSRT_URL* base_url = JSRT_ParseURL(base, NULL);
               if (base_url && strcmp(scheme, base_url->protocol) == 0) {
                 // Same scheme as base -> relative URL

@@ -123,6 +123,53 @@ char* normalize_dot_segments(const char* path) {
   return output;
 }
 
+// Decode percent-encoded dots in path for proper normalization
+// According to WHATWG URL spec, %2e and %2E should be decoded to . before path normalization
+char* decode_percent_encoded_dots(const char* path) {
+  if (!path || strlen(path) == 0) {
+    return strdup("");
+  }
+
+  size_t input_len = strlen(path);
+  char* output = malloc(input_len + 1);
+  if (!output) {
+    return NULL;
+  }
+
+  size_t i = 0, j = 0;
+  while (i < input_len) {
+    if (i + 2 < input_len && path[i] == '%' && path[i + 1] == '2' && (path[i + 2] == 'e' || path[i + 2] == 'E')) {
+      // %2e or %2E -> decode to .
+      output[j++] = '.';
+      i += 3;
+    } else {
+      output[j++] = path[i++];
+    }
+  }
+  output[j] = '\0';
+
+  return output;
+}
+
+// Enhanced dot segment normalization that handles percent-encoded dots first
+char* normalize_dot_segments_with_percent_decoding(const char* path) {
+  if (!path) {
+    return strdup("");
+  }
+
+  // First decode percent-encoded dots
+  char* decoded_path = decode_percent_encoded_dots(path);
+  if (!decoded_path) {
+    return strdup("");
+  }
+
+  // Then normalize dot segments
+  char* normalized = normalize_dot_segments(decoded_path);
+  free(decoded_path);
+
+  return normalized;
+}
+
 // Strip leading and trailing ASCII whitespace from URL string
 // ASCII whitespace: space (0x20), tab (0x09), LF (0x0A), CR (0x0D), FF (0x0C)
 char* strip_url_whitespace(const char* url) {

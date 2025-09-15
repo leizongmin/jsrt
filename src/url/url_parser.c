@@ -451,7 +451,7 @@ JSRT_URL* parse_absolute_url(const char* preprocessed_url) {
 
   // Normalize dot segments in the pathname for special schemes
   if (is_special_scheme(parsed->protocol) && parsed->pathname) {
-    char* normalized_pathname = normalize_dot_segments(parsed->pathname);
+    char* normalized_pathname = normalize_dot_segments_with_percent_decoding(parsed->pathname);
     if (normalized_pathname) {
       free(parsed->pathname);
       parsed->pathname = normalized_pathname;

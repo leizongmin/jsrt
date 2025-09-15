@@ -196,10 +196,16 @@ JSRT_URL* resolve_relative_url(const char* url, const char* base) {
   result->origin = compute_origin(result->protocol, result->hostname, result->port, result->double_colon_at_pattern);
 
   // For non-special schemes, pathname should not be encoded (spaces preserved)
-  // For special schemes, pathname should be encoded
+  // For special schemes, pathname should be encoded (except file URLs preserve pipes)
   char* encoded_pathname;
   if (is_special_scheme(result->protocol)) {
-    encoded_pathname = url_component_encode(result->pathname);
+    if (strcmp(result->protocol, "file:") == 0) {
+      // File URLs preserve pipe characters in pathname
+      encoded_pathname = strdup(result->pathname ? result->pathname : "");
+    } else {
+      // Other special schemes use component encoding
+      encoded_pathname = url_component_encode(result->pathname);
+    }
   } else {
     // Non-special schemes: preserve spaces and other characters in pathname
     encoded_pathname = strdup(result->pathname ? result->pathname : "");

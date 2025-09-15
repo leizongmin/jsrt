@@ -66,10 +66,10 @@ char* preprocess_file_urls(const char* cleaned_url) {
     char* normalized = malloc(input_len + 10);  // Extra space for normalization
     strcpy(normalized, "file:///");
 
-    // Add drive letter and colon (convert to uppercase per WHATWG URL spec)
+    // Add drive letter and colon (preserve original case)
     size_t pos = 8;
-    normalized[pos++] = toupper(cleaned_url[5]);  // Drive letter (uppercase)
-    normalized[pos++] = ':';                      // Convert | to :
+    normalized[pos++] = cleaned_url[5];  // Drive letter (preserve case)
+    normalized[pos++] = ':';             // Convert | to :
 
     // Add a single slash before the path content (not before the remaining slashes)
     if (path_start < input_len) {
@@ -109,7 +109,7 @@ char* preprocess_file_urls(const char* cleaned_url) {
       if (cleaned_url[i] == '\\') {
         normalized[pos++] = '/';
       } else if (i == 5) {
-        normalized[pos++] = toupper(cleaned_url[i]);  // Uppercase drive letter only
+        normalized[pos++] = cleaned_url[i];  // Preserve drive letter case
       } else {
         normalized[pos++] = cleaned_url[i];  // Keep everything else as-is
       }
@@ -129,10 +129,10 @@ char* preprocess_file_urls(const char* cleaned_url) {
     char* normalized = malloc(input_len + 10);  // Extra space for normalization
     strcpy(normalized, "file:///");
 
-    // Add drive letter and colon (convert to uppercase per WHATWG URL spec)
+    // Add drive letter and colon (preserve original case)
     size_t pos = 8;
-    normalized[pos++] = toupper(cleaned_url[5]);  // Drive letter (uppercase)
-    normalized[pos++] = ':';                      // Convert | or : to :
+    normalized[pos++] = cleaned_url[5];  // Drive letter (preserve case)
+    normalized[pos++] = ':';             // Convert | or : to :
 
     // Copy and normalize the rest of the path (starting from position 7, which is the backslash)
     for (size_t i = 7; i < input_len; i++) {

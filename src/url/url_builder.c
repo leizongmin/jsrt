@@ -61,9 +61,19 @@ void build_href(JSRT_URL* parsed) {
     final_host = strdup(parsed->host ? parsed->host : "");
   }
 
-  // Use encoded values for href construction
-  char* final_pathname =
-      is_special ? url_component_encode(parsed->pathname) : strdup(parsed->pathname ? parsed->pathname : "");
+  // Use encoded values for href construction with scheme-specific encoding
+  char* final_pathname;
+  if (is_special) {
+    if (strcmp(parsed->protocol, "file:") == 0) {
+      // File URLs preserve pipe characters in pathname
+      final_pathname = strdup(parsed->pathname ? parsed->pathname : "");
+    } else {
+      // Other special schemes use component encoding
+      final_pathname = url_component_encode(parsed->pathname);
+    }
+  } else {
+    final_pathname = strdup(parsed->pathname ? parsed->pathname : "");
+  }
   char* final_search = url_component_encode(parsed->search);
   char* final_hash = is_special ? url_fragment_encode(parsed->hash) : url_fragment_encode_nonspecial(parsed->hash);
 
@@ -245,9 +255,20 @@ char* build_url_string(const char* protocol, const char* username, const char* p
     strcat(url_string, "//");
   }
 
-  // Add pathname
+  // Add pathname with scheme-specific encoding
   if (pathname) {
-    char* encoded_pathname = is_special ? url_component_encode(pathname) : strdup(pathname);
+    char* encoded_pathname;
+    if (is_special) {
+      if (protocol && strcmp(protocol, "file:") == 0) {
+        // File URLs preserve pipe characters in pathname
+        encoded_pathname = strdup(pathname);
+      } else {
+        // Other special schemes use component encoding
+        encoded_pathname = url_component_encode(pathname);
+      }
+    } else {
+      encoded_pathname = strdup(pathname);
+    }
     strcat(url_string, encoded_pathname);
     free(encoded_pathname);
   }

@@ -198,9 +198,16 @@ static JSValue JSRT_URLGetPathname(JSContext* ctx, JSValueConst this_val, int ar
     return JS_EXCEPTION;
 
   // For non-special schemes, return the raw pathname without encoding
-  // For special schemes, return the percent-encoded pathname
+  // For special schemes, return the percent-encoded pathname (except file URLs preserve pipes)
   if (is_special_scheme(url->protocol)) {
-    char* encoded_pathname = url_component_encode(url->pathname);
+    char* encoded_pathname;
+    if (strcmp(url->protocol, "file:") == 0) {
+      // File URLs preserve pipe characters in pathname
+      encoded_pathname = strdup(url->pathname ? url->pathname : "");
+    } else {
+      // Other special schemes use component encoding
+      encoded_pathname = url_component_encode(url->pathname);
+    }
     if (!encoded_pathname)
       return JS_EXCEPTION;
 

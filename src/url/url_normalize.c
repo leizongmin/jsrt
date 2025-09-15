@@ -124,7 +124,8 @@ char* normalize_dot_segments(const char* path) {
 }
 
 // Decode percent-encoded dots in path for proper normalization
-// According to WHATWG URL spec, %2e and %2E should be decoded to . before path normalization
+// According to WHATWG URL spec, %2e and %2E should be decoded ONLY when they form dot segments
+// Other %2e sequences should be preserved as-is
 char* decode_percent_encoded_dots(const char* path) {
   if (!path || strlen(path) == 0) {
     return strdup("");
@@ -139,9 +140,47 @@ char* decode_percent_encoded_dots(const char* path) {
   size_t i = 0, j = 0;
   while (i < input_len) {
     if (i + 2 < input_len && path[i] == '%' && path[i + 1] == '2' && (path[i + 2] == 'e' || path[i + 2] == 'E')) {
-      // %2e or %2E -> decode to .
-      output[j++] = '.';
-      i += 3;
+      // Check if this %2e forms a dot segment that should be normalized
+      int should_decode = 0;
+
+      // Check for dot segment patterns:
+      // 1. "%2e" at end of string
+      // 2. "%2e/" (single dot segment)
+      // 3. "%2e%2e" followed by "/" or end (double dot segment)
+      // 4. Beginning of path: ".%2e" or "%2e"
+
+      if (i + 3 >= input_len) {
+        // %2e at end of string - decode
+        should_decode = 1;
+      } else if (path[i + 3] == '/') {
+        // %2e/ - single dot segment, decode
+        should_decode = 1;
+      } else if (i + 5 < input_len && path[i + 3] == '%' && path[i + 4] == '2' &&
+                 (path[i + 5] == 'e' || path[i + 5] == 'E')) {
+        // %2e%2e - check if followed by / or end
+        if (i + 6 >= input_len || path[i + 6] == '/') {
+          should_decode = 1;
+        }
+      } else if (i == 0 || path[i - 1] == '/') {
+        // Check if this starts a dot segment from beginning of path or after /
+        // Look ahead to see if it forms a complete dot segment
+        if (i + 3 < input_len && path[i + 3] == '.') {
+          // Pattern like "%2e." - check if followed by / or end
+          if (i + 4 >= input_len || path[i + 4] == '/') {
+            should_decode = 1;
+          }
+        }
+      }
+
+      if (should_decode) {
+        output[j++] = '.';
+        i += 3;
+      } else {
+        // Preserve %2e as-is - it's not part of a dot segment
+        output[j++] = path[i++];
+        output[j++] = path[i++];
+        output[j++] = path[i++];
+      }
     } else {
       output[j++] = path[i++];
     }

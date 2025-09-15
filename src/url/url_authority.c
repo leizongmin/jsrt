@@ -137,10 +137,24 @@ int parse_authority(JSRT_URL* parsed, const char* authority_str) {
       free(parsed->hostname);
       parsed->hostname = ipv4_canonical;
     } else {
-      // Not an IPv4 address - normalize hostname case to lowercase
-      // This is required for DNS hostnames per WHATWG URL spec
-      for (size_t i = 0; parsed->hostname[i]; i++) {
-        parsed->hostname[i] = tolower(parsed->hostname[i]);
+      // Not an IPv4 address - check for special cases before lowercasing
+      int should_lowercase = 1;
+
+      // For file URLs, check if hostname is actually a Windows drive letter
+      if (parsed->protocol && strcmp(parsed->protocol, "file:") == 0 && parsed->hostname &&
+          strlen(parsed->hostname) >= 2) {
+        // Check for patterns like "C:" or "C|" that should be treated as drive letters
+        if (isalpha(parsed->hostname[0]) && (parsed->hostname[1] == ':' || parsed->hostname[1] == '|') &&
+            (strlen(parsed->hostname) == 2 || parsed->hostname[2] == '/' || parsed->hostname[2] == '\0')) {
+          should_lowercase = 0;  // Preserve case for Windows drive letters
+        }
+      }
+
+      if (should_lowercase) {
+        // Normalize hostname case to lowercase (required for DNS hostnames per WHATWG URL spec)
+        for (size_t i = 0; parsed->hostname[i]; i++) {
+          parsed->hostname[i] = tolower(parsed->hostname[i]);
+        }
       }
     }
 
@@ -251,10 +265,24 @@ int parse_authority(JSRT_URL* parsed, const char* authority_str) {
       free(parsed->hostname);
       parsed->hostname = ipv4_canonical;
     } else {
-      // Not an IPv4 address - normalize hostname case to lowercase
-      // This is required for DNS hostnames per WHATWG URL spec
-      for (size_t i = 0; parsed->hostname[i]; i++) {
-        parsed->hostname[i] = tolower(parsed->hostname[i]);
+      // Not an IPv4 address - check for special cases before lowercasing
+      int should_lowercase = 1;
+
+      // For file URLs, check if hostname is actually a Windows drive letter
+      if (parsed->protocol && strcmp(parsed->protocol, "file:") == 0 && parsed->hostname &&
+          strlen(parsed->hostname) >= 2) {
+        // Check for patterns like "C:" or "C|" that should be treated as drive letters
+        if (isalpha(parsed->hostname[0]) && (parsed->hostname[1] == ':' || parsed->hostname[1] == '|') &&
+            (strlen(parsed->hostname) == 2 || parsed->hostname[2] == '/' || parsed->hostname[2] == '\0')) {
+          should_lowercase = 0;  // Preserve case for Windows drive letters
+        }
+      }
+
+      if (should_lowercase) {
+        // Normalize hostname case to lowercase (required for DNS hostnames per WHATWG URL spec)
+        for (size_t i = 0; parsed->hostname[i]; i++) {
+          parsed->hostname[i] = tolower(parsed->hostname[i]);
+        }
       }
     }
 

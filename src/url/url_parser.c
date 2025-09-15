@@ -216,6 +216,22 @@ int parse_double_colon_at_pattern(JSRT_URL* parsed, char** ptr) {
       return -1;
     }
 
+    // Try to canonicalize as IPv4 address if it looks like one
+    char* ipv4_canonical = canonicalize_ipv4_address(parsed->hostname);
+    if (ipv4_canonical) {
+      // Replace hostname with canonical IPv4 form
+      free(parsed->hostname);
+      parsed->hostname = ipv4_canonical;
+    } else {
+    }
+
+    // Special handling for file URLs with localhost
+    if (strcmp(parsed->protocol, "file:") == 0 && strcmp(parsed->hostname, "localhost") == 0) {
+      // For file URLs, localhost should be normalized to empty hostname
+      free(parsed->hostname);
+      parsed->hostname = strdup("");
+    }
+
     // Parse and normalize port
     char* port_str = port_colon + 1;
     char* normalized_port = normalize_port(port_str, parsed->protocol);
@@ -246,8 +262,24 @@ int parse_double_colon_at_pattern(JSRT_URL* parsed, char** ptr) {
       return -1;
     }
 
+    // Try to canonicalize as IPv4 address if it looks like one
+    char* ipv4_canonical = canonicalize_ipv4_address(parsed->hostname);
+    if (ipv4_canonical) {
+      // Replace hostname with canonical IPv4 form
+      free(parsed->hostname);
+      parsed->hostname = ipv4_canonical;
+    } else {
+    }
+
+    // Special handling for file URLs with localhost
+    if (strcmp(parsed->protocol, "file:") == 0 && strcmp(parsed->hostname, "localhost") == 0) {
+      // For file URLs, localhost should be normalized to empty hostname
+      free(parsed->hostname);
+      parsed->hostname = strdup("");
+    }
+
     free(parsed->host);
-    parsed->host = strdup(host_part);
+    parsed->host = strdup(parsed->hostname);
   }
   free(host_part);
 
@@ -402,6 +434,15 @@ JSRT_URL* parse_absolute_url(const char* preprocessed_url) {
   if (is_special_scheme(parsed->protocol) && strcmp(parsed->pathname, "") == 0) {
     free(parsed->pathname);
     parsed->pathname = strdup("/");
+  }
+
+  // Normalize dot segments in the pathname for special schemes
+  if (is_special_scheme(parsed->protocol) && parsed->pathname) {
+    char* normalized_pathname = normalize_dot_segments(parsed->pathname);
+    if (normalized_pathname) {
+      free(parsed->pathname);
+      parsed->pathname = normalized_pathname;
+    }
   }
 
   // Compute origin

@@ -130,6 +130,22 @@ int parse_authority(JSRT_URL* parsed, const char* authority_str) {
       goto cleanup_and_return_error;
     }
 
+    // Try to canonicalize as IPv4 address if it looks like one
+    char* ipv4_canonical = canonicalize_ipv4_address(parsed->hostname);
+    if (ipv4_canonical) {
+      // Replace hostname with canonical IPv4 form
+      free(parsed->hostname);
+      parsed->hostname = ipv4_canonical;
+    } else {
+    }
+
+    // Special handling for file URLs with localhost
+    if (strcmp(parsed->protocol, "file:") == 0 && strcmp(parsed->hostname, "localhost") == 0) {
+      // For file URLs, localhost should be normalized to empty hostname
+      free(parsed->hostname);
+      parsed->hostname = strdup("");
+    }
+
     // Parse port, handling leading zeros
     char* port_str = port_colon + 1;
     if (strlen(port_str) > 0) {
@@ -221,6 +237,22 @@ int parse_authority(JSRT_URL* parsed, const char* authority_str) {
     // Validate hostname characters (including Unicode validation)
     if (!validate_hostname_characters(parsed->hostname)) {
       goto cleanup_and_return_error;
+    }
+
+    // Try to canonicalize as IPv4 address if it looks like one
+    char* ipv4_canonical = canonicalize_ipv4_address(parsed->hostname);
+    if (ipv4_canonical) {
+      // Replace hostname with canonical IPv4 form
+      free(parsed->hostname);
+      parsed->hostname = ipv4_canonical;
+    } else {
+    }
+
+    // Special handling for file URLs with localhost
+    if (strcmp(parsed->protocol, "file:") == 0 && strcmp(parsed->hostname, "localhost") == 0) {
+      // For file URLs, localhost should be normalized to empty hostname
+      free(parsed->hostname);
+      parsed->hostname = strdup("");
     }
   }
 

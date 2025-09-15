@@ -238,10 +238,9 @@ int validate_hostname_characters_allow_at(const char* hostname, int allow_at) {
       return 0;  // Non-ASCII characters not allowed in hostnames
     }
 
-    // Reject hex notation patterns in hostnames (0x prefix)
-    if (c == '0' && (*(p + 1) == 'x' || *(p + 1) == 'X')) {
-      return 0;  // Hex notation not allowed in hostnames
-    }
+    // Allow hex notation patterns in hostnames for IPv4 address parsing
+    // IPv4 addresses like "192.0x00A80001" should be allowed and processed later
+    // The IPv4 canonicalization will handle the validation
   }
 
   // Validate punycode for IDN domains (xn-- prefix)

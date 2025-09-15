@@ -106,8 +106,8 @@ char* canonicalize_ipv4_address(const char* input) {
     // Check for overflow: IPv4 addresses must fit in 32 bits
     if (*endptr == '\0' && addr <= 0xFFFFFFFFULL) {
       char* result = malloc(16);  // "255.255.255.255\0"
-      snprintf(result, 16, "%lu.%lu.%lu.%lu", (addr >> 24) & 0xFF, (addr >> 16) & 0xFF, (addr >> 8) & 0xFF,
-               addr & 0xFF);
+      snprintf(result, 16, "%u.%u.%u.%u", (unsigned int)((addr >> 24) & 0xFF), (unsigned int)((addr >> 16) & 0xFF),
+               (unsigned int)((addr >> 8) & 0xFF), (unsigned int)(addr & 0xFF));
       free(normalized_input);
       return result;
     }

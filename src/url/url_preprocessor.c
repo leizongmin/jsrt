@@ -162,16 +162,19 @@ char* preprocess_url_string(const char* url, const char* base) {
     return NULL;
   }
 
-  // Skip single-slash normalization since they should now be treated as relative URLs
-  // per WPT test expectations (e.g., "http:/example.com/" with base -> relative)
-  // char* final_url = normalize_single_slash_schemes(normalized_url);
-  // free(normalized_url);
-  // if (!final_url) {
-  //   return NULL;
-  // }
-  // return final_url;
+  // Apply single-slash normalization for absolute URLs only
+  // Relative URLs with matching schemes should not be normalized here
+  char* final_url = normalized_url;
+  if (!base || !is_relative_url(normalized_url, base)) {
+    // This is an absolute URL - apply single-slash normalization
+    final_url = normalize_single_slash_schemes(normalized_url);
+    free(normalized_url);
+    if (!final_url) {
+      return NULL;
+    }
+  }
 
-  return normalized_url;
+  return final_url;
 }
 
 // Check if URL should be treated as relative
@@ -226,19 +229,41 @@ int is_relative_url(const char* cleaned_url, const char* base) {
 
           if (is_special) {
             // Check if it's a single-slash special scheme URL like "ftp:/example.com/"
-            // According to WPT tests, these should be treated as relative URLs when there's a base
+            // According to WPT tests, these should only be treated as relative URLs when the scheme matches the base
             if (*(p + 1) == '/' && *(p + 2) != '/') {
-              // Single slash after scheme for special schemes -> relative URL when base exists
-              // Examples: "http:/example.com/" with base -> relative path "example.com/"
-              free(scheme);
-              return 1;  // Relative URL (changed from 0 to 1 for WPT compliance)
+              // Single slash after scheme for special schemes -> check if scheme matches base
+              // Examples: "http:/example.com/" with http: base -> relative path
+              //           "ftp:/example.com/" with http: base -> absolute URL
+              JSRT_URL* base_url = JSRT_ParseURL(base, NULL);
+              if (base_url && strcmp(scheme, base_url->protocol) == 0) {
+                // Same scheme as base -> relative URL
+                JSRT_FreeURL(base_url);
+                free(scheme);
+                return 1;
+              } else {
+                // Different scheme from base -> absolute URL
+                if (base_url)
+                  JSRT_FreeURL(base_url);
+                free(scheme);
+                return 0;
+              }
             } else {
-              // Special schemes without authority (like "http:foo.com") are relative paths
-              // This includes cases like:
-              // - "http:foo.com" → relative path "foo.com"
-              // - "http::@c:29" → relative path ":@c:29"
-              free(scheme);
-              return 1;  // Relative URL
+              // Special schemes without authority (like "http:foo.com") - check scheme compatibility
+              // Same scheme as base: relative path
+              // Different scheme from base: absolute URL
+              JSRT_URL* base_url = JSRT_ParseURL(base, NULL);
+              if (base_url && strcmp(scheme, base_url->protocol) == 0) {
+                // Same scheme as base -> relative URL
+                JSRT_FreeURL(base_url);
+                free(scheme);
+                return 1;
+              } else {
+                // Different scheme from base -> absolute URL
+                if (base_url)
+                  JSRT_FreeURL(base_url);
+                free(scheme);
+                return 0;
+              }
             }
           } else {
             // Non-special schemes with just colon are absolute (e.g., "mailto:test" → absolute)
@@ -268,6 +293,38 @@ char* normalize_single_slash_schemes(const char* url) {
 
   size_t url_len = strlen(url);
 
+  // First, look for pattern "scheme:hostname" (no slashes) where scheme is special
+  for (size_t i = 0; i < url_len - 1; i++) {
+    if (url[i] == ':' && url[i + 1] != '/' && url[i + 1] != '\0') {
+      // Found "scheme:something" pattern where something doesn't start with slash
+      size_t scheme_len = i;
+      char* scheme = malloc(scheme_len + 2);  // +1 for ':', +1 for '\0'
+      strncpy(scheme, url, scheme_len);
+      scheme[scheme_len] = ':';
+      scheme[scheme_len + 1] = '\0';
+
+      if (is_special_scheme(scheme)) {
+        // Special scheme without slashes - add "//" after colon
+        size_t new_len = url_len + 2;  // +2 for "//"
+        char* normalized = malloc(new_len + 1);
+
+        // Copy scheme and colon
+        strncpy(normalized, url, i + 1);
+        // Add "//"
+        normalized[i + 1] = '/';
+        normalized[i + 2] = '/';
+        // Copy the rest starting after the colon
+        strcpy(normalized + i + 3, url + i + 1);
+
+        free(scheme);
+        return normalized;
+      }
+
+      free(scheme);
+      break;  // Only check first scheme found
+    }
+  }
+
   // Look for pattern "scheme:/" where scheme is special
   for (size_t i = 0; i < url_len - 2; i++) {
     if (url[i] == ':' && url[i + 1] == '/' && url[i + 2] != '/') {
@@ -279,16 +336,33 @@ char* normalize_single_slash_schemes(const char* url) {
       scheme[scheme_len + 1] = '\0';
 
       if (is_special_scheme(scheme)) {
-        // Special scheme with single slash - normalize to double slash
-        size_t new_len = url_len + 1;  // +1 for extra slash
-        char* normalized = malloc(new_len + 1);
+        char* normalized;
 
-        // Copy scheme and colon
-        strncpy(normalized, url, i + 1);
-        // Add extra slash
-        normalized[i + 1] = '/';
-        // Copy the rest starting from the single slash
-        strcpy(normalized + i + 2, url + i + 1);
+        // Special scheme with single slash - normalize based on scheme type
+        if (strcmp(scheme, "file:") == 0) {
+          // File URLs: "file:/path" -> "file:///path" (triple slash for local files)
+          size_t new_len = url_len + 2;  // +2 for two extra slashes
+          normalized = malloc(new_len + 1);
+
+          // Copy scheme and colon
+          strncpy(normalized, url, i + 1);
+          // Add two extra slashes to make it file:///
+          normalized[i + 1] = '/';
+          normalized[i + 2] = '/';
+          // Copy the rest starting from the single slash
+          strcpy(normalized + i + 3, url + i + 1);
+        } else {
+          // Other special schemes: normalize to double slash
+          size_t new_len = url_len + 1;  // +1 for extra slash
+          normalized = malloc(new_len + 1);
+
+          // Copy scheme and colon
+          strncpy(normalized, url, i + 1);
+          // Add extra slash
+          normalized[i + 1] = '/';
+          // Copy the rest starting from the single slash
+          strcpy(normalized + i + 2, url + i + 1);
+        }
 
         free(scheme);
         return normalized;

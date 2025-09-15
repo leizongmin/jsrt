@@ -93,6 +93,7 @@ JSRT_URL* resolve_relative_url(const char* url, const char* base) {
     // TODO: Windows path \\x\hello parsing - complex implementation needed
   } else if (url[0] == '/') {
     // Absolute path - parse the path to separate pathname, search, and hash
+    // Note: This handles both regular absolute paths and single-slash same-scheme special URLs
     char* path_copy = strdup(url);
     char* search_pos = strchr(path_copy, '?');
     char* hash_pos = strchr(path_copy, '#');

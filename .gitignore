@@ -72,6 +72,7 @@ test_*.mjs
 !test/**/test_*.mjs
 debug_*.js
 debug_*.mjs
+/Testing/Temporary/
 
 # Claude settings
 .claude/settings.local.json

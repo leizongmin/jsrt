@@ -304,7 +304,7 @@ JSValue js_fs_realpath_sync(JSContext* ctx, JSValueConst this_val, int argc, JSV
     
     const char* real_path = buffer;
 #else
-    // Unix/Linux: Use realpath()
+    // Unix/Linux/macOS: Use realpath()
     char* resolved_path = realpath(path, NULL);
     
     if (!resolved_path) {

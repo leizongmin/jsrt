@@ -96,11 +96,14 @@ try {
     // Test with original file
     const realPath1 = fs.realpathSync(testFile);
     assert.strictEqual(typeof realPath1, 'string', 'realpathSync should return a string');
-    assert.strictEqual(realPath1, testFile, 'realpathSync of original file should return same path');
     
-    // Test with symbolic link
+    // On macOS, /tmp might resolve to /private/tmp, so we should compare resolved paths
+    const expectedRealPath = fs.realpathSync(testFile);  // This should be the same as itself
+    assert.strictEqual(realPath1, expectedRealPath, 'realpathSync should be consistent');
+    
+    // Test with symbolic link - this should resolve to the same real path as the original file
     const realPath2 = fs.realpathSync(symLinkFile);
-    assert.strictEqual(realPath2, testFile, 'realpathSync of symbolic link should resolve to original file');
+    assert.strictEqual(realPath2, realPath1, 'realpathSync of symbolic link should resolve to same real path as original file');
     
     console.log('✓ realpathSync test passed');
 } catch (error) {

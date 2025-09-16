@@ -1,4 +1,7 @@
 #include "fs_common.h"
+#ifdef _WIN32
+#include <io.h>
+#endif
 
 // Helper function to parse file flags
 static int parse_file_flags(const char* flags) {
@@ -118,9 +121,26 @@ JSValue js_fs_read_sync(JSContext* ctx, JSValueConst this_val, int argc, JSValue
 
   ssize_t bytes_read;
   if (position >= 0) {
+#ifdef _WIN32
+    // Windows: Use _lseeki64 and _read
+    off_t original_pos = _lseeki64(fd, 0, SEEK_CUR);
+    if (original_pos == -1) {
+      return JS_Throw(ctx, create_fs_error(ctx, errno, "lseek", NULL));
+    }
+    if (_lseeki64(fd, position, SEEK_SET) == -1) {
+      return JS_Throw(ctx, create_fs_error(ctx, errno, "lseek", NULL));
+    }
+    bytes_read = _read(fd, buffer + offset, length);
+    _lseeki64(fd, original_pos, SEEK_SET); // Restore position
+#else
     bytes_read = pread(fd, buffer + offset, length, position);
+#endif
   } else {
+#ifdef _WIN32
+    bytes_read = _read(fd, buffer + offset, length);
+#else
     bytes_read = read(fd, buffer + offset, length);
+#endif
   }
 
   if (bytes_read < 0) {
@@ -194,9 +214,28 @@ JSValue js_fs_write_sync(JSContext* ctx, JSValueConst this_val, int argc, JSValu
 
   ssize_t bytes_written;
   if (position >= 0) {
+#ifdef _WIN32
+    // Windows: Use _lseeki64 and _write
+    off_t original_pos = _lseeki64(fd, 0, SEEK_CUR);
+    if (original_pos == -1) {
+      if (JS_IsString(argv[1])) JS_FreeCString(ctx, data);
+      return JS_Throw(ctx, create_fs_error(ctx, errno, "lseek", NULL));
+    }
+    if (_lseeki64(fd, position, SEEK_SET) == -1) {
+      if (JS_IsString(argv[1])) JS_FreeCString(ctx, data);
+      return JS_Throw(ctx, create_fs_error(ctx, errno, "lseek", NULL));
+    }
+    bytes_written = _write(fd, data + offset, length);
+    _lseeki64(fd, original_pos, SEEK_SET); // Restore position
+#else
     bytes_written = pwrite(fd, data + offset, length, position);
+#endif
   } else {
+#ifdef _WIN32
+    bytes_written = _write(fd, data + offset, length);
+#else
     bytes_written = write(fd, data + offset, length);
+#endif
   }
 
   if (JS_IsString(argv[1])) {

@@ -71,10 +71,10 @@ char* url_component_encode(const char* str) {
     if (c == '%' && i + 2 < len && hex_to_int(str[i + 1]) >= 0 && hex_to_int(str[i + 2]) >= 0) {
       // Already percent-encoded sequence, keep as-is
       encoded_len += 3;
-    } else if (c <= 32 || c == '"' || c == '<' || c == '>' || c == '\\' || c == '^' || c == '{' || c == '|' ||
-               c == '}') {
+    } else if (c <= 32 || c == '"' || c == '\'' || c == '<' || c == '>' || c == '\\' || c == '^' || c == '`' ||
+               c == '{' || c == '|' || c == '}') {
       // Encode control characters, space, and specific unsafe characters
-      // Do NOT encode Unicode characters (>= 127) to preserve them in URLs per WPT
+      // Include single quotes and backticks per WPT requirements
       encoded_len += 3;  // %XX
     } else {
       encoded_len++;
@@ -92,10 +92,10 @@ char* url_component_encode(const char* str) {
       encoded[j++] = str[i + 1];
       encoded[j++] = str[i + 2];
       i += 2;  // Skip the next two characters
-    } else if (c <= 32 || c == '"' || c == '<' || c == '>' || c == '\\' || c == '^' || c == '{' || c == '|' ||
-               c == '}') {
+    } else if (c <= 32 || c == '"' || c == '\'' || c == '<' || c == '>' || c == '\\' || c == '^' || c == '`' ||
+               c == '{' || c == '|' || c == '}') {
       // Encode control characters, space, and specific unsafe characters
-      // Preserve Unicode characters (>= 127) and single quotes per WPT
+      // Include single quotes and backticks per WPT requirements
       encoded[j++] = '%';
       encoded[j++] = hex_chars[c >> 4];
       encoded[j++] = hex_chars[c & 15];

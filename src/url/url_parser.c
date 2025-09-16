@@ -464,6 +464,15 @@ JSRT_URL* parse_absolute_url(const char* preprocessed_url) {
     }
   }
 
+  // Normalize Windows drive letters in file URL pathnames
+  if (parsed->protocol && strcmp(parsed->protocol, "file:") == 0 && parsed->pathname) {
+    char* normalized_drive = normalize_windows_drive_letters(parsed->pathname);
+    if (normalized_drive) {
+      free(parsed->pathname);
+      parsed->pathname = normalized_drive;
+    }
+  }
+
   // Compute origin
   free(parsed->origin);
   parsed->origin = compute_origin(parsed->protocol, parsed->hostname, parsed->port, parsed->double_colon_at_pattern);

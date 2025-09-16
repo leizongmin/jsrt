@@ -89,12 +89,14 @@ int looks_like_ipv4_address(const char* hostname) {
   }
 
   // Check if this looks like an IPv4 address
-  // It looks like IPv4 if:
+  // According to WHATWG URL spec, a hostname looks like IPv4 if:
   // 1. Contains dots AND consists only of digits, dots, and optionally hex prefixes
   // 2. OR starts with hex prefix (0x/0X) and contains only hex digits
+  // 3. OR consists entirely of digits (pure numeric hostname)
 
   int has_dots = strchr(normalized, '.') != NULL;
   int has_hex_prefix = strncmp(normalized, "0x", 2) == 0 || strncmp(normalized, "0X", 2) == 0;
+  int all_digits = 1;  // Track if it's purely numeric
 
   // Check each character
   for (size_t i = 0; i < strlen(normalized); i++) {
@@ -107,21 +109,24 @@ int looks_like_ipv4_address(const char* hostname) {
 
     // Allow dots if we're in dotted notation
     if (c == '.' && has_dots) {
+      all_digits = 0;  // Has dots, so not pure digits
       continue;
     }
 
     // Allow hex characters and 'x'/'X' if we have hex prefix
     if (has_hex_prefix && ((c >= 'a' && c <= 'f') || (c >= 'A' && c <= 'F') || c == 'x' || c == 'X')) {
+      all_digits = 0;  // Has hex chars, so not pure digits
       continue;
     }
 
     // Any other character means this doesn't look like IPv4
+    all_digits = 0;
     free(normalized);
     return 0;
   }
 
-  // If we have dots or hex prefix, it looks like IPv4
-  int result = has_dots || has_hex_prefix;
+  // If we have dots, hex prefix, OR it's all digits, it looks like IPv4
+  int result = has_dots || has_hex_prefix || all_digits;
   free(normalized);
   return result;
 }
@@ -150,8 +155,16 @@ char* canonicalize_ipv4_address(const char* input) {
   if (!has_dots) {
     // Try to parse as a single 32-bit number (decimal, octal, or hex)
     char* endptr;
+    errno = 0;  // Reset errno to detect overflow
     unsigned long long addr =
         strtoull(normalized_input, &endptr, 0);  // Auto-detect base (supports hex 0x, octal 0, decimal)
+
+    // Check for parsing errors or overflow
+    if (errno == ERANGE) {
+      // strtoull detected overflow - number is too large
+      free(normalized_input);
+      return NULL;
+    }
 
     // If the entire string was consumed and it's a valid 32-bit value
     // Check for overflow: IPv4 addresses must fit in 32 bits
@@ -203,12 +216,14 @@ char* canonicalize_ipv4_address(const char* input) {
       }
 
       char* endptr;
+      errno = 0;                                  // Reset errno to detect overflow
       values[i] = strtoul(parts[i], &endptr, 0);  // Auto-detect base
 
-      if (*endptr != '\0') {
+      if (errno == ERANGE || *endptr != '\0') {
+        // Either overflow occurred or invalid characters found
         free(input_copy);
         free(normalized_input);
-        return NULL;  // Invalid number
+        return NULL;  // Invalid number or overflow
       }
     }
 

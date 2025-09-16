@@ -146,6 +146,23 @@ JSRT_URL* resolve_relative_url(const char* url, const char* base) {
       result->search = strdup("");
     }
 
+    // Special case: Windows drive letter in relative URL for file scheme
+    // Handle relative URLs like "C|/foo/bar" when base is a file: URL
+    // These should be treated as absolute paths, not relative paths
+    if (is_file_scheme && strlen(path_copy) >= 3 && isalpha(path_copy[0]) && path_copy[1] == '|' &&
+        path_copy[2] == '/') {
+      // Convert Windows drive letter to absolute file path
+      // "C|/foo/bar" -> "/C:/foo/bar"
+      size_t new_len = strlen(path_copy) + 2;  // +1 for leading '/', +1 for null terminator
+      char* absolute_path = malloc(new_len);
+      snprintf(absolute_path, new_len, "/%c:%s", path_copy[0], path_copy + 2);  // Convert | to :
+
+      free(result->pathname);
+      result->pathname = absolute_path;
+      free(path_copy);
+      goto cleanup_and_normalize;
+    }
+
     // Special case: empty URL should resolve to base URL unchanged
     if (strlen(path_copy) == 0) {
       // Empty relative URL: preserve base pathname and search, clear hash (unless already set)
@@ -183,6 +200,7 @@ JSRT_URL* resolve_relative_url(const char* url, const char* base) {
     free(path_copy);
   }
 
+cleanup_and_normalize:
   // Normalize dot segments in the pathname (only for special schemes)
   // Non-special schemes should preserve dot segments like /.//
   if (is_special_scheme(result->protocol)) {
@@ -190,6 +208,15 @@ JSRT_URL* resolve_relative_url(const char* url, const char* base) {
     if (normalized_pathname) {
       free(result->pathname);
       result->pathname = normalized_pathname;
+    }
+  }
+
+  // Normalize Windows drive letters in file URL pathnames
+  if (result->protocol && strcmp(result->protocol, "file:") == 0 && result->pathname) {
+    char* normalized_drive = normalize_windows_drive_letters(result->pathname);
+    if (normalized_drive) {
+      free(result->pathname);
+      result->pathname = normalized_drive;
     }
   }
 

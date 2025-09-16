@@ -536,3 +536,53 @@ char* compute_origin(const char* protocol, const char* hostname, const char* por
   free(scheme);
   return origin;
 }
+
+// Normalize Windows drive letters in file URL pathnames
+// Convert patterns like "/C|/foo" to "/C:/foo" for file URLs
+// Also handles percent-encoded pipes: "/C%7C/foo" to "/C:/foo"
+char* normalize_windows_drive_letters(const char* path) {
+  if (!path || strlen(path) < 4) {
+    return strdup(path ? path : "");
+  }
+
+  // Check for Windows drive letter pattern: /X|/ where X is a letter
+  if (path[0] == '/' && strlen(path) >= 4 && isalpha(path[1]) && path[2] == '|' && path[3] == '/') {
+    // Convert /C|/foo to /C:/foo
+    size_t new_len = strlen(path) + 1;  // Same length (| becomes :)
+    char* result = malloc(new_len);
+    result[0] = '/';
+    result[1] = path[1];           // Drive letter
+    result[2] = ':';               // Convert pipe to colon
+    strcpy(result + 3, path + 3);  // Copy rest of path
+    return result;
+  }
+
+  // Check for percent-encoded pipe pattern: /X%7C/ where X is a letter
+  if (path[0] == '/' && strlen(path) >= 7 && isalpha(path[1]) && strncmp(path + 2, "%7C", 3) == 0 && path[5] == '/') {
+    // Convert /C%7C/foo to /C:/foo
+    size_t old_len = strlen(path);
+    size_t new_len = old_len - 2;  // %7C (3 chars) becomes : (1 char), so -2
+    char* result = malloc(new_len);
+    result[0] = '/';
+    result[1] = path[1];           // Drive letter
+    result[2] = ':';               // Convert %7C to colon
+    strcpy(result + 3, path + 5);  // Copy rest of path starting from the slash after %7C
+    return result;
+  }
+
+  // Check for lowercase percent-encoded pipe pattern: /X%7c/ where X is a letter
+  if (path[0] == '/' && strlen(path) >= 7 && isalpha(path[1]) && strncmp(path + 2, "%7c", 3) == 0 && path[5] == '/') {
+    // Convert /C%7c/foo to /C:/foo
+    size_t old_len = strlen(path);
+    size_t new_len = old_len - 2;  // %7c (3 chars) becomes : (1 char), so -2
+    char* result = malloc(new_len);
+    result[0] = '/';
+    result[1] = path[1];           // Drive letter
+    result[2] = ':';               // Convert %7c to colon
+    strcpy(result + 3, path + 5);  // Copy rest of path starting from the slash after %7c
+    return result;
+  }
+
+  // No conversion needed
+  return strdup(path);
+}

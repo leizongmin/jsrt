@@ -131,6 +131,7 @@ char* normalize_dot_segments(const char* path);
 char* decode_percent_encoded_dots(const char* path);
 char* normalize_dot_segments_with_percent_decoding(const char* path);
 char* normalize_windows_drive_letters(const char* path);
+char* normalize_hostname_unicode(const char* hostname);
 char* normalize_port(const char* port_str, const char* protocol);
 char* strip_url_whitespace(const char* url);
 char* remove_all_ascii_whitespace(const char* url);

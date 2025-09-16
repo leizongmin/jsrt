@@ -257,6 +257,13 @@ int parse_authority(JSRT_URL* parsed, const char* authority_str) {
       parsed->hostname = strdup(host_part);
     }
 
+    // Apply Unicode normalization to hostname (fullwidth -> halfwidth, case normalization)
+    char* normalized_hostname = normalize_hostname_unicode(parsed->hostname);
+    if (normalized_hostname) {
+      free(parsed->hostname);
+      parsed->hostname = normalized_hostname;
+    }
+
     // Validate hostname characters (including Unicode validation)
     if (!validate_hostname_characters(parsed->hostname)) {
       goto cleanup_and_return_error;

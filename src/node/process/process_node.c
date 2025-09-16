@@ -4,11 +4,11 @@
 
 #ifdef _WIN32
 #define WIN32_LEAN_AND_MEAN
+#include <windows.h>
 #ifndef PSAPI_VERSION
 #define PSAPI_VERSION 1
 #endif
 #include <psapi.h>
-#include <windows.h>
 #else
 #include <sys/resource.h>
 #include <unistd.h>

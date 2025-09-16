@@ -20,7 +20,8 @@ endif()
 
 # optimization flags
 if(CMAKE_BUILD_TYPE STREQUAL "Release")
-    set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -s")
+    # Note: -s flag is obsolete in modern linkers, use strip command instead if needed
+    # set(CMAKE_EXE_LINKER_FLAGS "${CMAKE_EXE_LINKER_FLAGS} -s")
 endif()
 
 # debug flags
@@ -645,9 +646,14 @@ if(WIN32)
         # These are already added to OPENSSL_LIBRARIES but ensure they're available
         list(APPEND JSRT_PLATFORM_LIBS ws2_32 crypt32 bcrypt)
     endif()
+elseif(APPLE)
+    # On macOS, dl and m are part of system libraries and don't need explicit linking
+    # libuv already handles pthread linking on Unix systems
+    set(JSRT_PLATFORM_LIBS "")
 else()
-    # Unix/Linux/macOS need these libraries
-    set(JSRT_PLATFORM_LIBS dl m pthread)
+    # Linux and other Unix systems may need explicit dl and m linking
+    # Note: libuv already links pthread on Unix systems, so we only add dl and m to avoid duplicates
+    set(JSRT_PLATFORM_LIBS dl m)
 endif()
 
 # build jsrt

@@ -22,9 +22,9 @@ static bool is_absolute_path(const char* path) {
     return false;
 
 #ifdef _WIN32
-  // Windows: C:\ or \\ (UNC) or /
+  // Windows: C:\ or C:/ or \\ (UNC) or /
   if ((path[0] >= 'A' && path[0] <= 'Z') || (path[0] >= 'a' && path[0] <= 'z')) {
-    return path[1] == ':';
+    return path[1] == ':' && path[2] && IS_PATH_SEPARATOR(path[2]);
   }
   return IS_PATH_SEPARATOR(path[0]);
 #else
@@ -124,9 +124,6 @@ static char* normalize_path(const char* path) {
   if (is_drive_path) {
     // For Windows drive paths, start with the drive letter
     strcpy(result, drive_prefix);
-    if (segment_count > 0) {
-      strcat(result, PATH_SEPARATOR_STR);
-    }
   } else if (is_absolute) {
     // For other absolute paths (UNC, etc.), add leading separator
     strcpy(result, PATH_SEPARATOR_STR);
@@ -139,8 +136,9 @@ static char* normalize_path(const char* path) {
 
   for (int i = 0; i < segment_count; i++) {
 #ifdef _WIN32
-    if (is_drive_path && i == 0) {
-      // First segment after drive letter, already have separator
+    if (is_drive_path) {
+      // For drive paths, always add separator before each segment
+      strcat(result, PATH_SEPARATOR_STR);
       strcat(result, segments[i]);
     } else {
 #endif
@@ -198,16 +196,23 @@ static JSValue js_path_join(JSContext* ctx, JSValueConst this_val, int argc, JSV
     }
 
     if (*part) {  // Skip empty strings
-      // Remove leading separators from part if not first
-      while (!first && IS_PATH_SEPARATOR(*part)) {
-        part++;
-      }
+      // If this part is an absolute path, reset the result
+      if (is_absolute_path(part)) {
+        result[0] = '\0';
+        strcat(result, part);
+        first = false;
+      } else {
+        // Remove leading separators from part if not first
+        while (!first && IS_PATH_SEPARATOR(*part)) {
+          part++;
+        }
 
-      if (!first && strlen(result) > 0 && !IS_PATH_SEPARATOR(result[strlen(result) - 1])) {
-        strcat(result, PATH_SEPARATOR_STR);
+        if (!first && strlen(result) > 0 && !IS_PATH_SEPARATOR(result[strlen(result) - 1])) {
+          strcat(result, PATH_SEPARATOR_STR);
+        }
+        strcat(result, part);
+        first = false;
       }
-      strcat(result, part);
-      first = false;
     }
 
     JS_FreeCString(ctx, part);

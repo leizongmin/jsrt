@@ -53,6 +53,7 @@ char* normalize_dot_segments(const char* path) {
     }
 
     // B: If input begins with "/./" or "/." (at end), replace with "/"
+    // Also handle "//.": consecutive slashes followed by dot should be normalized
     if (strncmp(input, "/./", 3) == 0) {
       *out_ptr++ = '/';
       *out_ptr = '\0';
@@ -63,6 +64,15 @@ char* normalize_dot_segments(const char* path) {
       *out_ptr++ = '/';
       *out_ptr = '\0';
       input += 2;
+      continue;
+    }
+    // Handle consecutive slashes followed by dot: //. -> /
+    if (strncmp(input, "//.", 3) == 0 && (input[3] == '/' || input[3] == '\0')) {
+      *out_ptr++ = '/';
+      *out_ptr = '\0';
+      input += 3;
+      if (*input == '/')
+        input++;  // Skip trailing slash if present
       continue;
     }
 
@@ -107,6 +117,19 @@ char* normalize_dot_segments(const char* path) {
     if (*input == '/') {
       *out_ptr++ = *input++;
       *out_ptr = '\0';
+    }
+
+    // Check if the next segment is a single dot before copying it
+    const char* segment_start = input;
+    const char* segment_end = input;
+    while (*segment_end != '\0' && *segment_end != '/') {
+      segment_end++;
+    }
+
+    // If this segment is just a single dot, skip it (don't copy to output)
+    if (segment_end - segment_start == 1 && *segment_start == '.') {
+      input = segment_end;  // Skip the dot segment
+      continue;
     }
 
     // Copy segment until next '/' or end
@@ -416,11 +439,15 @@ char* normalize_url_backslashes(const char* url) {
         result[result_pos++] = '\\';
       }
     } else if (i < stop_pos && url[i] == '|') {
-      // Handle pipe to colon normalization for Windows drive letters
-      // Extended pattern matching for better drive letter detection
-      if (i > 0 && isalpha(url[i - 1]) &&
-          (i + 1 < len && (url[i + 1] == '/' || url[i + 1] == '\\' || url[i + 1] == '|'))) {
+      // Handle pipe to colon normalization for Windows drive letters and file URLs
+      // According to WHATWG URL spec and WPT tests, pipes in file URLs should be converted to colons
+      // Check for drive letter pattern (letter followed by pipe) or consecutive pipes
+      if (is_special && (i > 0 && isalpha(url[i - 1]) &&
+                         (i + 1 < len && (url[i + 1] == '/' || url[i + 1] == '\\' || url[i + 1] == '|')))) {
         // Convert pipe to colon for drive letter patterns
+        result[result_pos++] = ':';
+      } else if (is_special && in_path_section) {
+        // For file URLs, pipes in path should be converted to colons per WPT spec
         result[result_pos++] = ':';
       } else {
         result[result_pos++] = '|';  // Preserve pipe - will be percent-encoded later

@@ -215,7 +215,7 @@ int validate_hostname_characters_allow_at(const char* hostname, int allow_at) {
       return 0;  // Spaces not allowed in hostname
     }
 
-    // Reject Unicode control characters and non-ASCII characters
+    // Check for problematic Unicode characters
     // Check for UTF-8 encoded Unicode characters
     if (c >= 0x80) {
       // Check for zero-width characters and other problematic Unicode
@@ -227,6 +227,9 @@ int validate_hostname_characters_allow_at(const char* hostname, int allow_at) {
             third == 0xAF) {
           return 0;  // Zero-width characters not allowed
         }
+        // Skip past this 3-byte sequence for further validation
+        p += 2;
+        continue;
       }
 
       // Check for soft hyphen (U+00AD) encoded as UTF-8: 0xC2 0xAD
@@ -240,9 +243,17 @@ int validate_hostname_characters_allow_at(const char* hostname, int allow_at) {
         return 0;  // Word joiner not allowed
       }
 
-      // For now, allow ASCII-compatible domain names, reject most Unicode
-      // This is stricter than full internationalized domain names but matches WPT expectations
-      return 0;  // Non-ASCII characters not allowed in hostnames
+      // Allow most Unicode characters for internationalized domain names
+      // Only reject specific problematic characters above
+      // Skip past multi-byte UTF-8 sequences
+      if ((c & 0xE0) == 0xC0) {
+        p += 1;  // 2-byte sequence
+      } else if ((c & 0xF0) == 0xE0) {
+        p += 2;  // 3-byte sequence
+      } else if ((c & 0xF8) == 0xF0) {
+        p += 3;  // 4-byte sequence
+      }
+      continue;
     }
 
     // Allow hex notation patterns in hostnames for IPv4 address parsing

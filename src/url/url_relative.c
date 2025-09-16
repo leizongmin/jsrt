@@ -65,6 +65,13 @@ JSRT_URL* resolve_relative_url(const char* url, const char* base) {
     scheme[scheme_len] = ':';
     scheme[scheme_len + 1] = '\0';
 
+    // Special case: file URLs cannot be relative to non-file base URLs
+    if (strcmp(scheme, "file:") == 0 && strcmp(base_url->protocol, "file:") != 0) {
+      free(scheme);
+      JSRT_FreeURL(base_url);
+      return NULL;  // file URLs cannot be relative to non-file base URLs
+    }
+
     // Only strip scheme for special schemes
     if (is_special_scheme(scheme)) {
       url = colon_pos + 1;  // Skip the scheme and colon
@@ -116,7 +123,12 @@ JSRT_URL* resolve_relative_url(const char* url, const char* base) {
       result->search = strdup("");
     }
 
-    result->pathname = strdup(path_copy);
+    // Encode the absolute pathname according to the scheme type
+    if (is_special_scheme(result->protocol)) {
+      result->pathname = url_path_encode_special(path_copy);
+    } else {
+      result->pathname = url_nonspecial_path_encode(path_copy);
+    }
     free(path_copy);
   } else {
   handle_complex_relative_path:

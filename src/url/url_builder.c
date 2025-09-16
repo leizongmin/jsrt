@@ -61,19 +61,9 @@ void build_href(JSRT_URL* parsed) {
     final_host = strdup(parsed->host ? parsed->host : "");
   }
 
-  // Use encoded values for href construction with scheme-specific encoding
-  char* final_pathname;
-  if (is_special) {
-    if (strcmp(parsed->protocol, "file:") == 0) {
-      // File URLs use special encoding that preserves pipe characters
-      final_pathname = url_component_encode_file_path(parsed->pathname ? parsed->pathname : "");
-    } else {
-      // Other special schemes use component encoding
-      final_pathname = url_component_encode(parsed->pathname);
-    }
-  } else {
-    final_pathname = strdup(parsed->pathname ? parsed->pathname : "");
-  }
+  // Pathname is already percent-encoded when stored in the URL object
+  // Just use it as-is for href construction (no additional encoding needed)
+  char* final_pathname = strdup(parsed->pathname ? parsed->pathname : "");
   char* final_search = url_component_encode(parsed->search);
   char* final_hash = is_special ? url_fragment_encode(parsed->hash) : url_fragment_encode_nonspecial(parsed->hash);
 

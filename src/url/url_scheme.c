@@ -50,6 +50,26 @@ int parse_special_scheme_without_slashes(JSRT_URL* parsed, char** ptr) {
     return 0;
   }
 
+  // Special handling for file URLs without slashes - these should be opaque paths
+  if (strcmp(parsed->protocol, "file:") == 0) {
+    // For file URLs like "file:test" or "file:...", treat as opaque path
+    free(parsed->pathname);
+    parsed->pathname = strdup(input_ptr);
+
+    // Clear hostname since this is an opaque path
+    free(parsed->hostname);
+    parsed->hostname = strdup("");
+    free(parsed->host);
+    parsed->host = strdup("");
+
+    // Mark as opaque path for href building
+    parsed->opaque_path = 1;
+
+    // Move pointer to end since we consumed everything
+    *ptr = input_ptr + strlen(input_ptr);
+    return 0;
+  }
+
   // Regular hostname parsing for cases like "http:example.com/"
   char* slash_pos = strchr(input_ptr, '/');
   char* query_pos = strchr(input_ptr, '?');

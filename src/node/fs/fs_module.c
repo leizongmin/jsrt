@@ -39,6 +39,19 @@ JSValue JSRT_InitNodeFs(JSContext* ctx) {
   JS_SetPropertyStr(ctx, fs_module, "chownSync", JS_NewCFunction(ctx, js_fs_chown_sync, "chownSync", 3));
   JS_SetPropertyStr(ctx, fs_module, "utimesSync", JS_NewCFunction(ctx, js_fs_utimes_sync, "utimesSync", 3));
 
+  // Link operations
+  JS_SetPropertyStr(ctx, fs_module, "linkSync", JS_NewCFunction(ctx, js_fs_link_sync, "linkSync", 2));
+  JS_SetPropertyStr(ctx, fs_module, "symlinkSync", JS_NewCFunction(ctx, js_fs_symlink_sync, "symlinkSync", 3));
+  JS_SetPropertyStr(ctx, fs_module, "readlinkSync", JS_NewCFunction(ctx, js_fs_readlink_sync, "readlinkSync", 2));
+  JS_SetPropertyStr(ctx, fs_module, "realpathSync", JS_NewCFunction(ctx, js_fs_realpath_sync, "realpathSync", 2));
+
+  // Advanced file operations
+  JS_SetPropertyStr(ctx, fs_module, "truncateSync", JS_NewCFunction(ctx, js_fs_truncate_sync, "truncateSync", 2));
+  JS_SetPropertyStr(ctx, fs_module, "ftruncateSync", JS_NewCFunction(ctx, js_fs_ftruncate_sync, "ftruncateSync", 2));
+  JS_SetPropertyStr(ctx, fs_module, "mkdtempSync", JS_NewCFunction(ctx, js_fs_mkdtemp_sync, "mkdtempSync", 2));
+  JS_SetPropertyStr(ctx, fs_module, "fsyncSync", JS_NewCFunction(ctx, js_fs_fsync_sync, "fsyncSync", 1));
+  JS_SetPropertyStr(ctx, fs_module, "fdatasyncSync", JS_NewCFunction(ctx, js_fs_fdatasync_sync, "fdatasyncSync", 1));
+
   // Asynchronous file operations
   JS_SetPropertyStr(ctx, fs_module, "readFile", JS_NewCFunction(ctx, js_fs_read_file, "readFile", 2));
   JS_SetPropertyStr(ctx, fs_module, "writeFile", JS_NewCFunction(ctx, js_fs_write_file, "writeFile", 3));
@@ -85,6 +98,30 @@ int js_node_fs_init(JSContext* ctx, JSModuleDef* m) {
   JS_SetModuleExport(ctx, m, "rename", JS_GetPropertyStr(ctx, fs_module, "rename"));
   JS_SetModuleExport(ctx, m, "rmdir", JS_GetPropertyStr(ctx, fs_module, "rmdir"));
   JS_SetModuleExport(ctx, m, "access", JS_GetPropertyStr(ctx, fs_module, "access"));
+
+  // Export file descriptor operations
+  JS_SetModuleExport(ctx, m, "openSync", JS_GetPropertyStr(ctx, fs_module, "openSync"));
+  JS_SetModuleExport(ctx, m, "closeSync", JS_GetPropertyStr(ctx, fs_module, "closeSync"));
+  JS_SetModuleExport(ctx, m, "readSync", JS_GetPropertyStr(ctx, fs_module, "readSync"));
+  JS_SetModuleExport(ctx, m, "writeSync", JS_GetPropertyStr(ctx, fs_module, "writeSync"));
+
+  // Export file permissions and attributes
+  JS_SetModuleExport(ctx, m, "chmodSync", JS_GetPropertyStr(ctx, fs_module, "chmodSync"));
+  JS_SetModuleExport(ctx, m, "chownSync", JS_GetPropertyStr(ctx, fs_module, "chownSync"));
+  JS_SetModuleExport(ctx, m, "utimesSync", JS_GetPropertyStr(ctx, fs_module, "utimesSync"));
+
+  // Export link operations
+  JS_SetModuleExport(ctx, m, "linkSync", JS_GetPropertyStr(ctx, fs_module, "linkSync"));
+  JS_SetModuleExport(ctx, m, "symlinkSync", JS_GetPropertyStr(ctx, fs_module, "symlinkSync"));
+  JS_SetModuleExport(ctx, m, "readlinkSync", JS_GetPropertyStr(ctx, fs_module, "readlinkSync"));
+  JS_SetModuleExport(ctx, m, "realpathSync", JS_GetPropertyStr(ctx, fs_module, "realpathSync"));
+
+  // Export advanced operations
+  JS_SetModuleExport(ctx, m, "truncateSync", JS_GetPropertyStr(ctx, fs_module, "truncateSync"));
+  JS_SetModuleExport(ctx, m, "ftruncateSync", JS_GetPropertyStr(ctx, fs_module, "ftruncateSync"));
+  JS_SetModuleExport(ctx, m, "mkdtempSync", JS_GetPropertyStr(ctx, fs_module, "mkdtempSync"));
+  JS_SetModuleExport(ctx, m, "fsyncSync", JS_GetPropertyStr(ctx, fs_module, "fsyncSync"));
+  JS_SetModuleExport(ctx, m, "fdatasyncSync", JS_GetPropertyStr(ctx, fs_module, "fdatasyncSync"));
 
   // Export constants
   JS_SetModuleExport(ctx, m, "constants", JS_GetPropertyStr(ctx, fs_module, "constants"));

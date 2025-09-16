@@ -3,6 +3,10 @@
 #include <stdlib.h>
 
 #ifdef _WIN32
+#define WIN32_LEAN_AND_MEAN
+#ifndef PSAPI_VERSION
+#define PSAPI_VERSION 1
+#endif
 #include <psapi.h>
 #include <windows.h>
 #else

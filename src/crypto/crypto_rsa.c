@@ -184,12 +184,6 @@ static bool load_rsa_functions(void) {
                  openssl_rsa_funcs.EVP_PKEY_decrypt_init && openssl_rsa_funcs.EVP_PKEY_decrypt &&
                  openssl_rsa_funcs.EVP_sha256 && openssl_rsa_funcs.RAND_bytes;
 
-  printf(
-      "DEBUG: RSA function loading status: EVP_PKEY_new=%p, EVP_PKEY_CTX_new_id=%p, EVP_PKEY_keygen_init=%p, "
-      "EVP_PKEY_keygen=%p\n",
-      openssl_rsa_funcs.EVP_PKEY_new, openssl_rsa_funcs.EVP_PKEY_CTX_new_id, openssl_rsa_funcs.EVP_PKEY_keygen_init,
-      openssl_rsa_funcs.EVP_PKEY_keygen);
-
   if (success) {
     JSRT_Debug("JSRT_Crypto_RSA: Successfully loaded OpenSSL RSA functions");
   } else {
@@ -246,30 +240,23 @@ int jsrt_crypto_generate_rsa_keypair(size_t modulus_length_bits, uint32_t public
   void* ctx = openssl_rsa_funcs.EVP_PKEY_CTX_new_id(EVP_PKEY_RSA, NULL);
   if (!ctx) {
     JSRT_Debug("JSRT_Crypto_RSA: Failed to create key generation context");
-    printf("DEBUG: EVP_PKEY_CTX_new_id failed\n");
     return -1;
   }
-  printf("DEBUG: EVP_PKEY_CTX_new_id succeeded, ctx=%p\n", ctx);
 
   // Initialize key generation
   int init_result = openssl_rsa_funcs.EVP_PKEY_keygen_init(ctx);
-  printf("DEBUG: EVP_PKEY_keygen_init returned: %d\n", init_result);
   if (init_result <= 0) {
     openssl_rsa_funcs.EVP_PKEY_CTX_free(ctx);
     JSRT_Debug("JSRT_Crypto_RSA: Failed to initialize key generation");
-    printf("DEBUG: EVP_PKEY_keygen_init failed with result %d\n", init_result);
     return -1;
   }
 
   // Set key length
-  printf("DEBUG: Setting RSA key length to %zu bits\n", modulus_length_bits);
   int ctrl_result = openssl_rsa_funcs.EVP_PKEY_CTX_ctrl(ctx, EVP_PKEY_RSA, -1, EVP_PKEY_CTRL_RSA_KEYGEN_BITS,
                                                         (int)modulus_length_bits, NULL);
-  printf("DEBUG: EVP_PKEY_CTX_ctrl returned: %d\n", ctrl_result);
   if (ctrl_result <= 0) {
     openssl_rsa_funcs.EVP_PKEY_CTX_free(ctx);
     JSRT_Debug("JSRT_Crypto_RSA: Failed to set key length");
-    printf("DEBUG: Failed to set RSA key length, ctrl returned %d\n", ctrl_result);
     return -1;
   }
 

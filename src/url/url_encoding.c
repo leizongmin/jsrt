@@ -521,22 +521,12 @@ char* url_path_encode_special(const char* str) {
     unsigned char c = (unsigned char)str[i];
     // Check if character needs encoding per URL spec
     if (c == '%' && i + 2 < len && hex_to_int(str[i + 1]) >= 0 && hex_to_int(str[i + 2]) >= 0) {
-      // Percent-encoded sequence found, check if it should be decoded
-      unsigned char decoded_byte = (unsigned char)((hex_to_int(str[i + 1]) << 4) | hex_to_int(str[i + 2]));
-
-      // Decode unreserved characters: ALPHA / DIGIT / "-" / "_" / "~"
-      // NOTE: "." is NOT decoded because %2e (dot) should not be normalized in paths per WHATWG spec
-      if ((decoded_byte >= 'A' && decoded_byte <= 'Z') || (decoded_byte >= 'a' && decoded_byte <= 'z') ||
-          (decoded_byte >= '0' && decoded_byte <= '9') || decoded_byte == '-' || decoded_byte == '_' ||
-          decoded_byte == '~') {
-        // This will be decoded to 1 character
-        encoded_len += 1;
-        i += 2;  // Skip the hex digits
-      } else {
-        // Keep as 3-character percent sequence
-        encoded_len += 3;
-        i += 2;  // Skip the hex digits
-      }
+      // According to WHATWG URL spec, already percent-encoded characters should be preserved
+      // Only decode when specifically required by the normalization process
+      // For URL paths, preserve existing percent-encoding to maintain compliance
+      // Keep as 3-character percent sequence
+      encoded_len += 3;
+      i += 2;  // Skip the hex digits
     } else if (c < 33 || c > 126 || c == '"' || c == '<' || c == '>' || c == '\\' || c == '^' || c == '{' || c == '|' ||
                c == '}' || c == '`') {
       // Need to percent-encode control characters, non-ASCII, and specific unsafe characters
@@ -556,21 +546,12 @@ char* url_path_encode_special(const char* str) {
       // Percent-encoded sequence found, check if it should be decoded
       unsigned char decoded_byte = (unsigned char)((hex_to_int(str[i + 1]) << 4) | hex_to_int(str[i + 2]));
 
-      // Decode unreserved characters: ALPHA / DIGIT / "-" / "_" / "~"
-      // NOTE: "." is NOT decoded because %2e (dot) should not be normalized in paths per WHATWG spec
-      if ((decoded_byte >= 'A' && decoded_byte <= 'Z') || (decoded_byte >= 'a' && decoded_byte <= 'z') ||
-          (decoded_byte >= '0' && decoded_byte <= '9') || decoded_byte == '-' || decoded_byte == '_' ||
-          decoded_byte == '~') {
-        // This is an unreserved character, decode it
-        encoded[j++] = decoded_byte;
-        i += 2;  // Skip the hex digits
-      } else {
-        // Keep percent-encoded for reserved or unsafe characters
-        encoded[j++] = str[i];
-        encoded[j++] = str[i + 1];
-        encoded[j++] = str[i + 2];
-        i += 2;  // Skip the next two characters
-      }
+      // According to WHATWG URL spec, already percent-encoded characters should be preserved
+      // Keep percent-encoded sequences as-is to maintain compliance
+      encoded[j++] = str[i];
+      encoded[j++] = str[i + 1];
+      encoded[j++] = str[i + 2];
+      i += 2;  // Skip the next two characters
     } else if (c < 33 || c > 126 || c == '"' || c == '<' || c == '>' || c == '\\' || c == '^' || c == '{' || c == '|' ||
                c == '}' || c == '`') {
       // Need to percent-encode control characters, non-ASCII, and specific unsafe characters
@@ -616,10 +597,10 @@ char* url_path_encode_file(const char* str) {
         encoded_len += 3;
         i += 2;  // Skip the hex digits
       }
-    } else if (c < 33 || c > 126 || c == '"' || c == '<' || c == '>' || c == '\\' || c == '^' || c == '{' || c == '|' ||
-               c == '}' || c == '`') {
+    } else if (c < 33 || c > 126 || c == '"' || c == '<' || c == '>' || c == '\\' || c == '^' || c == '{' || c == '}' ||
+               c == '`') {
       // Need to percent-encode control characters, non-ASCII, and specific unsafe characters
-      // Pipe character '|' must be percent-encoded per WPT test requirements
+      // NOTE: For file URLs, pipe character (|) is preserved, not encoded
       encoded_len += 3;  // %XX
     } else {
       encoded_len++;
@@ -635,25 +616,69 @@ char* url_path_encode_file(const char* str) {
       // Percent-encoded sequence found, check if it should be decoded
       unsigned char decoded_byte = (unsigned char)((hex_to_int(str[i + 1]) << 4) | hex_to_int(str[i + 2]));
 
-      // Decode unreserved characters: ALPHA / DIGIT / "-" / "_" / "~"
-      // NOTE: "." is NOT decoded because %2e (dot) should not be normalized in paths per WHATWG spec
-      if ((decoded_byte >= 'A' && decoded_byte <= 'Z') || (decoded_byte >= 'a' && decoded_byte <= 'z') ||
-          (decoded_byte >= '0' && decoded_byte <= '9') || decoded_byte == '-' || decoded_byte == '_' ||
-          decoded_byte == '~') {
-        // This is an unreserved character, decode it
-        encoded[j++] = decoded_byte;
-        i += 2;  // Skip the hex digits
-      } else {
-        // Keep percent-encoded for reserved or unsafe characters
-        encoded[j++] = str[i];
-        encoded[j++] = str[i + 1];
-        encoded[j++] = str[i + 2];
-        i += 2;  // Skip the next two characters
-      }
-    } else if (c < 33 || c > 126 || c == '"' || c == '<' || c == '>' || c == '\\' || c == '^' || c == '{' || c == '|' ||
-               c == '}' || c == '`') {
+      // According to WHATWG URL spec, already percent-encoded characters should be preserved
+      // Keep percent-encoded sequences as-is to maintain compliance
+      encoded[j++] = str[i];
+      encoded[j++] = str[i + 1];
+      encoded[j++] = str[i + 2];
+      i += 2;  // Skip the next two characters
+    } else if (c < 33 || c > 126 || c == '"' || c == '<' || c == '>' || c == '\\' || c == '^' || c == '{' || c == '}' ||
+               c == '`') {
       // Need to percent-encode control characters, non-ASCII, and specific unsafe characters
-      // Pipe character '|' must be percent-encoded per WPT test requirements
+      // NOTE: For file URLs, pipe character (|) is preserved, not encoded
+      encoded[j++] = '%';
+      encoded[j++] = hex_chars[c >> 4];
+      encoded[j++] = hex_chars[c & 15];
+    } else {
+      encoded[j++] = c;
+    }
+  }
+
+  encoded[j] = '\0';
+  return encoded;
+}
+
+// URL component encoding specifically for file URL paths
+// Preserves pipe characters (|) which should not be encoded in file URLs
+char* url_component_encode_file_path(const char* str) {
+  if (!str)
+    return NULL;
+
+  size_t len = strlen(str);
+  size_t encoded_len = 0;
+
+  // Calculate encoded length
+  for (size_t i = 0; i < len; i++) {
+    unsigned char c = (unsigned char)str[i];
+    // Check if character needs encoding per URL spec
+    if (c == '%' && i + 2 < len && hex_to_int(str[i + 1]) >= 0 && hex_to_int(str[i + 2]) >= 0) {
+      // Already percent-encoded sequence, keep as-is
+      encoded_len += 3;
+    } else if (c <= 32 || c == '"' || c == '\'' || c == '<' || c == '>' || c == '\\' || c == '^' || c == '`' ||
+               c == '{' || c == '}') {
+      // Encode control characters, space, and specific unsafe characters
+      // NOTE: For file URLs, pipe character (|) is preserved, not encoded
+      encoded_len += 3;  // %XX
+    } else {
+      encoded_len++;
+    }
+  }
+
+  char* encoded = malloc(encoded_len + 1);
+  size_t j = 0;
+
+  for (size_t i = 0; i < len; i++) {
+    unsigned char c = (unsigned char)str[i];
+    if (c == '%' && i + 2 < len && hex_to_int(str[i + 1]) >= 0 && hex_to_int(str[i + 2]) >= 0) {
+      // Already percent-encoded sequence, copy as-is
+      encoded[j++] = str[i];
+      encoded[j++] = str[i + 1];
+      encoded[j++] = str[i + 2];
+      i += 2;  // Skip the next two characters
+    } else if (c <= 32 || c == '"' || c == '\'' || c == '<' || c == '>' || c == '\\' || c == '^' || c == '`' ||
+               c == '{' || c == '}') {
+      // Encode control characters, space, and specific unsafe characters
+      // NOTE: For file URLs, pipe character (|) is preserved, not encoded
       encoded[j++] = '%';
       encoded[j++] = hex_chars[c >> 4];
       encoded[j++] = hex_chars[c & 15];

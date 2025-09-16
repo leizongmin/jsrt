@@ -142,6 +142,7 @@ char* normalize_single_slash_schemes(const char* url);
 char* url_encode_with_len(const char* str, size_t len);
 char* url_encode(const char* str);
 char* url_component_encode(const char* str);
+char* url_component_encode_file_path(const char* str);
 char* url_fragment_encode(const char* str);
 char* url_fragment_encode_nonspecial(const char* str);
 char* url_nonspecial_path_encode(const char* str);

@@ -176,7 +176,8 @@ JSRT_URL* resolve_relative_url(const char* url, const char* base) {
     else if (!is_special) {
       // Non-special schemes: simple concatenation without directory resolution
       // According to WHATWG URL spec, non-special schemes preserve relative paths as-is
-      result->pathname = strdup(path_copy);
+      char* encoded_path_copy = url_nonspecial_path_encode(path_copy);
+      result->pathname = encoded_path_copy;
     } else {
       // Special schemes: traditional directory-based resolution
       const char* base_pathname = base_url->pathname;
@@ -184,16 +185,20 @@ JSRT_URL* resolve_relative_url(const char* url, const char* base) {
 
       if (last_slash == NULL || last_slash == base_pathname) {
         // No directory or root directory
-        result->pathname = malloc(strlen(path_copy) + 2);
-        sprintf(result->pathname, "/%s", path_copy);
+        char* temp_pathname = malloc(strlen(path_copy) + 2);
+        sprintf(temp_pathname, "/%s", path_copy);
+        result->pathname = url_path_encode_special(temp_pathname);
+        free(temp_pathname);
       } else {
         // Copy base directory and append relative path
         size_t dir_len = last_slash - base_pathname;         // Length up to but not including last slash
         size_t total_len = dir_len + strlen(path_copy) + 3;  // dir + '/' + relative_path + '\0'
-        result->pathname = malloc(total_len);
-        strncpy(result->pathname, base_pathname, dir_len);
-        result->pathname[dir_len] = '/';
-        snprintf(result->pathname + dir_len + 1, total_len - dir_len - 1, "%s", path_copy);
+        char* temp_pathname = malloc(total_len);
+        strncpy(temp_pathname, base_pathname, dir_len);
+        temp_pathname[dir_len] = '/';
+        snprintf(temp_pathname + dir_len + 1, total_len - dir_len - 1, "%s", path_copy);
+        result->pathname = url_path_encode_special(temp_pathname);
+        free(temp_pathname);
       }
     }
 
@@ -223,21 +228,9 @@ cleanup_and_normalize:
   // Build origin using compute_origin function to handle all scheme types correctly
   result->origin = compute_origin(result->protocol, result->hostname, result->port, result->double_colon_at_pattern);
 
-  // For non-special schemes, pathname should not be encoded (spaces preserved)
-  // For special schemes, pathname should be encoded (except file URLs preserve pipes)
-  char* encoded_pathname;
-  if (is_special_scheme(result->protocol)) {
-    if (strcmp(result->protocol, "file:") == 0) {
-      // File URLs preserve pipe characters in pathname
-      encoded_pathname = strdup(result->pathname ? result->pathname : "");
-    } else {
-      // Other special schemes use component encoding
-      encoded_pathname = url_component_encode(result->pathname);
-    }
-  } else {
-    // Non-special schemes: preserve spaces and other characters in pathname
-    encoded_pathname = strdup(result->pathname ? result->pathname : "");
-  }
+  // Pathname is already percent-encoded when stored in the URL object
+  // Just use it as-is for href construction
+  char* encoded_pathname = strdup(result->pathname ? result->pathname : "");
   char* encoded_search = url_component_encode(result->search);
   // Use scheme-appropriate fragment encoding
   char* encoded_hash = is_special_scheme(result->protocol) ? url_fragment_encode(result->hash)

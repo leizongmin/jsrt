@@ -65,8 +65,8 @@ void build_href(JSRT_URL* parsed) {
   char* final_pathname;
   if (is_special) {
     if (strcmp(parsed->protocol, "file:") == 0) {
-      // File URLs preserve pipe characters in pathname
-      final_pathname = strdup(parsed->pathname ? parsed->pathname : "");
+      // File URLs use special encoding that preserves pipe characters
+      final_pathname = url_component_encode_file_path(parsed->pathname ? parsed->pathname : "");
     } else {
       // Other special schemes use component encoding
       final_pathname = url_component_encode(parsed->pathname);
@@ -260,8 +260,8 @@ char* build_url_string(const char* protocol, const char* username, const char* p
     char* encoded_pathname;
     if (is_special) {
       if (protocol && strcmp(protocol, "file:") == 0) {
-        // File URLs preserve pipe characters in pathname
-        encoded_pathname = strdup(pathname);
+        // File URLs use special encoding that preserves pipe characters
+        encoded_pathname = url_component_encode_file_path(pathname);
       } else {
         // Other special schemes use component encoding
         encoded_pathname = url_component_encode(pathname);

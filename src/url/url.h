@@ -122,6 +122,7 @@ int validate_credentials(const char* credentials);
 
 // IP address functions
 char* canonicalize_ipv4_address(const char* input);
+int looks_like_ipv4_address(const char* hostname);
 char* canonicalize_ipv6(const char* ipv6_str);
 
 // URL normalization functions

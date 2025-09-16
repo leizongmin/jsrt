@@ -616,10 +616,10 @@ char* url_path_encode_file(const char* str) {
         encoded_len += 3;
         i += 2;  // Skip the hex digits
       }
-    } else if (c < 33 || c > 126 || c == '"' || c == '<' || c == '>' || c == '\\' || c == '^' || c == '{' || c == '}' ||
-               c == '`') {
+    } else if (c < 33 || c > 126 || c == '"' || c == '<' || c == '>' || c == '\\' || c == '^' || c == '{' || c == '|' ||
+               c == '}' || c == '`') {
       // Need to percent-encode control characters, non-ASCII, and specific unsafe characters
-      // NOTE: Pipe character '|' is NOT encoded for file URLs per WHATWG URL spec (it's preserved)
+      // Pipe character '|' must be percent-encoded per WPT test requirements
       encoded_len += 3;  // %XX
     } else {
       encoded_len++;
@@ -650,10 +650,10 @@ char* url_path_encode_file(const char* str) {
         encoded[j++] = str[i + 2];
         i += 2;  // Skip the next two characters
       }
-    } else if (c < 33 || c > 126 || c == '"' || c == '<' || c == '>' || c == '\\' || c == '^' || c == '{' || c == '}' ||
-               c == '`') {
+    } else if (c < 33 || c > 126 || c == '"' || c == '<' || c == '>' || c == '\\' || c == '^' || c == '{' || c == '|' ||
+               c == '}' || c == '`') {
       // Need to percent-encode control characters, non-ASCII, and specific unsafe characters
-      // NOTE: Pipe character '|' is NOT encoded for file URLs per WHATWG URL spec (it's preserved)
+      // Pipe character '|' must be percent-encoded per WPT test requirements
       encoded[j++] = '%';
       encoded[j++] = hex_chars[c >> 4];
       encoded[j++] = hex_chars[c & 15];

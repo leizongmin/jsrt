@@ -439,19 +439,10 @@ char* normalize_url_backslashes(const char* url) {
         result[result_pos++] = '\\';
       }
     } else if (i < stop_pos && url[i] == '|') {
-      // Handle pipe to colon normalization for Windows drive letters and file URLs
-      // According to WHATWG URL spec and WPT tests, pipes in file URLs should be converted to colons
-      // Check for drive letter pattern (letter followed by pipe) or consecutive pipes
-      if (is_special && (i > 0 && isalpha(url[i - 1]) &&
-                         (i + 1 < len && (url[i + 1] == '/' || url[i + 1] == '\\' || url[i + 1] == '|')))) {
-        // Convert pipe to colon for drive letter patterns
-        result[result_pos++] = ':';
-      } else if (is_special && in_path_section) {
-        // For file URLs, pipes in path should be converted to colons per WPT spec
-        result[result_pos++] = ':';
-      } else {
-        result[result_pos++] = '|';  // Preserve pipe - will be percent-encoded later
-      }
+      // Handle pipe characters in URLs
+      // According to WHATWG URL spec and WPT tests, pipes should be percent-encoded, not converted to colons
+      // Only exception: Windows drive letters in specific contexts during preprocessing
+      result[result_pos++] = '|';  // Preserve pipe - will be percent-encoded later during path encoding
     } else {
       // Preserve other characters
       result[result_pos++] = url[i];

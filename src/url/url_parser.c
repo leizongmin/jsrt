@@ -222,7 +222,10 @@ int parse_double_colon_at_pattern(JSRT_URL* parsed, char** ptr) {
       // Replace hostname with canonical IPv4 form
       free(parsed->hostname);
       parsed->hostname = ipv4_canonical;
-    } else {
+    } else if (looks_like_ipv4_address(parsed->hostname)) {
+      // Hostname looks like IPv4 but failed canonicalization - this means invalid IPv4
+      // According to WHATWG URL spec, this should fail URL parsing
+      return -1;
     }
 
     // Special handling for file URLs with localhost
@@ -268,7 +271,10 @@ int parse_double_colon_at_pattern(JSRT_URL* parsed, char** ptr) {
       // Replace hostname with canonical IPv4 form
       free(parsed->hostname);
       parsed->hostname = ipv4_canonical;
-    } else {
+    } else if (looks_like_ipv4_address(parsed->hostname)) {
+      // Hostname looks like IPv4 but failed canonicalization - this means invalid IPv4
+      // According to WHATWG URL spec, this should fail URL parsing
+      return -1;
     }
 
     // Special handling for file URLs with localhost

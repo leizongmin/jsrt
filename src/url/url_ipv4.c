@@ -75,6 +75,57 @@ char* normalize_fullwidth_characters(const char* input) {
   return result;
 }
 
+// Check if a hostname looks like an IPv4 address
+// Returns 1 if it looks like IPv4 (and should be validated as such), 0 otherwise
+int looks_like_ipv4_address(const char* hostname) {
+  if (!hostname || strlen(hostname) == 0) {
+    return 0;
+  }
+
+  // First normalize full-width characters like canonicalize_ipv4_address does
+  char* normalized = normalize_fullwidth_characters(hostname);
+  if (!normalized) {
+    return 0;
+  }
+
+  // Check if this looks like an IPv4 address
+  // It looks like IPv4 if:
+  // 1. Contains dots AND consists only of digits, dots, and optionally hex prefixes
+  // 2. OR starts with hex prefix (0x/0X) and contains only hex digits
+
+  int has_dots = strchr(normalized, '.') != NULL;
+  int has_hex_prefix = strncmp(normalized, "0x", 2) == 0 || strncmp(normalized, "0X", 2) == 0;
+
+  // Check each character
+  for (size_t i = 0; i < strlen(normalized); i++) {
+    char c = normalized[i];
+
+    // Allow digits always
+    if (c >= '0' && c <= '9') {
+      continue;
+    }
+
+    // Allow dots if we're in dotted notation
+    if (c == '.' && has_dots) {
+      continue;
+    }
+
+    // Allow hex characters and 'x'/'X' if we have hex prefix
+    if (has_hex_prefix && ((c >= 'a' && c <= 'f') || (c >= 'A' && c <= 'F') || c == 'x' || c == 'X')) {
+      continue;
+    }
+
+    // Any other character means this doesn't look like IPv4
+    free(normalized);
+    return 0;
+  }
+
+  // If we have dots or hex prefix, it looks like IPv4
+  int result = has_dots || has_hex_prefix;
+  free(normalized);
+  return result;
+}
+
 // Canonicalize IPv4 address according to WHATWG URL spec
 // Handles decimal, octal, and hexadecimal formats
 // Returns NULL if not a valid IPv4 address, otherwise returns canonical dotted decimal

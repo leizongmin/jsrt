@@ -76,6 +76,20 @@ static char* normalize_path(const char* path) {
   char* segments[256];  // Max 256 path segments
   int segment_count = 0;
 
+#ifdef _WIN32
+  // For Windows, check if this is a drive letter path (e.g., "C:")
+  bool is_drive_path = false;
+  char drive_prefix[4] = {0};  // Store "C:" or similar
+  if (is_absolute && strlen(normalized) >= 2 &&
+      ((normalized[0] >= 'A' && normalized[0] <= 'Z') || (normalized[0] >= 'a' && normalized[0] <= 'z')) &&
+      normalized[1] == ':') {
+    is_drive_path = true;
+    drive_prefix[0] = normalized[0];
+    drive_prefix[1] = ':';
+    drive_prefix[2] = '\0';
+  }
+#endif
+
   // Split path into segments
   char* token = strtok(normalized, PATH_SEPARATOR_STR);
   while (token && segment_count < 256) {
@@ -106,15 +120,37 @@ static char* normalize_path(const char* path) {
   // Rebuild path
   result[0] = '\0';
 
+#ifdef _WIN32
+  if (is_drive_path) {
+    // For Windows drive paths, start with the drive letter
+    strcpy(result, drive_prefix);
+    if (segment_count > 0) {
+      strcat(result, PATH_SEPARATOR_STR);
+    }
+  } else if (is_absolute) {
+    // For other absolute paths (UNC, etc.), add leading separator
+    strcpy(result, PATH_SEPARATOR_STR);
+  }
+#else
   if (is_absolute) {
     strcpy(result, PATH_SEPARATOR_STR);
   }
+#endif
 
   for (int i = 0; i < segment_count; i++) {
-    if (i > 0) {
-      strcat(result, PATH_SEPARATOR_STR);
+#ifdef _WIN32
+    if (is_drive_path && i == 0) {
+      // First segment after drive letter, already have separator
+      strcat(result, segments[i]);
+    } else {
+#endif
+      if (i > 0) {
+        strcat(result, PATH_SEPARATOR_STR);
+      }
+      strcat(result, segments[i]);
+#ifdef _WIN32
     }
-    strcat(result, segments[i]);
+#endif
   }
 
   // Handle empty result

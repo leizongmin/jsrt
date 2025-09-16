@@ -1,5 +1,24 @@
 #include "fs_common.h"
 
+// Helper to get buffer data from Buffer or TypedArray
+static uint8_t* get_buffer_data_fs(JSContext* ctx, JSValue obj, size_t* size) {
+  // First try to get as TypedArray (for Buffer objects)
+  size_t byte_offset;
+  JSValue array_buffer = JS_GetTypedArrayBuffer(ctx, obj, &byte_offset, size, NULL);
+  if (!JS_IsException(array_buffer)) {
+    size_t buffer_size;
+    uint8_t* buffer = JS_GetArrayBuffer(ctx, &buffer_size, array_buffer);
+    JS_FreeValue(ctx, array_buffer);
+    if (buffer) {
+      return buffer + byte_offset;
+    }
+  }
+
+  // Fallback: try to get as ArrayBuffer directly
+  uint8_t* buffer = JS_GetArrayBuffer(ctx, size, obj);
+  return buffer;
+}
+
 // fs.readFileSync(path[, options])
 JSValue js_fs_read_file_sync(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
   if (argc < 1) {
@@ -50,29 +69,39 @@ JSValue js_fs_read_file_sync(JSContext* ctx, JSValueConst this_val, int argc, JS
 
   buffer[size] = '\0';
 
-  // Check if options specify Buffer return
-  bool return_buffer = false;
+  // Check encoding option - default is to return Buffer
+  bool return_string = false;
   if (argc >= 2 && JS_IsObject(argv[1]) && !JS_IsNull(argv[1])) {
     JSValue encoding = JS_GetPropertyStr(ctx, argv[1], "encoding");
     if (!JS_IsUndefined(encoding) && !JS_IsNull(encoding)) {
       const char* encoding_str = JS_ToCString(ctx, encoding);
-      if (encoding_str && strcmp(encoding_str, "buffer") == 0) {
-        return_buffer = true;
+      if (encoding_str && strcmp(encoding_str, "utf8") == 0) {
+        return_string = true;
       }
       if (encoding_str) {
         JS_FreeCString(ctx, encoding_str);
       }
     }
     JS_FreeValue(ctx, encoding);
+  } else if (argc >= 2 && JS_IsString(argv[1])) {
+    // Second argument is encoding string directly
+    const char* encoding_str = JS_ToCString(ctx, argv[1]);
+    if (encoding_str && strcmp(encoding_str, "utf8") == 0) {
+      return_string = true;
+    }
+    if (encoding_str) {
+      JS_FreeCString(ctx, encoding_str);
+    }
   }
 
   JS_FreeCString(ctx, path);
 
   JSValue result;
-  if (return_buffer) {
-    result = create_buffer_from_data(ctx, (const uint8_t*)buffer, size);
-  } else {
+  if (return_string) {
     result = JS_NewString(ctx, buffer);
+  } else {
+    // Default: return Buffer
+    result = create_buffer_from_data(ctx, (const uint8_t*)buffer, size);
   }
 
   free(buffer);
@@ -93,7 +122,7 @@ JSValue js_fs_write_file_sync(JSContext* ctx, JSValueConst this_val, int argc, J
   // Get data to write
   size_t data_size;
   const char* data;
-  JSValue buffer_val = JS_UNDEFINED;
+  bool is_string = false;
 
   if (JS_IsString(argv[1])) {
     data = JS_ToCStringLen(ctx, &data_size, argv[1]);
@@ -101,21 +130,22 @@ JSValue js_fs_write_file_sync(JSContext* ctx, JSValueConst this_val, int argc, J
       JS_FreeCString(ctx, file_path);
       return JS_EXCEPTION;
     }
+    is_string = true;
   } else {
-    // Assume it's a Buffer or ArrayBuffer
-    buffer_val = argv[1];
-    data = (const char*)JS_GetArrayBuffer(ctx, &data_size, buffer_val);
-    if (!data) {
+    // Try to get as Buffer or TypedArray
+    uint8_t* buffer_data = get_buffer_data_fs(ctx, argv[1], &data_size);
+    if (!buffer_data) {
       JS_FreeCString(ctx, file_path);
-      return JS_ThrowTypeError(ctx, "data must be a string or Buffer");
+      return JS_ThrowTypeError(ctx, "data must be string, Buffer, or TypedArray");
     }
+    data = (const char*)buffer_data;
   }
 
   FILE* file = fopen(file_path, "wb");
   if (!file) {
     JSValue error = create_fs_error(ctx, errno, "open", file_path);
     JS_FreeCString(ctx, file_path);
-    if (JS_IsString(argv[1])) {
+    if (is_string) {
       JS_FreeCString(ctx, data);
     }
     return JS_Throw(ctx, error);
@@ -127,14 +157,14 @@ JSValue js_fs_write_file_sync(JSContext* ctx, JSValueConst this_val, int argc, J
   if (written != data_size) {
     JSValue error = create_fs_error(ctx, errno, "write", file_path);
     JS_FreeCString(ctx, file_path);
-    if (JS_IsString(argv[1])) {
+    if (is_string) {
       JS_FreeCString(ctx, data);
     }
     return JS_Throw(ctx, error);
   }
 
   JS_FreeCString(ctx, file_path);
-  if (JS_IsString(argv[1])) {
+  if (is_string) {
     JS_FreeCString(ctx, data);
   }
 
@@ -155,7 +185,7 @@ JSValue js_fs_append_file_sync(JSContext* ctx, JSValueConst this_val, int argc, 
   // Get data to append
   size_t data_size;
   const char* data;
-  JSValue buffer_val = JS_UNDEFINED;
+  bool is_string = false;
 
   if (JS_IsString(argv[1])) {
     data = JS_ToCStringLen(ctx, &data_size, argv[1]);
@@ -163,21 +193,22 @@ JSValue js_fs_append_file_sync(JSContext* ctx, JSValueConst this_val, int argc, 
       JS_FreeCString(ctx, path);
       return JS_EXCEPTION;
     }
+    is_string = true;
   } else {
-    // Assume it's a Buffer or ArrayBuffer
-    buffer_val = argv[1];
-    data = (const char*)JS_GetArrayBuffer(ctx, &data_size, buffer_val);
-    if (!data) {
+    // Try to get as Buffer or TypedArray
+    uint8_t* buffer_data = get_buffer_data_fs(ctx, argv[1], &data_size);
+    if (!buffer_data) {
       JS_FreeCString(ctx, path);
-      return JS_ThrowTypeError(ctx, "data must be a string or Buffer");
+      return JS_ThrowTypeError(ctx, "data must be string, Buffer, or TypedArray");
     }
+    data = (const char*)buffer_data;
   }
 
   FILE* file = fopen(path, "ab");
   if (!file) {
     JSValue error = create_fs_error(ctx, errno, "open", path);
     JS_FreeCString(ctx, path);
-    if (JS_IsString(argv[1])) {
+    if (is_string) {
       JS_FreeCString(ctx, data);
     }
     return JS_Throw(ctx, error);
@@ -189,14 +220,14 @@ JSValue js_fs_append_file_sync(JSContext* ctx, JSValueConst this_val, int argc, 
   if (written != data_size) {
     JSValue error = create_fs_error(ctx, errno, "write", path);
     JS_FreeCString(ctx, path);
-    if (JS_IsString(argv[1])) {
+    if (is_string) {
       JS_FreeCString(ctx, data);
     }
     return JS_Throw(ctx, error);
   }
 
-  JS_FreeCString(ctx, path);  
-  if (JS_IsString(argv[1])) {
+  JS_FreeCString(ctx, path);
+  if (is_string) {
     JS_FreeCString(ctx, data);
   }
 

@@ -1,5 +1,8 @@
 #include "fs_common.h"
 
+// Forward declaration
+static JSValue js_buffer_to_string_simple(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv);
+
 // Helper function to create directories recursively
 int mkdir_recursive(const char* path, mode_t mode) {
   char* path_copy = strdup(path);
@@ -72,7 +75,7 @@ const char* errno_to_node_code(int err) {
   }
 }
 
-// Helper to create a Buffer-like object without circular dependencies
+// Helper to create a Buffer object with proper _isBuffer flag
 JSValue create_buffer_from_data(JSContext* ctx, const uint8_t* data, size_t size) {
   // Create an ArrayBuffer with the data
   JSValue array_buffer = JS_NewArrayBufferCopy(ctx, data, size);
@@ -80,37 +83,51 @@ JSValue create_buffer_from_data(JSContext* ctx, const uint8_t* data, size_t size
     return JS_EXCEPTION;
   }
 
-  // Create a Uint8Array from the ArrayBuffer
+  // Create Uint8Array from ArrayBuffer
   JSValue global = JS_GetGlobalObject(ctx);
   JSValue uint8_array_ctor = JS_GetPropertyStr(ctx, global, "Uint8Array");
   JSValue uint8_array = JS_CallConstructor(ctx, uint8_array_ctor, 1, &array_buffer);
 
+  // Add Buffer-specific properties
+  if (!JS_IsException(uint8_array)) {
+    // Add a special marker to identify this as a Buffer
+    JS_SetPropertyStr(ctx, uint8_array, "_isBuffer", JS_TRUE);
+
+    // Add toString method (simplified version)
+    JSValue toString_func = JS_NewCFunction(ctx, js_buffer_to_string_simple, "toString", 1);
+    JS_SetPropertyStr(ctx, uint8_array, "toString", toString_func);
+  }
+
   JS_FreeValue(ctx, array_buffer);
   JS_FreeValue(ctx, uint8_array_ctor);
   JS_FreeValue(ctx, global);
+  return uint8_array;
+}
 
-  // Add a toString method that converts bytes to string (like Buffer does)
-  if (!JS_IsException(uint8_array)) {
-    // Create a simple toString function that converts the byte array to string
-    const char* toString_code =
-        "(function() {"
-        "  let str = '';"
-        "  for (let i = 0; i < this.length; i++) {"
-        "    str += String.fromCharCode(this[i]);"
-        "  }"
-        "  return str;"
-        "})";
-
-    JSValue toString_func =
-        JS_Eval(ctx, toString_code, strlen(toString_code), "<buffer_toString>", JS_EVAL_TYPE_GLOBAL);
-    if (!JS_IsException(toString_func)) {
-      JS_SetPropertyStr(ctx, uint8_array, "toString", toString_func);
-    } else {
-      JS_FreeValue(ctx, toString_func);
+// Simple toString implementation for Buffer
+static JSValue js_buffer_to_string_simple(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
+  size_t size;
+  uint8_t* data = JS_GetArrayBuffer(ctx, &size, this_val);
+  if (!data) {
+    // Try to get as TypedArray
+    size_t byte_offset;
+    JSValue array_buffer = JS_GetTypedArrayBuffer(ctx, this_val, &byte_offset, &size, NULL);
+    if (!JS_IsException(array_buffer)) {
+      size_t buffer_size;
+      uint8_t* buffer = JS_GetArrayBuffer(ctx, &buffer_size, array_buffer);
+      JS_FreeValue(ctx, array_buffer);
+      if (buffer) {
+        data = buffer + byte_offset;
+      }
     }
   }
 
-  return uint8_array;
+  if (!data) {
+    return JS_ThrowTypeError(ctx, "Invalid buffer");
+  }
+
+  // Convert bytes to string (assuming UTF-8)
+  return JS_NewStringLen(ctx, (const char*)data, size);
 }
 
 // Helper to create Node.js fs error

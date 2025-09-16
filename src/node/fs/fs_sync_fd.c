@@ -5,13 +5,19 @@
 
 // Helper function to parse file flags
 static int parse_file_flags(const char* flags) {
-    if (strcmp(flags, "r") == 0) return O_RDONLY;
-    if (strcmp(flags, "r+") == 0) return O_RDWR;
-    if (strcmp(flags, "w") == 0) return O_WRONLY | O_CREAT | O_TRUNC;
-    if (strcmp(flags, "w+") == 0) return O_RDWR | O_CREAT | O_TRUNC;
-    if (strcmp(flags, "a") == 0) return O_WRONLY | O_CREAT | O_APPEND;
-    if (strcmp(flags, "a+") == 0) return O_RDWR | O_CREAT | O_APPEND;
-    return -1; // Invalid flags
+  if (strcmp(flags, "r") == 0)
+    return O_RDONLY;
+  if (strcmp(flags, "r+") == 0)
+    return O_RDWR;
+  if (strcmp(flags, "w") == 0)
+    return O_WRONLY | O_CREAT | O_TRUNC;
+  if (strcmp(flags, "w+") == 0)
+    return O_RDWR | O_CREAT | O_TRUNC;
+  if (strcmp(flags, "a") == 0)
+    return O_WRONLY | O_CREAT | O_APPEND;
+  if (strcmp(flags, "a+") == 0)
+    return O_RDWR | O_CREAT | O_APPEND;
+  return -1;  // Invalid flags
 }
 
 // fs.openSync(path, flags[, mode])
@@ -38,7 +44,7 @@ JSValue js_fs_open_sync(JSContext* ctx, JSValueConst this_val, int argc, JSValue
     return JS_ThrowTypeError(ctx, "Invalid flags");
   }
 
-  mode_t mode = 0666; // Default mode
+  mode_t mode = 0666;  // Default mode
   if (argc >= 3) {
     int32_t mode_val;
     if (JS_ToInt32(ctx, &mode_val, argv[2]) < 0) {
@@ -131,7 +137,7 @@ JSValue js_fs_read_sync(JSContext* ctx, JSValueConst this_val, int argc, JSValue
       return JS_Throw(ctx, create_fs_error(ctx, errno, "lseek", NULL));
     }
     bytes_read = _read(fd, buffer + offset, length);
-    _lseeki64(fd, original_pos, SEEK_SET); // Restore position
+    _lseeki64(fd, original_pos, SEEK_SET);  // Restore position
 #else
     bytes_read = pread(fd, buffer + offset, length, position);
 #endif
@@ -185,14 +191,16 @@ JSValue js_fs_write_sync(JSContext* ctx, JSValueConst this_val, int argc, JSValu
   // Parse optional parameters
   if (argc >= 3 && !JS_IsUndefined(argv[2])) {
     if (JS_ToInt32(ctx, &offset, argv[2]) < 0) {
-      if (JS_IsString(argv[1])) JS_FreeCString(ctx, data);
+      if (JS_IsString(argv[1]))
+        JS_FreeCString(ctx, data);
       return JS_EXCEPTION;
     }
   }
 
   if (argc >= 4 && !JS_IsUndefined(argv[3])) {
     if (JS_ToInt32(ctx, &length, argv[3]) < 0) {
-      if (JS_IsString(argv[1])) JS_FreeCString(ctx, data);
+      if (JS_IsString(argv[1]))
+        JS_FreeCString(ctx, data);
       return JS_EXCEPTION;
     }
   }
@@ -200,7 +208,8 @@ JSValue js_fs_write_sync(JSContext* ctx, JSValueConst this_val, int argc, JSValu
   if (argc >= 5 && !JS_IsNull(argv[4]) && !JS_IsUndefined(argv[4])) {
     int64_t pos_val;
     if (JS_ToInt64(ctx, &pos_val, argv[4]) < 0) {
-      if (JS_IsString(argv[1])) JS_FreeCString(ctx, data);
+      if (JS_IsString(argv[1]))
+        JS_FreeCString(ctx, data);
       return JS_EXCEPTION;
     }
     position = (off_t)pos_val;
@@ -208,7 +217,8 @@ JSValue js_fs_write_sync(JSContext* ctx, JSValueConst this_val, int argc, JSValu
 
   // Check bounds
   if (offset < 0 || length < 0 || (size_t)(offset + length) > data_size) {
-    if (JS_IsString(argv[1])) JS_FreeCString(ctx, data);
+    if (JS_IsString(argv[1]))
+      JS_FreeCString(ctx, data);
     return JS_ThrowRangeError(ctx, "offset + length exceeds data size");
   }
 
@@ -218,15 +228,17 @@ JSValue js_fs_write_sync(JSContext* ctx, JSValueConst this_val, int argc, JSValu
     // Windows: Use _lseeki64 and _write
     off_t original_pos = _lseeki64(fd, 0, SEEK_CUR);
     if (original_pos == -1) {
-      if (JS_IsString(argv[1])) JS_FreeCString(ctx, data);
+      if (JS_IsString(argv[1]))
+        JS_FreeCString(ctx, data);
       return JS_Throw(ctx, create_fs_error(ctx, errno, "lseek", NULL));
     }
     if (_lseeki64(fd, position, SEEK_SET) == -1) {
-      if (JS_IsString(argv[1])) JS_FreeCString(ctx, data);
+      if (JS_IsString(argv[1]))
+        JS_FreeCString(ctx, data);
       return JS_Throw(ctx, create_fs_error(ctx, errno, "lseek", NULL));
     }
     bytes_written = _write(fd, data + offset, length);
-    _lseeki64(fd, original_pos, SEEK_SET); // Restore position
+    _lseeki64(fd, original_pos, SEEK_SET);  // Restore position
 #else
     bytes_written = pwrite(fd, data + offset, length, position);
 #endif
@@ -334,7 +346,7 @@ JSValue js_fs_utimes_sync(JSContext* ctx, JSValueConst this_val, int argc, JSVal
   }
 
   struct utimbuf times;
-  times.actime = (time_t)atime; 
+  times.actime = (time_t)atime;
   times.modtime = (time_t)mtime;
 
   if (utime(path, &times) < 0) {

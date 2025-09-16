@@ -3,12 +3,12 @@
 
 #include <dirent.h>
 #include <errno.h>
+#include <fcntl.h>  // For open flags
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <sys/stat.h>
-#include <fcntl.h>     // For open flags
-#include <utime.h>     // For utime function
+#include <utime.h>  // For utime function
 #ifdef _WIN32
 #include <direct.h>  // For _mkdir on Windows
 #include <io.h>      // For access function
@@ -31,7 +31,7 @@ const char* errno_to_node_code(int err);
 JSValue create_buffer_from_data(JSContext* ctx, const uint8_t* data, size_t size);
 JSValue create_fs_error(JSContext* ctx, int err, const char* syscall, const char* path);
 
-// Basic file I/O operations  
+// Basic file I/O operations
 JSValue js_fs_read_file_sync(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv);
 JSValue js_fs_write_file_sync(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv);
 JSValue js_fs_append_file_sync(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv);

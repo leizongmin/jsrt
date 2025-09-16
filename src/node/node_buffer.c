@@ -36,6 +36,9 @@ static JSValue create_uint8_array(JSContext* ctx, JSValue array_buffer) {
     // Add toString method that converts bytes to string
     JSValue toString_func = JS_NewCFunction(ctx, js_buffer_to_string, "toString", 1);
     JS_SetPropertyStr(ctx, uint8_array, "toString", toString_func);
+
+    // Add a special marker to identify this as a Buffer
+    JS_SetPropertyStr(ctx, uint8_array, "_isBuffer", JS_TRUE);
   }
 
   JS_FreeValue(ctx, uint8_array_ctor);
@@ -253,7 +256,16 @@ static JSValue js_buffer_is_buffer(JSContext* ctx, JSValueConst this_val, int ar
     return JS_FALSE;
   }
 
-  // Check if it's a Uint8Array (our Buffer implementation)
+  // Check if it has the Buffer marker
+  JSValue is_buffer_marker = JS_GetPropertyStr(ctx, argv[0], "_isBuffer");
+  bool is_buffer = JS_ToBool(ctx, is_buffer_marker);
+  JS_FreeValue(ctx, is_buffer_marker);
+
+  if (is_buffer) {
+    return JS_TRUE;
+  }
+
+  // Fallback: Check if it's a Uint8Array (our Buffer implementation)
   JSValue global = JS_GetGlobalObject(ctx);
   JSValue uint8_array_ctor = JS_GetPropertyStr(ctx, global, "Uint8Array");
   JS_FreeValue(ctx, global);

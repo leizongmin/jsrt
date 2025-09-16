@@ -2,17 +2,17 @@
 
 // Helper function to copy file using buffer
 static int copy_file_content(FILE* src, FILE* dest) {
-    char buffer[8192];
-    size_t bytes_read, bytes_written;
-    
-    while ((bytes_read = fread(buffer, 1, sizeof(buffer), src)) > 0) {
-        bytes_written = fwrite(buffer, 1, bytes_read, dest);
-        if (bytes_written != bytes_read) {
-            return -1;
-        }
+  char buffer[8192];
+  size_t bytes_read, bytes_written;
+
+  while ((bytes_read = fread(buffer, 1, sizeof(buffer), src)) > 0) {
+    bytes_written = fwrite(buffer, 1, bytes_read, dest);
+    if (bytes_written != bytes_read) {
+      return -1;
     }
-    
-    return ferror(src) ? -1 : 0;
+  }
+
+  return ferror(src) ? -1 : 0;
 }
 
 // fs.copyFileSync(src, dest[, mode])
@@ -55,7 +55,7 @@ JSValue js_fs_copy_file_sync(JSContext* ctx, JSValueConst this_val, int argc, JS
   if (copy_file_content(src_file, dest_file) < 0) {
     fclose(src_file);
     fclose(dest_file);
-    unlink(dest); // Remove partially copied file
+    unlink(dest);  // Remove partially copied file
     JSValue error = create_fs_error(ctx, errno, "write", dest);
     JS_FreeCString(ctx, src);
     JS_FreeCString(ctx, dest);
@@ -89,8 +89,7 @@ JSValue js_fs_rename_sync(JSContext* ctx, JSValueConst this_val, int argc, JSVal
   }
 
   if (rename(old_path, new_path) < 0) {
-    JSValue error = create_fs_error(ctx, errno, "rename", 
-                                  errno == ENOENT ? old_path : new_path);
+    JSValue error = create_fs_error(ctx, errno, "rename", errno == ENOENT ? old_path : new_path);
     JS_FreeCString(ctx, old_path);
     JS_FreeCString(ctx, new_path);
     return JS_Throw(ctx, error);
@@ -112,7 +111,7 @@ JSValue js_fs_access_sync(JSContext* ctx, JSValueConst this_val, int argc, JSVal
     return JS_EXCEPTION;
   }
 
-  int mode = F_OK; // Default: check existence
+  int mode = F_OK;  // Default: check existence
   if (argc >= 2) {
     if (JS_ToInt32(ctx, &mode, argv[1]) < 0) {
       JS_FreeCString(ctx, path);

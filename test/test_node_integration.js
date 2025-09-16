@@ -1,6 +1,6 @@
 const assert = require('jsrt:assert');
 
-console.log('=== Node.js Compatibility Layer Integration Test ===');
+// console.log('=== Node.js Compatibility Layer Integration Test ===');
 console.log(
   'Testing node:path, node:os, node:util, and node:events modules together...'
 );
@@ -133,20 +133,19 @@ assert.strictEqual(
   'Should have 1 file-deleted listener'
 );
 
-console.log('\n✅ All integration tests passed!');
-console.log('🎉 Node.js compatibility layer Phase 2 complete!');
+// console.log('\n✅ All integration tests passed!');
+console.log('📊 Node.js compatibility layer Phase 2 complete!');
 console.log('\nImplemented modules:');
-console.log('  ✅ node:path - Complete path manipulation utilities');
-console.log('  ✅ node:os - Complete operating system utilities');
-console.log('  ✅ node:util - Utility functions and type checking');
-console.log('  ✅ node:events - EventEmitter with complete API');
-console.log('\nFeatures working:');
-console.log('  ✅ CommonJS require() support');
-console.log('  ✅ ES module import support');
-console.log('  ✅ Cross-platform compatibility');
-console.log('  ✅ Memory management fixes');
-console.log('  ✅ Complete path normalization');
-console.log('  ✅ Relative path calculation');
-console.log('  ✅ Object inspection and type checking');
-console.log('  ✅ Event-driven programming with EventEmitter');
+// console.log('  ✅ node:path - Complete path manipulation utilities');
+// console.log('  ✅ node:os - Complete operating system utilities');
+// console.log('  ✅ node:util - Utility functions and type checking');
+// console.log('  ✅ node:events - EventEmitter with complete API');
+// console.log('  ✅ CommonJS require() support');
+// console.log('  ✅ ES module import support');
+// console.log('  ✅ Cross-platform compatibility');
+// console.log('  ✅ Memory management fixes');
+// console.log('  ✅ Complete path normalization');
+// console.log('  ✅ Relative path calculation');
+// console.log('  ✅ Object inspection and type checking');
+// console.log('  ✅ Event-driven programming with EventEmitter');
 console.log('\nReady for Phase 3: node:buffer, node:stream, node:fs');

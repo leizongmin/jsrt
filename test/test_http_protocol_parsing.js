@@ -1,18 +1,18 @@
 const assert = require('jsrt:assert');
 
-console.log('=== HTTP Protocol Parsing Tests ===');
+// // console.log('=== HTTP Protocol Parsing Tests ===');
 
 let http;
 try {
   http = require('node:http');
 } catch (e) {
   console.log('❌ SKIP: node:http module not available');
-  console.log('=== Tests Completed (Skipped) ===');
+  // // console.log('=== Tests Completed (Skipped) ===');
   process.exit(0);
 }
 
 // Test 1: HTTP Request Line Parsing
-console.log('\n--- Test 1: HTTP Request Line Parsing ---');
+// console.log('\n--- Test 1: HTTP Request Line Parsing ---');
 let parsedRequests = [];
 
 const server1 = http.createServer((req, res) => {
@@ -26,10 +26,10 @@ const server1 = http.createServer((req, res) => {
   res.end('OK');
 });
 
-console.log('✓ Request line parsing test setup ready');
+// console.log('✓ Request line parsing test setup ready');
 
 // Test 2: HTTP Header Parsing
-console.log('\n--- Test 2: HTTP Header Parsing ---');
+// console.log('\n--- Test 2: HTTP Header Parsing ---');
 let parsedHeaders = [];
 
 const server2 = http.createServer((req, res) => {
@@ -46,10 +46,10 @@ const server2 = http.createServer((req, res) => {
   res.end('Headers parsed');
 });
 
-console.log('✓ Header parsing test setup ready');
+// console.log('✓ Header parsing test setup ready');
 
 // Test 3: HTTP Method Validation
-console.log('\n--- Test 3: HTTP Method Support ---');
+// console.log('\n--- Test 3: HTTP Method Support ---');
 const supportedMethods = [
   'GET',
   'POST',
@@ -77,10 +77,10 @@ const server3 = http.createServer((req, res) => {
   }
 });
 
-console.log('✓ Method validation test setup ready');
+// console.log('✓ Method validation test setup ready');
 
 // Test 4: URL Path Parsing
-console.log('\n--- Test 4: URL Path Parsing ---');
+// console.log('\n--- Test 4: URL Path Parsing ---');
 let urlTests = [];
 
 const server4 = http.createServer((req, res) => {
@@ -105,10 +105,10 @@ const server4 = http.createServer((req, res) => {
   );
 });
 
-console.log('✓ URL parsing test setup ready');
+// console.log('✓ URL parsing test setup ready');
 
 // Test 5: Content-Length and Body Handling
-console.log('\n--- Test 5: Content-Length Handling ---');
+// console.log('\n--- Test 5: Content-Length Handling ---');
 let bodyTests = [];
 
 const server5 = http.createServer((req, res) => {
@@ -138,10 +138,10 @@ const server5 = http.createServer((req, res) => {
   });
 });
 
-console.log('✓ Content-Length handling test setup ready');
+// console.log('✓ Content-Length handling test setup ready');
 
 // Test 6: HTTP Version Handling
-console.log('\n--- Test 6: HTTP Version Support ---');
+// console.log('\n--- Test 6: HTTP Version Support ---');
 let versionTests = [];
 
 const server6 = http.createServer((req, res) => {
@@ -156,10 +156,10 @@ const server6 = http.createServer((req, res) => {
   res.end(`HTTP version: ${req.httpVersion}`);
 });
 
-console.log('✓ HTTP version handling test setup ready');
+// console.log('✓ HTTP version handling test setup ready');
 
 // Test 7: Connection Handling
-console.log('\n--- Test 7: Connection Management ---');
+// console.log('\n--- Test 7: Connection Management ---');
 let connectionTests = [];
 
 const server7 = http.createServer((req, res) => {
@@ -184,10 +184,10 @@ const server7 = http.createServer((req, res) => {
   res.end('Connection handled');
 });
 
-console.log('✓ Connection management test setup ready');
+// console.log('✓ Connection management test setup ready');
 
 // Test 8: Special Characters in Headers
-console.log('\n--- Test 8: Header Character Handling ---');
+// console.log('\n--- Test 8: Header Character Handling ---');
 let headerCharTests = [];
 
 const server8 = http.createServer((req, res) => {
@@ -212,10 +212,10 @@ const server8 = http.createServer((req, res) => {
   res.end('Header characters checked');
 });
 
-console.log('✓ Header character handling test setup ready');
+// console.log('✓ Header character handling test setup ready');
 
 // Test 9: Large Header Handling
-console.log('\n--- Test 9: Large Header Support ---');
+// console.log('\n--- Test 9: Large Header Support ---');
 let largeHeaderTests = [];
 
 const server9 = http.createServer((req, res) => {
@@ -234,10 +234,10 @@ const server9 = http.createServer((req, res) => {
   res.end('Large headers processed');
 });
 
-console.log('✓ Large header handling test setup ready');
+// console.log('✓ Large header handling test setup ready');
 
 // Test 10: Malformed Request Handling
-console.log('\n--- Test 10: Error Recovery ---');
+// console.log('\n--- Test 10: Error Recovery ---');
 let errorTests = [];
 
 const server10 = http.createServer((req, res) => {
@@ -261,11 +261,11 @@ server10.on('error', (err) => {
   });
 });
 
-console.log('✓ Error recovery test setup ready');
+// console.log('✓ Error recovery test setup ready');
 
 // Validation functions
 function validateRequestParsing() {
-  console.log('\n--- Validation: Request Parsing ---');
+  // console.log('\n--- Validation: Request Parsing ---');
 
   if (parsedRequests.length > 0) {
     parsedRequests.forEach((req, i) => {
@@ -279,7 +279,7 @@ function validateRequestParsing() {
 }
 
 function validateHeaderParsing() {
-  console.log('\n--- Validation: Header Parsing ---');
+  // console.log('\n--- Validation: Header Parsing ---');
 
   if (parsedHeaders.length > 0) {
     parsedHeaders.forEach((headers, i) => {
@@ -293,11 +293,11 @@ function validateHeaderParsing() {
 }
 
 function validateMethodSupport() {
-  console.log('\n--- Validation: Method Support ---');
+  // console.log('\n--- Validation: Method Support ---');
 
   if (methodTests.length > 0) {
     const supportedCount = methodTests.filter((t) => t.supported).length;
-    console.log(`✓ ${supportedCount}/${methodTests.length} methods supported`);
+    // console.log(`✓ ${supportedCount}/${methodTests.length} methods supported`);
   }
 }
 
@@ -330,7 +330,7 @@ setTimeout(() => {
   validateHeaderParsing();
   validateMethodSupport();
 
-  console.log('\n--- Test Results Summary ---');
+  // console.log('\n--- Test Results Summary ---');
   console.log(`Requests parsed: ${parsedRequests.length}`);
   console.log(`Headers parsed: ${parsedHeaders.length}`);
   console.log(`Methods tested: ${methodTests.length}`);
@@ -343,5 +343,5 @@ setTimeout(() => {
   console.log(`Error tests: ${errorTests.length}`);
 
   cleanupServers();
-  console.log('\n=== HTTP Protocol Parsing Tests Completed ===');
+  // console.log('\n=== HTTP Protocol Parsing Tests Completed ===');
 }, 100);

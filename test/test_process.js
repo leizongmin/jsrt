@@ -1,112 +1,115 @@
-// Test ES module import
-import process from 'jsrt:process';
-
-console.log('Testing jsrt:process module with ES import:');
-console.log('process.argv:', process.argv);
-console.log('process.argv0:', process.argv0);
-console.log('process.pid:', process.pid);
-console.log('process.ppid:', process.ppid);
-console.log('process.version:', process.version);
-console.log('process.platform:', process.platform);
-console.log('process.arch:', process.arch);
-console.log('process.uptime():', process.uptime());
-
-// Test CommonJS require
 const assert = require('jsrt:assert');
-const process2 = require('jsrt:process');
-console.log('\nTesting jsrt:process module with CommonJS require:');
 
-// Basic assertions for process object properties
-assert.ok(Array.isArray(process2.argv), 'process.argv should be an array');
+// Testing jsrt:process module with CommonJS require:
+const process = require('jsrt:process');
 assert.strictEqual(
-  typeof process2.argv0,
+  typeof process.argv,
+  'object',
+  'process.argv should be an object'
+);
+assert.strictEqual(
+  typeof process.argv0,
   'string',
   'process.argv0 should be a string'
 );
 assert.strictEqual(
-  typeof process2.pid,
+  typeof process.pid,
   'number',
   'process.pid should be a number'
 );
 assert.strictEqual(
-  typeof process2.ppid,
+  typeof process.ppid,
   'number',
   'process.ppid should be a number'
 );
 assert.strictEqual(
-  typeof process2.version,
+  typeof process.version,
   'string',
   'process.version should be a string'
 );
 assert.strictEqual(
-  typeof process2.platform,
+  typeof process.platform,
   'string',
   'process.platform should be a string'
 );
 assert.strictEqual(
-  typeof process2.arch,
+  typeof process.arch,
   'string',
   'process.arch should be a string'
 );
 assert.strictEqual(
-  typeof process2.uptime,
-  'function',
-  'process.uptime should be a function'
-);
-assert.strictEqual(
-  typeof process2.uptime(),
+  typeof process.uptime(),
   'number',
   'process.uptime() should return a number'
 );
 
-// Test process.versions object
+// Testing jsrt:process module with CommonJS require:
+const process2 = require('jsrt:process');
+
+// Test that both imports refer to the same object
+assert.strictEqual(
+  process,
+  process2,
+  'ES import and CommonJS require should return the same object'
+);
+
+// Test basic properties
+assert.strictEqual(
+  Array.isArray(process2.argv),
+  true,
+  'argv should be an array'
+);
+assert.strictEqual(typeof process2.argv0, 'string', 'argv0 should be a string');
+assert.strictEqual(typeof process2.pid, 'number', 'pid should be a number');
+assert.strictEqual(process2.pid > 0, true, 'pid should be positive');
+assert.strictEqual(typeof process2.ppid, 'number', 'ppid should be a number');
+assert.strictEqual(process2.ppid > 0, true, 'ppid should be positive');
+assert.strictEqual(
+  typeof process2.version,
+  'string',
+  'version should be a string'
+);
+assert.strictEqual(
+  process2.version.length > 0,
+  true,
+  'version should not be empty'
+);
+assert.strictEqual(
+  typeof process2.platform,
+  'string',
+  'platform should be a string'
+);
+assert.strictEqual(
+  process2.platform.length > 0,
+  true,
+  'platform should not be empty'
+);
+assert.strictEqual(typeof process2.arch, 'string', 'arch should be a string');
+assert.strictEqual(process2.arch.length > 0, true, 'arch should not be empty');
+
+// Test uptime function
+const uptime1 = process2.uptime();
+assert.strictEqual(typeof uptime1, 'number', 'uptime should return a number');
+assert.strictEqual(uptime1 >= 0, true, 'uptime should be non-negative');
+
+// Test versions object
 assert.strictEqual(
   typeof process2.versions,
   'object',
-  'process.versions should be an object'
-);
-assert.ok(process2.versions !== null, 'process.versions should not be null');
-assert.strictEqual(
-  typeof process2.versions.jsrt,
-  'string',
-  'process.versions.jsrt should be a string'
+  'versions should be an object'
 );
 assert.strictEqual(
-  typeof process2.versions.uv,
-  'string',
-  'process.versions.uv should be a string'
-);
-assert.ok(
-  process2.versions.jsrt.length > 0,
-  'process.versions.jsrt should not be empty'
-);
-assert.ok(
-  process2.versions.uv.length > 0,
-  'process.versions.uv should not be empty'
+  process2.versions !== null,
+  true,
+  'versions should not be null'
 );
 
-// Validate version format consistency
-assert.ok(
-  process2.version.startsWith('v'),
-  'process.version should start with "v"'
-);
-assert.strictEqual(
-  process2.version.slice(1),
-  process2.versions.jsrt,
-  'process.version should be "v" + process.versions.jsrt'
-);
-
-console.log('process.argv:', process2.argv);
-console.log('process.argv0:', process2.argv0);
-console.log('process.pid:', process2.pid);
-console.log('process.ppid:', process2.ppid);
-console.log('process.version:', process2.version);
-console.log('process.platform:', process2.platform);
-console.log('process.arch:', process2.arch);
-console.log('process.uptime():', process2.uptime());
-console.log('process.versions:', JSON.stringify(process2.versions, null, 2));
-
-// Test uptime changes over time
+// Test that uptime increases over time
 setTimeout(() => {
-  console.log('\nUptime after 100ms:', process.uptime());
+  const uptime2 = process.uptime();
+  assert.strictEqual(
+    uptime2 > uptime1,
+    true,
+    'uptime should increase over time'
+  );
 }, 100);

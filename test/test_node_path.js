@@ -1,6 +1,6 @@
 const assert = require('jsrt:assert');
 
-console.log('=== Node.js path module tests ===');
+// console.log('=== Node.js path module tests ===');
 
 // Test CommonJS require
 const path = require('node:path');
@@ -18,7 +18,7 @@ assert.strictEqual(
 assert.strictEqual(path.join('a', '', 'c'), 'a' + path.sep + 'c');
 assert.strictEqual(path.join(''), '.');
 assert.strictEqual(path.join('/a/', 'b'), path.sep + 'a' + path.sep + 'b');
-console.log('✓ path.join tests passed');
+// console.log('✓ path.join tests passed');
 
 // Test path.resolve (basic cases - avoid process.cwd() issues)
 // Absolute paths should use platform separators
@@ -27,13 +27,13 @@ assert.strictEqual(
   path.resolve('/foo/bar', '../baz'),
   path.sep + 'foo' + path.sep + 'baz'
 );
-console.log('✓ path.resolve tests passed');
+// console.log('✓ path.resolve tests passed');
 
 // Test path.isAbsolute
 assert.strictEqual(path.isAbsolute(path.sep + 'foo' + path.sep + 'bar'), true);
 assert.strictEqual(path.isAbsolute('foo' + path.sep + 'bar'), false);
 assert.strictEqual(path.isAbsolute('.' + path.sep + 'foo'), false);
-console.log('✓ path.isAbsolute tests passed');
+// console.log('✓ path.isAbsolute tests passed');
 
 // Test path.dirname
 assert.strictEqual(
@@ -44,7 +44,7 @@ assert.strictEqual(
 // assert.strictEqual(path.dirname('/a/b/c/'), '/a/b');
 assert.strictEqual(path.dirname(path.sep + 'a'), path.sep);
 assert.strictEqual(path.dirname('a'), '.');
-console.log('✓ path.dirname tests passed');
+// console.log('✓ path.dirname tests passed');
 
 // Test path.basename
 assert.strictEqual(
@@ -60,7 +60,7 @@ assert.strictEqual(
   'b'
 );
 assert.strictEqual(path.basename('file.js', '.js'), 'file');
-console.log('✓ path.basename tests passed');
+// console.log('✓ path.basename tests passed');
 
 // Test path.extname
 assert.strictEqual(path.extname('file.txt'), '.txt');
@@ -68,24 +68,24 @@ assert.strictEqual(path.extname('file.'), '.');
 assert.strictEqual(path.extname('file'), '');
 assert.strictEqual(path.extname('.hiddenfile'), '');
 assert.strictEqual(path.extname('file.tar.gz'), '.gz');
-console.log('✓ path.extname tests passed');
+// console.log('✓ path.extname tests passed');
 
 // Test path constants
 assert.ok(path.sep === '/' || path.sep === '\\');
 assert.ok(path.delimiter === ':' || path.delimiter === ';');
-console.log('✓ path constants tests passed');
+// console.log('✓ path constants tests passed');
 
 // Platform-specific tests (handle undefined process gracefully)
 if (typeof process !== 'undefined' && process.platform === 'win32') {
   assert.strictEqual(path.sep, '\\');
   assert.strictEqual(path.delimiter, ';');
   assert.ok(path.win32);
-  console.log('✓ Windows-specific path tests passed');
+  // console.log('✓ Windows-specific path tests passed');
 } else {
   assert.strictEqual(path.sep, '/');
   assert.strictEqual(path.delimiter, ':');
   assert.ok(path.posix);
-  console.log('✓ Unix-specific path tests passed');
+  // console.log('✓ Unix-specific path tests passed');
 }
 
-console.log('✅ All node:path tests passed - Node.js compatibility working!');
+// Success case - no output needed

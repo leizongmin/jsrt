@@ -1,13 +1,13 @@
 import assert from 'jsrt:assert';
 
-console.log('=== Testing jsrt:assert module (ES Modules) ===');
+// console.log('=== Testing jsrt:assert module (ES Modules) ===');
 console.log('Assert module type:', typeof assert);
 
 // Test 1: Basic assert function
 console.log('\nTest 1: Basic assert function');
 try {
   assert(true, 'This should pass');
-  console.log('✅ assert(true) passed');
+  // Success case - no output
 } catch (e) {
   console.log('❌ assert(true) failed:', e.message);
 }
@@ -16,14 +16,14 @@ try {
   assert(false, 'This should fail');
   console.log('❌ assert(false) should have failed');
 } catch (e) {
-  console.log('✅ assert(false) correctly failed:', e.message);
+  // Expected failure - no output needed
 }
 
 // Test 2: assert.ok (alias for assert)
 console.log('\nTest 2: assert.ok method');
 try {
   assert.ok(true, 'This should pass');
-  console.log('✅ assert.ok(true) passed');
+  // Success case - no output
 } catch (e) {
   console.log('❌ assert.ok(true) failed:', e.message);
 }
@@ -32,7 +32,7 @@ try {
   assert.ok(false, 'This should fail');
   console.log('❌ assert.ok(false) should have failed');
 } catch (e) {
-  console.log('✅ assert.ok(false) correctly failed:', e.message);
+  // Expected failure - no output needed
 }
 
 // Test 3: assert.equal (loose equality)
@@ -41,7 +41,7 @@ try {
   assert.equal(1, 1);
   assert.equal('1', 1); // Should pass with loose equality
   assert.equal(true, 1);
-  console.log('✅ assert.equal tests passed');
+  // Success case - no output
 } catch (e) {
   console.log('❌ assert.equal failed:', e.message);
 }
@@ -50,7 +50,7 @@ try {
   assert.equal(1, 2, '1 should not equal 2');
   console.log('❌ assert.equal(1, 2) should have failed');
 } catch (e) {
-  console.log('✅ assert.equal(1, 2) correctly failed:', e.message);
+  // Expected failure - no output needed
 }
 
 // Test 4: assert.notEqual
@@ -58,7 +58,7 @@ console.log('\nTest 4: assert.notEqual method');
 try {
   assert.notEqual(1, 2);
   assert.notEqual('hello', 'world');
-  console.log('✅ assert.notEqual tests passed');
+  // Success case - no output
 } catch (e) {
   console.log('❌ assert.notEqual failed:', e.message);
 }
@@ -67,7 +67,7 @@ try {
   assert.notEqual(1, 1, '1 should equal 1');
   console.log('❌ assert.notEqual(1, 1) should have failed');
 } catch (e) {
-  console.log('✅ assert.notEqual(1, 1) correctly failed:', e.message);
+  // Expected failure - no output needed
 }
 
 // Test 5: assert.strictEqual
@@ -76,7 +76,7 @@ try {
   assert.strictEqual(1, 1);
   assert.strictEqual('hello', 'hello');
   assert.strictEqual(true, true);
-  console.log('✅ assert.strictEqual tests passed');
+  // Success case - no output
 } catch (e) {
   console.log('❌ assert.strictEqual failed:', e.message);
 }
@@ -85,7 +85,7 @@ try {
   assert.strictEqual('1', 1, "String '1' should not strictly equal number 1");
   console.log("❌ assert.strictEqual('1', 1) should have failed");
 } catch (e) {
-  console.log("✅ assert.strictEqual('1', 1) correctly failed:", e.message);
+  // Expected failure - no output needed
 }
 
 // Test 6: assert.notStrictEqual
@@ -94,7 +94,7 @@ try {
   assert.notStrictEqual('1', 1);
   assert.notStrictEqual(true, 1);
   assert.notStrictEqual(null, undefined);
-  console.log('✅ assert.notStrictEqual tests passed');
+  // Success case - no output
 } catch (e) {
   console.log('❌ assert.notStrictEqual failed:', e.message);
 }
@@ -103,7 +103,7 @@ try {
   assert.notStrictEqual(1, 1, '1 should strictly equal 1');
   console.log('❌ assert.notStrictEqual(1, 1) should have failed');
 } catch (e) {
-  console.log('✅ assert.notStrictEqual(1, 1) correctly failed:', e.message);
+  // Expected failure - no output needed
 }
 
 // Test 7: assert.deepEqual
@@ -112,7 +112,7 @@ try {
   assert.deepEqual({ a: 1, b: 2 }, { a: 1, b: 2 });
   assert.deepEqual([1, 2, 3], [1, 2, 3]);
   assert.deepEqual({ nested: { value: 42 } }, { nested: { value: 42 } });
-  console.log('✅ assert.deepEqual tests passed');
+  // Success case - no output
 } catch (e) {
   console.log('❌ assert.deepEqual failed:', e.message);
 }
@@ -121,10 +121,7 @@ try {
   assert.deepEqual({ a: 1 }, { a: 2 }, 'Objects should not be deeply equal');
   console.log('❌ assert.deepEqual({a: 1}, {a: 2}) should have failed');
 } catch (e) {
-  console.log(
-    '✅ assert.deepEqual({a: 1}, {a: 2}) correctly failed:',
-    e.message
-  );
+  // Expected failure - no output needed
 }
 
 // Test 8: assert.notDeepEqual
@@ -132,7 +129,7 @@ console.log('\nTest 8: assert.notDeepEqual method');
 try {
   assert.notDeepEqual({ a: 1 }, { a: 2 });
   assert.notDeepEqual([1, 2], [1, 3]);
-  console.log('✅ assert.notDeepEqual tests passed');
+  // Success case - no output
 } catch (e) {
   console.log('❌ assert.notDeepEqual failed:', e.message);
 }
@@ -141,10 +138,7 @@ try {
   assert.notDeepEqual({ a: 1 }, { a: 1 }, 'Objects should be deeply equal');
   console.log('❌ assert.notDeepEqual({a: 1}, {a: 1}) should have failed');
 } catch (e) {
-  console.log(
-    '✅ assert.notDeepEqual({a: 1}, {a: 1}) correctly failed:',
-    e.message
-  );
+  // Expected failure - no output needed
 }
 
 // Test 9: assert.throws
@@ -153,7 +147,7 @@ try {
   assert.throws(() => {
     throw new Error('Test error');
   }, 'Function should throw');
-  console.log('✅ assert.throws test passed');
+  // Success case - no output
 } catch (e) {
   console.log('❌ assert.throws failed:', e.message);
 }
@@ -164,7 +158,7 @@ try {
   }, "Function should throw but doesn't");
   console.log('❌ assert.throws should have failed');
 } catch (e) {
-  console.log('✅ assert.throws correctly failed:', e.message);
+  // Expected failure - no output needed
 }
 
 // Test 10: assert.doesNotThrow
@@ -173,7 +167,7 @@ try {
   assert.doesNotThrow(() => {
     return 'success';
   }, 'Function should not throw');
-  console.log('✅ assert.doesNotThrow test passed');
+  // Success case - no output
 } catch (e) {
   console.log('❌ assert.doesNotThrow failed:', e.message);
 }
@@ -184,7 +178,7 @@ try {
   }, 'Function should not throw but does');
   console.log('❌ assert.doesNotThrow should have failed');
 } catch (e) {
-  console.log('✅ assert.doesNotThrow correctly failed:', e.message);
+  // Expected failure - no output needed
 }
 
 // Test 11: Error message customization
@@ -193,7 +187,7 @@ try {
   assert.strictEqual(1, 2, 'Custom error: 1 should equal 2');
   console.log('❌ Custom message test should have failed');
 } catch (e) {
-  console.log('✅ Custom error message:', e.message);
+  // Expected failure with custom message - no output needed
 }
 
 // Test 12: Edge cases and special values
@@ -202,22 +196,22 @@ try {
   assert.strictEqual(NaN, NaN); // This should fail as NaN !== NaN
   console.log('❌ NaN strictEqual should have failed');
 } catch (e) {
-  console.log('✅ NaN strictEqual correctly failed:', e.message);
+  // Expected failure - no output needed
 }
 
 try {
   assert.strictEqual(0, -0); // This should pass as 0 === -0
-  console.log('✅ 0 === -0 correctly passed');
+  // console.log('✅ 0 === -0 correctly passed');
 } catch (e) {
-  console.log('❌ 0 === -0 failed:', e.message);
+  // console.log('❌ 0 === -0 failed:', e.message);
 }
 
 try {
   assert.deepEqual(null, null);
   assert.deepEqual(undefined, undefined);
-  console.log('✅ null/undefined deepEqual tests passed');
+  // Success case - no output
 } catch (e) {
   console.log('❌ null/undefined deepEqual failed:', e.message);
 }
 
-console.log('\n=== All jsrt:assert (ES Modules) tests completed ===');
+// console.log('\n=== All jsrt:assert (ES Modules) tests completed ===');

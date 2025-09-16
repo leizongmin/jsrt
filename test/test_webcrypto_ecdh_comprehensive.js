@@ -3,15 +3,9 @@ const assert = require('jsrt:assert');
 
 // Check if crypto is available (skip if OpenSSL not found)
 if (typeof crypto === 'undefined' || !crypto.subtle) {
-  console.log('❌ SKIP: WebCrypto not available (OpenSSL not found)');
-  console.log('=== ECDH Comprehensive Tests Completed (Skipped) ===');
 } else {
-  console.log('=== WebCrypto ECDH Comprehensive Tests ===');
-
   // Test 1: Multiple party key exchange (3-way)
   function testMultiPartyKeyExchange() {
-    console.log('\n1. Testing 3-party key exchange simulation...');
-
     // Generate three key pairs
     const alicePromise = crypto.subtle.generateKey(
       {
@@ -45,8 +39,6 @@ if (typeof crypto === 'undefined' || !crypto.subtle) {
         const aliceKeys = keyPairs[0];
         const bobKeys = keyPairs[1];
         const charlieKeys = keyPairs[2];
-
-        console.log('✅ Generated key pairs for Alice, Bob, and Charlie');
 
         // Alice derives with Bob
         const aliceBobPromise = crypto.subtle.deriveBits(
@@ -85,23 +77,6 @@ if (typeof crypto === 'undefined' || !crypto.subtle) {
         ]);
       })
       .then(function (secrets) {
-        console.log('✅ All three pairwise secrets derived');
-        console.log(
-          '   Alice-Bob secret length:',
-          new Uint8Array(secrets[0]).length,
-          'bytes'
-        );
-        console.log(
-          '   Bob-Charlie secret length:',
-          new Uint8Array(secrets[1]).length,
-          'bytes'
-        );
-        console.log(
-          '   Charlie-Alice secret length:',
-          new Uint8Array(secrets[2]).length,
-          'bytes'
-        );
-
         // Each pair should have unique secrets
         const ab = new Uint8Array(secrets[0]);
         const bc = new Uint8Array(secrets[1]);
@@ -132,8 +107,6 @@ if (typeof crypto === 'undefined' || !crypto.subtle) {
           true,
           'Charlie-Alice and Alice-Bob secrets should differ'
         );
-
-        console.log('✅ All pairwise secrets are unique');
       })
       .catch(function (error) {
         console.error(
@@ -146,8 +119,6 @@ if (typeof crypto === 'undefined' || !crypto.subtle) {
 
   // Test 2: Different bit lengths for deriveBits
   function testDifferentBitLengths() {
-    console.log('\n2. Testing different bit lengths for deriveBits...');
-
     return Promise.all([
       crypto.subtle.generateKey(
         {
@@ -187,13 +158,6 @@ if (typeof crypto === 'undefined' || !crypto.subtle) {
               )
               .then(function (secret) {
                 const bytes = new Uint8Array(secret);
-                console.log(
-                  '✅ Derived',
-                  bits,
-                  'bits (',
-                  bytes.length,
-                  'bytes)'
-                );
                 // P-256 might clamp to max 256 bits
                 const expectedBytes = Math.min(bits, 256) / 8;
                 assert.strictEqual(
@@ -238,8 +202,6 @@ if (typeof crypto === 'undefined' || !crypto.subtle) {
 
   // Test 3: Cross-curve key derivation (should fail)
   function testCrossCurveDerivation() {
-    console.log('\n3. Testing cross-curve key derivation (should fail)...');
-
     // Generate P-256 key pair
     const p256Promise = crypto.subtle.generateKey(
       {
@@ -294,14 +256,11 @@ if (typeof crypto === 'undefined' || !crypto.subtle) {
           throw error;
         }
         // Some errors are expected for cross-curve operations
-        console.log('✅ Cross-curve test handled appropriately');
       });
   }
 
   // Test 4: Derive with same key pair (self-derivation)
   function testSelfDerivation() {
-    console.log('\n4. Testing self-derivation (derive with own public key)...');
-
     return crypto.subtle
       .generateKey(
         {
@@ -324,11 +283,6 @@ if (typeof crypto === 'undefined' || !crypto.subtle) {
       })
       .then(function (secret) {
         const bytes = new Uint8Array(secret);
-        console.log(
-          '✅ Self-derivation succeeded, secret length:',
-          bytes.length,
-          'bytes'
-        );
 
         // The secret should still be valid (mathematically it's the private key times the generator point times the private key)
         assert.strictEqual(
@@ -350,7 +304,6 @@ if (typeof crypto === 'undefined' || !crypto.subtle) {
           true,
           'Self-derived secret should not be all zeros'
         );
-        console.log('✅ Self-derived secret is valid');
       })
       .catch(function (error) {
         console.error('❌ Self-derivation test failed:', error.message);
@@ -360,8 +313,6 @@ if (typeof crypto === 'undefined' || !crypto.subtle) {
 
   // Test 5: Maximum bit length derivation
   function testMaximumBitLength() {
-    console.log('\n5. Testing maximum bit length derivation...');
-
     // For each curve, test deriving maximum possible bits
     const curveMaxBits = {
       'P-256': 256,
@@ -404,15 +355,6 @@ if (typeof crypto === 'undefined' || !crypto.subtle) {
         })
         .then(function (secret) {
           const bytes = new Uint8Array(secret);
-          console.log(
-            '✅',
-            curve,
-            ': Derived',
-            maxBits,
-            'bits (',
-            bytes.length,
-            'bytes)'
-          );
           assert.strictEqual(
             bytes.length * 8,
             maxBits,
@@ -431,8 +373,6 @@ if (typeof crypto === 'undefined' || !crypto.subtle) {
 
   // Test 6: Zero bits derivation (edge case)
   function testZeroBitsDerivation() {
-    console.log('\n6. Testing zero bits derivation (edge case)...');
-
     return Promise.all([
       crypto.subtle.generateKey(
         {
@@ -473,7 +413,6 @@ if (typeof crypto === 'undefined' || !crypto.subtle) {
               0,
               'Zero bits should return empty buffer'
             );
-            console.log('✅ Zero bits derivation handled correctly');
           })
           .catch(function (error) {
             // Some implementations might reject 0 bits
@@ -491,8 +430,6 @@ if (typeof crypto === 'undefined' || !crypto.subtle) {
 
   // Test 7: Consistency test - same keys always produce same secret
   function testDerivationConsistency() {
-    console.log('\n7. Testing derivation consistency...');
-
     return Promise.all([
       crypto.subtle.generateKey(
         {
@@ -533,8 +470,6 @@ if (typeof crypto === 'undefined' || !crypto.subtle) {
         return Promise.all(derivePromises);
       })
       .then(function (secrets) {
-        console.log('Derived same secret 5 times');
-
         // All secrets should be identical
         const firstSecret = new Uint8Array(secrets[0]);
         for (let i = 1; i < secrets.length; i++) {
@@ -553,10 +488,6 @@ if (typeof crypto === 'undefined' || !crypto.subtle) {
             );
           }
         }
-
-        console.log(
-          '✅ All 5 derivations produced identical secrets (deterministic)'
-        );
       })
       .catch(function (error) {
         console.error('❌ Derivation consistency test failed:', error.message);
@@ -566,8 +497,6 @@ if (typeof crypto === 'undefined' || !crypto.subtle) {
 
   // Test 8: Invalid public key format
   function testInvalidPublicKey() {
-    console.log('\n8. Testing invalid public key handling...');
-
     return crypto.subtle
       .generateKey(
         {
@@ -602,7 +531,6 @@ if (typeof crypto === 'undefined' || !crypto.subtle) {
               return false;
             })
             .catch(function (error) {
-              console.log('✅ Correctly rejected invalid public key');
               return true;
             });
         });
@@ -618,7 +546,6 @@ if (typeof crypto === 'undefined' || !crypto.subtle) {
           true,
           'All invalid keys should be rejected'
         );
-        console.log('✅ All invalid public keys were correctly rejected');
       })
       .catch(function (error) {
         console.error('❌ Invalid public key test failed:', error.message);
@@ -636,7 +563,7 @@ if (typeof crypto === 'undefined' || !crypto.subtle) {
     .then(testDerivationConsistency)
     .then(testInvalidPublicKey)
     .then(function () {
-      console.log('\n=== All ECDH Comprehensive Tests Passed! ===');
+      // All tests passed
     })
     .catch(function (error) {
       console.error('\n=== ECDH Comprehensive Tests Failed ===');

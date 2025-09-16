@@ -1,14 +1,13 @@
 const assert = require('jsrt:assert');
 
-console.log('=== WebCrypto AES-CTR Tests ===');
+// // console.log('=== WebCrypto AES-CTR Tests ===');
 
 // Check if crypto.subtle is available
 if (typeof crypto === 'undefined' || !crypto.subtle) {
   console.log('❌ SKIP: WebCrypto not available (OpenSSL not found)');
-  console.log('=== Tests Completed (Skipped) ===');
+  // // console.log('=== Tests Completed (Skipped) ===');
 } else {
   // Test 1: Basic AES-CTR key generation and encryption/decryption (128-bit)
-  console.log('Test 1: AES-CTR 128-bit key generation and encrypt/decrypt');
   crypto.subtle
     .generateKey(
       {
@@ -19,7 +18,7 @@ if (typeof crypto === 'undefined' || !crypto.subtle) {
       ['encrypt', 'decrypt']
     )
     .then(function (key) {
-      console.log('✓ Generated AES-CTR 128-bit key');
+      // // console.log('✓ Generated AES-CTR 128-bit key');
 
       // Test data and counter
       const plaintext = new TextEncoder().encode('Hello, AES-CTR World!');
@@ -89,7 +88,7 @@ if (typeof crypto === 'undefined' || !crypto.subtle) {
           ['encrypt', 'decrypt']
         )
         .then(function (key) {
-          console.log('✓ Generated AES-CTR 256-bit key');
+          // // console.log('✓ Generated AES-CTR 256-bit key');
 
           const plaintext = new TextEncoder().encode(
             'AES-CTR with 256-bit key'
@@ -109,7 +108,7 @@ if (typeof crypto === 'undefined' || !crypto.subtle) {
               plaintext
             )
             .then(function (ciphertext) {
-              console.log('✓ Encryption successful with 256-bit key');
+              // // console.log('✓ Encryption successful with 256-bit key');
 
               // Decrypt
               return crypto.subtle.decrypt(
@@ -164,7 +163,7 @@ if (typeof crypto === 'undefined' || !crypto.subtle) {
               plaintext
             )
             .then(function (ciphertext) {
-              console.log('✓ Encryption with 128-bit counter successful');
+              // // console.log('✓ Encryption with 128-bit counter successful');
 
               return crypto.subtle.decrypt(
                 {
@@ -309,13 +308,12 @@ if (typeof crypto === 'undefined' || !crypto.subtle) {
                 '✓ Correctly threw error for invalid counter:',
                 error.name
               );
-              console.log('✅ PASS: AES-CTR error handling works correctly');
             });
         });
     })
     .then(function () {
-      console.log('\n=== AES-CTR Tests Completed Successfully ===');
-      console.log('✅ All AES-CTR functionality implemented correctly');
+      // console.log('\n=== AES-CTR Tests Completed Successfully ===');
+      // Success case - no output
       console.log('• 128-bit and 256-bit keys supported');
       console.log('• Counter-based encryption/decryption works');
       console.log('• Large data processing works');

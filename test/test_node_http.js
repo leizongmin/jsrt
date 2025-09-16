@@ -1,11 +1,8 @@
 const assert = require('jsrt:assert');
 
-console.log('=== Node.js HTTP Module Tests ===');
-
 // Test module loading
 const http = require('node:http');
 assert.ok(http, 'node:http module should load');
-console.log('✓ Module loads successfully');
 
 // Test that required functions exist
 assert.ok(
@@ -22,14 +19,12 @@ assert.ok(
   typeof http.IncomingMessage === 'function',
   'IncomingMessage should be a constructor'
 );
-console.log('✓ Required functions are available');
 
 // Test HTTP constants
 assert.ok(Array.isArray(http.METHODS), 'METHODS should be an array');
 assert.ok(http.METHODS.length > 0, 'METHODS should contain HTTP methods');
 assert.ok(http.METHODS.includes('GET'), 'METHODS should include GET');
 assert.ok(http.METHODS.includes('POST'), 'METHODS should include POST');
-console.log('✓ HTTP constants are available');
 
 assert.ok(
   typeof http.STATUS_CODES === 'object',
@@ -45,7 +40,6 @@ assert.strictEqual(
   'Not Found',
   'STATUS_CODES should include 404 Not Found'
 );
-console.log('✓ Status codes are available');
 
 // Test Server constructor
 const server = new http.Server();
@@ -58,7 +52,6 @@ assert.ok(
   typeof server.close === 'function',
   'Server should have close method'
 );
-console.log('✓ Server constructor and methods work');
 
 // Test createServer factory function
 const server2 = http.createServer();
@@ -67,7 +60,6 @@ assert.ok(
   typeof server2.listen === 'function',
   'Created server should have listen method'
 );
-console.log('✓ createServer factory function works');
 
 // Test createServer with callback
 let callbackCalled = false;
@@ -79,7 +71,6 @@ assert.ok(
   'createServer with callback should return a server instance'
 );
 // Note: callback won't actually be called without real request
-console.log('✓ createServer with callback works');
 
 // Test ServerResponse constructor
 const res = new http.ServerResponse();
@@ -111,7 +102,6 @@ assert.strictEqual(
   false,
   'ServerResponse should have headersSent false by default'
 );
-console.log('✓ ServerResponse constructor and properties work');
 
 // Test IncomingMessage constructor
 const req = new http.IncomingMessage();
@@ -131,7 +121,6 @@ assert.ok(
   typeof req.headers === 'object',
   'IncomingMessage should have headers object'
 );
-console.log('✓ IncomingMessage constructor and properties work');
 
 // Test ServerResponse methods
 res.writeHead(404, 'Not Found', { 'Content-Type': 'text/plain' });
@@ -142,7 +131,6 @@ assert.ok(true, 'write should work without errors');
 
 res.end('World!');
 assert.ok(true, 'end should work without errors');
-console.log('✓ ServerResponse methods work');
 
 // Test request function
 const clientReq = http.request('http://example.com/test');
@@ -152,11 +140,8 @@ assert.strictEqual(
   'http://example.com/test',
   'request should set URL properly'
 );
-console.log('✓ HTTP request function works');
 
 // Clean up test objects
 server.close();
 server2.close();
 server3.close();
-
-console.log('\n=== All Node.js HTTP module tests passed! ===');

@@ -1,6 +1,6 @@
 const assert = require('jsrt:assert');
 
-console.log('=== Enhanced HTTPS SSL/TLS and Connection Pooling Test ===');
+// console.log('=== Enhanced HTTPS SSL/TLS and Connection Pooling Test ===');
 
 // Test HTTPS module with SSL/TLS and connection pooling features
 const https = require('node:https');
@@ -17,7 +17,7 @@ try {
     error.message.includes('certificate'),
     'Should mention certificates'
   );
-  console.log('✓ HTTPS server properly requires SSL certificates');
+  // console.log('✓ HTTPS server properly requires SSL certificates');
 }
 
 // Test 2: HTTPS server with OpenSSL not available (graceful handling)
@@ -26,14 +26,14 @@ try {
     cert: 'dummy-cert-content',
     key: 'dummy-key-content',
   });
-  console.log('✓ HTTPS server creation attempted (OpenSSL handling)');
+  // console.log('✓ HTTPS server creation attempted (OpenSSL handling)');
 } catch (error) {
   if (error.code === 'ENOSSL') {
-    console.log('✓ HTTPS gracefully handles missing OpenSSL');
+    // console.log('✓ HTTPS gracefully handles missing OpenSSL');
   } else if (error.code === 'ENOCERT') {
-    console.log('✓ HTTPS validates certificate format properly');
+    // console.log('✓ HTTPS validates certificate format properly');
   } else {
-    console.log('✓ HTTPS handles SSL context creation errors');
+    // console.log('✓ HTTPS handles SSL context creation errors');
   }
 }
 
@@ -57,7 +57,7 @@ assert.strictEqual(
   'boolean',
   'Agent should have keepAlive'
 );
-console.log('✓ HTTPS Agent created with connection pooling options');
+// console.log('✓ HTTPS Agent created with connection pooling options');
 
 // Test 4: Global agent with enhanced features
 assert.ok(https.globalAgent, 'Global agent should exist');
@@ -70,7 +70,7 @@ assert.ok(
   https.globalAgent.keepAlive,
   'Global agent should support keep-alive'
 );
-console.log('✓ HTTPS global agent has enhanced connection pooling features');
+// console.log('✓ HTTPS global agent has enhanced connection pooling features');
 
 console.log('\n📡 Testing HTTPS request with connection pooling:');
 
@@ -98,7 +98,7 @@ assert.ok(
   typeof request1._pooled === 'boolean',
   'Request should indicate pooling status'
 );
-console.log('✓ HTTPS request supports connection pooling and keep-alive');
+// console.log('✓ HTTPS request supports connection pooling and keep-alive');
 
 // Test 6: HTTPS request methods with enhanced functionality
 assert.ok(
@@ -110,13 +110,13 @@ assert.ok(
   typeof request1.on === 'function',
   'Request should have event handling'
 );
-console.log('✓ HTTPS request has enhanced methods for connection management');
+// console.log('✓ HTTPS request has enhanced methods for connection management');
 
 // Test 7: HTTPS get method with automatic connection handling
 const request2 = https.get('https://example.com/api');
 assert.ok(request2, 'HTTPS get should create request');
 assert.ok(request2.url, 'GET request should have URL');
-console.log('✓ HTTPS get method supports enhanced connection handling');
+// console.log('✓ HTTPS get method supports enhanced connection handling');
 
 console.log('\n🌐 Testing HTTPS module exports and compatibility:');
 
@@ -125,17 +125,17 @@ assert.ok(typeof https.Agent === 'function', 'Should export Agent constructor');
 assert.ok(https.globalAgent, 'Should export enhanced global agent');
 assert.ok(https.METHODS, 'Should inherit HTTP methods');
 assert.ok(https.STATUS_CODES, 'Should inherit HTTP status codes');
-console.log('✓ HTTPS module exports enhanced Agent and compatibility features');
+// console.log('✓ HTTPS module exports enhanced Agent and compatibility features');
 
 console.log(
   '\n✅ All Enhanced HTTPS SSL/TLS and Connection Pooling tests passed!'
 );
-console.log('🎉 HTTPS module ready with:');
-console.log('  ✅ SSL/TLS server support with certificate loading');
-console.log('  ✅ Connection pooling and keep-alive for HTTP agents');
-console.log('  ✅ Enhanced Agent class with configurable pool settings');
-console.log('  ✅ Proper SSL context creation and certificate validation');
-console.log('  ✅ Graceful OpenSSL availability detection');
-console.log('  ✅ Node.js-compatible HTTPS API with enhanced features');
+console.log('📊 HTTPS module ready with:');
+// console.log('  ✅ SSL/TLS server support with certificate loading');
+// console.log('  ✅ Connection pooling and keep-alive for HTTP agents');
+// console.log('  ✅ Enhanced Agent class with configurable pool settings');
+// console.log('  ✅ Proper SSL context creation and certificate validation');
+// console.log('  ✅ Graceful OpenSSL availability detection');
+// console.log('  ✅ Node.js-compatible HTTPS API with enhanced features');
 
-console.log('\n🚀 Phase 5 HTTPS and Advanced Networking: COMPLETED');
+console.log('\n📊 Phase 5 HTTPS and Advanced Networking: COMPLETED');

@@ -1,9 +1,8 @@
 // Test CommonJS require
 const assert = require('jsrt:assert');
-console.log('=== CommonJS Module Tests ===');
+// console.log('=== CommonJS Module Tests ===');
 
 // Test 1: Basic require
-console.log('Test 1: Basic require');
 const { greet, data } = require('./test/commonjs_module.js');
 const greeting = greet('World');
 assert.strictEqual(typeof greet, 'function', 'greet should be a function');
@@ -30,4 +29,4 @@ assert.strictEqual(typeof mod2.data, 'object', 'mod2.data should be an object');
 console.log('mod2.greet("Again"):', greeting2);
 console.log('mod2.data:', mod2.data);
 
-console.log('\n=== All CommonJS tests completed ===');
+// console.log('\n=== All CommonJS tests completed ===');

@@ -270,9 +270,17 @@ static JSValue JSRT_EventTargetAddEventListener(JSContext* ctx, JSValueConst thi
     }
   }
 
-  // Add to beginning of list
-  listener->next = target->listeners;
-  target->listeners = listener;
+  // Add to end of list to maintain order (FIFO)
+  listener->next = NULL;
+  if (target->listeners == NULL) {
+    target->listeners = listener;
+  } else {
+    JSRT_EventListener* current = target->listeners;
+    while (current->next != NULL) {
+      current = current->next;
+    }
+    current->next = listener;
+  }
 
   JS_FreeCString(ctx, type);
   return JS_UNDEFINED;
@@ -359,8 +367,29 @@ static JSValue JSRT_EventTargetDispatchEvent(JSContext* ctx, JSValueConst this_v
         toRemove = listener;
       }
 
-      // Check if stopImmediatePropagation was called
+      // Check if stopImmediatePropagation was called - must check immediately after calling listener
       if (event->stopImmediatePropagationFlag) {
+        // Remove once listener if needed before breaking
+        if (toRemove) {
+          JSRT_EventListener* prev = NULL;
+          JSRT_EventListener* current = target->listeners;
+
+          while (current) {
+            if (current == toRemove) {
+              if (prev) {
+                prev->next = current->next;
+              } else {
+                target->listeners = current->next;
+              }
+              free(current->type);
+              JS_FreeValue(ctx, current->callback);
+              free(current);
+              break;
+            }
+            prev = current;
+            current = current->next;
+          }
+        }
         break;
       }
     }

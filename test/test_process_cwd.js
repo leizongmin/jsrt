@@ -53,7 +53,7 @@ try {
     e instanceof TypeError,
     'Should throw TypeError for missing argument'
   );
-  console.log('✓ Correctly throws error for missing argument');
+  // console.log('✓ Correctly throws error for missing argument');
 }
 
 // Test chdir with invalid directory
@@ -70,9 +70,9 @@ try {
 // Ensure we're back to original directory
 try {
   process.chdir(originalCwd);
-  console.log('✓ Successfully restored original working directory');
+  // console.log('✓ Successfully restored original working directory');
 } catch (e) {
   console.log('Warning: Could not restore original directory:', e.message);
 }
 
-console.log('=== process.cwd() and process.chdir() tests completed ===');
+// console.log('=== process.cwd() and process.chdir() tests completed ===');

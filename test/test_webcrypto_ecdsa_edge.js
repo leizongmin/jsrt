@@ -4,14 +4,9 @@ const assert = require('jsrt:assert');
 // Check if crypto is available (skip if OpenSSL not found)
 if (typeof crypto === 'undefined' || !crypto.subtle) {
   console.log('❌ SKIP: WebCrypto not available (OpenSSL not found)');
-  console.log('=== ECDSA Edge Case Tests Completed (Skipped) ===');
 } else {
-  console.log('=== WebCrypto ECDSA Edge Cases and Comprehensive Tests ===');
-
   // Test 1: Invalid curve names should fail
   function testInvalidCurveNames() {
-    console.log('\n1. Testing invalid curve names...');
-
     const invalidCurves = [
       'P-192', // Not supported
       'P-224', // Not supported
@@ -42,7 +37,6 @@ if (typeof crypto === 'undefined' || !crypto.subtle) {
           if (error.message && error.message.includes('Expected error')) {
             throw error;
           }
-          console.log('✅ Correctly rejected invalid curve:', curve);
         });
 
       testPromises.push(promise);
@@ -53,8 +47,6 @@ if (typeof crypto === 'undefined' || !crypto.subtle) {
 
   // Test 2: Empty data signing/verification
   function testEmptyData() {
-    console.log('\n2. Testing empty data signing/verification...');
-
     return crypto.subtle
       .generateKey(
         {
@@ -77,11 +69,6 @@ if (typeof crypto === 'undefined' || !crypto.subtle) {
             emptyData
           )
           .then(function (signature) {
-            console.log(
-              '✅ Empty data signed successfully, signature length:',
-              signature.byteLength
-            );
-
             return crypto.subtle.verify(
               {
                 name: 'ECDSA',
@@ -98,7 +85,6 @@ if (typeof crypto === 'undefined' || !crypto.subtle) {
               true,
               'Empty data signature should be valid'
             );
-            console.log('✅ Empty data verification successful');
           });
       })
       .catch(function (error) {
@@ -109,8 +95,6 @@ if (typeof crypto === 'undefined' || !crypto.subtle) {
 
   // Test 3: Large data signing/verification
   function testLargeData() {
-    console.log('\n3. Testing large data signing/verification...');
-
     // Create 1MB of random data
     const largeData = new Uint8Array(1024 * 1024);
     for (let i = 0; i < largeData.length; i++) {
@@ -127,8 +111,6 @@ if (typeof crypto === 'undefined' || !crypto.subtle) {
         ['sign', 'verify']
       )
       .then(function (keyPair) {
-        console.log('Generated P-521 key pair for large data test');
-
         return crypto.subtle
           .sign(
             {
@@ -139,11 +121,6 @@ if (typeof crypto === 'undefined' || !crypto.subtle) {
             largeData
           )
           .then(function (signature) {
-            console.log(
-              '✅ Large data (1MB) signed successfully, signature length:',
-              signature.byteLength
-            );
-
             return crypto.subtle.verify(
               {
                 name: 'ECDSA',
@@ -160,7 +137,6 @@ if (typeof crypto === 'undefined' || !crypto.subtle) {
               true,
               'Large data signature should be valid'
             );
-            console.log('✅ Large data verification successful');
           });
       })
       .catch(function (error) {
@@ -171,8 +147,6 @@ if (typeof crypto === 'undefined' || !crypto.subtle) {
 
   // Test 4: Wrong key usage should fail
   function testWrongKeyUsage() {
-    console.log('\n4. Testing wrong key usage...');
-
     // Generate key with only "sign" usage
     return crypto.subtle
       .generateKey(
@@ -184,8 +158,6 @@ if (typeof crypto === 'undefined' || !crypto.subtle) {
         ['sign'] // Only sign, not verify
       )
       .then(function (keyPair) {
-        console.log('Generated key pair with only "sign" usage');
-
         const data = new TextEncoder().encode('Test data');
 
         // Sign should work
@@ -199,8 +171,6 @@ if (typeof crypto === 'undefined' || !crypto.subtle) {
             data
           )
           .then(function (signature) {
-            console.log('✅ Signing with "sign" usage key works');
-
             // Try to verify with public key that doesn't have "verify" usage
             // This test might pass since public keys typically allow verify
             // but we're testing the API behavior
@@ -215,8 +185,6 @@ if (typeof crypto === 'undefined' || !crypto.subtle) {
 
   // Test 5: Cross-curve signature verification (should fail)
   function testCrossCurveVerification() {
-    console.log('\n5. Testing cross-curve signature verification...');
-
     // Generate P-256 key pair
     const p256Promise = crypto.subtle.generateKey(
       {
@@ -271,7 +239,6 @@ if (typeof crypto === 'undefined' || !crypto.subtle) {
               false,
               'Cross-curve verification should fail'
             );
-            console.log('✅ Cross-curve verification correctly failed');
           });
       })
       .catch(function (error) {
@@ -282,8 +249,6 @@ if (typeof crypto === 'undefined' || !crypto.subtle) {
 
   // Test 6: Invalid signature format
   function testInvalidSignatureFormat() {
-    console.log('\n6. Testing invalid signature format...');
-
     return crypto.subtle
       .generateKey(
         {
@@ -313,7 +278,6 @@ if (typeof crypto === 'undefined' || !crypto.subtle) {
               false,
               'Empty signature should not verify'
             );
-            console.log('   Empty signature returned false (correct)');
 
             // Test with too short signature
             return crypto.subtle.verify(
@@ -332,7 +296,6 @@ if (typeof crypto === 'undefined' || !crypto.subtle) {
               false,
               'Short signature should not verify'
             );
-            console.log('   Short signature returned false (correct)');
 
             // Test with wrong size signature
             return crypto.subtle.verify(
@@ -351,8 +314,6 @@ if (typeof crypto === 'undefined' || !crypto.subtle) {
               false,
               'Wrong size signature should not verify'
             );
-            console.log('   Wrong size signature returned false (correct)');
-            console.log('✅ All invalid signatures handled correctly');
           })
           .catch(function (error) {
             // If any verification throws an error instead of returning false, that's also acceptable
@@ -360,9 +321,6 @@ if (typeof crypto === 'undefined' || !crypto.subtle) {
               console.log(
                 '   Invalid signature threw error (acceptable):',
                 error.message
-              );
-              console.log(
-                '✅ Invalid signatures handled correctly (via errors)'
               );
             } else {
               throw error;
@@ -380,8 +338,6 @@ if (typeof crypto === 'undefined' || !crypto.subtle) {
 
   // Test 7: Multiple signatures of same data
   function testMultipleSignatures() {
-    console.log('\n7. Testing multiple signatures of same data...');
-
     return crypto.subtle
       .generateKey(
         {
@@ -411,8 +367,6 @@ if (typeof crypto === 'undefined' || !crypto.subtle) {
 
         return Promise.all(signPromises)
           .then(function (signatures) {
-            console.log('Generated 5 signatures for the same data');
-
             // Check that signatures are different (ECDSA includes randomness)
             let allDifferent = true;
             for (let i = 0; i < signatures.length - 1; i++) {
@@ -442,9 +396,6 @@ if (typeof crypto === 'undefined' || !crypto.subtle) {
               true,
               'ECDSA signatures should include randomness'
             );
-            console.log(
-              '✅ All signatures are different (includes randomness)'
-            );
 
             // Verify all signatures
             const verifyPromises = signatures.map(function (signature) {
@@ -469,7 +420,6 @@ if (typeof crypto === 'undefined' || !crypto.subtle) {
                 'Signature ' + index + ' should be valid'
               );
             });
-            console.log('✅ All 5 signatures verified successfully');
           });
       })
       .catch(function (error) {
@@ -480,8 +430,6 @@ if (typeof crypto === 'undefined' || !crypto.subtle) {
 
   // Test 8: Hash algorithm mismatch
   function testHashAlgorithmMismatch() {
-    console.log('\n8. Testing hash algorithm mismatch...');
-
     return crypto.subtle
       .generateKey(
         {
@@ -522,7 +470,6 @@ if (typeof crypto === 'undefined' || !crypto.subtle) {
               false,
               'Hash algorithm mismatch should fail verification'
             );
-            console.log('✅ Hash algorithm mismatch correctly failed');
           });
       })
       .catch(function (error) {
@@ -541,10 +488,7 @@ if (typeof crypto === 'undefined' || !crypto.subtle) {
     .then(testMultipleSignatures)
     .then(testHashAlgorithmMismatch)
     .then(function () {
-      console.log('\n=== All ECDSA Edge Case Tests Passed! ===');
-      console.log(
-        'Note: Invalid signature format test skipped due to implementation variations'
-      );
+      // Test completed successfully
     })
     .catch(function (error) {
       console.error('\n=== ECDSA Edge Case Tests Failed ===');

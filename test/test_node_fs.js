@@ -1,6 +1,6 @@
 const assert = require('jsrt:assert');
 
-console.log('=== Node.js File System Tests ===');
+// // console.log('=== Node.js File System Tests ===');
 
 // Test CommonJS import
 const fs = require('node:fs');
@@ -28,7 +28,7 @@ assert.ok(readFileSync, 'Should have readFileSync via destructuring');
 assert.ok(writeFileSync, 'Should have writeFileSync via destructuring');
 assert.ok(existsSync, 'Should have existsSync via destructuring');
 
-console.log('✓ Module imports work correctly');
+// // console.log('✓ Module imports work correctly');
 
 // Test constants
 assert.ok(fs.constants, 'Should have constants object');
@@ -37,7 +37,7 @@ assert.ok(typeof fs.constants.R_OK === 'number', 'Should have R_OK constant');
 assert.ok(typeof fs.constants.W_OK === 'number', 'Should have W_OK constant');
 assert.ok(typeof fs.constants.X_OK === 'number', 'Should have X_OK constant');
 
-console.log('✓ Constants are available');
+// // console.log('✓ Constants are available');
 
 // Create a test file path using cross-platform temporary directory
 const os = require('node:os');
@@ -61,7 +61,7 @@ try {
 
   // Test writeFileSync
   fs.writeFileSync(testFilePath, testData);
-  console.log('✓ writeFileSync works correctly');
+  // // console.log('✓ writeFileSync works correctly');
 
   // Test existsSync - should exist now
   assert.strictEqual(
@@ -81,7 +81,7 @@ try {
     testData,
     'Read data should match written data when converted to string'
   );
-  console.log('✓ readFileSync works correctly');
+  // // console.log('✓ readFileSync works correctly');
 
   // Test readFileSync with encoding (returns string)
   const readDataString = fs.readFileSync(testFilePath, { encoding: 'utf8' });
@@ -95,7 +95,7 @@ try {
     testData,
     'Read data with encoding should match written data'
   );
-  console.log('✓ readFileSync with encoding works correctly');
+  // // console.log('✓ readFileSync with encoding works correctly');
 
   // Test statSync
   const stats = fs.statSync(testFilePath);
@@ -110,7 +110,7 @@ try {
     testData.length,
     'File size should match data length'
   );
-  console.log('✓ statSync works correctly');
+  // // console.log('✓ statSync works correctly');
 
   // Test mkdir/readdir
   try {
@@ -142,12 +142,12 @@ try {
     true,
     'Test directory should exist after creation'
   );
-  console.log('✓ mkdirSync works correctly');
+  // // console.log('✓ mkdirSync works correctly');
 
   // Test readdirSync on a known directory
   const entries = fs.readdirSync(tmpDir);
   assert.ok(Array.isArray(entries), 'readdirSync should return an array');
-  console.log('✓ readdirSync works correctly');
+  // // console.log('✓ readdirSync works correctly');
 
   // Test unlinkSync
   fs.unlinkSync(testFilePath);
@@ -156,7 +156,7 @@ try {
     false,
     'Test file should not exist after unlinking'
   );
-  console.log('✓ unlinkSync works correctly');
+  // // console.log('✓ unlinkSync works correctly');
 
   // Clean up test directory
   try {
@@ -179,7 +179,7 @@ try {
   assert.ok(error.code, 'Error should have code property');
   assert.ok(error.path, 'Error should have path property');
   assert.ok(error.syscall, 'Error should have syscall property');
-  console.log('✓ Error handling works correctly');
+  // // console.log('✓ Error handling works correctly');
 }
 
 // Test with Buffer integration
@@ -200,10 +200,10 @@ if (Buffer) {
 
     // Clean up
     fs.unlinkSync(testBufferPath);
-    console.log('✓ Buffer integration works correctly');
+    // // console.log('✓ Buffer integration works correctly');
   } catch (error) {
     console.log('⚠️ Buffer integration test skipped:', error.message);
   }
 }
 
-console.log('\n=== All Node.js File System tests passed! ===');
+// console.log('\n=== All Node.js File System tests passed! ===');

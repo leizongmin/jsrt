@@ -12,7 +12,6 @@ if (process.env.PATH || process.env.Path) {
       typeof process.env.Path === 'string',
     'PATH should be a string'
   );
-  console.log('✓ PATH environment variable found');
 } else {
   console.log(
     '⚠️ PATH not found in environment (unusual but not necessarily an error)'
@@ -34,7 +33,6 @@ for (let key in process.env) {
 }
 
 assert.ok(envCount > 0, 'Should have at least one environment variable');
-console.log(`✓ Found ${envCount} environment variables`);
 
 // Test some platform-specific variables that are commonly available
 const commonVars = [
@@ -52,15 +50,10 @@ let foundVars = 0;
 for (const varName of commonVars) {
   if (process.env[varName]) {
     foundVars++;
-    console.log(
-      `✓ Found ${varName} = ${process.env[varName].substring(0, 50)}${process.env[varName].length > 50 ? '...' : ''}`
-    );
   }
 }
 
-if (foundVars > 0) {
-  console.log(`✓ Found ${foundVars} common environment variables`);
-} else {
+if (foundVars === 0) {
   console.log('⚠️ No common environment variables found (unusual)');
 }
 
@@ -75,5 +68,3 @@ assert.strictEqual(
   envCount,
   'Object.keys length should match iteration count'
 );
-
-console.log('=== Tests Completed ===');

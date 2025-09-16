@@ -1,6 +1,6 @@
 const assert = require('jsrt:assert');
 
-console.log('=== Node.js Compatibility Layer Integration Test with Buffer ===');
+// console.log('=== Node.js Compatibility Layer Integration Test with Buffer ===');
 console.log(
   'Testing node:path, node:os, node:util, node:events, and node:buffer modules together...'
 );
@@ -157,22 +157,22 @@ assert.strictEqual(
   'Should have 1 buffer-operation listener'
 );
 
-console.log('\n✅ All integration tests passed!');
-console.log('🎉 Node.js compatibility layer Phase 3 progress complete!');
+// Success case - no output
+console.log('📊 Node.js compatibility layer Phase 3 progress complete!');
 console.log('\nImplemented modules:');
-console.log('  ✅ node:path - Complete path manipulation utilities');
-console.log('  ✅ node:os - Complete operating system utilities');
-console.log('  ✅ node:util - Utility functions and type checking');
-console.log('  ✅ node:events - EventEmitter with complete API');
-console.log('  ✅ node:buffer - Buffer class with core functionality');
+// Success case - no output
+// Success case - no output
+// Success case - no output
+// Success case - no output
+// Success case - no output
 console.log('\nFeatures working:');
-console.log('  ✅ CommonJS require() support');
-console.log('  ✅ ES module import support');
-console.log('  ✅ Cross-platform compatibility');
-console.log('  ✅ Memory management fixes');
-console.log('  ✅ Complete path normalization');
-console.log('  ✅ Relative path calculation');
-console.log('  ✅ Object inspection and type checking');
-console.log('  ✅ Event-driven programming with EventEmitter');
-console.log('  ✅ Binary data manipulation with Buffer');
+// Success case - no output
+// Success case - no output
+// Success case - no output
+// Success case - no output
+// Success case - no output
+// Success case - no output
+// Success case - no output
+// Success case - no output
+// Success case - no output
 console.log('\nReady for Phase 3 completion: node:stream, node:fs');

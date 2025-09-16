@@ -6,14 +6,14 @@ const assert = require('jsrt:assert');
   // Check if crypto is available (skip if OpenSSL not found)
   if (typeof crypto === 'undefined' || !crypto.subtle) {
     console.log('❌ SKIP: WebCrypto not available (OpenSSL not found)');
-    console.log('=== Tests Completed (Skipped) ===');
+    // console.log('=== Tests Completed (Skipped) ===');
     return;
   }
 
-  console.log('=== WebCrypto RSA-PSS Signature/Verification Tests ===');
+  // console.log('=== WebCrypto RSA-PSS Signature/Verification Tests ===');
 
   // RSA-PSS is now implemented and working
-  console.log('\n✅ RSA-PSS is now fully implemented');
+  // Success case - no output
   console.log('Testing RSA-PSS key generation and signing/verification...');
 
   // Test RSA-PSS functionality
@@ -29,7 +29,7 @@ const assert = require('jsrt:assert');
       ['sign', 'verify']
     );
 
-    console.log('✅ RSA-PSS key generation works');
+    // Success case - no output
 
     // Test signing - should now work
     try {
@@ -60,7 +60,7 @@ const assert = require('jsrt:assert');
       );
 
       if (isValid) {
-        console.log('✅ RSA-PSS verification works correctly');
+        // Success case - no output
       } else {
         console.log('❌ RSA-PSS verification failed');
       }
@@ -71,5 +71,5 @@ const assert = require('jsrt:assert');
     console.error('Test error:', error);
   }
 
-  console.log('\n=== RSA-PSS Tests Completed Successfully ===');
+  // console.log('\n=== RSA-PSS Tests Completed Successfully ===');
 })();

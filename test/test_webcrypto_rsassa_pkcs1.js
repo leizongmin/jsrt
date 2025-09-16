@@ -4,7 +4,6 @@ const assert = require('jsrt:assert');
 // Check if crypto is available (skip if OpenSSL not found)
 if (typeof crypto === 'undefined' || !crypto.subtle) {
   console.log('❌ SKIP: WebCrypto not available (OpenSSL not found)');
-  console.log('=== RSASSA-PKCS1-v1_5 Tests Completed (Skipped) ===');
 } else {
   function testRSASSAPKCS1v15KeyGeneration() {
     console.log('Testing RSASSA-PKCS1-v1_5 key generation...');
@@ -21,7 +20,7 @@ if (typeof crypto === 'undefined' || !crypto.subtle) {
         ['sign', 'verify']
       )
       .then(function (keyPair) {
-        console.log('✓ RSASSA-PKCS1-v1_5 key generation successful');
+        // console.log('✓ RSASSA-PKCS1-v1_5 key generation successful');
 
         // Use assert for actual verification
         assert.strictEqual(
@@ -98,11 +97,11 @@ if (typeof crypto === 'undefined' || !crypto.subtle) {
         );
       })
       .then(function (isValid) {
-        console.log('✓ RSASSA-PKCS1-v1_5 verification result:', isValid);
+        // console.log('✓ RSASSA-PKCS1-v1_5 verification result:', isValid);
 
         // Use assert for verification
         assert.strictEqual(isValid, true, 'Signature should be valid');
-        console.log('✓ RSASSA-PKCS1-v1_5 signature/verification test PASSED');
+        // console.log('✓ RSASSA-PKCS1-v1_5 signature/verification test PASSED');
 
         return keyPair;
       })
@@ -131,7 +130,7 @@ if (typeof crypto === 'undefined' || !crypto.subtle) {
         data
       )
       .then(function (signature) {
-        console.log('✓ Original signature created');
+        // console.log('✓ Original signature created');
 
         // Try to verify with tampered data (should fail)
         return crypto.subtle.verify(
@@ -155,7 +154,7 @@ if (typeof crypto === 'undefined' || !crypto.subtle) {
           false,
           'Signature should be invalid for tampered data'
         );
-        console.log('✓ RSASSA-PKCS1-v1_5 invalid signature test PASSED');
+        // console.log('✓ RSASSA-PKCS1-v1_5 invalid signature test PASSED');
       })
       .catch(function (error) {
         console.error(
@@ -214,7 +213,7 @@ if (typeof crypto === 'undefined' || !crypto.subtle) {
                 );
               })
               .then(function (isValid) {
-                console.log('✓', hash, 'signature verification:', isValid);
+                // console.log('✓', hash, 'signature verification:', isValid);
                 assert.strictEqual(
                   isValid,
                   true,
@@ -226,13 +225,13 @@ if (typeof crypto === 'undefined' || !crypto.subtle) {
     });
 
     return promise.then(function () {
-      console.log('✓ All hash algorithms test PASSED');
+      // console.log('✓ All hash algorithms test PASSED');
     });
   }
 
   // Run all tests
   function runTests() {
-    console.log('=== RSASSA-PKCS1-v1_5 WebCrypto Tests ===\n');
+    // // console.log('=== RSASSA-PKCS1-v1_5 WebCrypto Tests ===\n');
 
     testRSASSAPKCS1v15KeyGeneration()
       .then(function (keyPair) {
@@ -249,7 +248,7 @@ if (typeof crypto === 'undefined' || !crypto.subtle) {
         return testRSASSAPKCS1v15WithDifferentHashes(keyPair);
       })
       .then(function () {
-        console.log('\n=== All RSASSA-PKCS1-v1_5 tests PASSED! ===');
+        // console.log('\n=== All RSASSA-PKCS1-v1_5 tests PASSED! ===');
       })
       .catch(function (error) {
         console.error('\n=== RSASSA-PKCS1-v1_5 tests FAILED ===');

@@ -1,7 +1,7 @@
 // Comprehensive JWK format test suite
 const assert = require('jsrt:assert');
 
-console.log('=== Comprehensive JWK Format Test Suite ===');
+// console.log('=== Comprehensive JWK Format Test Suite ===');
 
 async function testJWKComprehensive() {
   let passed = 0;
@@ -11,7 +11,6 @@ async function testJWKComprehensive() {
 
   // Test 1: RSA public key JWK import (RFC 7517 example)
   total++;
-  console.log('Test 1: RSA public key JWK import');
   try {
     const rsaPublicJwk = {
       kty: 'RSA',
@@ -43,7 +42,6 @@ async function testJWKComprehensive() {
       'RSASSA-PKCS1-v1_5',
       'Algorithm should match'
     );
-    console.log('✅ PASS: RSA public key JWK import');
     passed++;
   } catch (error) {
     console.log('❌ FAIL: RSA public key JWK import - ' + error.message);
@@ -52,7 +50,6 @@ async function testJWKComprehensive() {
 
   // Test 2: RSA key with RSA-OAEP algorithm
   total++;
-  console.log('Test 2: RSA JWK with RSA-OAEP algorithm');
   try {
     const rsaOaepJwk = {
       kty: 'RSA',
@@ -76,7 +73,6 @@ async function testJWKComprehensive() {
       'RSA-OAEP',
       'Algorithm should be RSA-OAEP'
     );
-    console.log('✅ PASS: RSA JWK with RSA-OAEP algorithm');
     passed++;
   } catch (error) {
     console.log('❌ FAIL: RSA JWK with RSA-OAEP algorithm - ' + error.message);
@@ -85,7 +81,6 @@ async function testJWKComprehensive() {
 
   // Test 3: Invalid JWK - missing kty
   total++;
-  console.log('Test 3: Invalid JWK - missing kty');
   try {
     const invalidJwk = {
       n: 'invalid',
@@ -107,7 +102,6 @@ async function testJWKComprehensive() {
         expectedError.message.includes('kty'),
         'Error should mention kty parameter'
       );
-      console.log('✅ PASS: Correctly rejected JWK missing kty');
       passed++;
     }
   } catch (error) {
@@ -117,7 +111,6 @@ async function testJWKComprehensive() {
 
   // Test 4: Invalid JWK - wrong algorithm
   total++;
-  console.log('Test 4: Algorithm mismatch error');
   try {
     const rsaJwk = {
       kty: 'RSA',
@@ -140,7 +133,6 @@ async function testJWKComprehensive() {
         expectedError.message.includes('Algorithm mismatch'),
         'Error should mention algorithm mismatch'
       );
-      console.log('✅ PASS: Correctly rejected algorithm mismatch');
       passed++;
     }
   } catch (error) {
@@ -150,7 +142,6 @@ async function testJWKComprehensive() {
 
   // Test 5: ECDSA JWK import (P-256)
   total++;
-  console.log('Test 5: ECDSA P-256 JWK import');
   try {
     const ecJwk = {
       kty: 'EC',
@@ -183,7 +174,6 @@ async function testJWKComprehensive() {
       'P-256',
       'Named curve should be P-256'
     );
-    console.log('✅ PASS: ECDSA P-256 JWK import');
     passed++;
   } catch (error) {
     console.log('❌ FAIL: ECDSA P-256 JWK import - ' + error.message);
@@ -192,7 +182,6 @@ async function testJWKComprehensive() {
 
   // Test 6: Symmetric (oct) JWK import for HMAC
   total++;
-  console.log('Test 6: Symmetric HMAC JWK import');
   try {
     const octJwk = {
       kty: 'oct',
@@ -218,7 +207,6 @@ async function testJWKComprehensive() {
       'HMAC',
       'Algorithm should be HMAC'
     );
-    console.log('✅ PASS: Symmetric HMAC JWK import');
     passed++;
   } catch (error) {
     console.log('❌ FAIL: Symmetric HMAC JWK import - ' + error.message);
@@ -227,7 +215,6 @@ async function testJWKComprehensive() {
 
   // Test 7: AES-256 symmetric key JWK import
   total++;
-  console.log('Test 7: AES-256 JWK import');
   try {
     const aesJwk = {
       kty: 'oct',
@@ -253,7 +240,6 @@ async function testJWKComprehensive() {
       'AES-GCM',
       'Algorithm should be AES-GCM'
     );
-    console.log('✅ PASS: AES-256 JWK import');
     passed++;
   } catch (error) {
     console.log('❌ FAIL: AES-256 JWK import - ' + error.message);
@@ -262,7 +248,6 @@ async function testJWKComprehensive() {
 
   // Test 8: ECDSA P-384 JWK import
   total++;
-  console.log('Test 8: ECDSA P-384 JWK import');
   try {
     const ecP384Jwk = {
       kty: 'EC',
@@ -285,7 +270,6 @@ async function testJWKComprehensive() {
       'P-384',
       'Named curve should be P-384'
     );
-    console.log('✅ PASS: ECDSA P-384 JWK import');
     passed++;
   } catch (error) {
     console.log('❌ FAIL: ECDSA P-384 JWK import - ' + error.message);
@@ -294,7 +278,6 @@ async function testJWKComprehensive() {
 
   // Test 9: Invalid EC curve
   total++;
-  console.log('Test 9: Invalid EC curve in JWK');
   try {
     const invalidCurveJwk = {
       kty: 'EC',
@@ -318,7 +301,6 @@ async function testJWKComprehensive() {
         expectedError.message.includes('Unsupported curve'),
         'Error should mention unsupported curve'
       );
-      console.log('✅ PASS: Correctly rejected unsupported curve');
       passed++;
     }
   } catch (error) {
@@ -328,7 +310,6 @@ async function testJWKComprehensive() {
 
   // Test 10: HMAC key too short
   total++;
-  console.log('Test 10: HMAC key too short');
   try {
     const shortHmacJwk = {
       kty: 'oct',
@@ -350,7 +331,6 @@ async function testJWKComprehensive() {
         expectedError.message.includes('too short'),
         'Error should mention key too short'
       );
-      console.log('✅ PASS: Correctly rejected short HMAC key');
       passed++;
     }
   } catch (error) {
@@ -360,7 +340,6 @@ async function testJWKComprehensive() {
 
   // Test 11: Invalid base64url encoding
   total++;
-  console.log('Test 11: Invalid base64url encoding in JWK');
   try {
     const invalidEncodingJwk = {
       kty: 'RSA',
@@ -383,7 +362,6 @@ async function testJWKComprehensive() {
         expectedError.message.includes('base64url'),
         'Error should mention base64url encoding'
       );
-      console.log('✅ PASS: Correctly rejected invalid base64url');
       passed++;
     }
   } catch (error) {
@@ -391,12 +369,12 @@ async function testJWKComprehensive() {
     failed++;
   }
 
-  console.log('\n=== JWK Comprehensive Test Summary ===');
+  // console.log('\n=== JWK Comprehensive Test Summary ===');
   console.log('Total Tests:', total);
   console.log('Passed:', passed);
   console.log('Failed:', failed);
   console.log('Skipped:', skipped);
-  console.log('=== Tests Completed ===');
+  // console.log('=== Tests Completed ===');
 
   return { total, passed, failed, skipped };
 }
@@ -404,7 +382,7 @@ async function testJWKComprehensive() {
 // Check if crypto.subtle is available
 if (typeof crypto === 'undefined' || !crypto.subtle) {
   console.log('❌ SKIP: WebCrypto not available (OpenSSL not found)');
-  console.log('=== Tests Completed (Skipped) ===');
+  // console.log('=== Tests Completed (Skipped) ===');
 } else {
   testJWKComprehensive().catch(console.error);
 }

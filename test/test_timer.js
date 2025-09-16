@@ -1,73 +1,83 @@
-// Cross-platform compatible timer tests
 const assert = require('jsrt:assert');
-console.log('Starting timer tests...');
 
-// Test 1: Basic setTimeout functionality
-console.log('Test 1: setTimeout basic test');
-setTimeout(() => {
-  console.log('setTimeout callback executed');
-  assert(true, 'setTimeout callback should execute');
-}, 0);
+// Test setTimeout with arguments
+let timeoutCalled = false;
+let timeoutArgs = [];
 
-// Test 2: setTimeout with arguments
-console.log('Test 2: setTimeout with arguments');
 setTimeout(
   (msg, num) => {
-    console.log('setTimeout with args:', msg, num);
-    assert.strictEqual(msg, 'hello', 'First argument should be "hello"');
-    assert.strictEqual(num, 123, 'Second argument should be 123');
+    timeoutCalled = true;
+    timeoutArgs = [msg, num];
+
+    if (msg !== 'hello') {
+      console.error('❌ FAIL: setTimeout arg1 expected "hello", got', msg);
+    }
+
+    if (num !== 123) {
+      console.error('❌ FAIL: setTimeout arg2 expected 123, got', num);
+    }
   },
-  0,
+  10,
   'hello',
   123
 );
 
-// Test 3: Timer return value validation
-console.log('Test 3: Timer return value');
+// Test setTimeout return value and clearTimeout
 const timer1 = setTimeout(() => {
-  console.log('timer1 executed');
-}, 0);
-console.log('Timer type:', typeof timer1);
-console.log('Timer has id:', 'id' in timer1);
-assert.strictEqual(typeof timer1, 'object', 'Timer should return an object');
-assert.strictEqual('id' in timer1, true, 'Timer should have an id property');
-
-// Test 4: Clear timeout functionality
-console.log('Test 4: clearTimeout test');
-const timer2 = setTimeout(() => {
-  console.log('This should NOT appear - timer was cleared');
-}, 100);
-clearTimeout(timer2);
-
-// Test 5: setInterval basic test (limited iterations)
-console.log('Test 5: setInterval basic test');
-let count = 0;
-const interval1 = setInterval(() => {
-  count++;
-  console.log('setInterval iteration:', count);
-  assert(count > 0, 'Count should be greater than 0');
-  assert(count <= 2, 'Count should not exceed 2');
-  if (count >= 2) {
-    clearInterval(interval1);
-    console.log('setInterval cleared');
-    assert.strictEqual(count, 2, 'Final count should be exactly 2');
-  }
+  console.error('❌ FAIL: This should NOT appear - timer was cleared');
 }, 50);
 
-// Test 6: Clear functions with invalid arguments (should not crash)
-console.log('Test 6: Invalid clear calls');
-try {
-  clearTimeout();
-  clearTimeout(null);
-  clearInterval();
-  clearInterval(null);
-  assert(true, 'Clear functions should not crash with invalid arguments');
-} catch (e) {
-  assert(false, 'Clear functions should not throw errors: ' + e.message);
+if (typeof timer1 !== 'object') {
+  console.error('❌ FAIL: Timer should return an object, got', typeof timer1);
 }
 
-// Final completion message
+if (!timer1 || typeof timer1.id !== 'number') {
+  console.error('❌ FAIL: Timer should have an id property');
+}
+
+clearTimeout(timer1);
+
+// Test setInterval and clearInterval
+let count = 0;
+const timer2 = setInterval(() => {
+  count++;
+  if (count > 2) {
+    console.error('❌ FAIL: setInterval count exceeded limit:', count);
+    clearInterval(timer2);
+  }
+  if (count === 2) {
+    clearInterval(timer2);
+    setTimeout(() => {
+      if (count !== 2) {
+        console.error('❌ FAIL: Final count should be 2, got', count);
+      }
+    }, 100);
+  }
+}, 20);
+
+// Test clearTimeout/clearInterval with invalid arguments
+try {
+  clearTimeout(null);
+  clearTimeout(undefined);
+  clearTimeout({});
+  clearInterval(null);
+  clearInterval(undefined);
+  clearInterval({});
+} catch (e) {
+  console.error('❌ FAIL: Clear functions should not throw errors:', e.message);
+}
+
+// Wait for all timers to complete
 setTimeout(() => {
-  console.log('Timer tests completed successfully');
-  assert(true, 'Timer tests completed without errors');
-}, 150);
+  assert.strictEqual(timeoutCalled, true, 'setTimeout should have been called');
+  assert.deepStrictEqual(
+    timeoutArgs,
+    ['hello', 123],
+    'setTimeout should receive correct arguments'
+  );
+  assert.strictEqual(
+    count,
+    2,
+    'setInterval should have been called exactly 2 times'
+  );
+}, 200);

@@ -17,7 +17,7 @@ console.log(
 );
 
 // Test querystring ES module import
-console.log('\n--- Testing node:querystring ES module import ---');
+// console.log('\n--- Testing node:querystring ES module import ---');
 assert.ok(querystring, 'querystring should import');
 assert.strictEqual(
   typeof querystring.parse,
@@ -35,11 +35,11 @@ assert.strictEqual(testData.a, '1', 'Parse should work correctly');
 assert.strictEqual(testData.b, '2', 'Parse should work correctly');
 assert.strictEqual(testData.c, 'hello world', 'URL decoding should work');
 
-console.log('✓ ES module import for node:querystring works correctly');
-console.log('✓ Parsed data:', testData);
+// console.log('✓ ES module import for node:querystring works correctly');
+// console.log('✓ Parsed data:', testData);
 
 // Test process ES module import
-console.log('\n--- Testing node:process ES module import ---');
+// console.log('\n--- Testing node:process ES module import ---');
 assert.ok(process, 'process should import');
 assert.strictEqual(
   typeof process.hrtime,
@@ -61,11 +61,9 @@ const hrStart = process.hrtime();
 assert.ok(Array.isArray(hrStart), 'hrtime should return array');
 assert.strictEqual(hrStart.length, 2, 'hrtime should return array of length 2');
 
-console.log('✓ ES module import for node:process works correctly');
-console.log('✓ Process PID:', process.pid);
-console.log('✓ High-resolution time:', hrStart);
+// console.log('✓ ES module import for node:process works correctly');
+// console.log('✓ Process PID:', process.pid);
+// console.log('✓ High-resolution time:', hrStart);
 
-console.log('\n✅ All ES module import tests passed!');
-console.log(
-  '🎉 Enhanced Node.js compatibility with ES modules working perfectly!'
-);
+// Success case - no output needed
+// Enhanced Node.js compatibility with ES modules working perfectly

@@ -1,6 +1,6 @@
 const assert = require('jsrt:assert');
 
-console.log('=== HTTP Server Integration Tests ===');
+// === HTTP Server Integration Tests ===
 
 let http;
 let net;
@@ -9,12 +9,12 @@ try {
   net = require('node:net');
 } catch (e) {
   console.log('❌ SKIP: Required modules not available');
-  console.log('=== Tests Completed (Skipped) ===');
+  // console.log('=== Tests Completed (Skipped) ===');
   process.exit(0);
 }
 
 // Test 1: HTTP and Net Module Integration
-console.log('\n--- Test 1: Module Integration ---');
+// --- Test 1: Module Integration ---
 try {
   assert.ok(http, 'HTTP module should be loaded');
   assert.ok(net, 'Net module should be loaded');
@@ -26,13 +26,13 @@ try {
     typeof net.createConnection === 'function',
     'Net createConnection should be available'
   );
-  console.log('✓ Module integration test passed');
+  // ✓ Module integration test passed
 } catch (err) {
   console.log('⚠ Module integration test failed:', err.message);
 }
 
 // Test 2: HTTP Server Object Validation
-console.log('\n--- Test 2: HTTP Server Object ---');
+// --- Test 2: HTTP Server Object ---
 try {
   // Test server creation without actually starting it
   const server = http.createServer((req, res) => {
@@ -52,13 +52,13 @@ try {
     'Server should have close method'
   );
 
-  console.log('✓ HTTP server object validation passed');
+  // ✓ HTTP server object validation passed
 } catch (err) {
   console.log('⚠ HTTP server object test failed:', err.message);
 }
 
 // Test 3: HTTP Request and Response Object Creation
-console.log('\n--- Test 3: Request/Response Objects ---');
+// --- Test 3: Request/Response Objects ---
 try {
   const server = http.createServer((req, res) => {
     // Validate request properties exist
@@ -85,13 +85,13 @@ try {
     res.end('OK');
   });
 
-  console.log('✓ Request/Response object validation passed');
+  // ✓ Request/Response object validation passed
 } catch (err) {
   console.log('⚠ Request/Response object test failed:', err.message);
 }
 
 // Test 4: HTTP Constants and Methods
-console.log('\n--- Test 4: HTTP Constants ---');
+// --- Test 4: HTTP Constants ---
 try {
   // Test HTTP methods
   const expectedMethods = ['GET', 'POST', 'PUT', 'DELETE'];
@@ -115,13 +115,13 @@ try {
     'Status 500 should be Internal Server Error'
   );
 
-  console.log('✓ HTTP constants validation passed');
+  // ✓ HTTP constants validation passed
 } catch (err) {
   console.log('⚠ HTTP constants test failed:', err.message);
 }
 
 // Test 5: HTTP Agent Integration
-console.log('\n--- Test 5: HTTP Agent ---');
+// --- Test 5: HTTP Agent ---
 try {
   assert.ok(typeof http.Agent === 'function', 'Agent constructor should exist');
   assert.ok(typeof http.globalAgent === 'object', 'Global agent should exist');
@@ -132,13 +132,13 @@ try {
     'Agent should have maxSockets'
   );
 
-  console.log('✓ HTTP Agent integration passed');
+  // ✓ HTTP Agent integration passed
 } catch (err) {
   console.log('⚠ HTTP Agent test failed:', err.message);
 }
 
 // Test 6: HTTP Request Object Creation
-console.log('\n--- Test 6: HTTP Request Creation ---');
+// --- Test 6: HTTP Request Creation ---
 try {
   const options = {
     hostname: 'localhost',
@@ -155,13 +155,13 @@ try {
   );
   assert.ok(typeof req.end === 'function', 'Request should have end method');
 
-  console.log('✓ HTTP request creation passed');
+  // ✓ HTTP request creation passed
 } catch (err) {
   console.log('⚠ HTTP request creation test failed:', err.message);
 }
 
 // Test 7: HTTP Response Headers
-console.log('\n--- Test 7: Response Headers ---');
+// --- Test 7: Response Headers ---
 try {
   const response = new http.ServerResponse();
 
@@ -169,13 +169,13 @@ try {
   response.setHeader('Content-Type', 'application/json');
   response.setHeader('X-Custom-Header', 'test-value');
 
-  console.log('✓ Response headers test passed');
+  // ✓ Response headers test passed
 } catch (err) {
   console.log('⚠ Response headers test failed:', err.message);
 }
 
 // Test 8: Multiple Server Creation
-console.log('\n--- Test 8: Multiple Server Creation ---');
+// --- Test 8: Multiple Server Creation ---
 try {
   const servers = [];
 
@@ -192,13 +192,13 @@ try {
     assert.ok(server, `Server ${i} should exist`);
   });
 
-  console.log('✓ Multiple server creation passed');
+  // ✓ Multiple server creation passed
 } catch (err) {
   console.log('⚠ Multiple server creation test failed:', err.message);
 }
 
 // Test 9: HTTP Module Completeness
-console.log('\n--- Test 9: Module Completeness ---');
+// --- Test 9: Module Completeness ---
 try {
   const expectedExports = [
     'createServer',
@@ -219,13 +219,13 @@ try {
     );
   });
 
-  console.log('✓ Module completeness test passed');
+  // ✓ Module completeness test passed
 } catch (err) {
   console.log('⚠ Module completeness test failed:', err.message);
 }
 
 // Test 10: Error Handling
-console.log('\n--- Test 10: Error Handling ---');
+// --- Test 10: Error Handling ---
 try {
   const server = http.createServer((req, res) => {
     res.statusCode = 500;
@@ -233,21 +233,21 @@ try {
   });
 
   // Test that server can handle error status codes
-  console.log('✓ Error handling test passed');
+  // ✓ Error handling test passed
 } catch (err) {
   console.log('⚠ Error handling test failed:', err.message);
 }
 
-console.log('\n--- Integration Test Summary ---');
-console.log('✓ Module integration completed');
-console.log('✓ HTTP server object validation completed');
-console.log('✓ Request/Response objects validation completed');
-console.log('✓ HTTP constants validation completed');
-console.log('✓ HTTP Agent integration completed');
-console.log('✓ HTTP request creation completed');
-console.log('✓ Response headers testing completed');
-console.log('✓ Multiple server creation completed');
-console.log('✓ Module completeness testing completed');
-console.log('✓ Error handling testing completed');
+// --- Integration Test Summary ---
+// ✓ Module integration completed
+// ✓ HTTP server object validation completed
+// ✓ Request/Response objects validation completed
+// ✓ HTTP constants validation completed
+// ✓ HTTP Agent integration completed
+// ✓ HTTP request creation completed
+// ✓ Response headers testing completed
+// ✓ Multiple server creation completed
+// ✓ Module completeness testing completed
+// ✓ Error handling testing completed
 
-console.log('\n=== HTTP Server Integration Tests Completed ===');
+// === HTTP Server Integration Tests Completed ===

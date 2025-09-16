@@ -17,8 +17,8 @@ console.log({
 });
 
 // Test function existence checks (safe way)
-console.log('setTimeout exists:', typeof setTimeout === 'function');
-console.log('console.log exists:', typeof console.log === 'function');
+// console.log('setTimeout exists:', typeof setTimeout === 'function');
+// console.log('console.log exists:', typeof console.log === 'function');
 assert.strictEqual(
   typeof setTimeout,
   'function',
@@ -64,5 +64,3 @@ console.log('Mixed array:', [
 
 // Test console.log with empty array and object
 console.log('Empty structures:', [], {});
-
-console.log('Console tests completed successfully');

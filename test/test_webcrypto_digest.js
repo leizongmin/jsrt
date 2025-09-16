@@ -1,28 +1,19 @@
 // WebCrypto SubtleCrypto.digest tests
 const assert = require('jsrt:assert');
-console.log('=== Starting WebCrypto SubtleCrypto Digest Tests ===');
-
 // Test 1: crypto.subtle object existence
-console.log('Test 1: crypto.subtle object existence');
 if (typeof crypto === 'undefined') {
   console.log('❌ SKIP: crypto object not available (OpenSSL not found)');
-  console.log('=== WebCrypto Digest Tests Completed (Skipped) ===');
 } else if (typeof crypto.subtle === 'undefined') {
   console.log('❌ FAIL: crypto.subtle not available');
-  console.log('=== WebCrypto Digest Tests Completed (Failed) ===');
+  // console.log('=== WebCrypto Digest Tests Completed (Failed) ===');
 } else {
-  console.log('✅ PASS: crypto.subtle is available');
-
   // Test 2: digest function existence
-  console.log('Test 2: crypto.subtle.digest function existence');
   if (typeof crypto.subtle.digest === 'function') {
-    console.log('✅ PASS: crypto.subtle.digest is a function');
   } else {
     console.log('❌ FAIL: crypto.subtle.digest should be a function');
   }
 
   // Test 3: Basic SHA-256 digest test
-  console.log('Test 3: Basic SHA-256 digest test');
   try {
     const data = new TextEncoder().encode('hello');
     console.log('Input data:', Array.from(data));
@@ -31,8 +22,6 @@ if (typeof crypto === 'undefined') {
     console.log('Digest result type:', typeof result);
 
     if (result && typeof result.then === 'function') {
-      console.log('✅ PASS: Returns promise-like object');
-
       result
         .then((hash) => {
           console.log('SHA-256 hash received');
@@ -58,7 +47,6 @@ if (typeof crypto === 'undefined') {
           }
 
           if (matches) {
-            console.log('✅ PASS: SHA-256 hash matches expected value');
           } else {
             console.log('❌ FAIL: SHA-256 hash does not match expected value');
             console.log('Expected:', expected_start);
@@ -66,7 +54,6 @@ if (typeof crypto === 'undefined') {
           }
 
           // Test 4: Different algorithms
-          console.log('Test 4: Different hash algorithms');
           testOtherAlgorithms();
         })
         .catch((error) => {

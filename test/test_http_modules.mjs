@@ -1,11 +1,11 @@
 import assert from 'jsrt:assert';
 import process from 'jsrt:process';
 
-console.log('=== HTTP Module Loading Tests with Real Imports ===');
+// console.log('=== HTTP Module Loading Tests with Real Imports ===');
 
 function runTests() {
   // Test 1: Check that HTTP module loading is enabled by default
-  console.log('\n--- Test 1: HTTP Module Loading Enabled by Default ---');
+  // // console.log('\n--- Test 1: HTTP Module Loading Enabled by Default ---');
   console.log('Testing that HTTP module loading is now enabled by default...');
 
   try {
@@ -64,10 +64,10 @@ function runTests() {
   );
 
   // Test 2: Test actual module loading from supported CDNs
-  console.log('\n--- Test 2: Real Module Loading from CDNs ---');
+  // // console.log('\n--- Test 2: Real Module Loading from CDNs ---');
 
   // Test 2a: jsDelivr (CommonJS format) with fallbacks
-  console.log('\n--- Test 2a: Loading lodash from cdn.jsdelivr.net ---');
+  // // console.log('\n--- Test 2a: Loading lodash from cdn.jsdelivr.net ---');
   let lodashJsd = null;
 
   // Try multiple approaches to handle platform-specific parsing issues
@@ -82,7 +82,7 @@ function runTests() {
     try {
       console.log(`  Trying URL ${i + 1}: ${lodashUrls[i]}`);
       lodashJsd = require(lodashUrls[i]);
-      console.log(`  ✅ Success with URL ${i + 1}`);
+      // Success case - no output
       break;
     } catch (error) {
       console.log(`  ❌ URL ${i + 1} failed: ${error.message}`);
@@ -92,7 +92,7 @@ function runTests() {
     }
   }
 
-  console.log('✅ Successfully loaded lodash from jsDelivr');
+  // Success case - no output
   console.log('Lodash version:', lodashJsd.VERSION);
   console.log(
     'Testing lodashJsd.uniq([1,2,2,3]):',
@@ -105,7 +105,7 @@ function runTests() {
   );
 
   // Test 2b: unpkg (CommonJS format) - using different approach
-  console.log('\n--- Test 2b: Loading different module from unpkg.com ---');
+  // // console.log('\n--- Test 2b: Loading different module from unpkg.com ---');
 
   // Since we already tested lodash extensively above, let's test a different module
   // to verify unpkg CDN works in general
@@ -119,7 +119,7 @@ function runTests() {
     try {
       console.log(`  Trying unpkg URL ${i + 1}: ${unpkgUrls[i]}`);
       unpkgModule = require(unpkgUrls[i]);
-      console.log(`  ✅ Success with unpkg URL ${i + 1}`);
+      // Success case - no output
       break;
     } catch (error) {
       console.log(`  ❌ unpkg URL ${i + 1} failed: ${error.message}`);
@@ -129,7 +129,7 @@ function runTests() {
     }
   }
 
-  console.log('✅ Successfully loaded module from unpkg');
+  // Success case - no output
   console.log('Module type:', typeof unpkgModule);
   assert.ok(unpkgModule, 'Module from unpkg should be loaded');
 
@@ -149,22 +149,20 @@ function runTests() {
   }
 
   // Test 3: Mixed module systems
-  console.log('\n--- Test 3: Mixed Module System Integration ---');
+  // // console.log('\n--- Test 3: Mixed Module System Integration ---');
   const jsrtAssert = require('jsrt:assert');
-  console.log('✅ Local jsrt:assert module loaded successfully');
+  // Success case - no output
   assert.ok(jsrtAssert, 'jsrt:assert should be loaded');
-  console.log('✅ Successfully demonstrated mixed local + HTTP module loading');
+  // Success case - no output
 
-  console.log('\n=== All HTTP Module Loading Tests Completed Successfully ===');
-  console.log('🎯 HTTP module loading is fully functional');
+  // console.log('\n=== All HTTP Module Loading Tests Completed Successfully ===');
+  console.log('📊 HTTP module loading is fully functional');
 }
 
 // Run the tests
 if (typeof crypto === 'undefined') {
   console.log('❌ SKIP: crypto object not available (OpenSSL not found)');
-  console.log('=== HTTP module Tests Completed (Skipped) ===');
 } else if (process.env.SKIP_HTTP_MODULE_TESTS) {
-  console.log('=== HTTP module Tests Completed (Skipped) ===');
 } else {
   try {
     runTests();

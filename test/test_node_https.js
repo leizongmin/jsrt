@@ -1,12 +1,12 @@
 const assert = require('jsrt:assert');
 
-console.log('=== Node.js HTTPS Module Test ===');
+// // console.log('=== Node.js HTTPS Module Test ===');
 console.log('Testing node:https module implementation...');
 
 // Test HTTPS module loading
 const https = require('node:https');
 assert.ok(https, 'node:https module should load');
-console.log('✓ HTTPS module loaded successfully');
+// // console.log('✓ HTTPS module loaded successfully');
 
 // Test HTTPS functions exist
 assert.strictEqual(
@@ -24,14 +24,14 @@ assert.strictEqual(
   'function',
   'https.get should be a function'
 );
-console.log('✓ All HTTPS functions are available');
+// // console.log('✓ All HTTPS functions are available');
 
 // Test HTTPS constants (inherited from HTTP)
 assert.ok(https.METHODS, 'HTTPS METHODS constants should be available');
 assert.ok(Array.isArray(https.METHODS), 'METHODS should be an array');
 assert.ok(https.METHODS.includes('GET'), 'METHODS should include GET');
 assert.ok(https.METHODS.includes('POST'), 'METHODS should include POST');
-console.log('✓ HTTPS constants inherited from HTTP');
+// // console.log('✓ HTTPS constants inherited from HTTP');
 
 assert.ok(https.STATUS_CODES, 'HTTPS STATUS_CODES should be available');
 assert.strictEqual(
@@ -44,7 +44,7 @@ assert.strictEqual(
   'OK',
   'Status code 200 should be OK'
 );
-console.log('✓ HTTPS status codes inherited from HTTP');
+// // console.log('✓ HTTPS status codes inherited from HTTP');
 
 // Test HTTPS-specific properties
 assert.ok(https.globalAgent, 'HTTPS globalAgent should be available');
@@ -53,7 +53,7 @@ assert.strictEqual(
   'https:',
   'Global agent should use https protocol'
 );
-console.log('✓ HTTPS-specific properties are available');
+// // console.log('✓ HTTPS-specific properties are available');
 
 // Test HTTPS createServer (should indicate not fully implemented)
 console.log('\n📋 Testing HTTPS server creation:');
@@ -90,7 +90,7 @@ try {
     'https://example.com/test',
     'Request URL should be set'
   );
-  console.log('✓ HTTPS request created with URL string');
+  // // console.log('✓ HTTPS request created with URL string');
 
   // Test with options object
   const request2 = https.request({
@@ -103,7 +103,7 @@ try {
     request2.url.includes('https://example.com:443/api/test'),
     'Request URL should be built from options'
   );
-  console.log('✓ HTTPS request created with options object');
+  // // console.log('✓ HTTPS request created with options object');
 
   // Test request methods exist
   assert.strictEqual(
@@ -121,7 +121,7 @@ try {
     'function',
     'Request should have on method for events'
   );
-  console.log('✓ HTTPS request has expected methods');
+  // // console.log('✓ HTTPS request has expected methods');
 } catch (error) {
   console.log('❌ HTTPS request creation failed:', error.message);
   throw error;
@@ -143,7 +143,7 @@ try {
     'https://example.com/get-test',
     'Get request URL should be set'
   );
-  console.log('✓ HTTPS get method creates request');
+  // // console.log('✓ HTTPS get method creates request');
 } catch (error) {
   console.log('❌ HTTPS get method failed:', error.message);
   throw error;
@@ -161,7 +161,7 @@ try {
     error.message.includes('URL'),
     'Error should mention URL requirement'
   );
-  console.log('✓ https.request() throws error for missing URL');
+  // // console.log('✓ https.request() throws error for missing URL');
 }
 
 try {
@@ -173,20 +173,30 @@ try {
     error.message.includes('URL'),
     'Error should mention URL requirement'
   );
-  console.log('✓ https.get() throws error for missing URL');
+  // // console.log('✓ https.get() throws error for missing URL');
 }
 
-console.log('\n✅ All HTTPS module tests passed!');
-console.log('🎉 Node.js HTTPS compatibility layer working!');
+// Success case - no output
+
+console.log('\n📊 HTTPS Module Summary:');
+// Success case - no output
+// Success case - no output
+// Success case - no output
+// Success case - no output
+// Success case - no output
+// Success case - no output
+// Success case - no output
+// Success case - no output
+console.log('📊 Node.js HTTPS compatibility layer working!');
 
 console.log('\nImplemented HTTPS features:');
-console.log('  ✅ https.request() - HTTPS client request creation');
-console.log('  ✅ https.get() - Convenience method for GET requests');
-console.log('  ✅ https.createServer() - Server creation (placeholder)');
-console.log('  ✅ HTTP constants inheritance (METHODS, STATUS_CODES)');
-console.log('  ✅ HTTPS-specific properties (globalAgent)');
-console.log('  ✅ URL parsing for both string and options');
-console.log('  ✅ Error handling for invalid arguments');
+// Success case - no output
+// Success case - no output
+// Success case - no output
+// Success case - no output
+// Success case - no output
+// Success case - no output
+// Success case - no output
 
 console.log('\nNote: Full SSL/TLS implementation requires:');
 console.log('  📋 SSL context creation and certificate handling');

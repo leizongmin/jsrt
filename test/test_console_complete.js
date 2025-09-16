@@ -1,12 +1,8 @@
 // Comprehensive Console API tests for WinterCG compliance
 const assert = require('jsrt:assert');
-console.log('=== Starting Complete Console API Tests ===');
-
 // Test basic logging methods
-console.log('Test 1: console.log - basic functionality');
 console.log('This is a log message with', 123, true, null, undefined);
 
-console.log('Test 2: console.error - error messages');
 if (typeof console.error === 'function') {
   console.error('This is an error message with', 456, false);
   assert.strictEqual(
@@ -18,7 +14,6 @@ if (typeof console.error === 'function') {
   console.log('console.error NOT IMPLEMENTED');
 }
 
-console.log('Test 3: console.warn - warning messages');
 if (typeof console.warn === 'function') {
   console.warn('This is a warning message with', 789, 'warning');
   assert.strictEqual(
@@ -30,7 +25,6 @@ if (typeof console.warn === 'function') {
   console.log('console.warn NOT IMPLEMENTED');
 }
 
-console.log('Test 4: console.info - info messages');
 if (typeof console.info === 'function') {
   console.info('This is an info message with', { info: true });
   assert.strictEqual(
@@ -42,7 +36,6 @@ if (typeof console.info === 'function') {
   console.log('console.info NOT IMPLEMENTED');
 }
 
-console.log('Test 5: console.debug - debug messages');
 if (typeof console.debug === 'function') {
   console.debug('This is a debug message with', [1, 2, 3]);
   assert.strictEqual(
@@ -54,14 +47,12 @@ if (typeof console.debug === 'function') {
   console.log('console.debug NOT IMPLEMENTED');
 }
 
-console.log('Test 6: console.trace - stack trace');
 if (typeof console.trace === 'function') {
   console.trace('Trace message', 'with arguments');
 } else {
   console.log('console.trace NOT IMPLEMENTED');
 }
 
-console.log('Test 7: console.assert - assertions');
 if (typeof console.assert === 'function') {
   console.assert(true, 'This should not appear');
   console.assert(false, 'This assertion failed:', { reason: 'test' });
@@ -70,7 +61,6 @@ if (typeof console.assert === 'function') {
   console.log('console.assert NOT IMPLEMENTED');
 }
 
-console.log('Test 8: console.time/timeEnd - timing');
 if (
   typeof console.time === 'function' &&
   typeof console.timeEnd === 'function'
@@ -99,7 +89,6 @@ if (
   console.log('console.time/timeEnd NOT IMPLEMENTED');
 }
 
-console.log('Test 9: console.count/countReset - counting');
 if (
   typeof console.count === 'function' &&
   typeof console.countReset === 'function'
@@ -125,7 +114,6 @@ if (
   console.log('console.count/countReset NOT IMPLEMENTED');
 }
 
-console.log('Test 10: console.group/groupEnd - grouping');
 if (
   typeof console.group === 'function' &&
   typeof console.groupEnd === 'function'
@@ -142,7 +130,6 @@ if (
   console.log('console.group/groupEnd NOT IMPLEMENTED');
 }
 
-console.log('Test 11: console.groupCollapsed');
 if (typeof console.groupCollapsed === 'function') {
   console.groupCollapsed('Collapsed group');
   console.log('Inside collapsed group');
@@ -151,7 +138,6 @@ if (typeof console.groupCollapsed === 'function') {
   console.log('console.groupCollapsed NOT IMPLEMENTED');
 }
 
-console.log('Test 12: console.dir - object inspection');
 if (typeof console.dir === 'function') {
   console.dir({ name: 'test', value: 123, nested: { a: 1, b: 2 } });
   console.dir([1, 2, 3, { inner: true }]);
@@ -159,7 +145,6 @@ if (typeof console.dir === 'function') {
   console.log('console.dir NOT IMPLEMENTED');
 }
 
-console.log('Test 13: console.table - tabular data');
 if (typeof console.table === 'function') {
   console.table([
     { name: 'Alice', age: 30, city: 'New York' },
@@ -171,7 +156,6 @@ if (typeof console.table === 'function') {
   console.log('console.table NOT IMPLEMENTED');
 }
 
-console.log('Test 14: console.clear - clear console');
 if (typeof console.clear === 'function') {
   console.log('This message should be cleared');
   console.clear();
@@ -181,8 +165,6 @@ if (typeof console.clear === 'function') {
 }
 
 // Test edge cases
-console.log('Test 15: Edge cases and error handling');
-
 // Test calling time/timeEnd with invalid arguments
 if (typeof console.time === 'function') {
   console.time(); // No label
@@ -206,5 +188,3 @@ if (typeof console.group === 'function') {
   console.groupEnd();
   console.groupEnd();
 }
-
-console.log('=== Console API Tests Complete ===');

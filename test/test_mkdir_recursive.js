@@ -45,14 +45,14 @@ cleanup();
 console.log('Testing basic mkdir...');
 fs.mkdirSync(testDir);
 assert.ok(fs.existsSync(testDir), 'Basic mkdir should create directory');
-console.log('✓ Basic mkdir test passed');
+// console.log('✓ Basic mkdir test passed');
 
 // Test 2: mkdir with recursive option (single level)
 console.log('Testing mkdir with recursive option (single level)...');
 fs.rmdirSync(testDir);
 fs.mkdirSync(testDir, { recursive: true });
 assert.ok(fs.existsSync(testDir), 'Recursive mkdir should create directory');
-console.log('✓ Recursive mkdir (single level) test passed');
+// console.log('✓ Recursive mkdir (single level) test passed');
 
 // Test 3: mkdir with recursive option (multiple levels)
 console.log('Testing mkdir with recursive option (multiple levels)...');
@@ -75,7 +75,7 @@ assert.ok(
   fs.existsSync(nestedPath),
   'Recursive mkdir should create final directory'
 );
-console.log('✓ Recursive mkdir (multiple levels) test passed');
+// console.log('✓ Recursive mkdir (multiple levels) test passed');
 
 // Test 4: mkdir with recursive option on existing directory (should not fail)
 console.log('Testing mkdir with recursive option on existing directory...');
@@ -84,7 +84,7 @@ assert.ok(
   fs.existsSync(nestedPath),
   'Recursive mkdir on existing path should not fail'
 );
-console.log('✓ Recursive mkdir on existing directory test passed');
+// console.log('✓ Recursive mkdir on existing directory test passed');
 
 // Test 5: mkdir with custom mode and recursive
 console.log('Testing mkdir with custom mode and recursive...');
@@ -94,7 +94,7 @@ assert.ok(
   fs.existsSync(modeTestPath),
   'Recursive mkdir with mode should create directory'
 );
-console.log('✓ Recursive mkdir with mode test passed');
+// console.log('✓ Recursive mkdir with mode test passed');
 
 // Test 6: mkdir without recursive on nested path (should fail)
 console.log('Testing mkdir without recursive on nested path (should fail)...');
@@ -107,7 +107,7 @@ try {
     error.code === 'ENOENT',
     'Should get ENOENT error for non-recursive nested path'
   );
-  console.log('✓ Non-recursive mkdir failure test passed');
+  // console.log('✓ Non-recursive mkdir failure test passed');
 }
 
 // Clean up

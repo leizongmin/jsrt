@@ -1,9 +1,8 @@
 // Test structuredClone implementation
 const assert = require('jsrt:assert');
-console.log('=== Structured Clone API Tests ===');
+// console.log('=== Structured Clone API Tests ===');
 
 // Test 1: Primitive values
-console.log('Test 1: Primitive values');
 const clonedNumber = structuredClone(42);
 console.log('Clone number:', clonedNumber);
 assert.strictEqual(clonedNumber, 42, 'Cloned number should equal original');
@@ -34,7 +33,7 @@ const obj1 = { a: 1, b: 'hello', c: true };
 const cloned_obj1 = structuredClone(obj1);
 console.log('Original object:', JSON.stringify(obj1));
 console.log('Cloned object:', JSON.stringify(cloned_obj1));
-console.log('Are different objects:', obj1 !== cloned_obj1);
+// console.log('Are different objects:', obj1 !== cloned_obj1);
 assert(obj1 !== cloned_obj1, 'Cloned object should be a different reference');
 console.log(
   'Have same content:',
@@ -80,7 +79,7 @@ const arr1 = [1, 2, 3, 'hello', true];
 const cloned_arr1 = structuredClone(arr1);
 console.log('Original array:', JSON.stringify(arr1));
 console.log('Cloned array:', JSON.stringify(cloned_arr1));
-console.log('Are different arrays:', arr1 !== cloned_arr1);
+// console.log('Are different arrays:', arr1 !== cloned_arr1);
 
 // Test 5: Nested arrays
 console.log('\nTest 5: Nested arrays');
@@ -112,8 +111,8 @@ const date = new Date('2023-01-01');
 const cloned_date = structuredClone(date);
 console.log('Original date:', date.toISOString());
 console.log('Cloned date:', cloned_date.toISOString());
-console.log('Are different Date objects:', date !== cloned_date);
-console.log('Have same time value:', date.getTime() === cloned_date.getTime());
+// console.log('Are different Date objects:', date !== cloned_date);
+// console.log('Have same time value:', date.getTime() === cloned_date.getTime());
 
 // Test 8: RegExp objects
 console.log('\nTest 8: RegExp objects');
@@ -121,9 +120,9 @@ const regex = /hello/gi;
 const cloned_regex = structuredClone(regex);
 console.log('Original regex:', regex.toString());
 console.log('Cloned regex:', cloned_regex.toString());
-console.log('Are different RegExp objects:', regex !== cloned_regex);
-console.log('Have same source:', regex.source === cloned_regex.source);
-console.log('Have same flags:', regex.flags === cloned_regex.flags);
+// console.log('Are different RegExp objects:', regex !== cloned_regex);
+// console.log('Have same source:', regex.source === cloned_regex.source);
+// console.log('Have same flags:', regex.flags === cloned_regex.flags);
 
 // Test 9: Circular references
 console.log('\nTest 9: Circular references');
@@ -134,12 +133,12 @@ try {
   const cloned_circular = structuredClone(circular);
   console.log('Cloned circular object successfully');
   console.log('Cloned has name:', cloned_circular.name);
-  console.log('Cloned has self reference:', cloned_circular.self !== undefined);
+  // console.log('Cloned has self reference:', cloned_circular.self !== undefined);
   console.log(
     'Self reference points to same object:',
     cloned_circular.self === cloned_circular
   );
-  console.log('But different from original:', cloned_circular !== circular);
+  // console.log('But different from original:', cloned_circular !== circular);
 } catch (e) {
   console.log('Error cloning circular reference:', e.message);
 }
@@ -185,4 +184,4 @@ try {
   console.log('Error cloning container with circular array:', e.message);
 }
 
-console.log('\n=== All Structured Clone tests completed ===');
+// console.log('\n=== All Structured Clone tests completed ===');

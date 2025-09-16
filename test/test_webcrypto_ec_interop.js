@@ -5,9 +5,8 @@ const assert = require('jsrt:assert');
 // Check if crypto is available (skip if OpenSSL not found)
 if (typeof crypto === 'undefined' || !crypto.subtle) {
   console.log('❌ SKIP: WebCrypto not available (OpenSSL not found)');
-  console.log('=== EC Interoperability Tests Completed (Skipped) ===');
 } else {
-  console.log('=== WebCrypto EC Interoperability Tests ===');
+  // console.log('=== WebCrypto EC Interoperability Tests ===');
 
   // Test 1: Generate key with both ECDSA and ECDH usages
   function testMixedAlgorithmUsages() {
@@ -40,7 +39,7 @@ if (typeof crypto === 'undefined' || !crypto.subtle) {
             data
           )
           .then(function (signature) {
-            console.log('✅ Key works for ECDSA signing despite mixed usages');
+            // Success case - no output needed
           });
       })
       .catch(function (error) {
@@ -79,7 +78,7 @@ if (typeof crypto === 'undefined' || !crypto.subtle) {
         const ecdsaKeys = keyPairs[0];
         const ecdhKeys = keyPairs[1];
 
-        console.log('✅ Generated ECDSA and ECDH keys on same curve (P-256)');
+        // Success case - no output needed
 
         // Verify both use the same curve
         assert.strictEqual(
@@ -175,7 +174,7 @@ if (typeof crypto === 'undefined' || !crypto.subtle) {
         const bobSignKeys = keys[2];
         const bobDHKeys = keys[3];
 
-        console.log('✅ Alice and Bob each generated ECDSA and ECDH key pairs');
+        // Success case - no output needed
 
         // Step 1: Derive shared secret using ECDH
         const sharedSecretPromise = crypto.subtle.deriveBits(
@@ -205,12 +204,8 @@ if (typeof crypto === 'undefined' || !crypto.subtle) {
             const sharedSecret = new Uint8Array(results[0]);
             const signature = results[1];
 
-            console.log(
-              '✅ Derived shared secret:',
-              sharedSecret.length,
-              'bytes'
-            );
-            console.log('✅ Created signature:', signature.byteLength, 'bytes');
+            // Success case - no output needed
+            // Success case - no output needed
 
             // Step 3: Bob verifies Alice's signature
             return crypto.subtle.verify(
@@ -225,9 +220,7 @@ if (typeof crypto === 'undefined' || !crypto.subtle) {
           })
           .then(function (isValid) {
             assert.strictEqual(isValid, true, 'Signature should be valid');
-            console.log(
-              '✅ Combined ECDH key exchange and ECDSA signature workflow succeeded'
-            );
+            // Success case - no output needed
           });
       })
       .catch(function (error) {
@@ -279,7 +272,7 @@ if (typeof crypto === 'undefined' || !crypto.subtle) {
         })
         .then(function (isValid) {
           assert.strictEqual(isValid, true, 'ECDSA should work on ' + curve);
-          console.log('✅ ECDSA works on curve:', curve);
+          // Success case - no output needed
         });
 
       // Test ECDH on this curve
@@ -317,7 +310,7 @@ if (typeof crypto === 'undefined' || !crypto.subtle) {
             32,
             'ECDH should produce 32 bytes'
           );
-          console.log('✅ ECDH works on curve:', curve);
+          // Success case - no output needed
         });
 
       testPromises.push(ecdsaPromise);
@@ -402,7 +395,7 @@ if (typeof crypto === 'undefined' || !crypto.subtle) {
 
     return Promise.all(performancePromises)
       .then(function (times) {
-        console.log('✅ Performance comparison completed');
+        // Success case - no output needed
         console.log(
           '   Note: Larger curves generally take more time but provide more security'
         );
@@ -505,7 +498,7 @@ if (typeof crypto === 'undefined' || !crypto.subtle) {
     .then(testErrorPropagation)
     .then(testKeyReuse)
     .then(function () {
-      console.log('\n=== All EC Interoperability Tests Passed! ===');
+      // console.log('\n=== All EC Interoperability Tests Passed! ===');
     })
     .catch(function (error) {
       console.error('\n=== EC Interoperability Tests Failed ===');

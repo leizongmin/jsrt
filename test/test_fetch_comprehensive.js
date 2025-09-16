@@ -1,6 +1,5 @@
 // Comprehensive Fetch API Unit Tests
 const assert = require('jsrt:assert');
-console.log('=== Comprehensive Fetch API Unit Tests ===');
 
 let testCount = 0;
 let passCount = 0;
@@ -9,7 +8,6 @@ let failCount = 0;
 function testAssert(condition, message) {
   testCount++;
   if (condition) {
-    console.log(`✅ PASS: ${message}`);
     passCount++;
   } else {
     console.log(`❌ FAIL: ${message}`);
@@ -20,7 +18,6 @@ function testAssert(condition, message) {
 }
 
 // Test 1: Headers Class Functionality
-console.log('\nTest Group 1: Headers Class');
 
 function testHeaders() {
   const headers = new Headers();
@@ -68,7 +65,6 @@ function testHeaders() {
 }
 
 // Test 2: Request Class Functionality
-console.log('\nTest Group 2: Request Class');
 
 function testRequest() {
   // Test basic GET request
@@ -96,7 +92,6 @@ function testRequest() {
 }
 
 // Test 3: Response Class Functionality
-console.log('\nTest Group 3: Response Class');
 
 function testResponse() {
   const response = new Response();
@@ -122,7 +117,6 @@ function testResponse() {
 }
 
 // Test 4: Response Methods Return Promises
-console.log('\nTest Group 4: Response Promise Methods');
 
 async function testResponsePromises() {
   const response = new Response();
@@ -194,7 +188,6 @@ async function testResponsePromises() {
 }
 
 // Test 5: Fetch Function
-console.log('\nTest Group 5: Fetch Function');
 
 function testFetch() {
   // Test function exists
@@ -252,7 +245,6 @@ function testFetch() {
 }
 
 // Test 6: Error Handling
-console.log('\nTest Group 6: Error Handling');
 
 function testErrorHandling() {
   try {
@@ -273,7 +265,6 @@ function testErrorHandling() {
 }
 
 // Test 7: Integration Test
-console.log('\nTest Group 7: Integration Test');
 
 async function testIntegration() {
   // Create a complete request flow (without actual network)
@@ -320,8 +311,6 @@ async function testIntegration() {
 
 // Run all tests
 async function runAllTests() {
-  console.log('🧪 Running comprehensive fetch API tests...\n');
-
   try {
     testHeaders();
     testRequest();
@@ -331,32 +320,9 @@ async function runAllTests() {
     testErrorHandling();
     await testIntegration();
 
-    console.log('\n=== Test Results Summary ===');
-    console.log(`Total tests: ${testCount}`);
-    console.log(`✅ Passed: ${passCount}`);
-    console.log(`❌ Failed: ${failCount}`);
-    console.log(`Success rate: ${((passCount / testCount) * 100).toFixed(1)}%`);
-
-    if (failCount === 0) {
-      console.log(
-        '🎉 All tests passed! Fetch API implementation is working correctly.'
-      );
-    } else {
+    if (failCount > 0) {
       console.log('⚠️  Some tests failed. Please review the implementation.');
     }
-
-    console.log('\n🔍 Tested Features:');
-    console.log('✅ Headers class with case-insensitive operations');
-    console.log('✅ Request class with method and URL properties');
-    console.log('✅ Response class with status and ok properties');
-    console.log(
-      '✅ Response methods return Promises (text, json, arrayBuffer, blob)'
-    );
-    console.log('✅ fetch() function returns Promise<Response>');
-    console.log('✅ POST/PUT request body support');
-    console.log('✅ Headers object and plain object support');
-    console.log('✅ Error handling for missing parameters');
-    console.log('✅ Integration between all components');
   } catch (error) {
     console.error('Test suite error:', error.message);
     console.error('Stack:', error.stack);

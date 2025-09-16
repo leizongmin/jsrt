@@ -19,5 +19,5 @@ assert.strictEqual(path.extname('file.txt'), '.txt');
 assert.ok(path.sep);
 assert.ok(path.delimiter);
 
-console.log('✅ Basic node:path functionality confirmed working');
-console.log('=== Node.js compatibility layer Phase 1 complete ===');
+// Success case - no output
+// console.log('=== Node.js compatibility layer Phase 1 complete ===');

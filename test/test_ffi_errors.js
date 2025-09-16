@@ -1,13 +1,12 @@
 const assert = require('jsrt:assert');
 
-console.log('=== FFI Enhanced Error Messages Tests ===');
+// // console.log('=== FFI Enhanced Error Messages Tests ===');
 
 // Test 1: Basic FFI module loading with enhanced error messages
-console.log('Test 1: Loading FFI module with enhanced error messages');
 const ffi = require('jsrt:ffi');
 assert.strictEqual(typeof ffi, 'object', 'FFI module should be an object');
 assert.strictEqual(ffi.version, '3.0.0', 'FFI version should be 3.0.0');
-console.log('✓ FFI module with enhanced error messages loaded successfully');
+// // console.log('✓ FFI module with enhanced error messages loaded successfully');
 
 // Test 2: Enhanced error messages for invalid arguments
 console.log('\nTest 2: Enhanced error messages for invalid arguments');
@@ -17,7 +16,7 @@ try {
   ffi.Library();
   assert.fail('ffi.Library should throw with no arguments');
 } catch (error) {
-  console.log('✓ Enhanced error for missing arguments:', error.message);
+  // // console.log('✓ Enhanced error for missing arguments:', error.message);
   assert(
     error.message.includes('FFI Error in ffi.Library'),
     'Error should include function context'
@@ -33,7 +32,7 @@ try {
   ffi.Library(null, {});
   assert.fail('ffi.Library should throw with null library name');
 } catch (error) {
-  console.log('✓ Enhanced error for invalid library name:', error.message);
+  // // console.log('✓ Enhanced error for invalid library name:', error.message);
   assert(
     error.message.includes('FFI Error in ffi.Library'),
     'Error should include function context'
@@ -67,7 +66,7 @@ try {
   ffi.malloc();
   assert.fail('ffi.malloc should throw with no arguments');
 } catch (error) {
-  console.log('✓ Enhanced error for malloc no arguments:', error.message);
+  // // console.log('✓ Enhanced error for malloc no arguments:', error.message);
   assert(
     error.message.includes('FFI Error in ffi.malloc'),
     'Error should include function context'
@@ -83,7 +82,7 @@ try {
   ffi.malloc(0);
   assert.fail('ffi.malloc should throw with zero size');
 } catch (error) {
-  console.log('✓ Enhanced error for malloc zero size:', error.message);
+  // // console.log('✓ Enhanced error for malloc zero size:', error.message);
   assert(
     error.message.includes('FFI Error in ffi.malloc'),
     'Error should include function context'
@@ -99,7 +98,7 @@ try {
   ffi.malloc(2 * 1024 * 1024 * 1024); // 2GB
   assert.fail('ffi.malloc should throw with oversized allocation');
 } catch (error) {
-  console.log('✓ Enhanced error for malloc oversized:', error.message);
+  // // console.log('✓ Enhanced error for malloc oversized:', error.message);
   assert(
     error.message.includes('FFI Error in ffi.malloc'),
     'Error should include function context'
@@ -187,7 +186,7 @@ try {
   ffi.arrayLength('not an array');
   assert.fail('ffi.arrayLength should throw with non-array');
 } catch (error) {
-  console.log('✓ Enhanced error for arrayLength non-array:', error.message);
+  // // console.log('✓ Enhanced error for arrayLength non-array:', error.message);
   assert(
     error.message.includes('must be an array'),
     'Error should specify expected type'
@@ -204,7 +203,7 @@ try {
   });
   assert.fail('ffi.Library should throw with non-existent library');
 } catch (error) {
-  console.log('✓ Enhanced error for non-existent library:', error.message);
+  // // console.log('✓ Enhanced error for non-existent library:', error.message);
   assert(
     error.message.includes('FFI Error in ffi.Library'),
     'Error should include function context'
@@ -231,7 +230,7 @@ try {
   );
 }
 
-console.log('\n=== Enhanced Error Messages Tests Completed ===');
+// console.log('\n=== Enhanced Error Messages Tests Completed ===');
 console.log('Enhanced error reporting provides:');
 console.log(
   '- Function context in error messages (e.g., "FFI Error in ffi.malloc")'

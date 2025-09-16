@@ -1,6 +1,6 @@
 const assert = require('jsrt:assert');
 
-console.log('=== HTTP and HTTPS Advanced Networking Integration Test ===');
+// console.log('=== HTTP and HTTPS Advanced Networking Integration Test ===');
 
 // Test both HTTP and HTTPS modules with enhanced networking features
 const http = require('node:http');
@@ -31,7 +31,7 @@ assert.strictEqual(
   'http:',
   'HTTP Agent should have HTTP protocol'
 );
-console.log('✅ HTTP Agent created with connection pooling options');
+// Success case - no output needed
 
 // Test 2: HTTP global agent
 assert.ok(http.globalAgent, 'HTTP global agent should exist');
@@ -44,7 +44,7 @@ assert.ok(
   http.globalAgent.keepAlive,
   'HTTP global agent should support keep-alive'
 );
-console.log('✅ HTTP global agent has connection pooling features');
+// Success case - no output needed
 
 console.log('\n🔒 Testing HTTPS Agent with SSL connection pooling:');
 
@@ -71,7 +71,7 @@ assert.strictEqual(
   'https:',
   'HTTPS Agent should have HTTPS protocol'
 );
-console.log('✅ HTTPS Agent created with SSL connection pooling options');
+// Success case - no output needed
 
 // Test 4: HTTPS global agent
 assert.ok(https.globalAgent, 'HTTPS global agent should exist');
@@ -84,7 +84,7 @@ assert.ok(
   https.globalAgent.keepAlive,
   'HTTPS global agent should support keep-alive'
 );
-console.log('✅ HTTPS global agent has SSL connection pooling features');
+// Success case - no output needed
 
 console.log('\n🌐 Testing Agent interoperability:');
 
@@ -99,7 +99,7 @@ assert.notStrictEqual(
   https.globalAgent.protocol,
   'Protocols should differ'
 );
-console.log('✅ HTTP and HTTPS agents are properly separated');
+// Success case - no output needed
 
 // Test 6: Both modules should export Agent constructors
 assert.strictEqual(
@@ -112,7 +112,7 @@ assert.strictEqual(
   'function',
   'HTTPS should export Agent constructor'
 );
-console.log('✅ Both modules export Agent constructors');
+// Success case - no output needed
 
 console.log('\n📊 Testing connection pooling configuration:');
 
@@ -140,7 +140,7 @@ assert.strictEqual(
   256,
   'Default HTTPS agent maxFreeSockets should be 256'
 );
-console.log('✅ Default agent connection pool settings are consistent');
+// Success case - no output needed
 
 // Test 8: Agent timeout configuration
 assert.ok(
@@ -151,9 +151,9 @@ assert.ok(
   defaultHttpsAgent.timeout >= 30000,
   'HTTPS agent should have reasonable timeout'
 );
-console.log('✅ Agents have proper timeout configurations');
+// Success case - no output needed
 
-console.log('\n🚀 Testing advanced networking features:');
+console.log('\n📊 Testing advanced networking features:');
 
 // Test 9: HTTP request with agent (connection pooling simulation)
 const httpRequest = http.request({
@@ -164,7 +164,7 @@ const httpRequest = http.request({
 });
 
 assert.ok(httpRequest, 'HTTP request with custom agent should be created');
-console.log('✅ HTTP request supports custom agent for connection pooling');
+// Success case - no output needed
 
 // Test 10: HTTPS request with agent and SSL
 const httpsRequest = https.request({
@@ -176,24 +176,18 @@ const httpsRequest = https.request({
 
 assert.ok(httpsRequest, 'HTTPS request with custom agent should be created');
 assert.ok(httpsRequest._keepAlive, 'HTTPS request should support keep-alive');
-console.log(
-  '✅ HTTPS request supports custom agent with SSL connection pooling'
-);
+// Success case - no output needed
 
-console.log('\n✅ All HTTP and HTTPS Advanced Networking tests passed!');
-console.log('🎉 Enhanced networking features implemented:');
-console.log('  ✅ HTTP Agent class with connection pooling');
-console.log('  ✅ HTTPS Agent class with SSL connection pooling');
-console.log('  ✅ Global agents for both HTTP and HTTPS protocols');
-console.log(
-  '  ✅ Configurable connection pool settings (maxSockets, keepAlive)'
-);
-console.log('  ✅ Protocol-specific agent separation and management');
-console.log('  ✅ Request-level agent assignment for custom pooling');
-console.log('  ✅ Keep-alive connection support for performance');
-console.log('  ✅ Timeout and connection lifecycle management');
+// Success case - no output needed
+// Enhanced networking features implemented:
+//   HTTP Agent class with connection pooling
+//   HTTPS Agent class with SSL connection pooling
+//   Global agents for both HTTP and HTTPS protocols
+//   Configurable connection pool settings (maxSockets, keepAlive)
+//   Protocol-specific agent separation and management
+//   Request-level agent assignment for custom pooling
+//   Keep-alive connection support for performance
+//   Timeout and connection lifecycle management
 
-console.log('\n🚀 Phase 5 Advanced Networking: COMPLETED');
-console.log(
-  '   Both HTTP and HTTPS now support enterprise-grade connection pooling!'
-);
+// Phase 5 Advanced Networking: COMPLETED
+// Both HTTP and HTTPS now support enterprise-grade connection pooling!

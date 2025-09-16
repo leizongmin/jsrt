@@ -1,6 +1,6 @@
 const assert = require('jsrt:assert');
 
-console.log('=== Node.js Compatibility Layer Summary Test ===');
+// console.log('=== Node.js Compatibility Layer Summary Test ===');
 console.log('Testing complete implementation status across all phases...\n');
 
 // Phase 1 - Foundation modules
@@ -25,11 +25,9 @@ try {
     'querystring.parse should exist'
   );
 
-  console.log('  ✅ node:path - Complete path manipulation utilities');
-  console.log('  ✅ node:os - Complete operating system utilities');
-  console.log(
-    '  ✅ node:querystring - Complete query string parsing utilities'
-  );
+  // Success case - no output
+  // Success case - no output
+  // Success case - no output
 } catch (error) {
   console.log('  ❌ Phase 1 modules failed:', error.message);
 }
@@ -63,12 +61,10 @@ try {
     'process.hrtime should exist'
   );
 
-  console.log('  ✅ node:util - Utility functions and type checking');
-  console.log('  ✅ node:events - Complete EventEmitter implementation');
-  console.log('  ✅ node:buffer - Buffer class with core operations');
-  console.log(
-    '  ✅ node:process - Process utilities with Node.js compatibility'
-  );
+  // Success case - no output
+  // Success case - no output
+  // Success case - no output
+  // Success case - no output
 } catch (error) {
   console.log('  ❌ Phase 2 modules failed:', error.message);
 }
@@ -104,10 +100,10 @@ try {
     'https.request should exist'
   );
 
-  console.log('  ✅ node:net - TCP networking (Socket, Server)');
-  console.log('  ✅ node:http - HTTP protocol (Server, Request, Response)');
-  console.log('  ✅ node:dns - DNS lookup operations with promises');
-  console.log('  ✅ node:https - HTTPS support foundation');
+  // Success case - no output
+  // Success case - no output
+  // Success case - no output
+  // Success case - no output
 } catch (error) {
   console.log('  ❌ Phase 4 modules failed:', error.message);
 }
@@ -138,9 +134,7 @@ try {
   assert.strictEqual(typeof uuid, 'string', 'randomUUID should work');
   assert.strictEqual(uuid.length, 36, 'UUID should be correct length');
 
-  console.log(
-    '  ✅ node:crypto - Cryptographic operations (randomBytes, randomUUID)'
-  );
+  // Success case - no output
   console.log(
     '  📋 node:fs - File system operations (existing, needs enhancement)'
   );
@@ -164,14 +158,14 @@ try {
   );
   httpServer.close();
 
-  console.log('  ✅ HTTP server inherits EventEmitter from node:events');
+  // Success case - no output
 
   // Buffer usage across modules
   const Buffer = require('node:buffer').Buffer;
   const buf = Buffer.from('test data');
   assert.ok(Buffer.isBuffer(buf), 'Buffer should be created correctly');
 
-  console.log('  ✅ Buffer integration working across modules');
+  // Success case - no output
 
   // DNS promises
   const dnsPromise = require('node:dns').lookup('localhost');
@@ -181,7 +175,7 @@ try {
     'DNS should return promises'
   );
 
-  console.log('  ✅ DNS async operations with promises working');
+  // Success case - no output
 
   // HTTPS inherits HTTP constants
   const http = require('node:http');
@@ -192,7 +186,7 @@ try {
     'HTTPS should have STATUS_CODES'
   );
 
-  console.log('  ✅ HTTPS properly inherits HTTP constants');
+  // Success case - no output
 } catch (error) {
   console.log('  ❌ Integration test failed:', error.message);
 }
@@ -209,8 +203,8 @@ try {
   assert.ok(net_cjs, 'CommonJS networking modules should work');
   assert.ok(dns_cjs, 'CommonJS DNS module should work');
 
-  console.log('  ✅ CommonJS require("node:*") loading working');
-  console.log('  ✅ ES module import support available');
+  // Success case - no output
+  // Success case - no output
 } catch (error) {
   console.log('  ❌ Module loading failed:', error.message);
 }
@@ -231,14 +225,16 @@ phases.forEach((phase) => {
   console.log(`${phase.status} ${phase.name} (${phase.modules} modules)`);
 });
 
-console.log('\n🎉 Node.js Compatibility Implementation Status:');
-console.log(`✅ Total Modules Implemented: 14`);
+console.log('\n📊 Node.js Compatibility Implementation Status:');
+console.log(`📊 Total Modules Implemented: 14`);
 console.log(`📋 Total Modules Planned: 0`);
-console.log(`🎯 Overall Progress: 100% complete`);
+console.log(`📊 Overall Progress: 100% complete`);
 
-console.log('\n🚀 Fully ready for production use!');
+console.log('\n📊 Fully ready for production use!');
 console.log(
   '🔧 All phases completed with enhanced functionality and cross-platform support.'
 );
 
-console.log('\n✅ All compatibility layer tests passed!');
+// Success case - no output
+
+// Success case - no output

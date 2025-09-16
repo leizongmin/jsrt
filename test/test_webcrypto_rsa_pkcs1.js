@@ -3,12 +3,8 @@ const assert = require('jsrt:assert');
 
 // Check if crypto is available (skip if OpenSSL not found)
 if (typeof crypto === 'undefined' || !crypto.subtle) {
-  console.log('❌ SKIP: WebCrypto not available (OpenSSL not found)');
-  console.log('=== RSA-PKCS1-v1_5 Tests Completed (Skipped) ===');
 } else {
   function testRSAPKCS1v15KeyGeneration() {
-    console.log('Testing RSA-PKCS1-v1_5 key generation...');
-
     return crypto.subtle
       .generateKey(
         {
@@ -21,8 +17,6 @@ if (typeof crypto === 'undefined' || !crypto.subtle) {
         ['encrypt', 'decrypt']
       )
       .then(function (keyPair) {
-        console.log('✓ RSA-PKCS1-v1_5 key generation successful');
-
         // Use assert for actual verification
         assert.strictEqual(
           keyPair.publicKey.type,
@@ -45,8 +39,6 @@ if (typeof crypto === 'undefined' || !crypto.subtle) {
           'Modulus length should be 2048'
         );
 
-        console.log('Public key type:', keyPair.publicKey.type);
-        console.log('Private key type:', keyPair.privateKey.type);
         console.log('Algorithm name:', keyPair.publicKey.algorithm.name);
         console.log(
           'Modulus length:',
@@ -103,7 +95,6 @@ if (typeof crypto === 'undefined' || !crypto.subtle) {
           'Hello, RSA-PKCS1-v1_5!',
           'Decrypted text should match original plaintext'
         );
-        console.log('✓ RSA-PKCS1-v1_5 encryption/decryption test PASSED');
       })
       .catch(function (error) {
         console.error(
@@ -116,14 +107,14 @@ if (typeof crypto === 'undefined' || !crypto.subtle) {
 
   // Run all tests
   function runTests() {
-    console.log('=== RSA-PKCS1-v1_5 WebCrypto Tests ===\n');
+    // console.log('=== RSA-PKCS1-v1_5 WebCrypto Tests ===\n');
 
     testRSAPKCS1v15KeyGeneration()
       .then(function (keyPair) {
         return testRSAPKCS1v15Encryption(keyPair);
       })
       .then(function () {
-        console.log('\n=== All RSA-PKCS1-v1_5 tests PASSED! ===');
+        // console.log('\n=== All RSA-PKCS1-v1_5 tests PASSED! ===');
       })
       .catch(function (error) {
         console.error('\n=== RSA-PKCS1-v1_5 tests FAILED ===');

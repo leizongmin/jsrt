@@ -1,13 +1,9 @@
 // WebCrypto AES-GCM tests
-console.log('=== Starting WebCrypto AES-GCM Tests ===');
-
 // Check if crypto is available (skip if OpenSSL not found)
 if (typeof crypto === 'undefined' || !crypto.subtle) {
   console.log('❌ SKIP: WebCrypto not available (OpenSSL not found)');
-  console.log('=== WebCrypto AES-GCM Tests Completed (Skipped) ===');
 } else {
   // Test 1: crypto.subtle.generateKey for AES-GCM
-  console.log('Test 1: AES-GCM key generation');
   try {
     const keyPromise = crypto.subtle.generateKey(
       {
@@ -23,15 +19,12 @@ if (typeof crypto === 'undefined' || !crypto.subtle) {
 
     keyPromise
       .then((key) => {
-        console.log('✅ PASS: AES-GCM key generated successfully');
         console.log('Key type:', key.type);
         console.log('Key extractable:', key.extractable);
         console.log('Key algorithm name:', key.algorithm.name);
         console.log('Key length:', key.algorithm.length);
 
         // Test 2: Basic AES-GCM encryption/decryption test
-        console.log('Test 2: Basic AES-GCM encryption/decryption');
-
         const plaintext = new TextEncoder().encode('Hello, WebCrypto AES-GCM!');
         console.log('Plaintext:', Array.from(plaintext));
 
@@ -51,7 +44,6 @@ if (typeof crypto === 'undefined' || !crypto.subtle) {
 
         encryptPromise
           .then((ciphertext) => {
-            console.log('✅ PASS: AES-GCM encryption completed');
             const ciphertextArray = new Uint8Array(ciphertext);
             console.log('Ciphertext length:', ciphertextArray.length);
             console.log(
@@ -87,7 +79,6 @@ if (typeof crypto === 'undefined' || !crypto.subtle) {
 
             decryptPromise
               .then((decryptedData) => {
-                console.log('✅ PASS: AES-GCM decryption completed');
                 const decryptedArray = new Uint8Array(decryptedData);
                 console.log('Decrypted data length:', decryptedArray.length);
                 console.log('Decrypted data:', Array.from(decryptedArray));
@@ -143,8 +134,6 @@ if (typeof crypto === 'undefined' || !crypto.subtle) {
   }
 
   function testWithAAD(key) {
-    console.log('Test 3: AES-GCM with Additional Authenticated Data (AAD)');
-
     const plaintext = new TextEncoder().encode('Secret message');
     const aad = new TextEncoder().encode('Public header data');
     const iv = crypto.getRandomValues(new Uint8Array(12));
@@ -167,7 +156,6 @@ if (typeof crypto === 'undefined' || !crypto.subtle) {
         plaintext
       )
       .then((ciphertext) => {
-        console.log('✅ PASS: AES-GCM encryption with AAD completed');
         encryptedCiphertext = ciphertext;
         const ciphertextArray = new Uint8Array(ciphertext);
         console.log('Ciphertext with AAD length:', ciphertextArray.length);
@@ -184,12 +172,9 @@ if (typeof crypto === 'undefined' || !crypto.subtle) {
         );
       })
       .then((decryptedData) => {
-        console.log('✅ PASS: AES-GCM decryption with AAD completed');
         const decryptedText = new TextDecoder().decode(decryptedData);
 
         if (decryptedText === 'Secret message') {
-          console.log('✅ PASS: AES-GCM with AAD round-trip successful!');
-
           // Test 4: Try decrypting with wrong AAD (should fail)
           testWrongAAD(key, encryptedCiphertext, iv, aad);
         } else {
@@ -208,8 +193,6 @@ if (typeof crypto === 'undefined' || !crypto.subtle) {
   }
 
   function testWrongAAD(key, ciphertext, iv, originalAAD) {
-    console.log('Test 4: AES-GCM authentication test (wrong AAD should fail)');
-
     const wrongAAD = new TextEncoder().encode('Wrong header data');
 
     // Try to decrypt with wrong AAD - this should fail authentication
@@ -240,14 +223,11 @@ if (typeof crypto === 'undefined' || !crypto.subtle) {
   }
 
   function testDifferentKeySizes() {
-    console.log('Test 5: Different AES-GCM key sizes');
-
     const keySizes = [128, 256]; // Test 128 and 256-bit keys
     let testIndex = 0;
 
     function testNextKeySize() {
       if (testIndex >= keySizes.length) {
-        console.log('=== WebCrypto AES-GCM Tests Completed ===');
         return;
       }
 
@@ -281,7 +261,6 @@ if (typeof crypto === 'undefined' || !crypto.subtle) {
             .then((decryptedData) => {
               const decryptedText = new TextDecoder().decode(decryptedData);
               if (decryptedText === `Test AES-GCM-${keySize}`) {
-                console.log(`✅ PASS: AES-GCM-${keySize} works correctly`);
               } else {
                 console.log(`❌ FAIL: AES-GCM-${keySize} round-trip failed`);
               }

@@ -1,10 +1,10 @@
 const assert = require('jsrt:assert');
 
-console.log('=== Node.js util Module Tests ===');
+// // console.log('=== Node.js util Module Tests ===');
 
 // Test CommonJS import
 const util = require('node:util');
-console.log('✓ CommonJS require("node:util") successful');
+// // console.log('✓ CommonJS require("node:util") successful');
 
 // Test util.format()
 console.log('\n🔧 Testing util.format():');
@@ -39,7 +39,7 @@ assert.strictEqual(
   false,
   'isArray should return false for non-arrays'
 );
-console.log('  ✓ util.isArray() works correctly');
+// console.log('  ✓ util.isArray() works correctly');
 
 // util.isObject()
 assert.strictEqual(
@@ -57,7 +57,7 @@ assert.strictEqual(
   false,
   'isObject should return false for strings'
 );
-console.log('  ✓ util.isObject() works correctly');
+// console.log('  ✓ util.isObject() works correctly');
 
 // util.isString()
 assert.strictEqual(
@@ -70,7 +70,7 @@ assert.strictEqual(
   false,
   'isString should return false for numbers'
 );
-console.log('  ✓ util.isString() works correctly');
+// console.log('  ✓ util.isString() works correctly');
 
 // util.isNumber()
 assert.strictEqual(
@@ -83,7 +83,7 @@ assert.strictEqual(
   false,
   'isNumber should return false for string numbers'
 );
-console.log('  ✓ util.isNumber() works correctly');
+// console.log('  ✓ util.isNumber() works correctly');
 
 // util.isBoolean()
 assert.strictEqual(
@@ -101,7 +101,7 @@ assert.strictEqual(
   false,
   'isBoolean should return false for numbers'
 );
-console.log('  ✓ util.isBoolean() works correctly');
+// console.log('  ✓ util.isBoolean() works correctly');
 
 // util.isFunction()
 function testFn() {}
@@ -115,7 +115,7 @@ assert.strictEqual(
   false,
   'isFunction should return false for non-functions'
 );
-console.log('  ✓ util.isFunction() works correctly');
+// console.log('  ✓ util.isFunction() works correctly');
 
 // util.isNull()
 assert.strictEqual(
@@ -133,7 +133,7 @@ assert.strictEqual(
   false,
   'isNull should return false for falsy values'
 );
-console.log('  ✓ util.isNull() works correctly');
+// console.log('  ✓ util.isNull() works correctly');
 
 // util.isUndefined()
 assert.strictEqual(
@@ -151,7 +151,7 @@ assert.strictEqual(
   false,
   'isUndefined should return false for null'
 );
-console.log('  ✓ util.isUndefined() works correctly');
+// console.log('  ✓ util.isUndefined() works correctly');
 
 // Test util.promisify()
 console.log('\n⚡ Testing util.promisify():');
@@ -164,7 +164,7 @@ assert.strictEqual(
   'function',
   'promisify should return a function'
 );
-console.log('  ✓ util.promisify() returns a function');
+// console.log('  ✓ util.promisify() returns a function');
 
-console.log('\n✅ All util module tests passed!');
+// Success case - no output
 console.log('📦 node:util module is working correctly');

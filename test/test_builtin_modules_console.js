@@ -24,7 +24,7 @@ assert.strictEqual(
   path2,
   'Modules should be cached and return same instance'
 );
-console.log('✓ Module caching works correctly');
+// Success case - no output
 
 // Test that circular reference issue is fixed
 console.log('\nTesting circular reference fix:');
@@ -50,7 +50,7 @@ if (path.win32) {
 console.log('\nTesting JSON.stringify on path module:');
 try {
   const pathStr = JSON.stringify(path, null, 2);
-  console.log('✓ JSON.stringify works without infinite recursion');
+  // Success case - no output
   // Verify the string contains expected properties
   assert.ok(
     pathStr.includes('"sep"'),
@@ -78,7 +78,7 @@ assert.strictEqual(
   expectedResult,
   'Direct method call on require result should work'
 );
-console.log('✓ Direct method calls on require results work');
+// Success case - no output
 
 // Test console.log with method calls
 console.log('\nTesting console.log with method calls:');
@@ -105,5 +105,5 @@ const modules = [
 ];
 console.log('Multiple modules loaded:', modules.length, 'modules');
 
-console.log('✅ All built-in modules console output tests passed!');
-console.log('✅ Stack overflow issue fixed - circular references resolved!');
+// Success case - no output
+// Success case - no output

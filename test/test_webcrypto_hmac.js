@@ -1,13 +1,9 @@
 // WebCrypto HMAC tests
-console.log('=== Starting WebCrypto HMAC Tests ===');
-
 // Check if crypto is available (skip if OpenSSL not found)
 if (typeof crypto === 'undefined' || !crypto.subtle) {
   console.log('❌ SKIP: WebCrypto not available (OpenSSL not found)');
-  console.log('=== WebCrypto HMAC Tests Completed (Skipped) ===');
 } else {
   // Test 1: crypto.subtle.generateKey for HMAC
-  console.log('Test 1: HMAC key generation');
   try {
     const keyPromise = crypto.subtle.generateKey(
       {
@@ -23,15 +19,12 @@ if (typeof crypto === 'undefined' || !crypto.subtle) {
 
     keyPromise
       .then((key) => {
-        console.log('✅ PASS: HMAC key generated successfully');
         console.log('Key type:', key.type);
         console.log('Key extractable:', key.extractable);
         console.log('Key algorithm name:', key.algorithm.name);
         console.log('Key algorithm hash:', key.algorithm.hash);
 
         // Test 2: Basic HMAC sign/verify test
-        console.log('Test 2: Basic HMAC sign/verify');
-
         const data = new TextEncoder().encode('Hello, WebCrypto HMAC!');
         console.log('Data:', Array.from(data));
 
@@ -40,7 +33,6 @@ if (typeof crypto === 'undefined' || !crypto.subtle) {
 
         signPromise
           .then((signature) => {
-            console.log('✅ PASS: HMAC signing completed');
             const signatureArray = new Uint8Array(signature);
             console.log('Signature length:', signatureArray.length);
             console.log(
@@ -70,7 +62,6 @@ if (typeof crypto === 'undefined' || !crypto.subtle) {
 
             verifyPromise
               .then((isValid) => {
-                console.log('✅ PASS: HMAC verification completed');
                 console.log('Verification result:', isValid);
 
                 if (isValid === true) {
@@ -118,8 +109,6 @@ if (typeof crypto === 'undefined' || !crypto.subtle) {
   }
 
   function testWrongData(key, originalSignature) {
-    console.log('Test 3: HMAC authentication test (wrong data should fail)');
-
     const wrongData = new TextEncoder().encode('Wrong data');
 
     // Try to verify original signature with wrong data - this should fail
@@ -149,8 +138,6 @@ if (typeof crypto === 'undefined' || !crypto.subtle) {
   }
 
   function testDifferentHashAlgorithms() {
-    console.log('Test 4: Different HMAC hash algorithms');
-
     const hashAlgorithms = ['SHA-1', 'SHA-256', 'SHA-384', 'SHA-512'];
     const expectedSizes = {
       'SHA-1': 20, // 160 bits
@@ -163,7 +150,6 @@ if (typeof crypto === 'undefined' || !crypto.subtle) {
 
     function testNextHashAlgorithm() {
       if (testIndex >= hashAlgorithms.length) {
-        console.log('=== WebCrypto HMAC Tests Completed ===');
         return;
       }
 
@@ -204,7 +190,6 @@ if (typeof crypto === 'undefined' || !crypto.subtle) {
             })
             .then((isValid) => {
               if (isValid) {
-                console.log(`✅ PASS: HMAC-${hashAlg} works correctly`);
               } else {
                 console.log(`❌ FAIL: HMAC-${hashAlg} verification failed`);
               }

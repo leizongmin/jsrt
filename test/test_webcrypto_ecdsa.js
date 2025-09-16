@@ -4,9 +4,8 @@ const assert = require('jsrt:assert');
 // Check if crypto is available (skip if OpenSSL not found)
 if (typeof crypto === 'undefined' || !crypto.subtle) {
   console.log('❌ SKIP: WebCrypto not available (OpenSSL not found)');
-  console.log('=== ECDSA Tests Completed (Skipped) ===');
 } else {
-  console.log('=== WebCrypto ECDSA Signature/Verification Tests ===');
+  // console.log('=== WebCrypto ECDSA Signature/Verification Tests ===');
 
   // Test 1: ECDSA key generation with P-256 curve
   function testECDSAKeyGenerationP256() {
@@ -22,7 +21,7 @@ if (typeof crypto === 'undefined' || !crypto.subtle) {
         ['sign', 'verify']
       )
       .then(function (keyPair) {
-        console.log('✅ ECDSA P-256 key pair generated successfully');
+        // console.log('✅ ECDSA P-256 key pair generated successfully');
 
         // Verify key properties
         assert.strictEqual(
@@ -88,7 +87,7 @@ if (typeof crypto === 'undefined' || !crypto.subtle) {
           )
           .then(function (isValid) {
             assert.strictEqual(isValid, true, 'Signature should be valid');
-            console.log('✅ ECDSA signature verified successfully');
+            // console.log('✅ ECDSA signature verified successfully');
             return { keyPair, signature, data };
           });
       })
@@ -120,7 +119,7 @@ if (typeof crypto === 'undefined' || !crypto.subtle) {
           false,
           'Signature should be invalid for tampered data'
         );
-        console.log('✅ ECDSA correctly rejected tampered data');
+        // console.log('✅ ECDSA correctly rejected tampered data');
       })
       .catch(function (error) {
         console.error('❌ ECDSA invalid signature test failed:', error.message);
@@ -146,7 +145,7 @@ if (typeof crypto === 'undefined' || !crypto.subtle) {
           ['sign', 'verify']
         )
         .then(function (keyPair) {
-          console.log('✅ Generated ECDSA key pair with curve:', curve);
+          // console.log('✅ Generated ECDSA key pair with curve:', curve);
 
           // Test signing with the generated key
           const testData = new TextEncoder().encode('Test data for ' + curve);
@@ -176,7 +175,7 @@ if (typeof crypto === 'undefined' || !crypto.subtle) {
                 true,
                 'Signature should be valid for ' + curve
               );
-              console.log('✅ ECDSA sign/verify successful with curve:', curve);
+              // console.log('✅ ECDSA sign/verify successful with curve:', curve);
             });
         })
         .catch(function (error) {
@@ -240,7 +239,7 @@ if (typeof crypto === 'undefined' || !crypto.subtle) {
                   true,
                   'Signature should be valid with ' + hash
                 );
-                console.log('✅ ECDSA sign/verify successful with hash:', hash);
+                // console.log('✅ ECDSA sign/verify successful with hash:', hash);
               });
           })();
 
@@ -262,7 +261,7 @@ if (typeof crypto === 'undefined' || !crypto.subtle) {
     .then(testECDSADifferentCurves)
     .then(testECDSADifferentHashes)
     .then(function () {
-      console.log('\n=== All ECDSA Tests Passed! ===');
+      // console.log('\n=== All ECDSA Tests Passed! ===');
     })
     .catch(function (error) {
       console.error('\n=== ECDSA Tests Failed ===');

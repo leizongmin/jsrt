@@ -4,7 +4,7 @@ const path = require('node:path');
 const os = require('node:os');
 const { Buffer } = require('node:buffer');
 
-console.log('=== Testing Advanced File Operations ===');
+// // console.log('=== Testing Advanced File Operations ===');
 
 // Test setup
 const testDir = path.join(os.tmpdir(), 'jsrt-advanced-tests');
@@ -66,7 +66,7 @@ try {
     'File should be truncated to 0 bytes when no length specified'
   );
 
-  console.log('✓ truncateSync test passed');
+  // console.log('✓ truncateSync test passed');
 } catch (error) {
   console.error('✗ truncateSync test failed:', error.message);
   throw error;
@@ -113,7 +113,7 @@ try {
     fs.closeSync(fd);
   }
 
-  console.log('✓ ftruncateSync test passed');
+  // console.log('✓ ftruncateSync test passed');
 } catch (error) {
   console.error('✗ ftruncateSync test failed:', error.message);
   throw error;
@@ -168,7 +168,7 @@ try {
   fs.rmdirSync(tempDir);
   fs.rmdirSync(tempDir2);
 
-  console.log('✓ mkdtempSync test passed');
+  // console.log('✓ mkdtempSync test passed');
 } catch (error) {
   console.error('✗ mkdtempSync test failed:', error.message);
   throw error;
@@ -208,7 +208,7 @@ try {
   fs.rmdirSync(tempDir2);
   fs.rmdirSync(tempDirBuffer.toString());
 
-  console.log('✓ mkdtempSync options test passed');
+  // console.log('✓ mkdtempSync options test passed');
 } catch (error) {
   console.error('✗ mkdtempSync options test failed:', error.message);
   throw error;
@@ -231,7 +231,7 @@ try {
     // Sync the file (should not throw)
     fs.fsyncSync(fd);
 
-    console.log('✓ fsyncSync test passed');
+    // console.log('✓ fsyncSync test passed');
   } finally {
     fs.closeSync(fd);
   }
@@ -257,7 +257,7 @@ try {
     // Data sync the file (should not throw)
     fs.fdatasyncSync(fd);
 
-    console.log('✓ fdatasyncSync test passed');
+    // console.log('✓ fdatasyncSync test passed');
   } finally {
     fs.closeSync(fd);
   }
@@ -286,7 +286,7 @@ try {
       'truncate',
       'Error should have correct syscall'
     );
-    console.log('✓ truncateSync error handling test passed');
+    // console.log('✓ truncateSync error handling test passed');
   }
 
   // Test ftruncateSync with invalid fd
@@ -300,7 +300,7 @@ try {
       true,
       'ftruncateSync should throw error with code'
     );
-    console.log('✓ ftruncateSync error handling test passed');
+    // console.log('✓ ftruncateSync error handling test passed');
   }
 
   // Test mkdtempSync with invalid prefix (directory doesn't exist)
@@ -314,7 +314,7 @@ try {
       'ENOENT',
       'mkdtempSync should throw ENOENT error'
     );
-    console.log('✓ mkdtempSync error handling test passed');
+    // console.log('✓ mkdtempSync error handling test passed');
   }
 } catch (error) {
   console.error('✗ Error handling test failed:', error.message);
@@ -336,7 +336,7 @@ try {
       'RangeError',
       'truncateSync should throw RangeError for negative length'
     );
-    console.log('✓ truncateSync range validation test passed');
+    // console.log('✓ truncateSync range validation test passed');
   }
 
   // Test negative length for ftruncateSync
@@ -351,7 +351,7 @@ try {
         'RangeError',
         'ftruncateSync should throw RangeError for negative length'
       );
-      console.log('✓ ftruncateSync range validation test passed');
+      // console.log('✓ ftruncateSync range validation test passed');
     }
   } finally {
     fs.closeSync(fd);
@@ -369,4 +369,4 @@ try {
   console.warn('Warning: Failed to clean up test directory:', e.message);
 }
 
-console.log('\n=== All Advanced Operations tests passed! ===');
+// console.log('\n=== All Advanced Operations tests passed! ===');

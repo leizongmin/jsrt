@@ -470,11 +470,20 @@ static JSValue headers_get(JSContext* ctx, JSValueConst this_val, int argc, JSVa
     return JS_UNDEFINED;
   }
 
+  // Convert name to lowercase for case-insensitive lookup
+  size_t name_len = strlen(name);
+  char* lower_name = malloc(name_len + 1);
+  for (size_t i = 0; i < name_len; i++) {
+    lower_name[i] = (char)tolower((unsigned char)name[i]);
+  }
+  lower_name[name_len] = '\0';
+
   JSValue headers_map = JS_GetPropertyStr(ctx, this_val, "_headers");
-  JSValue result = JS_GetPropertyStr(ctx, headers_map, name);
+  JSValue result = JS_GetPropertyStr(ctx, headers_map, lower_name);
 
   JS_FreeValue(ctx, headers_map);
   JS_FreeCString(ctx, name);
+  free(lower_name);
 
   return JS_IsUndefined(result) ? JS_NULL : result;
 }
@@ -489,11 +498,20 @@ static JSValue headers_set(JSContext* ctx, JSValueConst this_val, int argc, JSVa
     return JS_UNDEFINED;
   }
 
+  // Convert name to lowercase for case-insensitive storage
+  size_t name_len = strlen(name);
+  char* lower_name = malloc(name_len + 1);
+  for (size_t i = 0; i < name_len; i++) {
+    lower_name[i] = (char)tolower((unsigned char)name[i]);
+  }
+  lower_name[name_len] = '\0';
+
   JSValue headers_map = JS_GetPropertyStr(ctx, this_val, "_headers");
-  JS_SetPropertyStr(ctx, headers_map, name, JS_DupValue(ctx, argv[1]));
+  JS_SetPropertyStr(ctx, headers_map, lower_name, JS_DupValue(ctx, argv[1]));
 
   JS_FreeValue(ctx, headers_map);
   JS_FreeCString(ctx, name);
+  free(lower_name);
 
   return JS_UNDEFINED;
 }
@@ -508,13 +526,22 @@ static JSValue headers_has(JSContext* ctx, JSValueConst this_val, int argc, JSVa
     return JS_FALSE;
   }
 
+  // Convert name to lowercase for case-insensitive lookup
+  size_t name_len = strlen(name);
+  char* lower_name = malloc(name_len + 1);
+  for (size_t i = 0; i < name_len; i++) {
+    lower_name[i] = (char)tolower((unsigned char)name[i]);
+  }
+  lower_name[name_len] = '\0';
+
   JSValue headers_map = JS_GetPropertyStr(ctx, this_val, "_headers");
-  JSValue value = JS_GetPropertyStr(ctx, headers_map, name);
+  JSValue value = JS_GetPropertyStr(ctx, headers_map, lower_name);
   JSValue result = JS_NewBool(ctx, !JS_IsUndefined(value));
 
   JS_FreeValue(ctx, headers_map);
   JS_FreeValue(ctx, value);
   JS_FreeCString(ctx, name);
+  free(lower_name);
 
   return result;
 }
@@ -529,13 +556,22 @@ static JSValue headers_delete(JSContext* ctx, JSValueConst this_val, int argc, J
     return JS_UNDEFINED;
   }
 
+  // Convert name to lowercase for case-insensitive deletion
+  size_t name_len = strlen(name);
+  char* lower_name = malloc(name_len + 1);
+  for (size_t i = 0; i < name_len; i++) {
+    lower_name[i] = (char)tolower((unsigned char)name[i]);
+  }
+  lower_name[name_len] = '\0';
+
   JSValue headers_map = JS_GetPropertyStr(ctx, this_val, "_headers");
-  JSAtom atom = JS_NewAtom(ctx, name);
+  JSAtom atom = JS_NewAtom(ctx, lower_name);
   JS_DeleteProperty(ctx, headers_map, atom, 0);
   JS_FreeAtom(ctx, atom);
 
   JS_FreeValue(ctx, headers_map);
   JS_FreeCString(ctx, name);
+  free(lower_name);
 
   return JS_UNDEFINED;
 }
@@ -706,8 +742,17 @@ static JSValue headers_constructor(JSContext* ctx, JSValueConst new_target, int 
         JSValue value = JS_GetProperty(ctx, argv[0], tab[i].atom);
         const char* key_str = JS_ToCString(ctx, key);
         if (key_str) {
-          JS_SetPropertyStr(ctx, headers_map, key_str, JS_DupValue(ctx, value));
+          // Convert key to lowercase for case-insensitive storage
+          size_t key_len = strlen(key_str);
+          char* lower_key = malloc(key_len + 1);
+          for (size_t j = 0; j < key_len; j++) {
+            lower_key[j] = (char)tolower((unsigned char)key_str[j]);
+          }
+          lower_key[key_len] = '\0';
+
+          JS_SetPropertyStr(ctx, headers_map, lower_key, JS_DupValue(ctx, value));
           JS_FreeCString(ctx, key_str);
+          free(lower_key);
         }
         JS_FreeValue(ctx, key);
         JS_FreeValue(ctx, value);

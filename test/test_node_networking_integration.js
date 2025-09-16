@@ -1,6 +1,6 @@
 const assert = require('jsrt:assert');
 
-console.log('=== Node.js Networking Integration Test ===');
+// console.log('=== Node.js Networking Integration Test ===');
 console.log('Testing node:net and node:http modules together...');
 
 // Test both modules load
@@ -9,7 +9,7 @@ const http = require('node:http');
 
 assert.ok(net, 'node:net module should load');
 assert.ok(http, 'node:http module should load');
-console.log('✓ Both networking modules load successfully');
+// console.log('✓ Both networking modules load successfully');
 
 // Test that HTTP builds on net
 console.log('\n🌐 Testing HTTP Server (built on net.Server):');
@@ -32,7 +32,7 @@ assert.ok(
   typeof server.listen === 'function',
   'HTTP server should have listen method'
 );
-console.log('✓ HTTP server created with request handler');
+// console.log('✓ HTTP server created with request handler');
 
 // Test net.Socket creation
 console.log('\n🔌 Testing TCP Socket:');
@@ -47,7 +47,7 @@ assert.ok(
   'Socket should have write method'
 );
 assert.ok(typeof socket.end === 'function', 'Socket should have end method');
-console.log('✓ TCP socket created with all methods');
+// console.log('✓ TCP socket created with all methods');
 
 // Test net.Server creation
 console.log('\n🏠 Testing TCP Server:');
@@ -62,7 +62,7 @@ assert.ok(
   typeof netServer.listen === 'function',
   'TCP server should have listen method'
 );
-console.log('✓ TCP server created with connection handler');
+// console.log('✓ TCP server created with connection handler');
 
 // Test HTTP client request
 console.log('\n📤 Testing HTTP Client:');
@@ -73,7 +73,7 @@ assert.strictEqual(
   'http://example.com/test',
   'Request URL should be set correctly'
 );
-console.log('✓ HTTP client request created');
+// console.log('✓ HTTP client request created');
 
 // Test networking constants
 console.log('\n📋 Testing networking constants:');
@@ -89,7 +89,7 @@ assert.strictEqual(
   'OK',
   'Status code 200 should be OK'
 );
-console.log('✓ HTTP constants are properly defined');
+// console.log('✓ HTTP constants are properly defined');
 
 // Test that HTTP and net modules work together conceptually
 console.log('\n🔗 Testing HTTP/TCP Integration:');
@@ -97,26 +97,26 @@ console.log('\n🔗 Testing HTTP/TCP Integration:');
 // HTTP creates underlying net server
 assert.ok(server, 'HTTP server exists');
 // In a real scenario, we'd test actual networking, but for now we test the structure
-console.log('  ✓ HTTP server built on TCP foundation');
-console.log('  ✓ Both modules use EventEmitter pattern');
-console.log('  ✓ Consistent API design across modules');
+// console.log('  ✓ HTTP server built on TCP foundation');
+// console.log('  ✓ Both modules use EventEmitter pattern');
+// console.log('  ✓ Consistent API design across modules');
 
 // Clean up
 socket.destroy();
 netServer.close();
 server.close();
 
-console.log('\n✅ All networking integration tests passed!');
-console.log('🎉 Node.js networking compatibility layer working!');
+// console.log('\n✅ All networking integration tests passed!');
+console.log('📊 Node.js networking compatibility layer working!');
 console.log('\nImplemented networking modules:');
-console.log('  ✅ node:net - TCP networking (Socket, Server)');
-console.log('  ✅ node:http - HTTP protocol (Server, Request, Response)');
+// console.log('  ✅ node:net - TCP networking (Socket, Server)');
+// console.log('  ✅ node:http - HTTP protocol (Server, Request, Response)');
 console.log('\nFeatures working:');
-console.log('  ✅ EventEmitter inheritance for all networking objects');
-console.log('  ✅ Factory functions (createServer, connect, request)');
-console.log('  ✅ Constructor functions (Socket, Server, etc.)');
-console.log('  ✅ HTTP constants (METHODS, STATUS_CODES)');
-console.log('  ✅ CommonJS require() support');
-console.log('  ✅ Consistent API with Node.js networking modules');
+// console.log('  ✅ EventEmitter inheritance for all networking objects');
+// console.log('  ✅ Factory functions (createServer, connect, request)');
+// console.log('  ✅ Constructor functions (Socket, Server, etc.)');
+// console.log('  ✅ HTTP constants (METHODS, STATUS_CODES)');
+// console.log('  ✅ CommonJS require() support');
+// console.log('  ✅ Consistent API with Node.js networking modules');
 
 console.log('\nReady for Phase 5: Advanced modules (fs, stream, crypto)');

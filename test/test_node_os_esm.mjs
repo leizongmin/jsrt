@@ -24,5 +24,5 @@ console.log('userInfo():', userInfo());
 console.log('endianness():', endianness());
 console.log('EOL:', JSON.stringify(EOL));
 
-console.log('✅ ES module imports for node:os working correctly');
-console.log('=== ES module memory management for node:os successful ===');
+// console.log('✅ ES module imports for node:os working correctly');
+// console.log('=== ES module memory management for node:os successful ===');

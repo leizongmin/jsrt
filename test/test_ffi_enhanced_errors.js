@@ -1,12 +1,8 @@
 const assert = require('jsrt:assert');
 
-console.log('=== FFI Enhanced Error Reporting Tests ===');
-
 // Test enhanced error reporting with stack traces
 try {
   const ffi = require('jsrt:ffi');
-
-  console.log('Test 1: Basic error structure validation');
 
   try {
     ffi.malloc(0); // Invalid size
@@ -45,12 +41,8 @@ try {
       );
     }
 
-    console.log('✓ Error structure validation passed');
     console.log('Error message:', error.message);
-    console.log('Stack trace available:', !!error.stack);
   }
-
-  console.log('Test 2: Library loading error with detailed information');
 
   try {
     ffi.Library('nonexistent.so', {});
@@ -77,11 +69,8 @@ try {
       'Library error should have stack trace'
     );
 
-    console.log('✓ Library loading error validation passed');
     console.log('Detailed error message:', error.message);
   }
-
-  console.log('Test 3: Function signature error reporting');
 
   try {
     ffi.Library(); // Missing arguments
@@ -102,11 +91,7 @@ try {
       'string',
       'Missing args error should have stack trace'
     );
-
-    console.log('✓ Function signature error validation passed');
   }
-
-  console.log('Test 4: Memory management error reporting');
 
   try {
     ffi.writeString(0, 'test'); // Invalid pointer for writeString
@@ -122,11 +107,7 @@ try {
       'string',
       'Memory error should have stack trace'
     );
-
-    console.log('✓ Memory management error validation passed');
   }
-
-  console.log('Test 5: Array function error reporting');
 
   try {
     ffi.arrayFromPointer(); // Missing arguments
@@ -142,11 +123,7 @@ try {
       'string',
       'Array error should have stack trace'
     );
-
-    console.log('✓ Array function error validation passed');
   }
-
-  console.log('Test 6: Callback error reporting');
 
   try {
     ffi.Callback(); // Missing arguments
@@ -167,11 +144,7 @@ try {
       'string',
       'Callback error should have stack trace'
     );
-
-    console.log('✓ Callback error validation passed');
   }
-
-  console.log('Test 7: Async function error reporting');
 
   try {
     ffi.callAsync(); // Missing arguments
@@ -192,11 +165,7 @@ try {
       'string',
       'Async error should have stack trace'
     );
-
-    console.log('✓ Async function error validation passed');
   }
-
-  console.log('Test 8: Struct function error reporting');
 
   try {
     ffi.Struct(); // Missing arguments
@@ -217,8 +186,6 @@ try {
       'string',
       'Struct error should have stack trace'
     );
-
-    console.log('✓ Struct function error validation passed');
   }
 
   try {
@@ -240,11 +207,7 @@ try {
       'string',
       'allocStruct error should have stack trace'
     );
-
-    console.log('✓ allocStruct function error validation passed');
   }
-
-  console.log('Test 9: Error message consistency');
 
   const errorFunctions = [
     () => ffi.malloc(0),
@@ -280,10 +243,6 @@ try {
     errorFunctions.length,
     'All test functions should throw errors'
   );
-  console.log('✓ Error message consistency validation passed');
-
-  console.log('Test 10: Stack trace content validation');
-
   function testFunction() {
     try {
       ffi.malloc(-1); // Invalid size
@@ -300,7 +259,6 @@ try {
         'Stack trace should not be empty'
       );
 
-      console.log('✓ Stack trace content validation passed');
       console.log('Sample stack trace:');
       console.log(error.stack.split('\n').slice(0, 3).join('\n') + '...');
 
@@ -314,8 +272,6 @@ try {
   } catch (error) {
     // Expected
   }
-
-  console.log('✓ All enhanced error reporting tests passed');
 } catch (error) {
   console.error('❌ Enhanced error reporting test failed:', error.message);
   if (error.stack) {
@@ -323,5 +279,3 @@ try {
   }
   throw error;
 }
-
-console.log('=== Enhanced Error Reporting Tests Completed ===');

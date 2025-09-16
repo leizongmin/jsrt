@@ -1,11 +1,11 @@
 const assert = require('jsrt:assert');
 
-console.log('=== Node.js events Module Tests ===');
+// console.log('=== Node.js events Module Tests ===');
 
 // Test CommonJS import
 const events = require('node:events');
 const { EventEmitter } = events;
-console.log('✓ CommonJS require("node:events") successful');
+// console.log('✓ CommonJS require("node:events") successful');
 
 // Test EventEmitter constructor
 console.log('\n🏗️ Testing EventEmitter constructor:');
@@ -21,7 +21,7 @@ assert.strictEqual(
   'function',
   'EventEmitter should have emit method'
 );
-console.log('✓ EventEmitter constructor works');
+// console.log('✓ EventEmitter constructor works');
 
 // Test basic event emission and listening
 console.log('\n📡 Testing basic event emission:');
@@ -41,7 +41,7 @@ assert.strictEqual(
   true,
   'emit should return true when listeners exist'
 );
-console.log('✓ Basic event emission and listening works');
+// console.log('✓ Basic event emission and listening works');
 
 // Test multiple listeners
 console.log('\n🔄 Testing multiple listeners:');
@@ -52,10 +52,10 @@ emitter.on('count', () => counter++);
 
 emitter.emit('count');
 assert.strictEqual(counter, 3, 'All listeners should be called');
-console.log('✓ Multiple listeners work correctly');
+// console.log('✓ Multiple listeners work correctly');
 
 // Test once() method
-console.log('\n🎯 Testing once() method:');
+console.log('\n📊 Testing once() method:');
 let onceCounter = 0;
 emitter.once('once-test', () => onceCounter++);
 
@@ -68,7 +68,7 @@ assert.strictEqual(
   1,
   'once() listener should only be called once'
 );
-console.log('✓ once() method works correctly');
+// console.log('✓ once() method works correctly');
 
 // Test removeListener
 console.log('\n🗑️ Testing removeListener:');
@@ -92,7 +92,7 @@ assert.strictEqual(
   1,
   'Listener should not be called after removal'
 );
-console.log('✓ removeListener works correctly');
+// console.log('✓ removeListener works correctly');
 
 // Test listenerCount
 console.log('\n📊 Testing listenerCount:');
@@ -105,7 +105,7 @@ assert.strictEqual(
   0,
   'listenerCount should return 0 for nonexistent events'
 );
-console.log('✓ listenerCount works correctly');
+// console.log('✓ listenerCount works correctly');
 
 // Test removeAllListeners
 console.log('\n🧹 Testing removeAllListeners:');
@@ -124,7 +124,7 @@ assert.strictEqual(
   0,
   'Should have 0 listeners after cleanup'
 );
-console.log('✓ removeAllListeners works correctly');
+// console.log('✓ removeAllListeners works correctly');
 
 // Test addListener (alias for on)
 console.log('\n🔗 Testing addListener alias:');
@@ -134,7 +134,7 @@ emitter.addListener('alias-test', () => {
 });
 emitter.emit('alias-test');
 assert.strictEqual(aliasTest, true, 'addListener should work as alias for on');
-console.log('✓ addListener alias works correctly');
+// console.log('✓ addListener alias works correctly');
 
 // Test chaining
 console.log('\n⛓️ Testing method chaining:');
@@ -144,7 +144,7 @@ assert.strictEqual(
   emitter,
   'on() should return the emitter for chaining'
 );
-console.log('✓ Method chaining works correctly');
+// console.log('✓ Method chaining works correctly');
 
 // Test emit with no listeners
 console.log('\n🔇 Testing emit with no listeners:');
@@ -154,7 +154,7 @@ assert.strictEqual(
   false,
   'emit should return false when no listeners exist'
 );
-console.log('✓ emit with no listeners works correctly');
+// console.log('✓ emit with no listeners works correctly');
 
 // Test emit with multiple arguments
 console.log('\n📦 Testing emit with multiple arguments:');
@@ -173,7 +173,7 @@ assert.deepEqual(
   { key: 'value' },
   'Third argument should be passed correctly'
 );
-console.log('✓ Multiple arguments work correctly');
+// console.log('✓ Multiple arguments work correctly');
 
-console.log('\n✅ All events module tests passed!');
-console.log('🎉 node:events module with EventEmitter is working correctly');
+// Success case - no output needed
+// node:events module with EventEmitter is working correctly

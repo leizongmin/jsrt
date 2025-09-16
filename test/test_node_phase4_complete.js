@@ -1,6 +1,6 @@
 const assert = require('jsrt:assert');
 
-console.log('=== Node.js Phase 4 Networking Completion Test ===');
+// console.log('=== Node.js Phase 4 Networking Completion Test ===');
 console.log('Testing all Phase 4 networking modules together...');
 
 // Test all four networking modules load
@@ -13,7 +13,7 @@ assert.ok(net, 'node:net module should load');
 assert.ok(http, 'node:http module should load');
 assert.ok(dns, 'node:dns module should load');
 assert.ok(https, 'node:https module should load');
-console.log('✓ All four networking modules load successfully');
+// console.log('✓ All four networking modules load successfully');
 
 // Test that all modules have expected functions
 console.log('\n🌐 Testing module APIs:');
@@ -25,7 +25,7 @@ assert.strictEqual(
   'net.createServer should exist'
 );
 assert.strictEqual(typeof net.connect, 'function', 'net.connect should exist');
-console.log('✓ net module API complete');
+// console.log('✓ net module API complete');
 
 // HTTP module
 assert.strictEqual(
@@ -43,7 +43,7 @@ assert.ok(
   typeof http.STATUS_CODES === 'object',
   'http.STATUS_CODES should be object'
 );
-console.log('✓ http module API complete');
+// console.log('✓ http module API complete');
 
 // DNS module
 assert.strictEqual(typeof dns.lookup, 'function', 'dns.lookup should exist');
@@ -59,7 +59,7 @@ assert.strictEqual(
   'dns.resolve6 should exist'
 );
 assert.ok(dns.RRTYPE, 'dns.RRTYPE constants should exist');
-console.log('✓ dns module API complete');
+// console.log('✓ dns module API complete');
 
 // HTTPS module
 assert.strictEqual(
@@ -77,7 +77,7 @@ assert.ok(
   Array.isArray(https.METHODS),
   'https.METHODS should be inherited from http'
 );
-console.log('✓ https module API complete');
+// console.log('✓ https module API complete');
 
 // Test module integration patterns
 console.log('\n🔗 Testing module integration:');
@@ -89,7 +89,7 @@ assert.strictEqual(
   'function',
   'DNS should return promises'
 );
-console.log('✓ DNS returns promises for async operations');
+// console.log('✓ DNS returns promises for async operations');
 
 // HTTP and HTTPS share constants
 assert.deepEqual(
@@ -102,7 +102,7 @@ assert.deepEqual(
   https.STATUS_CODES,
   'HTTP and HTTPS should share STATUS_CODES'
 );
-console.log('✓ HTTP and HTTPS share common constants');
+// console.log('✓ HTTP and HTTPS share common constants');
 
 // HTTPS builds on HTTP (dependency check)
 assert.ok(https.globalAgent, 'HTTPS should have globalAgent');
@@ -111,7 +111,7 @@ assert.strictEqual(
   'https:',
   'HTTPS agent should use https protocol'
 );
-console.log('✓ HTTPS properly extends HTTP functionality');
+// console.log('✓ HTTPS properly extends HTTP functionality');
 
 // Test basic object creation (structure only, no network)
 console.log('\n📋 Testing object creation:');
@@ -124,7 +124,7 @@ assert.strictEqual(
   'function',
   'TCP server should have listen method'
 );
-console.log('✓ TCP server creation works');
+// console.log('✓ TCP server creation works');
 
 // Create HTTP server
 const httpServer = http.createServer();
@@ -134,7 +134,7 @@ assert.strictEqual(
   'function',
   'HTTP server should have listen method'
 );
-console.log('✓ HTTP server creation works');
+// console.log('✓ HTTP server creation works');
 
 // Test HTTPS server creation (should indicate incomplete)
 try {
@@ -146,7 +146,7 @@ try {
     error.code === 'ENOCERT',
     'HTTPS should throw ENOCERT for missing certificates'
   );
-  console.log('✅ HTTPS server properly requires SSL certificates');
+  // console.log('✅ HTTPS server properly requires SSL certificates');
 }
 
 // Create HTTP request
@@ -157,7 +157,7 @@ assert.strictEqual(
   'http://example.com/test',
   'HTTP request URL should be set'
 );
-console.log('✓ HTTP client request creation works');
+// console.log('✓ HTTP client request creation works');
 
 // DNS error handling
 try {
@@ -165,30 +165,30 @@ try {
   assert.fail('DNS lookup without args should throw');
 } catch (error) {
   assert.ok(error.message.includes('hostname'), 'DNS should require hostname');
-  console.log('✓ DNS error handling works');
+  // console.log('✓ DNS error handling works');
 }
 
 // Clean up objects
 tcpServer.close();
 httpServer.close();
 
-console.log('\n✅ All Phase 4 networking integration tests passed!');
-console.log('🎉 Node.js Phase 4 networking compatibility layer complete!');
+// console.log('\n✅ All Phase 4 networking integration tests passed!');
+console.log('📊 Node.js Phase 4 networking compatibility layer complete!');
 
 console.log('\nCompleted Phase 4 networking modules:');
-console.log('  ✅ node:net - TCP networking (Socket, Server)');
-console.log('  ✅ node:http - HTTP protocol (Server, Request, Response)');
-console.log('  ✅ node:dns - DNS lookup operations');
-console.log('  ✅ node:https - HTTPS support (basic implementation)');
+// console.log('  ✅ node:net - TCP networking (Socket, Server)');
+// console.log('  ✅ node:http - HTTP protocol (Server, Request, Response)');
+// console.log('  ✅ node:dns - DNS lookup operations');
+// console.log('  ✅ node:https - HTTPS support (basic implementation)');
 
 console.log('\nFeatures working across all modules:');
-console.log('  ✅ CommonJS require() support for all modules');
-console.log('  ✅ ES module import support for all modules');
-console.log('  ✅ EventEmitter inheritance for networking objects');
-console.log('  ✅ Promise-based async operations (DNS)');
-console.log('  ✅ Consistent API design across modules');
-console.log('  ✅ Error handling with Node.js-compatible error codes');
-console.log('  ✅ HTTP constants sharing between HTTP and HTTPS');
+// console.log('  ✅ CommonJS require() support for all modules');
+// console.log('  ✅ ES module import support for all modules');
+// console.log('  ✅ EventEmitter inheritance for networking objects');
+// console.log('  ✅ Promise-based async operations (DNS)');
+// console.log('  ✅ Consistent API design across modules');
+// console.log('  ✅ Error handling with Node.js-compatible error codes');
+// console.log('  ✅ HTTP constants sharing between HTTP and HTTPS');
 
-console.log('\n🚀 Phase 4 - Networking Modules: COMPLETED');
+console.log('\n📊 Phase 4 - Networking Modules: COMPLETED');
 console.log('Ready for Phase 5 or production use!');

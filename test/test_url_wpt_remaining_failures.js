@@ -33,7 +33,7 @@ function test(name, testFn) {
   console.log(`\nTest: ${name}`);
   try {
     testFn();
-    console.log('✅ PASS');
+    // console.log('✅ PASS');
   } catch (e) {
     failedTests++;
     console.log('❌ FAIL:', e.message);
@@ -155,7 +155,7 @@ test('URL Constructor - Backslash normalization for special schemes', () => {
       assert.strictEqual(url.href, expected);
     } catch (e) {
       if (expected === null) {
-        console.log(`    ✅ ${input} correctly threw: ${e.message}`);
+        // Success case - no output
       } else {
         throw new Error(
           `Backslash normalization failed for "${input}": ${e.message}`
@@ -211,7 +211,7 @@ test('URL Constructor - Port and zero-port handling failures', () => {
       console.log(`    ERROR: ${input} should have thrown but didn't`);
     } catch (e) {
       didThrow = true;
-      console.log(`    ✅ ${input} correctly threw: ${e.message}`);
+      // Success case - no output
     }
 
     if (!didThrow) {
@@ -312,9 +312,7 @@ test('URLSearchParams Constructor - Advanced constructor cases', () => {
         shouldThrow();
       } catch (e) {
         didThrow = true;
-        console.log(
-          `    ✅ DOMException constructor correctly threw: ${e.message}`
-        );
+        // Success case - no output
       }
       if (!didThrow) {
         throw new Error('DOMException constructor should have thrown');
@@ -717,7 +715,7 @@ test('Invalid URLs - IPv6 validation', () => {
       console.log(`    ERROR: ${input} should have thrown but didn't`);
     } catch (e) {
       didThrow = true;
-      console.log(`    ✅ ${input} correctly threw: ${e.message}`);
+      // Success case - no output
     }
 
     if (!didThrow) {
@@ -745,7 +743,7 @@ test('Invalid URLs - Blob URL validation', () => {
       console.log(`    ERROR: ${input} should have thrown but didn't`);
     } catch (e) {
       didThrow = true;
-      console.log(`    ✅ ${input} correctly threw: ${e.message}`);
+      // Success case - no output
     }
 
     if (!didThrow) {
@@ -774,7 +772,7 @@ test('Invalid URLs - Unicode hostname validation', () => {
       console.log(`    Input: ${input} - Got valid URL, should have thrown`);
     } catch (e) {
       didThrow = true;
-      console.log(`    ✅ ${input} correctly threw: ${e.message}`);
+      // Success case - no output
     }
 
     if (!didThrow) {
@@ -825,7 +823,7 @@ test('Special Character Encoding - Userinfo and path encoding', () => {
 
 // ===== SUMMARY =====
 
-console.log('\\n=== Test Summary ===');
+// console.log('\\n=== Test Summary ===');
 console.log(`Total tests: ${totalTests}`);
 console.log(`Failed tests: ${failedTests}`);
 console.log(`Passed tests: ${totalTests - failedTests}`);
@@ -862,4 +860,4 @@ if (failedTests > 0) {
   );
 }
 
-console.log('\\n=== Tests Completed ===');
+// console.log('\\n=== Tests Completed ===');

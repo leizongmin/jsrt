@@ -4,9 +4,8 @@ const assert = require('jsrt:assert');
 // Check if crypto is available (skip if OpenSSL not found)
 if (typeof crypto === 'undefined' || !crypto.subtle) {
   console.log('❌ SKIP: WebCrypto not available (OpenSSL not found)');
-  console.log('=== ECDH Tests Completed (Skipped) ===');
 } else {
-  console.log('=== WebCrypto ECDH Key Derivation Tests ===');
+  // console.log('=== WebCrypto ECDH Key Derivation Tests ===');
 
   // Test 1: ECDH key generation with P-256 curve
   function testECDHKeyGenerationP256() {
@@ -22,7 +21,7 @@ if (typeof crypto === 'undefined' || !crypto.subtle) {
         ['deriveKey', 'deriveBits']
       )
       .then(function (keyPair) {
-        console.log('✅ ECDH P-256 key pair generated successfully');
+        // Success case - no output
 
         // Verify key properties
         assert.strictEqual(
@@ -83,7 +82,7 @@ if (typeof crypto === 'undefined' || !crypto.subtle) {
         const aliceKeyPair = keyPairs[0];
         const bobKeyPair = keyPairs[1];
 
-        console.log('✅ Generated key pairs for Alice and Bob');
+        // Success case - no output
 
         // Alice derives shared secret using Bob's public key
         const aliceSecretPromise = crypto.subtle.deriveBits(
@@ -111,7 +110,7 @@ if (typeof crypto === 'undefined' || !crypto.subtle) {
         const aliceSecret = new Uint8Array(secrets[0]);
         const bobSecret = new Uint8Array(secrets[1]);
 
-        console.log('✅ Derived shared secrets for both parties');
+        // Success case - no output
         console.log('   Alice secret length:', aliceSecret.length, 'bytes');
         console.log('   Bob secret length:', bobSecret.length, 'bytes');
 
@@ -135,9 +134,7 @@ if (typeof crypto === 'undefined' || !crypto.subtle) {
           true,
           'Both parties should derive the same secret'
         );
-        console.log(
-          '✅ Both parties successfully derived the same shared secret'
-        );
+        // Success case - no output
       })
       .catch(function (error) {
         console.error('❌ ECDH key derivation failed:', error.message);
@@ -172,7 +169,7 @@ if (typeof crypto === 'undefined' || !crypto.subtle) {
         ),
       ])
         .then(function (keyPairs) {
-          console.log('✅ Generated ECDH key pairs with curve:', curve);
+          // Success case - no output
 
           // Derive bits using each other's public key
           return crypto.subtle.deriveBits(
@@ -185,7 +182,7 @@ if (typeof crypto === 'undefined' || !crypto.subtle) {
           );
         })
         .then(function (sharedSecret) {
-          console.log('✅ ECDH key derivation successful with curve:', curve);
+          // Success case - no output
           assert.strictEqual(
             sharedSecret.byteLength,
             32,
@@ -247,7 +244,7 @@ if (typeof crypto === 'undefined' || !crypto.subtle) {
         );
       })
       .then(function (aesKey) {
-        console.log('✅ Successfully derived AES key from ECDH shared secret');
+        // Success case - no output
 
         // Verify the derived key properties
         assert.strictEqual(
@@ -266,7 +263,7 @@ if (typeof crypto === 'undefined' || !crypto.subtle) {
           'Derived key length should be 256 bits'
         );
 
-        console.log('✅ Derived AES key has correct properties');
+        // Success case - no output
       })
       .catch(function (error) {
         // Note: deriveKey might not be fully implemented yet
@@ -304,7 +301,7 @@ if (typeof crypto === 'undefined' || !crypto.subtle) {
           error.name === 'NotSupportedError' ||
           error.message.includes('Unsupported')
         ) {
-          console.log('✅ Correctly rejected unsupported curve P-192');
+          // Success case - no output
         } else {
           throw error;
         }
@@ -318,7 +315,7 @@ if (typeof crypto === 'undefined' || !crypto.subtle) {
     .then(testECDHDeriveAESKey)
     .then(testECDHInvalidParameters)
     .then(function () {
-      console.log('\n=== All ECDH Tests Passed! ===');
+      // console.log('\n=== All ECDH Tests Passed! ===');
     })
     .catch(function (error) {
       console.error('\n=== ECDH Tests Failed ===');

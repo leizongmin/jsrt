@@ -1,6 +1,6 @@
 const assert = require('jsrt:assert');
 
-console.log('=== Node.js Stream Tests ===');
+// // console.log('=== Node.js Stream Tests ===');
 
 // Test CommonJS import
 const stream = require('node:stream');
@@ -17,7 +17,7 @@ assert.ok(Writable, 'Should have Writable via destructuring');
 assert.ok(Transform, 'Should have Transform via destructuring');
 assert.ok(PassThrough, 'Should have PassThrough via destructuring');
 
-console.log('✓ Module imports work correctly');
+// console.log('✓ Module imports work correctly');
 
 // Test Readable stream
 console.log('\nTesting Readable stream...');
@@ -40,7 +40,7 @@ assert.strictEqual(
   'Should not be readable after end'
 );
 
-console.log('✓ Readable stream works correctly');
+// console.log('✓ Readable stream works correctly');
 
 // Test Writable stream
 console.log('\nTesting Writable stream...');
@@ -58,7 +58,7 @@ assert.strictEqual(
   'Should not be writable after end'
 );
 
-console.log('✓ Writable stream works correctly');
+// console.log('✓ Writable stream works correctly');
 
 // Test PassThrough stream
 console.log('\nTesting PassThrough stream...');
@@ -75,7 +75,7 @@ assert.strictEqual(
 );
 assert.strictEqual(passthrough.read(), 'data', 'Should read written data');
 
-console.log('✓ PassThrough stream works correctly');
+// console.log('✓ PassThrough stream works correctly');
 
 // Test Transform stream (alias for PassThrough)
 console.log('\nTesting Transform stream...');
@@ -84,6 +84,6 @@ assert.ok(transform, 'Should create Transform instance');
 assert.strictEqual(transform.readable, true, 'Should be readable');
 assert.strictEqual(transform.writable, true, 'Should be writable');
 
-console.log('✓ Transform stream works correctly');
+// console.log('✓ Transform stream works correctly');
 
-console.log('\n=== All Node.js Stream tests passed! ===');
+// console.log('\n=== All Node.js Stream tests passed! ===');

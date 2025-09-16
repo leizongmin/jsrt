@@ -1,5 +1,5 @@
 // Test npm ES module support
-console.log('=== NPM ES Module Loading Tests ===');
+// // console.log('=== NPM ES Module Loading Tests ===');
 
 // Note: ES module imports for npm packages may have limited support
 // This tests what works with the current implementation
@@ -12,7 +12,7 @@ try {
   if (typeof _ !== 'function') {
     throw new Error('lodash should be a function, got: ' + typeof _);
   }
-  console.log('✓ Lodash ESM package imported successfully');
+  // // console.log('✓ Lodash ESM package imported successfully');
   console.log(
     '  lodash.map test:',
     _.map([1, 2, 3], (x) => x * 2)
@@ -32,7 +32,7 @@ try {
   if (typeof moment !== 'function') {
     throw new Error('moment should be a function, got: ' + typeof moment);
   }
-  console.log('✓ Moment ESM package imported successfully');
+  // // console.log('✓ Moment ESM package imported successfully');
   console.log('  current time:', moment().format('YYYY-MM-DD HH:mm:ss'));
 } catch (error) {
   console.log('❌ Moment ES import not yet supported:', error.message);
@@ -54,10 +54,10 @@ try {
   ) {
     throw error;
   }
-  console.log('✓ Non-existent ESM package handled correctly');
+  // // console.log('✓ Non-existent ESM package handled correctly');
 }
 
-console.log('\n=== NPM ES module tests completed ===');
+// console.log('\n=== NPM ES module tests completed ===');
 console.log(
   'Note: Full ES module support for npm packages is still in development.'
 );

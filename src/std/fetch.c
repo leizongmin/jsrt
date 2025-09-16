@@ -1227,11 +1227,14 @@ static void JSRT_HeadersSet(JSRT_Headers* headers, const char* name, const char*
     return;
 
   // Convert name to lowercase
-  char* lower_name = malloc(strlen(name) + 1);
-  for (size_t i = 0; name[i]; i++) {
-    lower_name[i] = tolower(name[i]);
+  size_t name_len = strlen(name);
+  char* lower_name = malloc(name_len + 1);
+  for (size_t i = 0; i < name_len; i++) {
+    lower_name[i] = (char)tolower((unsigned char)name[i]);
   }
-  lower_name[strlen(name)] = '\0';
+  lower_name[name_len] = '\0';
+
+  JSRT_Debug("JSRT_HeadersSet - original name: '%s', lower name: '%s'", name, lower_name);
 
   // Check if header already exists
   JSRT_HeaderItem* item = headers->first;
@@ -1258,11 +1261,14 @@ static const char* JSRT_HeadersGet(JSRT_Headers* headers, const char* name) {
     return NULL;
 
   // Convert name to lowercase
-  char* lower_name = malloc(strlen(name) + 1);
-  for (size_t i = 0; name[i]; i++) {
-    lower_name[i] = tolower(name[i]);
+  size_t name_len = strlen(name);
+  char* lower_name = malloc(name_len + 1);
+  for (size_t i = 0; i < name_len; i++) {
+    lower_name[i] = (char)tolower((unsigned char)name[i]);
   }
-  lower_name[strlen(name)] = '\0';
+  lower_name[name_len] = '\0';
+
+  JSRT_Debug("JSRT_HeadersGet - original name: '%s', lower name: '%s'", name, lower_name);
 
   JSRT_HeaderItem* item = headers->first;
   while (item) {
@@ -1286,11 +1292,12 @@ static void JSRT_HeadersDelete(JSRT_Headers* headers, const char* name) {
     return;
 
   // Convert name to lowercase
-  char* lower_name = malloc(strlen(name) + 1);
-  for (size_t i = 0; name[i]; i++) {
-    lower_name[i] = tolower(name[i]);
+  size_t name_len = strlen(name);
+  char* lower_name = malloc(name_len + 1);
+  for (size_t i = 0; i < name_len; i++) {
+    lower_name[i] = (char)tolower((unsigned char)name[i]);
   }
-  lower_name[strlen(name)] = '\0';
+  lower_name[name_len] = '\0';
 
   JSRT_HeaderItem** current = &headers->first;
   while (*current) {

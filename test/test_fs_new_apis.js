@@ -11,8 +11,6 @@ const testFile2 = path.join(testDir, 'test2.txt');
 const testFile3 = path.join(testDir, 'test3.txt');
 const testSubDir = path.join(testDir, 'subdir');
 
-console.log('Testing new fs APIs...');
-
 // Clean up and create test directory
 try {
   if (fs.existsSync(testDir)) {
@@ -48,8 +46,6 @@ function cleanup() {
 fs.mkdirSync(testDir);
 
 // Test 1: appendFileSync and appendFile
-console.log('Testing appendFileSync and appendFile...');
-
 // Create initial file
 fs.writeFileSync(testFile, 'Hello');
 
@@ -80,8 +76,6 @@ while (!appendAsyncDone && waitCount < 100) {
 assert.ok(appendAsyncDone, 'appendFile async operation should complete');
 
 // Test 2: copyFileSync and copyFile
-console.log('Testing copyFileSync and copyFile...');
-
 // Test copyFileSync
 fs.copyFileSync(testFile, testFile2);
 const originalContent = fs.readFileSync(testFile, 'utf8');
@@ -113,8 +107,6 @@ while (!copyAsyncDone && waitCount < 100) {
 assert.ok(copyAsyncDone, 'copyFile async operation should complete');
 
 // Test 3: renameSync and rename
-console.log('Testing renameSync and rename...');
-
 const renamedFile = path.join(testDir, 'renamed.txt');
 
 // Test renameSync
@@ -149,12 +141,10 @@ while (!renameAsyncDone && waitCount < 100) {
 assert.ok(renameAsyncDone, 'rename async operation should complete');
 
 // Test 4: accessSync and access
-console.log('Testing accessSync and access...');
-
 // Test accessSync - file exists
 try {
   fs.accessSync(testFile);
-  console.log('accessSync: file exists check passed');
+  // accessSync: file exists check passed
 } catch (e) {
   assert.fail('accessSync should not throw for existing file');
 }
@@ -204,8 +194,6 @@ while (!accessAsyncDone2 && waitCount < 100) {
 assert.ok(accessAsyncDone2, 'access async operation should complete');
 
 // Test 5: rmdirSync and rmdir
-console.log('Testing rmdirSync and rmdir...');
-
 // Create test subdirectory
 fs.mkdirSync(testSubDir);
 assert.ok(fs.existsSync(testSubDir), 'Test subdirectory should exist');
@@ -240,8 +228,6 @@ while (!rmdirAsyncDone && waitCount < 100) {
 assert.ok(rmdirAsyncDone, 'rmdir async operation should complete');
 
 // Test 6: Error handling
-console.log('Testing error handling...');
-
 // Test copyFileSync with non-existent source
 try {
   fs.copyFileSync('nonexistent.txt', 'dest.txt');
@@ -280,5 +266,3 @@ try {
 
 // Cleanup
 cleanup();
-
-console.log('All new fs API tests passed!');

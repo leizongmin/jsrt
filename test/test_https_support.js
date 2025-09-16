@@ -1,6 +1,5 @@
 // Test HTTPS support in fetch API - Non-network version for CI
 const assert = require('jsrt:assert');
-console.log('=== HTTPS Fetch Support Tests ===');
 
 // These tests only validate URL parsing and promise creation, no network operations
 
@@ -17,7 +16,6 @@ try {
     'function',
     'HTTPS promise should have then method'
   );
-  console.log('✅ HTTPS URLs are parsed and accepted');
 } catch (error) {
   if (error.message.includes('Invalid URL')) {
     console.log('❌ HTTPS URLs rejected - implementation incomplete');
@@ -37,7 +35,6 @@ try {
     'function',
     'HTTP promise should have then method'
   );
-  console.log('✅ HTTP compatibility maintained');
 } catch (error) {
   console.log('❌ HTTP compatibility broken:', error.message);
   throw error;
@@ -57,7 +54,6 @@ try {
     'object',
     'HTTP custom port should work'
   );
-  console.log('✅ Custom ports work for both protocols');
 } catch (error) {
   console.log('❌ Custom port handling failed:', error.message);
   throw error;
@@ -72,21 +68,15 @@ try {
     'object',
     'Should create promise even for invalid protocols'
   );
-  console.log('✅ Invalid protocols handled via promise rejection');
 } catch (error) {
   // If it throws immediately with "Invalid URL", that's also acceptable
   if (error.message.includes('Invalid URL')) {
-    console.log('✅ Invalid protocols rejected immediately');
+    // Invalid protocols rejected immediately - this is acceptable
   } else {
     console.log('❌ Unexpected error for invalid protocol:', error.message);
     throw error;
   }
 }
-
-console.log('=== HTTPS Support Infrastructure Tests Completed ===');
-console.log('✅ Core infrastructure working correctly');
-console.log('📋 HTTPS URL parsing: IMPLEMENTED');
-console.log('📋 HTTP compatibility: MAINTAINED');
 
 // Force exit to prevent hanging in CI
 // The issue is that fetch() creates network operations that keep the event loop alive

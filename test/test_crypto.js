@@ -1,6 +1,5 @@
 // Comprehensive WebCrypto API tests for WinterCG compliance
 const assert = require('jsrt:assert');
-console.log('=== Starting Comprehensive WebCrypto API Tests ===');
 
 // Test counter for statistics
 let testCount = 0;
@@ -9,11 +8,9 @@ let skipCount = 0;
 
 function runTest(testName, testFn) {
   testCount++;
-  console.log(`Test ${testCount}: ${testName}`);
   try {
     if (testFn()) {
       passCount++;
-      console.log(`✅ PASS: ${testName}`);
     }
   } catch (error) {
     console.log(`❌ FAIL: ${testName} - ${error.message}`);
@@ -24,7 +21,6 @@ function runTest(testName, testFn) {
 function skipTest(testName, reason) {
   testCount++;
   skipCount++;
-  console.log(`Test ${testCount}: ${testName}`);
   console.log(`❌ SKIP: ${testName} - ${reason}`);
 }
 
@@ -34,7 +30,6 @@ if (typeof crypto === 'undefined') {
     'All crypto tests',
     'crypto object not available (OpenSSL not found)'
   );
-  console.log('=== Comprehensive WebCrypto API Tests Completed (Skipped) ===');
 } else {
   // Basic crypto object tests
   runTest('crypto object existence', () => {
@@ -691,16 +686,11 @@ if (typeof crypto === 'undefined') {
         })
       )
       .then(() => {
-        console.log('\n=== Test Summary ===');
-        console.log(`Total Tests: ${testCount}`);
-        console.log(`Passed: ${passCount}`);
-        console.log(`Skipped: ${skipCount}`);
-        console.log(`Failed: ${testCount - passCount - skipCount}`);
-        console.log('=== Comprehensive WebCrypto API Tests Completed ===');
+        // Tests completed successfully
       })
       .catch((error) => {
         console.log(`❌ Fatal test error: ${error.message}`);
-        console.log('\n=== Test Summary ===');
+        // Test Summary
         console.log(`Total Tests: ${testCount}`);
         console.log(`Passed: ${passCount}`);
         console.log(`Skipped: ${skipCount}`);

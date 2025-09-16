@@ -1,6 +1,6 @@
 const assert = require('jsrt:assert');
 
-console.log('=== Comprehensive Node.js Compatibility Assessment ===');
+// console.log('=== Comprehensive Node.js Compatibility Assessment ===');
 console.log('Testing all implemented modules and their API coverage...\n');
 
 // Track detailed test results
@@ -8,7 +8,6 @@ let totalTests = 0;
 let passedTests = 0;
 
 function testModule(moduleName, testFunctions) {
-  console.log(`📋 Testing ${moduleName}:`);
   const moduleTests = testFunctions.length;
   let modulePass = 0;
 
@@ -18,15 +17,11 @@ function testModule(moduleName, testFunctions) {
       test();
       modulePass++;
       passedTests++;
-      console.log(`  ✅ ${test.name || 'test'}`);
     } catch (error) {
       console.log(`  ❌ ${test.name || 'test'}: ${error.message}`);
     }
   }
 
-  console.log(
-    `  📊 ${moduleName}: ${modulePass}/${moduleTests} tests passed\n`
-  );
   return modulePass === moduleTests;
 }
 
@@ -379,9 +374,8 @@ testModule('Module Loading', [
   },
 ]);
 
-console.log('=== Final Assessment ===');
 console.log(`📊 Total Tests Run: ${totalTests}`);
-console.log(`✅ Tests Passed: ${passedTests}`);
+// console.log(`✅ Tests Passed: ${passedTests}`);
 console.log(`❌ Tests Failed: ${totalTests - passedTests}`);
 console.log(
   `🎯 Success Rate: ${((passedTests / totalTests) * 100).toFixed(1)}%`
@@ -397,4 +391,4 @@ if (passedTests === totalTests) {
   );
 }
 
-console.log('\n✅ Comprehensive Node.js compatibility assessment completed!');
+// Success case - no output

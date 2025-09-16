@@ -4,7 +4,6 @@ const assert = require('jsrt:assert');
 // Check if crypto is available (skip if OpenSSL not found)
 if (typeof crypto === 'undefined' || !crypto.subtle) {
   console.log('❌ SKIP: WebCrypto not available (OpenSSL not found)');
-  console.log('=== RSA-OAEP Tests Completed (Skipped) ===');
 } else {
   function testRSAOAEPKeyGeneration() {
     console.log('Testing RSA-OAEP key generation...');
@@ -21,7 +20,7 @@ if (typeof crypto === 'undefined' || !crypto.subtle) {
         ['encrypt', 'decrypt']
       )
       .then(function (keyPair) {
-        console.log('✓ Key generation successful');
+        // console.log('✓ Key generation successful');
 
         // Use assert for actual verification
         assert.strictEqual(
@@ -100,7 +99,7 @@ if (typeof crypto === 'undefined' || !crypto.subtle) {
       })
       .then(function (decryptedData) {
         const decryptedText = new TextDecoder().decode(decryptedData);
-        console.log('✓ Decryption successful, decrypted text:', decryptedText);
+        // console.log('✓ Decryption successful, decrypted text:', decryptedText);
 
         // Use assert for verification
         assert.strictEqual(
@@ -108,7 +107,7 @@ if (typeof crypto === 'undefined' || !crypto.subtle) {
           'Hello, RSA-OAEP!',
           'Decrypted text should match original plaintext'
         );
-        console.log('✓ RSA-OAEP encryption/decryption test PASSED');
+        // console.log('✓ RSA-OAEP encryption/decryption test PASSED');
       })
       .catch(function (error) {
         // RSA-OAEP might not be fully supported on all OpenSSL versions
@@ -148,7 +147,7 @@ if (typeof crypto === 'undefined' || !crypto.subtle) {
         plaintext
       )
       .then(function (ciphertext) {
-        console.log('✓ Encryption with label successful');
+        // console.log('✓ Encryption with label successful');
 
         // Decrypt with same label
         return crypto.subtle.decrypt(
@@ -163,7 +162,7 @@ if (typeof crypto === 'undefined' || !crypto.subtle) {
       })
       .then(function (decryptedData) {
         const decryptedText = new TextDecoder().decode(decryptedData);
-        console.log('✓ Decryption with label successful:', decryptedText);
+        // console.log('✓ Decryption with label successful:', decryptedText);
 
         // Use assert for verification
         assert.strictEqual(
@@ -171,7 +170,7 @@ if (typeof crypto === 'undefined' || !crypto.subtle) {
           'Test with label',
           'Decrypted text with label should match original plaintext'
         );
-        console.log('✓ RSA-OAEP with label test PASSED');
+        // console.log('✓ RSA-OAEP with label test PASSED');
       })
       .catch(function (error) {
         // RSA-OAEP with label might not be fully supported on all OpenSSL versions
@@ -192,7 +191,7 @@ if (typeof crypto === 'undefined' || !crypto.subtle) {
 
   // Run all tests
   function runTests() {
-    console.log('=== RSA-OAEP WebCrypto Tests ===\n');
+    // // console.log('=== RSA-OAEP WebCrypto Tests ===\n');
 
     testRSAOAEPKeyGeneration()
       .then(function (keyPair) {
@@ -204,7 +203,7 @@ if (typeof crypto === 'undefined' || !crypto.subtle) {
         return testRSAOAEPWithLabel(keyPair);
       })
       .then(function () {
-        console.log('\n=== All RSA-OAEP tests PASSED! ===');
+        // console.log('\n=== All RSA-OAEP tests PASSED! ===');
       })
       .catch(function (error) {
         // Handle RSA-OAEP compatibility issues gracefully
@@ -218,7 +217,7 @@ if (typeof crypto === 'undefined' || !crypto.subtle) {
           console.log(
             '✓ RSA-OAEP key generation works - partial support detected'
           );
-          console.log('\n=== RSA-OAEP tests completed (partial support) ===');
+          // console.log('\n=== RSA-OAEP tests completed (partial support) ===');
         } else {
           console.error('\n=== RSA-OAEP tests FAILED ===');
           throw error;

@@ -1,6 +1,6 @@
 const assert = require('jsrt:assert');
 
-console.log('=== Enhanced Node.js Compatibility Layer Summary Test ===');
+// console.log('=== Enhanced Node.js Compatibility Layer Summary Test ===');
 console.log(
   'Testing complete implementation status with new Phase 3 & 5 additions...\\n'
 );
@@ -27,8 +27,8 @@ try {
     'querystring.parse should exist'
   );
 
-  console.log('  ✅ node:path - Complete path manipulation utilities');
-  console.log('  ✅ node:os - Complete operating system utilities');
+  console.log('  📊 node:path - Complete path manipulation utilities');
+  console.log('  📊 node:os - Complete operating system utilities');
   console.log(
     '  ✅ node:querystring - Complete query string parsing utilities'
   );
@@ -65,9 +65,9 @@ try {
     'process.hrtime should exist'
   );
 
-  console.log('  ✅ node:util - Utility functions and type checking');
-  console.log('  ✅ node:events - Complete EventEmitter implementation');
-  console.log('  ✅ node:buffer - Buffer class with core operations');
+  console.log('  📊 node:util - Utility functions and type checking');
+  console.log('  📊 node:events - Complete EventEmitter implementation');
+  console.log('  📊 node:buffer - Buffer class with core operations');
   console.log(
     '  ✅ node:process - Process utilities with Node.js compatibility'
   );
@@ -133,9 +133,9 @@ try {
     'https.createServer should exist'
   );
 
-  console.log('  ✅ node:net - TCP networking (Socket, Server)');
-  console.log('  ✅ node:http - HTTP protocol (Server, Request, Response)');
-  console.log('  ✅ node:dns - DNS lookup operations with promises');
+  console.log('  📊 node:net - TCP networking (Socket, Server)');
+  console.log('  📊 node:http - HTTP protocol (Server, Request, Response)');
+  console.log('  📊 node:dns - DNS lookup operations with promises');
   console.log(
     '  ✅ node:https - HTTPS support with SSL/TLS and connection pooling'
   );
@@ -166,8 +166,8 @@ try {
   console.log(
     '  ✅ Enhanced Buffer Support - TypedArray/ArrayBuffer integration'
   );
-  console.log('  ✅ SSL/TLS Server Support - HTTPS with certificate loading');
-  console.log('  ✅ Advanced Networking - Connection pooling and keep-alive');
+  console.log('  📊 SSL/TLS Server Support - HTTPS with certificate loading');
+  console.log('  📊 Advanced Networking - Connection pooling and keep-alive');
 } catch (error) {
   console.log('  ❌ Phase 5 modules failed:', error.message);
 }
@@ -225,12 +225,12 @@ try {
     'Process hrtime should be available'
   );
 
-  console.log('  ✅ HTTP server inherits EventEmitter from node:events');
-  console.log('  ✅ Buffer integration working across modules');
-  console.log('  ✅ DNS async operations with promises working');
-  console.log('  ✅ HTTPS properly inherits HTTP constants');
-  console.log('  ✅ Query string parsing integration working');
-  console.log('  ✅ Process enhancements integrated');
+  console.log('  📊 HTTP server inherits EventEmitter from node:events');
+  console.log('  📊 Buffer integration working across modules');
+  console.log('  📊 DNS async operations with promises working');
+  console.log('  📊 HTTPS properly inherits HTTP constants');
+  console.log('  📊 Query string parsing integration working');
+  console.log('  📊 Process enhancements integrated');
 } catch (error) {
   console.log('  ❌ Integration test failed:', error.message);
 }
@@ -251,8 +251,8 @@ try {
   assert.ok(querystring_cjs, 'CommonJS querystring module should work');
   assert.ok(process_cjs, 'CommonJS process module should work');
 
-  console.log('  ✅ CommonJS require(\"node:*\") loading working');
-  console.log('  ✅ ES module import support available');
+  console.log('  📊 CommonJS require("node:*") loading working');
+  console.log('  📊 ES module import support available');
 } catch (error) {
   console.log('  ❌ Module loading failed:', error.message);
 }
@@ -273,21 +273,20 @@ phases.forEach((phase) => {
   console.log(`${phase.status} ${phase.name} (${phase.modules} modules)`);
 });
 
-console.log('\\n🎉 Enhanced Node.js Compatibility Implementation Status:');
-console.log(`✅ Total Modules Implemented: 14`);
-console.log(`📋 Total Modules Planned: 0`);
-console.log(`🎯 Overall Progress: 100% complete`);
+console.log('\n📊 Enhanced Node.js Compatibility Implementation Status:');
+console.log(`📊 Total Modules Implemented: 14`);
+console.log(`📊 Overall Progress: 100% complete`);
 
-console.log('\\n🚀 Fully ready for production use!');
+console.log('\n📊 Fully ready for production use!');
 console.log('🔧 All phases completed with enhanced functionality.');
 
 console.log('\\n📋 Newly Added Modules:');
-console.log('  ✅ node:querystring - Query string parsing and encoding');
+console.log('  📊 node:querystring - Query string parsing and encoding');
 console.log(
   '  ✅ node:process - Extended process utilities with Node.js compatibility'
 );
-console.log('  ✅ Enhanced Buffer integration across fs operations');
-console.log('  ✅ SSL/TLS server support with certificate management');
-console.log('  ✅ Advanced networking with connection pooling');
+console.log('  📊 Enhanced Buffer integration across fs operations');
+console.log('  📊 SSL/TLS server support with certificate management');
+console.log('  📊 Advanced networking with connection pooling');
 
-console.log('\\n✅ All enhanced compatibility layer tests passed!');
+// console.log('\n✅ All enhanced compatibility layer tests passed!');

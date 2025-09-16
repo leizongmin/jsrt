@@ -1,29 +1,29 @@
 const assert = require('jsrt:assert');
 
-console.log('=== Node.js Process Module Tests ===');
+// // console.log('=== Node.js Process Module Tests ===');
 
 // Test CommonJS require
 const process = require('node:process');
 assert.ok(process, 'node:process should load');
 
-console.log('✓ Node.js process module loaded successfully');
+// // console.log('✓ Node.js process module loaded successfully');
 
 // Test basic process properties
-console.log('\n--- Testing Process Properties ---');
+// // console.log('\n--- Testing Process Properties ---');
 assert.strictEqual(
   typeof process.pid,
   'number',
   'process.pid should be a number'
 );
 assert.ok(process.pid > 0, 'process.pid should be positive');
-console.log('✓ process.pid:', process.pid);
+// // console.log('✓ process.pid:', process.pid);
 
 assert.strictEqual(
   typeof process.ppid,
   'number',
   'process.ppid should be a number'
 );
-console.log('✓ process.ppid:', process.ppid);
+// // console.log('✓ process.ppid:', process.ppid);
 
 // Test versions object
 assert.ok(process.versions, 'process.versions should exist');
@@ -39,16 +39,16 @@ if (process.nodeVersion) {
     'string',
     'process.nodeVersion should be a string'
   );
-  console.log('✓ process.nodeVersion:', process.nodeVersion);
+  // // console.log('✓ process.nodeVersion:', process.nodeVersion);
 } else {
   console.log(
     '⚠️  process.nodeVersion not available (existing process object may be read-only)'
   );
 }
-console.log('✓ process.versions:', process.versions);
+// // console.log('✓ process.versions:', process.versions);
 
 // Test hrtime function
-console.log('\n--- Testing process.hrtime() ---');
+// // console.log('\n--- Testing process.hrtime() ---');
 assert.strictEqual(
   typeof process.hrtime,
   'function',
@@ -64,7 +64,7 @@ assert.strictEqual(
   'number',
   'hrtime()[1] should be nanoseconds'
 );
-console.log('✓ process.hrtime() returns:', start);
+// // console.log('✓ process.hrtime() returns:', start);
 
 // Test hrtime with previous time (diff)
 const diff = process.hrtime(start);
@@ -76,10 +76,10 @@ assert.strictEqual(
 );
 assert.ok(diff[0] >= 0, 'hrtime diff seconds should be non-negative');
 assert.ok(diff[1] >= 0, 'hrtime diff nanoseconds should be non-negative');
-console.log('✓ process.hrtime(previous) diff:', diff);
+// // console.log('✓ process.hrtime(previous) diff:', diff);
 
 // Test uptime function
-console.log('\n--- Testing process.uptime() ---');
+// // console.log('\n--- Testing process.uptime() ---');
 assert.strictEqual(
   typeof process.uptime,
   'function',
@@ -93,10 +93,10 @@ assert.strictEqual(
   'process.uptime() should return a number'
 );
 assert.ok(uptime >= 0, 'process.uptime() should be non-negative');
-console.log('✓ process.uptime():', uptime, 'seconds');
+// // console.log('✓ process.uptime():', uptime, 'seconds');
 
 // Test memoryUsage function
-console.log('\n--- Testing process.memoryUsage() ---');
+// // console.log('\n--- Testing process.memoryUsage() ---');
 assert.strictEqual(
   typeof process.memoryUsage,
   'function',
@@ -134,10 +134,10 @@ assert.strictEqual(
   'number',
   'memory.arrayBuffers should be a number'
 );
-console.log('✓ process.memoryUsage():', memory);
+// // console.log('✓ process.memoryUsage():', memory);
 
 // Test nextTick function
-console.log('\n--- Testing process.nextTick() ---');
+// // console.log('\n--- Testing process.nextTick() ---');
 assert.strictEqual(
   typeof process.nextTick,
   'function',
@@ -147,7 +147,7 @@ assert.strictEqual(
 let nextTickCalled = false;
 process.nextTick(() => {
   nextTickCalled = true;
-  console.log('✓ process.nextTick() callback executed');
+  // // console.log('✓ process.nextTick() callback executed');
 });
 
 // Wait briefly for nextTick to execute
@@ -156,8 +156,8 @@ setTimeout(() => {
     nextTickCalled,
     'process.nextTick callback should have been called'
   );
-  console.log('✓ process.nextTick() functionality verified');
+  // // console.log('✓ process.nextTick() functionality verified');
 
-  console.log('\n✅ All Node.js Process module tests passed!');
-  console.log('🎉 Node.js process compatibility implemented successfully!');
+  // Success case - no output
+  console.log('📊 Node.js process compatibility implemented successfully!');
 }, 10);

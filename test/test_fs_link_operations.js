@@ -4,8 +4,6 @@ const path = require('node:path');
 const os = require('node:os');
 const { Buffer } = require('node:buffer');
 
-console.log('=== Testing Link Operations ===');
-
 // Test setup - create test directory and files
 const testDir = path.join(os.tmpdir(), 'jsrt-link-tests');
 const testFile = path.join(testDir, 'original.txt');
@@ -54,10 +52,7 @@ try {
 fs.mkdirSync(testDir, { recursive: true });
 fs.writeFileSync(testFile, testContent);
 
-console.log('Test setup completed');
-
 // Test 1: linkSync - Hard Links
-console.log('\n1. Testing linkSync (hard links)...');
 try {
   fs.linkSync(testFile, hardLinkFile);
 
@@ -86,15 +81,12 @@ try {
     linkedStat.size,
     'Hard link should have same size'
   );
-
-  console.log('✓ linkSync test passed');
 } catch (error) {
   console.error('✗ linkSync test failed:', error.message);
   throw error;
 }
 
 // Test 2: symlinkSync - Symbolic Links
-console.log('\n2. Testing symlinkSync (symbolic links)...');
 try {
   fs.symlinkSync(testFile, symLinkFile);
 
@@ -113,15 +105,12 @@ try {
     symlinkedContent,
     'Symbolic link should resolve to same content as original'
   );
-
-  console.log('✓ symlinkSync test passed');
 } catch (error) {
   console.error('✗ symlinkSync test failed:', error.message);
   throw error;
 }
 
 // Test 3: readlinkSync - Read Symbolic Links
-console.log('\n3. Testing readlinkSync...');
 try {
   const linkTarget = fs.readlinkSync(symLinkFile);
 
@@ -131,15 +120,12 @@ try {
     testFile,
     'readlinkSync should return the target path'
   );
-
-  console.log('✓ readlinkSync test passed');
 } catch (error) {
   console.error('✗ readlinkSync test failed:', error.message);
   throw error;
 }
 
 // Test 4: realpathSync - Resolve Real Path
-console.log('\n4. Testing realpathSync...');
 try {
   // Test with original file
   const realPath1 = fs.realpathSync(testFile);
@@ -164,15 +150,12 @@ try {
     realPath1,
     'realpathSync of symbolic link should resolve to same real path as original file'
   );
-
-  console.log('✓ realpathSync test passed');
 } catch (error) {
   console.error('✗ realpathSync test failed:', error.message);
   throw error;
 }
 
 // Test 5: Error handling - linkSync with non-existent file
-console.log('\n5. Testing error handling...');
 try {
   const nonExistentFile = path.join(testDir, 'nonexistent.txt');
   const shouldFailLink = path.join(testDir, 'shouldfail.txt');
@@ -191,7 +174,6 @@ try {
       'link',
       'Error should have correct syscall'
     );
-    console.log('✓ linkSync error handling test passed');
   }
 } catch (error) {
   console.error('✗ Error handling test failed:', error.message);
@@ -199,7 +181,6 @@ try {
 }
 
 // Test 6: symlinkSync with type parameter (directories)
-console.log('\n6. Testing symlinkSync with directory type...');
 try {
   const testSubDir = path.join(testDir, 'subdir');
   const symLinkDir = path.join(testDir, 'symlink-dir');
@@ -216,15 +197,12 @@ try {
 
   // The link should be created successfully
   // Note: We can't use lstatSync as it's not implemented yet
-
-  console.log('✓ symlinkSync directory type test passed');
 } catch (error) {
   console.error('✗ symlinkSync directory type test failed:', error.message);
   throw error;
 }
 
 // Test 7: readlinkSync with options (encoding)
-console.log('\n7. Testing readlinkSync with options...');
 try {
   // Test with different encoding options
   const linkTarget1 = fs.readlinkSync(symLinkFile, 'utf8');
@@ -248,15 +226,12 @@ try {
     true,
     'readlinkSync with buffer encoding should return Buffer'
   );
-
-  console.log('✓ readlinkSync options test passed');
 } catch (error) {
   console.error('✗ readlinkSync options test failed:', error.message);
   throw error;
 }
 
 // Test 8: realpathSync with options
-console.log('\n8. Testing realpathSync with options...');
 try {
   // Test with different encoding options
   const realPath1 = fs.realpathSync(symLinkFile, 'utf8');
@@ -280,8 +255,6 @@ try {
     true,
     'realpathSync with buffer encoding should return Buffer'
   );
-
-  console.log('✓ realpathSync options test passed');
 } catch (error) {
   console.error('✗ realpathSync options test failed:', error.message);
   throw error;
@@ -320,9 +293,6 @@ try {
   } catch (e) {
     /* ignore */
   }
-  console.log('\nTest cleanup completed');
 } catch (e) {
   console.warn('Warning: Failed to clean up test directory:', e.message);
 }
-
-console.log('\n=== All Link Operations tests passed! ===');

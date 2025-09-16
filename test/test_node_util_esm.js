@@ -1,13 +1,9 @@
 const assert = require('jsrt:assert');
 
-console.log('=== Node.js util ES Module Tests ===');
-
 async function testESModules() {
   // Test ES module import (using dynamic import since we're in CommonJS context)
   try {
     // For now, test CommonJS since ES module dynamic import needs more setup
-    console.log('Testing ES module exports through CommonJS...');
-
     const util = require('node:util');
 
     // Verify that all expected functions are available
@@ -67,8 +63,6 @@ async function testESModules() {
       'promisify should be a function'
     );
 
-    console.log('✓ All util functions are properly exported');
-
     // Test that functions work correctly
     assert.strictEqual(
       util.isArray([1, 2, 3]),
@@ -87,11 +81,6 @@ async function testESModules() {
       'string',
       'format should work in ES module exports'
     );
-    console.log('  util.format() output:', formatted);
-
-    console.log(
-      '✅ ES module functionality verified through CommonJS interface'
-    );
   } catch (error) {
     console.error('❌ ES module test failed:', error.message);
     throw error;
@@ -100,5 +89,3 @@ async function testESModules() {
 
 // Run the test
 testESModules().catch(console.error);
-
-console.log('\n🎉 util ES module tests completed!');

@@ -1,18 +1,18 @@
 const assert = require('jsrt:assert');
 
-console.log('=== HTTP Server Functionality Tests ===');
+// // console.log('=== HTTP Server Functionality Tests ===');
 
 let http;
 try {
   http = require('node:http');
 } catch (e) {
   console.log('❌ SKIP: node:http module not available');
-  console.log('=== Tests Completed (Skipped) ===');
+  // console.log('=== Tests Completed (Skipped) ===');
   process.exit(0);
 }
 
 // Test 1: Basic server creation and startup
-console.log('\n--- Test 1: Basic Server Creation ---');
+// // console.log('\n--- Test 1: Basic Server Creation ---');
 const server1 = http.createServer((req, res) => {
   res.statusCode = 200;
   res.setHeader('Content-Type', 'text/plain');
@@ -28,23 +28,23 @@ assert.ok(
   typeof server1.close === 'function',
   'Server should have close method'
 );
-console.log('✓ Basic server creation works');
+// console.log('✓ Basic server creation works');
 
 // Test 2: Server listening (synchronous only to avoid race conditions)
-console.log('\n--- Test 2: Server Listen Method ---');
+// // console.log('\n--- Test 2: Server Listen Method ---');
 const server2 = http.createServer();
 
 try {
   // Only test that listen method exists and doesn't throw immediately
   const result = server2.listen;
   assert.ok(typeof result === 'function', 'Server should have listen method');
-  console.log('✓ Server listen method exists');
+  // console.log('✓ Server listen method exists');
 } catch (e) {
   console.log('⚠ Server listen test failed:', e.message);
 }
 
 // Test 3: Request handler invocation
-console.log('\n--- Test 3: Request Handler Properties ---');
+// // console.log('\n--- Test 3: Request Handler Properties ---');
 let requestHandlerCalled = false;
 let receivedRequest = null;
 let receivedResponse = null;
@@ -89,10 +89,10 @@ const server3 = http.createServer((req, res) => {
   );
 });
 
-console.log('✓ Request handler structure is valid');
+// console.log('✓ Request handler structure is valid');
 
 // Test 4: HTTP Server Response Methods
-console.log('\n--- Test 4: Response Methods ---');
+// // console.log('\n--- Test 4: Response Methods ---');
 const server4 = http.createServer((req, res) => {
   try {
     // Test writeHead
@@ -108,16 +108,14 @@ const server4 = http.createServer((req, res) => {
     // Test end
     res.end('Final part');
 
-    console.log(
-      '✓ Response methods (writeHead, write, end) work without errors'
-    );
+    // console.log('✓ Response methods (writeHead, write, end) work without errors');
   } catch (e) {
     console.log('⚠ Response method error:', e.message);
   }
 });
 
 // Test 5: Multiple servers on different ports
-console.log('\n--- Test 5: Multiple Server Instances ---');
+// // console.log('\n--- Test 5: Multiple Server Instances ---');
 const server5a = http.createServer((req, res) => {
   res.end('Server A');
 });
@@ -130,20 +128,20 @@ assert.ok(
   server5a !== server5b,
   'Multiple servers should be different instances'
 );
-console.log('✓ Multiple server instances can be created');
+// console.log('✓ Multiple server instances can be created');
 
 // Test 6: Server close functionality
-console.log('\n--- Test 6: Server Close ---');
+// // console.log('\n--- Test 6: Server Close ---');
 const server6 = http.createServer();
 try {
   server6.close();
-  console.log('✓ Server close method works');
+  // console.log('✓ Server close method works');
 } catch (e) {
   console.log('⚠ Server close error:', e.message);
 }
 
 // Test 7: HTTP Constants and Status Codes
-console.log('\n--- Test 7: HTTP Constants ---');
+// // console.log('\n--- Test 7: HTTP Constants ---');
 assert.ok(Array.isArray(http.METHODS), 'METHODS should be an array');
 assert.ok(http.METHODS.includes('GET'), 'METHODS should include GET');
 assert.ok(http.METHODS.includes('POST'), 'METHODS should include POST');
@@ -170,23 +168,23 @@ assert.strictEqual(
   'STATUS_CODES[500] should be "Internal Server Error"'
 );
 
-console.log('✓ HTTP constants are properly defined');
+// console.log('✓ HTTP constants are properly defined');
 
 // Test 8: Request object construction
-console.log('\n--- Test 8: Request Construction ---');
+// // console.log('\n--- Test 8: Request Construction ---');
 try {
   const testReq = new http.IncomingMessage();
   assert.ok(testReq, 'IncomingMessage constructor should work');
   assert.ok(typeof testReq.method === 'string', 'Request should have method');
   assert.ok(typeof testReq.url === 'string', 'Request should have url');
   assert.ok(typeof testReq.headers === 'object', 'Request should have headers');
-  console.log('✓ Request object construction works');
+  // console.log('✓ Request object construction works');
 } catch (e) {
   console.log('⚠ Request construction error:', e.message);
 }
 
 // Test 9: Response object construction
-console.log('\n--- Test 9: Response Construction ---');
+// // console.log('\n--- Test 9: Response Construction ---');
 try {
   const testRes = new http.ServerResponse();
   assert.ok(testRes, 'ServerResponse constructor should work');
@@ -203,13 +201,13 @@ try {
     false,
     'Response headersSent should be false initially'
   );
-  console.log('✓ Response object construction works');
+  // console.log('✓ Response object construction works');
 } catch (e) {
   console.log('⚠ Response construction error:', e.message);
 }
 
 // Test 10: Client request functionality
-console.log('\n--- Test 10: Client Request ---');
+// // console.log('\n--- Test 10: Client Request ---');
 try {
   const clientReq = http.request({
     hostname: 'localhost',
@@ -227,13 +225,13 @@ try {
     typeof clientReq.end === 'function',
     'Client request should have end method'
   );
-  console.log('✓ Client request creation works');
+  // console.log('✓ Client request creation works');
 } catch (e) {
   console.log('⚠ Client request error:', e.message);
 }
 
 // Cleanup all test servers
-console.log('\n--- Cleanup ---');
+// // console.log('\n--- Cleanup ---');
 try {
   // Close all servers, handling already-closed servers gracefully
   try {
@@ -271,9 +269,9 @@ try {
   } catch (e) {
     /* already closed */
   }
-  console.log('✓ All test servers closed');
+  // console.log('✓ All test servers closed');
 } catch (e) {
   console.log('⚠ Cleanup warning:', e.message);
 }
 
-console.log('\n=== HTTP Server Functionality Tests Completed ===');
+// // console.log('\n=== HTTP Server Functionality Tests Completed ===');

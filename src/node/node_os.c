@@ -133,8 +133,26 @@ static JSValue js_os_tmpdir(JSContext* ctx, JSValueConst this_val, int argc, JSV
     // Remove trailing backslash if present
     if (temp_path[length - 1] == '\\') {
       temp_path[length - 1] = '\0';
+      length--;
     }
-    return JS_NewString(ctx, temp_path);
+
+    // Fix invalid paths that start with backslash (e.g., "\D:\...")
+    // This can happen in some Windows environments like MSYS2
+    if (temp_path[0] == '\\' && length > 1) {
+      // Check if it's a malformed drive path like "\D:\..."
+      if (length > 3 && temp_path[2] == ':' && temp_path[3] == '\\') {
+        // Remove the leading backslash to fix the path
+        memmove(temp_path, temp_path + 1, length);
+        temp_path[length - 1] = '\0';
+      }
+    }
+
+    // Validate the final path format
+    if (temp_path[0] != '\0' &&
+        ((temp_path[0] >= 'A' && temp_path[0] <= 'Z') || (temp_path[0] >= 'a' && temp_path[0] <= 'z')) &&
+        temp_path[1] == ':') {
+      return JS_NewString(ctx, temp_path);
+    }
   }
   return JS_NewString(ctx, "C:\\Windows\\Temp");
 #else

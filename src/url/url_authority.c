@@ -151,7 +151,7 @@ int parse_authority(JSRT_URL* parsed, const char* authority_str) {
     }
 
     // Validate hostname characters (including Unicode validation)
-    if (!validate_hostname_characters(parsed->hostname)) {
+    if (!validate_hostname_characters_with_scheme(parsed->hostname, parsed->protocol)) {
       goto cleanup_and_return_error;
     }
 
@@ -328,7 +328,7 @@ int parse_authority(JSRT_URL* parsed, const char* authority_str) {
     }
 
     // Validate hostname characters (including Unicode validation)
-    if (!validate_hostname_characters(parsed->hostname)) {
+    if (!validate_hostname_characters_with_scheme(parsed->hostname, parsed->protocol)) {
       goto cleanup_and_return_error;
     }
 

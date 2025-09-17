@@ -283,7 +283,7 @@ char* canonicalize_ipv4_address(const char* input) {
         free(normalized_input);
         return NULL;  // Invalid number or overflow
       }
-      
+
       // Special case handling for IPv4 parsing per WHATWG URL spec:
       // 1. If strtoul couldn't parse anything, treat as 0
       // 2. If strtoul parsed something but there are remaining characters,

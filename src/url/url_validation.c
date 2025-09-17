@@ -192,15 +192,13 @@ int validate_hostname_characters_allow_at(const char* hostname, int allow_at) {
   for (const char* p = hostname; *p; p++) {
     unsigned char c = (unsigned char)*p;
 
-    // Per WPT tests, many special characters are actually allowed in hostnames
-    // Only reject the most critical characters that would break URL structure
-    // Characters like !"$&'()*+,-.;=_`{}~ are allowed per WPT expectations
-    // These characters are truly forbidden in hostnames: # / : < > ? [ \ ] ^
-    // But allow @ if allow_at flag is set (for double colon @ patterns)
-    // Note: [ and ] are allowed for IPv6 addresses, handled above
-    if (c == '#' || c == '/' || c == '<' || c == '>' || c == '?' || (!allow_at && c == '@') || c == '[' || c == '\\' ||
-        c == ']' || c == '^') {
-      return 0;  // Invalid hostname character
+    // Per WPT tests, many special characters are allowed in hostnames for non-special schemes
+    // Only reject characters that would truly break URL parsing structure
+    // For non-special schemes like sc:// and foo://, allow most special characters
+    // Characters like !"$&'()*+,-.;=_`{}~ should be allowed per WHATWG URL spec
+    // Only reject characters that would break basic URL structure parsing
+    if (c == '#' || c == '/' || c == '?' || (!allow_at && c == '@') || c == '[' || c == ']') {
+      return 0;  // Invalid hostname character that breaks URL structure
     }
 
     // Special handling for % - allow it for percent-encoded characters
@@ -211,7 +209,9 @@ int validate_hostname_characters_allow_at(const char* hostname, int allow_at) {
         p += 2;
         continue;
       } else {
-        return 0;  // Invalid percent-encoding
+        // For non-special schemes, allow lone % characters (they will be percent-encoded later)
+        // Only reject % in contexts where it would break URL structure
+        continue;
       }
     }
 
@@ -220,9 +220,10 @@ int validate_hostname_characters_allow_at(const char* hostname, int allow_at) {
       // Allow colon only if this looks like a Windows drive letter: single letter + colon at end
       if (strlen(hostname) == 2 && p == hostname + 1 && isalpha(hostname[0])) {
         continue;  // Allow Windows drive letter pattern like "C:"
-      } else {
-        return 0;  // Invalid hostname character
       }
+      // For non-special schemes, colons in hostnames should be allowed (percent-encoded)
+      // The hostname will be percent-encoded later if needed
+      continue;
     }
 
     // Reject ASCII control characters (including null bytes)
@@ -254,7 +255,10 @@ int validate_hostname_characters_allow_at(const char* hostname, int allow_at) {
 
       // Check for soft hyphen (U+00AD) encoded as UTF-8: 0xC2 0xAD
       if (c == 0xC2 && (unsigned char)*(p + 1) == 0xAD) {
-        return 0;  // Soft hyphen not allowed
+        // Per WHATWG URL spec, soft hyphens should be processed during IDNA processing
+        // For now, allow them in hostname validation
+        p += 1;  // Skip past the 2-byte soft hyphen sequence
+        continue;
       }
 
       // Check for Unicode whitespace characters that should be rejected

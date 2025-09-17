@@ -44,7 +44,7 @@ char* parse_url_components(JSRT_URL* parsed, const char* scheme, char* ptr) {
 
     // Blob URLs can contain various formats:
     // 1. blob:http://example.com/uuid (with inner URL)
-    // 2. blob:d3958f5c-0777-0845-9dcf-2cb28783acaf (UUID only)  
+    // 2. blob:d3958f5c-0777-0845-9dcf-2cb28783acaf (UUID only)
     // 3. blob: (empty)
     // 4. blob:about:blank, blob:ws://example.org/, etc.
     // We should accept all formats, validation is done elsewhere

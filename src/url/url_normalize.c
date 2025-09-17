@@ -275,14 +275,18 @@ char* strip_url_whitespace(const char* url) {
       found_whitespace = 1;
     }
     // Check for multi-byte Unicode whitespace
-    else if (check_pos >= start + 2) {
+    // Ensure we have enough bytes to safely check backwards
+    else if (end - start >= 3 && check_pos >= start + 2) {
       // U+3000 (ideographic space): 0xE3 0x80 0x80
-      if (check_pos >= start + 2 && check_pos[-2] == 0xE3 && check_pos[-1] == 0x80 && check_pos[0] == 0x80) {
+      if (check_pos[-2] == 0xE3 && check_pos[-1] == 0x80 && check_pos[0] == 0x80) {
         end -= 3;
         found_whitespace = 1;
       }
+    }
+    // Check for 2-byte Unicode whitespace
+    else if (end - start >= 2 && check_pos >= start + 1) {
       // U+00A0 (non-breaking space): 0xC2 0xA0
-      else if (check_pos >= start + 1 && check_pos[-1] == 0xC2 && check_pos[0] == 0xA0) {
+      if (check_pos[-1] == 0xC2 && check_pos[0] == 0xA0) {
         end -= 2;
         found_whitespace = 1;
       }

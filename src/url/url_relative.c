@@ -65,11 +65,12 @@ JSRT_URL* resolve_relative_url(const char* url, const char* base) {
     scheme[scheme_len] = ':';
     scheme[scheme_len + 1] = '\0';
 
-    // Special case: file URLs cannot be relative to non-file base URLs
+    // Special case: file URLs against non-file base URLs should be treated as absolute URLs
     if (strcmp(scheme, "file:") == 0 && strcmp(base_url->protocol, "file:") != 0) {
       free(scheme);
       JSRT_FreeURL(base_url);
-      return NULL;  // file URLs cannot be relative to non-file base URLs
+      // Parse as absolute file URL by calling main parser without base
+      return JSRT_ParseURL(url, NULL);
     }
 
     // Only strip scheme for special schemes
@@ -231,7 +232,13 @@ cleanup_and_normalize:
   // Normalize Windows drive letters in file URL pathnames
   if (result->protocol && strcmp(result->protocol, "file:") == 0 && result->pathname) {
     char* normalized_drive = normalize_windows_drive_letters(result->pathname);
-    if (normalized_drive) {
+    if (normalized_drive == NULL) {
+      // Invalid drive letter pattern (e.g., double pipes)
+      JSRT_FreeURL(base_url);
+      JSRT_FreeURL(result);
+      return NULL;
+    }
+    if (normalized_drive != result->pathname) {  // Check if it was actually changed
       free(result->pathname);
       result->pathname = normalized_drive;
     }

@@ -627,6 +627,12 @@ char* normalize_windows_drive_letters(const char* path) {
     return strdup(path ? path : "");
   }
 
+  // Check for invalid double pipe pattern: /X||/ where X is a letter
+  if (path[0] == '/' && strlen(path) >= 5 && isalpha(path[1]) && path[2] == '|' && path[3] == '|') {
+    // Double pipes in drive letters are invalid per WHATWG URL spec
+    return NULL;  // Signal invalid path
+  }
+
   // Check for Windows drive letter pattern: /X|/ where X is a letter
   if (path[0] == '/' && strlen(path) >= 4 && isalpha(path[1]) && path[2] == '|' && path[3] == '/') {
     // Convert /C|/foo to /C:/foo

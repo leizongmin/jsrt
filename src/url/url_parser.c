@@ -66,9 +66,25 @@ char* parse_url_components(JSRT_URL* parsed, const char* scheme, char* ptr) {
       return NULL;
     }
     return ptr;
-  } else if (is_special && !(strcmp(scheme, "file") == 0 && *ptr != '/' && *ptr != '\\')) {
+  } else if (strcmp(scheme, "file") == 0 && *ptr != '/' && *ptr != '\\') {
+    // File URLs without slashes should be treated as opaque paths
+    // Set the pathname to the entire remaining content
+    free(parsed->pathname);
+    parsed->pathname = strdup(ptr);
+
+    // Clear hostname since this is an opaque path
+    free(parsed->hostname);
+    parsed->hostname = strdup("");
+    free(parsed->host);
+    parsed->host = strdup("");
+
+    // Mark as opaque path for href building
+    parsed->opaque_path = 1;
+
+    // Return pointer to end since we consumed everything
+    return ptr + strlen(ptr);
+  } else if (is_special) {
     // Special schemes: handle various formats like "http:example.com/" or "http::@host:port"
-    // But exclude file URLs without slashes (like "file:p" which should be opaque)
     if (parse_special_scheme_without_slashes(parsed, &ptr) != 0) {
       return NULL;
     }
@@ -468,7 +484,14 @@ JSRT_URL* parse_absolute_url(const char* preprocessed_url) {
   // Normalize Windows drive letters in file URL pathnames
   if (parsed->protocol && strcmp(parsed->protocol, "file:") == 0 && parsed->pathname) {
     char* normalized_drive = normalize_windows_drive_letters(parsed->pathname);
-    if (normalized_drive) {
+    if (normalized_drive == NULL) {
+      // Invalid drive letter pattern (e.g., double pipes)
+      free(scheme);
+      free(url_copy);
+      JSRT_FreeURL(parsed);
+      return NULL;
+    }
+    if (normalized_drive != parsed->pathname) {  // Check if it was actually changed
       free(parsed->pathname);
       parsed->pathname = normalized_drive;
     }

@@ -418,6 +418,13 @@ char* normalize_single_slash_schemes(const char* url) {
 
       if (is_special_scheme(scheme)) {
         // Special scheme without slashes - add "//" after colon
+        // EXCEPT for file URLs which should remain opaque when they have no slashes
+        if (strcmp(scheme, "file:") == 0) {
+          // File URLs without slashes should remain opaque - don't add "//"
+          free(scheme);
+          break;
+        }
+
         size_t new_len = url_len + 2;  // +2 for "//"
         char* normalized = malloc(new_len + 1);
 

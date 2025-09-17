@@ -75,7 +75,24 @@ void build_href(JSRT_URL* parsed) {
              final_search, final_hash);
   } else if (is_special && !parsed->opaque_path) {
     // Special schemes with empty host (like file:///path) should include //
-    snprintf(parsed->href, href_len, "%s//%s%s%s", parsed->protocol, final_pathname, final_search, final_hash);
+    // For file URLs, ensure proper slash handling to avoid file:////
+    if (strcmp(parsed->protocol, "file:") == 0) {
+      // File URLs: build as file:// + pathname (which already starts with /)
+      // This ensures file:/// not file:////
+      snprintf(parsed->href, href_len, "%s//%s%s%s", parsed->protocol, final_pathname, final_search, final_hash);
+    } else {
+      snprintf(parsed->href, href_len, "%s//%s%s%s", parsed->protocol, final_pathname, final_search, final_hash);
+    }
+  } else if (strcmp(parsed->protocol, "file:") == 0 && parsed->opaque_path) {
+    // Opaque file URLs need special formatting
+    // But for cases like "//" -> "file:///" we shouldn't double the slashes
+    if (final_pathname && final_pathname[0] == '/') {
+      // pathname already starts with slash, use file:// format
+      snprintf(parsed->href, href_len, "%s//%s%s%s", parsed->protocol, final_pathname, final_search, final_hash);
+    } else {
+      // pathname doesn't start with slash, use file:/// format
+      snprintf(parsed->href, href_len, "%s///%s%s%s", parsed->protocol, final_pathname, final_search, final_hash);
+    }
   } else if (parsed->has_authority_syntax) {
     // Non-special schemes that started with // should preserve authority syntax
     // For empty pathname (like foo://), don't add extra slash

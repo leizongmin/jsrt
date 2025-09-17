@@ -67,36 +67,19 @@ char* parse_url_components(JSRT_URL* parsed, const char* scheme, char* ptr) {
     }
     return ptr;
   } else if (strcmp(scheme, "file") == 0 && *ptr != '/' && *ptr != '\\') {
-    // Per WHATWG URL spec, file URLs are always hierarchical, never opaque
-    // File URLs without slashes should be treated as hierarchical paths with leading slash
+    // File URLs without slashes should be treated as opaque paths
+    // Set the pathname to the entire remaining content
     free(parsed->pathname);
+    parsed->pathname = strdup(ptr);
 
-    // Ensure file URL pathnames always start with "/"
-    size_t path_len = strlen(ptr);
-    char* normalized_path = malloc(path_len + 2);  // +1 for leading slash, +1 for null terminator
-    if (!normalized_path) {
-      return NULL;  // Memory allocation failure
-    }
-
-    if (ptr[0] == '/') {
-      // Already has leading slash
-      strcpy(normalized_path, ptr);
-    } else {
-      // Add leading slash
-      normalized_path[0] = '/';
-      strcpy(normalized_path + 1, ptr);
-    }
-
-    parsed->pathname = normalized_path;
-
-    // Clear hostname since this has no authority
+    // Clear hostname since this is an opaque path
     free(parsed->hostname);
     parsed->hostname = strdup("");
     free(parsed->host);
     parsed->host = strdup("");
 
-    // File URLs are hierarchical, not opaque
-    parsed->opaque_path = 0;
+    // Mark as opaque path for href building
+    parsed->opaque_path = 1;
 
     // Return pointer to end since we consumed everything
     return ptr + strlen(ptr);
@@ -473,8 +456,11 @@ JSRT_URL* parse_absolute_url(const char* preprocessed_url) {
 
   free(scheme);
 
-  // File URLs are always hierarchical per WHATWG URL spec, never opaque
-  // Removed opaque_path setting for file URLs
+  // For file URLs without authority (like "file:p"), set opaque_path flag
+  if (strcmp(parsed->protocol, "file:") == 0 && strlen(parsed->host) == 0 && parsed->pathname &&
+      parsed->pathname[0] != '/') {
+    parsed->opaque_path = 1;
+  }
 
   // Handle file URL Windows drive letters
   handle_file_url_drive_letters(parsed);

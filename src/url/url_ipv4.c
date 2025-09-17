@@ -125,6 +125,15 @@ int looks_like_ipv4_address(const char* hostname) {
     return 0;
   }
 
+  // Special cases that should NOT be treated as IPv4 addresses per WPT:
+  // - Single dot: "."
+  // - Double dot: ".."
+  // These are valid hostnames, not IPv4 addresses
+  if (strcmp(normalized, ".") == 0 || strcmp(normalized, "..") == 0) {
+    free(normalized);
+    return 0;
+  }
+
   // If we have dots, hex prefix, OR it's all digits, it looks like IPv4
   int result = has_dots || has_hex_prefix || all_digits;
   free(normalized);

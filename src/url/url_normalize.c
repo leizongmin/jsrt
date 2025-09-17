@@ -242,9 +242,34 @@ static int is_unicode_whitespace(const unsigned char* ptr, size_t remaining_len)
   return 0;
 }
 
-// Strip leading and trailing whitespace (ASCII + Unicode) from URL string
-// ASCII whitespace: space (0x20), tab (0x09), LF (0x0A), CR (0x0D), FF (0x0C)
-// Unicode whitespace: U+3000 (ideographic space), U+00A0 (non-breaking space)
+// Returns number of bytes to skip for C0 controls and space (0 if not matching)
+// WHATWG URL spec: strip leading/trailing C0 controls (0x00-0x1F) or space (0x20)
+static int is_c0_control_or_space(const unsigned char* ptr, size_t remaining_len) {
+  unsigned char c = ptr[0];
+  
+  // C0 control characters (0x00-0x1F) or space (0x20)
+  if (c <= 0x20) {
+    return 1;
+  }
+  
+  // Check for UTF-8 encoded Unicode whitespace that should also be stripped
+  if (c >= 0x80 && remaining_len >= 3) {
+    // U+3000 (ideographic space): 0xE3 0x80 0x80
+    if (c == 0xE3 && ptr[1] == 0x80 && ptr[2] == 0x80) {
+      return 3;
+    }
+    // U+00A0 (non-breaking space): 0xC2 0xA0
+    if (c == 0xC2 && ptr[1] == 0xA0) {
+      return 2;
+    }
+  }
+
+  return 0;
+}
+
+// Strip leading and trailing C0 controls, space, and other whitespace from URL string
+// Per WHATWG URL spec: remove leading/trailing C0 controls (0x00-0x1F) or space (0x20)
+// Also remove other Unicode whitespace: U+3000 (ideographic space), U+00A0 (non-breaking space)
 char* strip_url_whitespace(const char* url) {
   if (!url)
     return NULL;
@@ -253,9 +278,9 @@ char* strip_url_whitespace(const char* url) {
   const unsigned char* start = (const unsigned char*)url;
   const unsigned char* end = start + url_len;
 
-  // Find start (skip leading whitespace)
+  // Find start (skip leading C0 controls, space, and other whitespace)
   while (start < end) {
-    int skip = is_unicode_whitespace(start, end - start);
+    int skip = is_c0_control_or_space(start, end - start);
     if (skip > 0) {
       start += skip;
     } else {
@@ -263,14 +288,14 @@ char* strip_url_whitespace(const char* url) {
     }
   }
 
-  // Find end (skip trailing whitespace)
+  // Find end (skip trailing C0 controls, space, and other whitespace)
   while (end > start) {
-    // Check if the character before 'end' is whitespace
+    // Check if the character before 'end' is a C0 control, space, or other whitespace
     const unsigned char* check_pos = end - 1;
     int found_whitespace = 0;
 
-    // Check for ASCII whitespace (1 byte)
-    if (*check_pos == 0x20 || *check_pos == 0x09 || *check_pos == 0x0A || *check_pos == 0x0D || *check_pos == 0x0C) {
+    // Check for C0 control characters (0x00-0x1F) or space (0x20)
+    if (*check_pos <= 0x20) {
       end--;
       found_whitespace = 1;
     }

@@ -20,19 +20,19 @@ static JSClassDef JSRT_URLClass = {
 
 // Helper function to strip tab and newline characters from URL strings
 // According to URL spec, these characters should be removed: tab (0x09), LF (0x0A), CR (0x0D)
-static char* JSRT_StripURLControlCharacters(const char* input) {
+static char* JSRT_StripURLControlCharacters(const char* input, size_t input_len) {
   if (!input)
     return NULL;
 
-  size_t len = strlen(input);
-  char* result = malloc(len + 1);
+  char* result = malloc(input_len + 1);
   if (!result)
     return NULL;
 
   size_t j = 0;
-  for (size_t i = 0; i < len; i++) {
+  for (size_t i = 0; i < input_len; i++) {
     char c = input[i];
-    // Skip tab, line feed, and carriage return
+    // Skip tab, line feed, and carriage return (per WHATWG URL spec)
+    // Note: other C0 controls should be handled later by strip_url_whitespace
     if (c != 0x09 && c != 0x0A && c != 0x0D) {
       result[j++] = c;
     }
@@ -46,13 +46,14 @@ static JSValue JSRT_URLConstructor(JSContext* ctx, JSValueConst new_target, int 
     return JS_ThrowTypeError(ctx, "URL constructor requires at least 1 argument");
   }
 
-  const char* url_str_raw = JS_ToCString(ctx, argv[0]);
+  size_t url_str_len;
+  const char* url_str_raw = JS_ToCStringLen(ctx, &url_str_len, argv[0]);
   if (!url_str_raw) {
     return JS_EXCEPTION;
   }
 
   // Strip control characters as per URL specification
-  char* url_str = JSRT_StripURLControlCharacters(url_str_raw);
+  char* url_str = JSRT_StripURLControlCharacters(url_str_raw, url_str_len);
   JS_FreeCString(ctx, url_str_raw);
   if (!url_str) {
     return JS_EXCEPTION;
@@ -61,12 +62,13 @@ static JSValue JSRT_URLConstructor(JSContext* ctx, JSValueConst new_target, int 
   const char* base_str_raw = NULL;
   char* base_str = NULL;
   if (argc >= 2 && !JS_IsUndefined(argv[1])) {
-    base_str_raw = JS_ToCString(ctx, argv[1]);
+    size_t base_str_len;
+    base_str_raw = JS_ToCStringLen(ctx, &base_str_len, argv[1]);
     if (!base_str_raw) {
       free(url_str);
       return JS_EXCEPTION;
     }
-    base_str = JSRT_StripURLControlCharacters(base_str_raw);
+    base_str = JSRT_StripURLControlCharacters(base_str_raw, base_str_len);
     JS_FreeCString(ctx, base_str_raw);
     if (!base_str) {
       free(url_str);

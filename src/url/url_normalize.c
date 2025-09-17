@@ -246,12 +246,12 @@ static int is_unicode_whitespace(const unsigned char* ptr, size_t remaining_len)
 // WHATWG URL spec: strip leading/trailing C0 controls (0x00-0x1F) or space (0x20)
 static int is_c0_control_or_space(const unsigned char* ptr, size_t remaining_len) {
   unsigned char c = ptr[0];
-  
+
   // C0 control characters (0x00-0x1F) or space (0x20)
   if (c <= 0x20) {
     return 1;
   }
-  
+
   // Check for UTF-8 encoded Unicode whitespace that should also be stripped
   if (c >= 0x80 && remaining_len >= 3) {
     // U+3000 (ideographic space): 0xE3 0x80 0x80

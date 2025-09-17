@@ -70,6 +70,7 @@ typedef struct {
 
 // Core URL functions
 JSRT_URL* JSRT_ParseURL(const char* url, const char* base);
+JSRT_URL* JSRT_ParseURLWithLength(const char* url, size_t url_len, const char* base, size_t base_len);
 void JSRT_FreeURL(JSRT_URL* url);
 
 // URL preprocessing functions (url_preprocessor.c)

@@ -233,7 +233,7 @@ int validate_hostname_characters_with_scheme(const char* hostname, const char* s
       continue;
     }
 
-    // For special schemes, reject ASCII control characters 
+    // For special schemes, reject ASCII control characters
     // For non-special schemes, allow control characters (they'll be percent-encoded)
     if ((c < 0x20 || c == 0x7F) && is_special) {
       return 0;  // Control characters not allowed in special schemes

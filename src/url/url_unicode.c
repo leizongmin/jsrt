@@ -33,13 +33,13 @@ char* normalize_hostname_unicode(const char* hostname) {
         if ((c2 & 0xC0) == 0x80) {
           // Calculate the Unicode codepoint for 2-byte UTF-8
           unsigned int codepoint = ((c & 0x1F) << 6) | (c2 & 0x3F);
-          
+
           // U+00AD (soft hyphen) - should be removed per IDNA spec
           if (codepoint == 0x00AD) {
             read_pos += 2;  // Skip the soft hyphen entirely
             continue;
           }
-          
+
           // Other 2-byte UTF-8 sequences - copy as-is
         }
       } else if ((c & 0xF0) == 0xE0 && read_pos + 2 < len) {

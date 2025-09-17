@@ -30,10 +30,12 @@ static char* JSRT_StripURLControlCharacters(const char* input, size_t input_len)
 
   size_t j = 0;
   for (size_t i = 0; i < input_len; i++) {
-    char c = input[i];
-    // Skip tab, line feed, and carriage return (per WHATWG URL spec)
-    // Note: other C0 controls should be handled later by strip_url_whitespace
-    if (c != 0x09 && c != 0x0A && c != 0x0D) {
+    unsigned char c = (unsigned char)input[i];
+    // Skip all C0 control characters (0x00-0x1F) including null byte
+    // This includes tab (0x09), line feed (0x0A), carriage return (0x0D) and others
+    // Per WHATWG URL spec: "Remove all ASCII tab or newline from input"
+    // but browsers also strip other C0 controls in practice
+    if (c >= 0x20) {  // Only keep characters >= 0x20 (space and above)
       result[j++] = c;
     }
   }

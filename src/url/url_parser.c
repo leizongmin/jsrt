@@ -455,8 +455,9 @@ JSRT_URL* parse_absolute_url(const char* preprocessed_url) {
     parsed->pathname = strdup("/");
   }
 
-  // Normalize dot segments in the pathname for special schemes
-  if (is_special_scheme(parsed->protocol) && parsed->pathname) {
+  // Normalize dot segments in the pathname for ALL schemes
+  // According to WHATWG URL spec, dot segment normalization applies to all schemes
+  if (parsed->pathname) {
     char* normalized_pathname = normalize_dot_segments_with_percent_decoding(parsed->pathname);
     if (normalized_pathname) {
       free(parsed->pathname);

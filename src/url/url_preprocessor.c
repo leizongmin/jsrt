@@ -235,9 +235,19 @@ char* preprocess_url_string(const char* url, const char* base) {
     return NULL;
   }
 
+  // For non-special schemes, normalize spaces before query/fragment boundaries
+  char* space_normalized_url = cleaned_url;
+  if (!has_special_scheme) {
+    space_normalized_url = normalize_spaces_before_query_fragment(cleaned_url);
+    free(cleaned_url);
+    if (!space_normalized_url) {
+      return NULL;
+    }
+  }
+
   // Normalize backslashes for special schemes
-  char* normalized_url = normalize_url_backslashes(cleaned_url);
-  free(cleaned_url);
+  char* normalized_url = normalize_url_backslashes(space_normalized_url);
+  free(space_normalized_url);
   if (!normalized_url) {
     return NULL;
   }

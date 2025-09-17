@@ -237,10 +237,26 @@ int validate_hostname_characters_allow_at(const char* hostname, int allow_at) {
         return 0;  // Soft hyphen not allowed
       }
 
+      // Check for Unicode whitespace characters that should be rejected
+      // U+3000 (ideographic space): 0xE3 0x80 0x80
+      if (c == 0xE3 && (unsigned char)*(p + 1) == 0x80 && (unsigned char)*(p + 2) == 0x80) {
+        return 0;  // Unicode whitespace not allowed in hostname
+      }
+
+      // U+00A0 (non-breaking space): 0xC2 0xA0
+      if (c == 0xC2 && (unsigned char)*(p + 1) == 0xA0) {
+        return 0;  // Non-breaking space not allowed in hostname
+      }
+
       // Check for other problematic Unicode characters
       // Word Joiner (U+2060): 0xE2 0x81 0xA0
       if (c == 0xE2 && (unsigned char)*(p + 1) == 0x81 && (unsigned char)*(p + 2) == 0xA0) {
         return 0;  // Word joiner not allowed
+      }
+
+      // Zero Width No-Break Space (U+FEFF): 0xEF 0xBB 0xBF
+      if (c == 0xEF && (unsigned char)*(p + 1) == 0xBB && (unsigned char)*(p + 2) == 0xBF) {
+        return 0;  // Zero width no-break space not allowed
       }
 
       // Allow most Unicode characters for internationalized domain names

@@ -1,149 +1,133 @@
 #include <ctype.h>
 #include "url.h"
 
-// Normalize dot segments in URL path according to RFC 3986
+// Normalize dot segments in URL path according to RFC 3986 and WHATWG URL spec
 // Resolves "." and ".." segments in paths
 char* normalize_dot_segments(const char* path) {
   if (!path || strlen(path) == 0) {
     return strdup("");
   }
 
-  // Create output buffer - worst case is same size as input
-  size_t input_len = strlen(path);
-  char* output = malloc(input_len + 1);
-  if (!output) {
-    return NULL;
+  // Use a simple approach: split into segments, process them, then reconstruct
+  size_t path_len = strlen(path);
+  char* path_copy = strdup(path);
+  char** segments = malloc(path_len * sizeof(char*));
+  int segment_count = 0;
+
+  // Handle leading slash
+  int is_absolute = (path[0] == '/');
+  char* ptr = path_copy;
+  if (is_absolute) {
+    ptr++;  // Skip leading slash
   }
 
-  char* out_ptr = output;
-  const char* input = path;
-
-  // Start with empty output buffer
-  *out_ptr = '\0';
-
-  while (*input != '\0') {
-    // A: If input begins with "../" or "./", remove prefix and handle ".." case
-    if (strncmp(input, "../", 3) == 0) {
-      // "../" should also remove the last segment from the output (like "/../")
-      // Remove last segment from output
-      if (out_ptr > output) {
-        // Move back past the current trailing slash if there is one
-        if (*(out_ptr - 1) == '/') {
-          out_ptr--;
-        }
-        // Find and remove the last segment
-        while (out_ptr > output && *(out_ptr - 1) != '/') {
-          out_ptr--;
-        }
-        // If we're not at root and don't have a trailing slash, ensure we have one
-        if (out_ptr > output && *(out_ptr - 1) == '/') {
-          // Keep the existing slash
-        } else if (out_ptr == output) {
-          // We're at the root, add a slash
-          *out_ptr++ = '/';
-        }
-        *out_ptr = '\0';
-      }
-      input += 3;
-      continue;
-    }
-    if (strncmp(input, "./", 2) == 0) {
-      input += 2;
-      continue;
-    }
-
-    // B: If input begins with "/./" or "/." (at end), replace with "/"
-    // Also handle "//.": consecutive slashes followed by dot should be normalized
-    if (strncmp(input, "/./", 3) == 0) {
-      *out_ptr++ = '/';
-      *out_ptr = '\0';
-      input += 3;
-      continue;
-    }
-    if (strncmp(input, "/.", 2) == 0 && input[2] == '\0') {
-      *out_ptr++ = '/';
-      *out_ptr = '\0';
-      input += 2;
-      continue;
-    }
-    // Handle consecutive slashes followed by dot: //. -> /
-    if (strncmp(input, "//.", 3) == 0 && (input[3] == '/' || input[3] == '\0')) {
-      *out_ptr++ = '/';
-      *out_ptr = '\0';
-      input += 3;
-      if (*input == '/')
-        input++;  // Skip trailing slash if present
-      continue;
-    }
-
-    // C: If input begins with "/../" or "/.." (at end), replace with "/" and remove last segment
-    if (strncmp(input, "/../", 4) == 0 || (strncmp(input, "/..", 3) == 0 && input[3] == '\0')) {
-      // Remove last segment from output (everything back to and including the previous '/')
-      if (out_ptr > output) {
-        // Move back past the current trailing slash if there is one
-        if (*(out_ptr - 1) == '/') {
-          out_ptr--;
-        }
-        // Find and remove the last segment
-        while (out_ptr > output && *(out_ptr - 1) != '/') {
-          out_ptr--;
-        }
-        // If we found a '/', keep it, otherwise we're at the root
-        if (out_ptr == output || *(out_ptr - 1) != '/') {
-          *out_ptr++ = '/';  // Ensure we have a leading slash
-        }
-        *out_ptr = '\0';
-      } else {
-        // Output is empty, just add "/"
-        *out_ptr++ = '/';
-        *out_ptr = '\0';
-      }
-
-      // Skip the input pattern
-      if (input[3] == '\0') {
-        input += 3;  // "/.."
-      } else {
-        input += 4;  // "/../"
-      }
-      continue;
-    }
-
-    // D: If input is ".." or ".", remove it
-    if (strcmp(input, ".") == 0 || strcmp(input, "..") == 0) {
-      break;  // End of input
-    }
-
-    // E: Move first path segment from input to output
-    if (*input == '/') {
-      *out_ptr++ = *input++;
-      *out_ptr = '\0';
-    }
-
-    // Check if the next segment is a single dot before copying it
-    const char* segment_start = input;
-    const char* segment_end = input;
-    while (*segment_end != '\0' && *segment_end != '/') {
-      segment_end++;
-    }
-
-    // If this segment is just a single dot, skip it (don't copy to output)
-    if (segment_end - segment_start == 1 && *segment_start == '.') {
-      input = segment_end;  // Skip the dot segment
-      continue;
-    }
-
-    // Copy segment until next '/' or end
-    while (*input != '\0' && *input != '/') {
-      *out_ptr++ = *input++;
-      *out_ptr = '\0';
+  // Split into segments manually to preserve empty segments
+  char* start = ptr;
+  while (*start != '\0') {
+    char* end = strchr(start, '/');
+    if (end == NULL) {
+      // Last segment
+      segments[segment_count++] = strdup(start);
+      break;
+    } else {
+      // Extract segment (could be empty)
+      size_t len = end - start;
+      char* segment = malloc(len + 1);
+      strncpy(segment, start, len);
+      segment[len] = '\0';
+      segments[segment_count++] = segment;
+      start = end + 1;
     }
   }
 
-  // For URL paths, consecutive slashes are significant and should be preserved
-  // According to WHATWG URL spec, paths like "//@" should remain as "//@", not "/@"
-  // Only normalize dot segments, but preserve the rest of the path structure
+  // Check for trailing empty segments and dot segments before processing (for slash handling)
+  int had_trailing_empty = 0;
+  int had_trailing_dot_segment = 0;
+  for (int i = segment_count - 1; i >= 0; i--) {
+    if (strcmp(segments[i], "..") == 0 || strcmp(segments[i], ".") == 0) {
+      had_trailing_dot_segment = 1;
+      continue;  // Skip dot segments
+    } else if (strlen(segments[i]) == 0) {
+      had_trailing_empty = 1;
+      break;
+    } else {
+      break;  // Found non-empty segment
+    }
+  }
 
-  return output;
+  // Process segments using a stack approach
+  char** output_segments = malloc(segment_count * sizeof(char*));
+  int output_count = 0;
+
+  for (int i = 0; i < segment_count; i++) {
+    if (strcmp(segments[i], ".") == 0) {
+      // Single dot: skip it
+      free(segments[i]);
+    } else if (strcmp(segments[i], "..") == 0) {
+      // Double dot: remove previous segment if it exists
+      if (output_count > 0) {
+        free(output_segments[output_count - 1]);
+        output_count--;
+      }
+      free(segments[i]);
+    } else {
+      // Normal segment (including empty segments): keep it
+      output_segments[output_count++] = segments[i];
+    }
+  }
+
+  // Reconstruct the path
+  size_t result_len = 1;  // At least for null terminator
+  if (is_absolute) {
+    result_len++;  // For leading slash
+  }
+  for (int i = 0; i < output_count; i++) {
+    result_len += strlen(output_segments[i]) + 1;  // +1 for slash separator
+  }
+
+  char* result = malloc(result_len + 1);
+  result[0] = '\0';
+
+  if (is_absolute) {
+    strcat(result, "/");
+  }
+
+  for (int i = 0; i < output_count; i++) {
+    if (i > 0) {
+      strcat(result, "/");
+    }
+    strcat(result, output_segments[i]);
+    free(output_segments[i]);
+  }
+
+  // Handle trailing slash case: if original path ended with / and we have segments
+  // Also handle the case where the path had trailing slashes before dot segments
+  if (output_count > 0) {
+    // Check if original path structure suggests a trailing slash
+    if (path_len > 1 && path[path_len - 1] == '/') {
+      strcat(result, "/");
+    } else if (had_trailing_empty) {
+      // There were empty segments at the end (before dot segments)
+      // This handles cases like /foo/bar//.. where there's an implicit trailing slash
+      strcat(result, "/");
+    } else if (had_trailing_dot_segment) {
+      // The last segment in original path was a dot segment
+      // In this case, we should add a trailing slash
+      // Examples: /foo/. -> /foo/, /foo/bar/.. -> /foo/
+      strcat(result, "/");
+    }
+  }
+
+  // Special case: if result is empty and it was an absolute path, return "/"
+  if (strlen(result) == 0 && is_absolute) {
+    strcpy(result, "/");
+  }
+
+  free(path_copy);
+  free(segments);
+  free(output_segments);
+
+  return result;
 }
 
 // Decode percent-encoded dots in path for proper normalization
@@ -232,23 +216,81 @@ char* normalize_dot_segments_with_percent_decoding(const char* path) {
   return normalized;
 }
 
-// Strip leading and trailing ASCII whitespace from URL string
+// Check if character is a Unicode whitespace that should be stripped
+// Returns number of bytes to skip (0 if not whitespace)
+static int is_unicode_whitespace(const unsigned char* ptr, size_t remaining_len) {
+  unsigned char c = ptr[0];
+
+  // ASCII whitespace: space (0x20), tab (0x09), LF (0x0A), CR (0x0D), FF (0x0C)
+  if (c == 0x20 || c == 0x09 || c == 0x0A || c == 0x0D || c == 0x0C) {
+    return 1;
+  }
+
+  // Check for UTF-8 encoded Unicode whitespace
+  if (c >= 0x80 && remaining_len >= 3) {
+    // U+3000 (ideographic space): 0xE3 0x80 0x80
+    if (c == 0xE3 && ptr[1] == 0x80 && ptr[2] == 0x80) {
+      return 3;
+    }
+    // U+00A0 (non-breaking space): 0xC2 0xA0
+    if (c == 0xC2 && ptr[1] == 0xA0) {
+      return 2;
+    }
+    // More Unicode whitespace characters can be added here
+  }
+
+  return 0;
+}
+
+// Strip leading and trailing whitespace (ASCII + Unicode) from URL string
 // ASCII whitespace: space (0x20), tab (0x09), LF (0x0A), CR (0x0D), FF (0x0C)
+// Unicode whitespace: U+3000 (ideographic space), U+00A0 (non-breaking space)
 char* strip_url_whitespace(const char* url) {
   if (!url)
     return NULL;
 
+  size_t url_len = strlen(url);
+  const unsigned char* start = (const unsigned char*)url;
+  const unsigned char* end = start + url_len;
+
   // Find start (skip leading whitespace)
-  const char* start = url;
-  while (*start && (*start == 0x20 || *start == 0x09 || *start == 0x0A || *start == 0x0D || *start == 0x0C)) {
-    start++;
+  while (start < end) {
+    int skip = is_unicode_whitespace(start, end - start);
+    if (skip > 0) {
+      start += skip;
+    } else {
+      break;
+    }
   }
 
   // Find end (skip trailing whitespace)
-  const char* end = start + strlen(start);
-  while (end > start &&
-         (*(end - 1) == 0x20 || *(end - 1) == 0x09 || *(end - 1) == 0x0A || *(end - 1) == 0x0D || *(end - 1) == 0x0C)) {
-    end--;
+  while (end > start) {
+    // Check if the character before 'end' is whitespace
+    const unsigned char* check_pos = end - 1;
+    int found_whitespace = 0;
+
+    // Check for ASCII whitespace (1 byte)
+    if (*check_pos == 0x20 || *check_pos == 0x09 || *check_pos == 0x0A || *check_pos == 0x0D || *check_pos == 0x0C) {
+      end--;
+      found_whitespace = 1;
+    }
+    // Check for multi-byte Unicode whitespace
+    else if (check_pos >= start + 2) {
+      // U+3000 (ideographic space): 0xE3 0x80 0x80
+      if (check_pos >= start + 2 && check_pos[-2] == 0xE3 && check_pos[-1] == 0x80 && check_pos[0] == 0x80) {
+        end -= 3;
+        found_whitespace = 1;
+      }
+      // U+00A0 (non-breaking space): 0xC2 0xA0
+      else if (check_pos >= start + 1 && check_pos[-1] == 0xC2 && check_pos[0] == 0xA0) {
+        end -= 2;
+        found_whitespace = 1;
+      }
+    }
+
+    if (!found_whitespace) {
+      break;
+    }
   }
 
   // Create trimmed string
@@ -307,8 +349,9 @@ char* normalize_port(const char* port_str, const char* protocol) {
   return result;
 }
 
-// Remove tab, newline, carriage return from URL string per WHATWG spec
-// Spaces are preserved and will be encoded later in the appropriate components
+// Remove specific whitespace characters from URL string per WHATWG spec
+// Tab, newline, carriage return are removed; spaces preserved for encoding later
+// Also remove certain Unicode zero-width characters
 char* remove_all_ascii_whitespace(const char* url) {
   if (!url)
     return NULL;
@@ -319,27 +362,51 @@ char* remove_all_ascii_whitespace(const char* url) {
     return NULL;
 
   size_t j = 0;
+  size_t i = 0;
 
-  for (size_t i = 0; i < len; i++) {
-    char c = url[i];
+  while (i < len) {
+    unsigned char c = (unsigned char)url[i];
 
     // Always remove tab, line feed, and carriage return
     if (c == 0x09 || c == 0x0A || c == 0x0D) {
+      i++;
       continue;
     }
 
-    // According to WHATWG URL spec, spaces should be preserved and encoded later
-    // Only remove tab, LF, and CR - preserve all spaces
+    // Check for zero-width Unicode characters that should be removed
+    if (c >= 0x80 && i + 2 < len) {
+      // Zero Width Space (U+200B): 0xE2 0x80 0x8B
+      // Zero Width Non-Joiner (U+200C): 0xE2 0x80 0x8C
+      // Zero Width Joiner (U+200D): 0xE2 0x80 0x8D
+      // Word Joiner (U+2060): 0xE2 0x81 0xA0
+      // Zero Width No-Break Space (U+FEFF): 0xEF 0xBB 0xBF
+      if (c == 0xE2 && (unsigned char)url[i + 1] == 0x80) {
+        unsigned char third = (unsigned char)url[i + 2];
+        if (third == 0x8B || third == 0x8C || third == 0x8D) {
+          i += 3;  // Skip zero-width character
+          continue;
+        }
+      } else if (c == 0xE2 && (unsigned char)url[i + 1] == 0x81 && (unsigned char)url[i + 2] == 0xA0) {
+        i += 3;  // Skip Word Joiner (U+2060)
+        continue;
+      } else if (c == 0xEF && (unsigned char)url[i + 1] == 0xBB && (unsigned char)url[i + 2] == 0xBF) {
+        i += 3;  // Skip Zero Width No-Break Space (U+FEFF)
+        continue;
+      }
+    }
 
-    result[j++] = c;
+    // According to WHATWG URL spec, spaces should be preserved and encoded later
+    // Only remove tab, LF, CR, and zero-width characters - preserve all other characters
+    result[j++] = url[i++];
   }
   result[j] = '\0';
 
   return result;
 }
 
-// Normalize consecutive spaces to single space for non-special schemes
-char* normalize_spaces_in_path(const char* path) {
+// Normalize spaces in URL path specifically for the query/fragment boundary issue
+// This handles the special case where spaces before ? or # should be collapsed to single %20
+char* normalize_spaces_before_query_fragment(const char* path) {
   if (!path)
     return NULL;
 
@@ -349,18 +416,33 @@ char* normalize_spaces_in_path(const char* path) {
     return NULL;
 
   size_t j = 0;
-  int prev_was_space = 0;
 
   for (size_t i = 0; i < len; i++) {
     char c = path[i];
-    if (c == ' ' || c == '\t') {
-      if (!prev_was_space) {
-        result[j++] = ' ';  // Normalize tab to space, collapse consecutive spaces
-        prev_was_space = 1;
+
+    // Check if we're at the start of a space sequence
+    if (c == ' ') {
+      // Count all consecutive spaces
+      size_t space_start = i;
+      size_t space_end = i;
+      while (space_end < len && path[space_end] == ' ') {
+        space_end++;
+      }
+
+      // Check if this space sequence is trailing (at end or before ?/#)
+      if (space_end == len || path[space_end] == '?' || path[space_end] == '#') {
+        // This is a trailing space sequence - collapse to single space
+        result[j++] = ' ';
+        i = space_end - 1;  // Skip the rest (loop will increment)
+      } else {
+        // This is a middle space sequence - keep all spaces as-is
+        for (size_t k = space_start; k < space_end; k++) {
+          result[j++] = ' ';
+        }
+        i = space_end - 1;  // Skip to end of space sequence
       }
     } else {
       result[j++] = c;
-      prev_was_space = 0;
     }
   }
   result[j] = '\0';

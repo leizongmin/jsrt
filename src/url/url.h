@@ -136,6 +136,7 @@ char* normalize_port(const char* port_str, const char* protocol);
 char* strip_url_whitespace(const char* url);
 char* remove_all_ascii_whitespace(const char* url);
 char* normalize_spaces_in_path(const char* path);
+char* normalize_spaces_before_query_fragment(const char* path);
 char* normalize_url_backslashes(const char* url);
 char* normalize_single_slash_schemes(const char* url);
 

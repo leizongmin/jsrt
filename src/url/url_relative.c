@@ -218,9 +218,9 @@ JSRT_URL* resolve_relative_url(const char* url, const char* base) {
   }
 
 cleanup_and_normalize:
-  // Normalize dot segments in the pathname (only for special schemes)
-  // Non-special schemes should preserve dot segments like /.//
-  if (is_special_scheme(result->protocol)) {
+  // Normalize dot segments in the pathname for ALL schemes
+  // According to WHATWG URL spec, dot segment normalization applies to all schemes
+  if (result->pathname) {
     char* normalized_pathname = normalize_dot_segments_with_percent_decoding(result->pathname);
     if (normalized_pathname) {
       free(result->pathname);

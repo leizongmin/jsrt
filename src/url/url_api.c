@@ -219,8 +219,14 @@ static JSValue JSRT_URLGetPathname(JSContext* ctx, JSValueConst this_val, int ar
     free(encoded_pathname);
     return result;
   } else {
-    // Non-special schemes return raw pathname
-    return JS_NewString(ctx, url->pathname);
+    // Non-special schemes use special trailing space encoding
+    char* encoded_pathname = url_nonspecial_trailing_space_encode(url->pathname);
+    if (!encoded_pathname)
+      return JS_EXCEPTION;
+
+    JSValue result = JS_NewString(ctx, encoded_pathname);
+    free(encoded_pathname);
+    return result;
   }
 }
 

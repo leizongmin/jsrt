@@ -408,7 +408,7 @@ char* remove_all_ascii_whitespace(const char* url) {
       // Zero Width Non-Joiner (U+200C): 0xE2 0x80 0x8C
       // Zero Width Joiner (U+200D): 0xE2 0x80 0x8D
       // Word Joiner (U+2060): 0xE2 0x81 0xA0
-      // Zero Width No-Break Space (U+FEFF): 0xEF 0xBB 0xBF
+      // NOTE: BOM (U+FEFF) is NOT stripped here - only from leading/trailing positions
       if (c == 0xE2 && (unsigned char)url[i + 1] == 0x80) {
         unsigned char third = (unsigned char)url[i + 2];
         if (third == 0x8B || third == 0x8C || third == 0x8D) {
@@ -418,9 +418,9 @@ char* remove_all_ascii_whitespace(const char* url) {
       } else if (c == 0xE2 && (unsigned char)url[i + 1] == 0x81 && (unsigned char)url[i + 2] == 0xA0) {
         i += 3;  // Skip Word Joiner (U+2060)
         continue;
-      } else if (c == 0xEF && (unsigned char)url[i + 1] == 0xBB && (unsigned char)url[i + 2] == 0xBF) {
-        i += 3;  // Skip Zero Width No-Break Space (U+FEFF)
-        continue;
+        // NOTE: BOM (U+FEFF) should NOT be stripped from middle of URLs per WHATWG spec
+        // It should only be stripped from leading/trailing positions during whitespace removal
+        // When found in the middle, it should be preserved and later percent-encoded
       }
     }
 
@@ -449,26 +449,48 @@ char* normalize_spaces_before_query_fragment(const char* path) {
   for (size_t i = 0; i < len; i++) {
     char c = path[i];
 
-    // Check if we're at the start of a space sequence
-    if (c == ' ') {
-      // Count all consecutive spaces
+    // Check if we're at the start of a whitespace sequence (space, tab)
+    if (c == ' ' || c == '\t') {
+      // Count all consecutive whitespace characters
       size_t space_start = i;
       size_t space_end = i;
-      while (space_end < len && path[space_end] == ' ') {
+      while (space_end < len && (path[space_end] == ' ' || path[space_end] == '\t')) {
         space_end++;
       }
 
       // Check if this space sequence is trailing (at end or before ?/#)
       if (space_end == len || path[space_end] == '?' || path[space_end] == '#') {
-        // This is a trailing space sequence - collapse to single space
-        result[j++] = ' ';
+        // For non-special schemes, collapse trailing whitespace sequence per WPT rules
+        size_t whitespace_count = space_end - space_start;
+
+        // Check if this is a mixed whitespace sequence (contains tabs)
+        bool has_tabs = false;
+        for (size_t k = space_start; k < space_end; k++) {
+          if (path[k] == '\t') {
+            has_tabs = true;
+            break;
+          }
+        }
+
+        if (whitespace_count == 1) {
+          // Single space/tab -> just one space (will be encoded as %20)
+          result[j++] = ' ';
+        } else if (whitespace_count == 2) {
+          // Two spaces -> literal space + space to be encoded as %20
+          result[j++] = ' ';  // First literal space
+          result[j++] = ' ';  // Second space (will be encoded as %20)
+        } else {
+          // Multiple spaces -> collapse to two spaces (literal + encoded)
+          result[j++] = ' ';  // First literal space
+          result[j++] = ' ';  // Second space (will be encoded as %20)
+        }
         i = space_end - 1;  // Skip the rest (loop will increment)
       } else {
-        // This is a middle space sequence - keep all spaces as-is
+        // This is a middle whitespace sequence - keep all whitespace as-is
         for (size_t k = space_start; k < space_end; k++) {
-          result[j++] = ' ';
+          result[j++] = path[k];  // Preserve original whitespace character (space or tab)
         }
-        i = space_end - 1;  // Skip to end of space sequence
+        i = space_end - 1;  // Skip to end of whitespace sequence
       }
     } else {
       result[j++] = c;

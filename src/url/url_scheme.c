@@ -50,20 +50,38 @@ int parse_special_scheme_without_slashes(JSRT_URL* parsed, char** ptr) {
     return 0;
   }
 
-  // Special handling for file URLs without slashes - these should be opaque paths
+  // Special handling for file URLs without slashes - these should be hierarchical paths
   if (strcmp(parsed->protocol, "file:") == 0) {
-    // For file URLs like "file:test" or "file:...", treat as opaque path
+    // Per WHATWG URL spec, file URLs are always hierarchical, never opaque
+    // For file URLs like "file:test" or "file:...", treat as hierarchical path with leading slash
     free(parsed->pathname);
-    parsed->pathname = strdup(input_ptr);
 
-    // Clear hostname since this is an opaque path
+    // Ensure file URL pathnames always start with "/"
+    size_t path_len = strlen(input_ptr);
+    char* normalized_path = malloc(path_len + 2);  // +1 for leading slash, +1 for null terminator
+    if (!normalized_path) {
+      return -1;  // Memory allocation failure
+    }
+
+    if (input_ptr[0] == '/') {
+      // Already has leading slash
+      strcpy(normalized_path, input_ptr);
+    } else {
+      // Add leading slash
+      normalized_path[0] = '/';
+      strcpy(normalized_path + 1, input_ptr);
+    }
+
+    parsed->pathname = normalized_path;
+
+    // Clear hostname since this has no authority
     free(parsed->hostname);
     parsed->hostname = strdup("");
     free(parsed->host);
     parsed->host = strdup("");
 
-    // Mark as opaque path for href building
-    parsed->opaque_path = 1;
+    // File URLs are hierarchical, not opaque
+    parsed->opaque_path = 0;
 
     // Move pointer to end since we consumed everything
     *ptr = input_ptr + strlen(input_ptr);

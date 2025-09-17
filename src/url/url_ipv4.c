@@ -90,40 +90,12 @@ int looks_like_ipv4_address(const char* hostname) {
 
   // Check if this looks like an IPv4 address
   // According to WHATWG URL spec, a hostname looks like IPv4 if:
-  // 1. Contains dots AND consists only of digits, dots, and optionally hex prefixes
-  // 2. OR starts with hex prefix (0x/0X) and contains only hex digits
-  // 3. OR consists entirely of digits (pure numeric hostname)
+  // 1. Consists entirely of digits (pure numeric hostname)
+  // 2. OR has hex prefix (0x/0X) format
+  // 3. OR is dotted notation where each part is a valid number
 
   int has_dots = strchr(normalized, '.') != NULL;
   int has_hex_prefix = strncmp(normalized, "0x", 2) == 0 || strncmp(normalized, "0X", 2) == 0;
-  int all_digits = 1;  // Track if it's purely numeric
-
-  // Check each character
-  for (size_t i = 0; i < strlen(normalized); i++) {
-    char c = normalized[i];
-
-    // Allow digits always
-    if (c >= '0' && c <= '9') {
-      continue;
-    }
-
-    // Allow dots if we're in dotted notation
-    if (c == '.' && has_dots) {
-      all_digits = 0;  // Has dots, so not pure digits
-      continue;
-    }
-
-    // Allow hex characters and 'x'/'X' if we have hex prefix
-    if (has_hex_prefix && ((c >= 'a' && c <= 'f') || (c >= 'A' && c <= 'F') || c == 'x' || c == 'X')) {
-      all_digits = 0;  // Has hex chars, so not pure digits
-      continue;
-    }
-
-    // Any other character means this doesn't look like IPv4
-    all_digits = 0;
-    free(normalized);
-    return 0;
-  }
 
   // Special cases that should NOT be treated as IPv4 addresses per WPT:
   // - Single dot: "."
@@ -134,10 +106,76 @@ int looks_like_ipv4_address(const char* hostname) {
     return 0;
   }
 
-  // If we have dots, hex prefix, OR it's all digits, it looks like IPv4
-  int result = has_dots || has_hex_prefix || all_digits;
+  // Case 1: Pure numeric (no dots, no hex prefix)
+  if (!has_dots && !has_hex_prefix) {
+    // Check if all characters are digits
+    for (size_t i = 0; i < strlen(normalized); i++) {
+      if (normalized[i] < '0' || normalized[i] > '9') {
+        free(normalized);
+        return 0;  // Not all digits, not IPv4
+      }
+    }
+    free(normalized);
+    return 1;  // All digits, looks like IPv4
+  }
+
+  // Case 2: Hex prefix format (0x...)
+  if (has_hex_prefix && !has_dots) {
+    // Check if all characters after 0x are valid hex
+    for (size_t i = 2; i < strlen(normalized); i++) {
+      char c = normalized[i];
+      if (!((c >= '0' && c <= '9') || (c >= 'a' && c <= 'f') || (c >= 'A' && c <= 'F'))) {
+        free(normalized);
+        return 0;  // Invalid hex character
+      }
+    }
+    free(normalized);
+    return 1;  // Valid hex format, looks like IPv4
+  }
+
+  // Case 3: Dotted notation - check if each part is a valid number
+  if (has_dots && !has_hex_prefix) {
+    char* input_copy = strdup(normalized);
+    char* part = strtok(input_copy, ".");
+    int valid_dotted = 1;
+
+    while (part && valid_dotted) {
+      // Each part must be a valid number (decimal, octal, or hex like "0x123")
+      if (strlen(part) == 0) {
+        valid_dotted = 0;  // Empty part
+        break;
+      }
+
+      // Check if this part is "0x" format
+      if (strncmp(part, "0x", 2) == 0 || strncmp(part, "0X", 2) == 0) {
+        // Hex format part - check remaining characters
+        for (size_t i = 2; i < strlen(part); i++) {
+          char c = part[i];
+          if (!((c >= '0' && c <= '9') || (c >= 'a' && c <= 'f') || (c >= 'A' && c <= 'F'))) {
+            valid_dotted = 0;
+            break;
+          }
+        }
+      } else {
+        // Decimal/octal format - check if all are digits
+        for (size_t i = 0; i < strlen(part); i++) {
+          if (part[i] < '0' || part[i] > '9') {
+            valid_dotted = 0;
+            break;
+          }
+        }
+      }
+      part = strtok(NULL, ".");
+    }
+
+    free(input_copy);
+    free(normalized);
+    return valid_dotted;
+  }
+
+  // Case 4: Has both dots and hex prefix - this is not valid IPv4
   free(normalized);
-  return result;
+  return 0;
 }
 
 // Canonicalize IPv4 address according to WHATWG URL spec
@@ -145,6 +183,11 @@ int looks_like_ipv4_address(const char* hostname) {
 // Returns NULL if not a valid IPv4 address, otherwise returns canonical dotted decimal
 char* canonicalize_ipv4_address(const char* input) {
   if (!input || strlen(input) == 0) {
+    return NULL;
+  }
+
+  // First check if this even looks like an IPv4 address
+  if (!looks_like_ipv4_address(input)) {
     return NULL;
   }
 
@@ -228,11 +271,32 @@ char* canonicalize_ipv4_address(const char* input) {
       errno = 0;                                  // Reset errno to detect overflow
       values[i] = strtoul(parts[i], &endptr, 0);  // Auto-detect base
 
-      if (errno == ERANGE || *endptr != '\0') {
-        // Either overflow occurred or invalid characters found
+      if (errno == ERANGE) {
+        // Overflow occurred
         free(input_copy);
         free(normalized_input);
         return NULL;  // Invalid number or overflow
+      }
+      
+      // Special case handling for IPv4 parsing per WHATWG URL spec:
+      // 1. If strtoul couldn't parse anything, treat as 0
+      // 2. If strtoul parsed something but there are remaining characters,
+      //    check if it's a special case like "0x" (which should be treated as 0)
+      if (endptr == parts[i]) {
+        // No digits were parsed at all, treat as 0
+        values[i] = 0;
+      } else if (*endptr != '\0') {
+        // Some characters remain after parsing
+        // Check if this is "0x" case - if the remaining part is just "x" after parsing "0"
+        if (strcmp(parts[i], "0x") == 0 || strcmp(parts[i], "0X") == 0) {
+          // Special case: "0x" or "0X" without valid hex digits should be treated as 0
+          values[i] = 0;
+        } else {
+          // Other cases with invalid characters - this is invalid IPv4
+          free(input_copy);
+          free(normalized_input);
+          return NULL;
+        }
       }
     }
 

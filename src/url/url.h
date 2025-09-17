@@ -164,6 +164,8 @@ char* url_decode_query_with_length_and_output_len(const char* str, size_t len, s
 int is_default_port(const char* scheme, const char* port);
 int is_special_scheme(const char* protocol);
 char* compute_origin(const char* protocol, const char* hostname, const char* port, int double_colon_at_pattern);
+char* compute_origin_with_pathname(const char* protocol, const char* hostname, const char* port,
+                                   int double_colon_at_pattern, const char* pathname);
 int hex_to_int(char c);
 
 // URLSearchParams functions

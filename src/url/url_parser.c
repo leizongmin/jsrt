@@ -45,7 +45,8 @@ char* parse_url_components(JSRT_URL* parsed, const char* scheme, char* ptr) {
     }
 
     // The inner URL should be an absolute URL with a valid scheme
-    if (!(strncmp(ptr, "http://", 7) == 0 || strncmp(ptr, "https://", 8) == 0 || strncmp(ptr, "ftp://", 6) == 0)) {
+    if (!(strncmp(ptr, "http://", 7) == 0 || strncmp(ptr, "https://", 8) == 0 || strncmp(ptr, "ftp://", 6) == 0 ||
+          strncmp(ptr, "ws://", 5) == 0 || strncmp(ptr, "wss://", 6) == 0)) {
       return NULL;
     }
 
@@ -499,7 +500,8 @@ JSRT_URL* parse_absolute_url(const char* preprocessed_url) {
 
   // Compute origin
   free(parsed->origin);
-  parsed->origin = compute_origin(parsed->protocol, parsed->hostname, parsed->port, parsed->double_colon_at_pattern);
+  parsed->origin = compute_origin_with_pathname(parsed->protocol, parsed->hostname, parsed->port,
+                                                parsed->double_colon_at_pattern, parsed->pathname);
 
   // Build href
   build_href(parsed);

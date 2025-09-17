@@ -245,7 +245,8 @@ cleanup_and_normalize:
   }
 
   // Build origin using compute_origin function to handle all scheme types correctly
-  result->origin = compute_origin(result->protocol, result->hostname, result->port, result->double_colon_at_pattern);
+  result->origin = compute_origin_with_pathname(result->protocol, result->hostname, result->port,
+                                                result->double_colon_at_pattern, result->pathname);
 
   // Pathname is already percent-encoded when stored in the URL object
   // Just use it as-is for href construction

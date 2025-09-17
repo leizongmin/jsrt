@@ -558,7 +558,13 @@ int is_default_port(const char* scheme, const char* port) {
 
 // Compute origin for URL according to WHATWG URL spec
 char* compute_origin(const char* protocol, const char* hostname, const char* port, int double_colon_at_pattern) {
-  if (!protocol || !hostname || strlen(protocol) == 0 || strlen(hostname) == 0) {
+  return compute_origin_with_pathname(protocol, hostname, port, double_colon_at_pattern, NULL);
+}
+
+// Extended compute origin function that can handle blob URLs using pathname
+char* compute_origin_with_pathname(const char* protocol, const char* hostname, const char* port,
+                                   int double_colon_at_pattern, const char* pathname) {
+  if (!protocol || strlen(protocol) == 0) {
     return strdup("null");
   }
 
@@ -573,13 +579,16 @@ char* compute_origin(const char* protocol, const char* hostname, const char* por
     free(scheme);
     // For blob URLs, the origin is derived from the inner URL
     // blob:https://example.com/uuid -> https://example.com
-    // The hostname for blob URLs should contain the inner URL
-    if (strncmp(hostname, "http://", 7) == 0 || strncmp(hostname, "https://", 8) == 0) {
+    // The inner URL is stored in the pathname
+    // For blob URLs, only http, https, ws, wss inner URLs provide tuple origins
+    // FTP and other schemes result in null origin for blob URLs
+    if (pathname && (strncmp(pathname, "http://", 7) == 0 || strncmp(pathname, "https://", 8) == 0 ||
+                     strncmp(pathname, "ws://", 5) == 0 || strncmp(pathname, "wss://", 6) == 0)) {
       // Parse the inner URL to extract its origin
-      JSRT_URL* inner_url = JSRT_ParseURL(hostname, NULL);
-      if (inner_url && inner_url->protocol && inner_url->hostname) {
-        char* inner_origin = compute_origin(inner_url->protocol, inner_url->hostname, inner_url->port,
-                                            inner_url->double_colon_at_pattern);
+      JSRT_URL* inner_url = JSRT_ParseURL(pathname, NULL);
+      if (inner_url && inner_url->protocol && inner_url->hostname && strlen(inner_url->hostname) > 0) {
+        char* inner_origin = compute_origin_with_pathname(inner_url->protocol, inner_url->hostname, inner_url->port,
+                                                          inner_url->double_colon_at_pattern, NULL);
         JSRT_FreeURL(inner_url);
         return inner_origin;
       }
@@ -593,6 +602,12 @@ char* compute_origin(const char* protocol, const char* hostname, const char* por
   // All other schemes (including file, data, javascript, and custom schemes) have null origin
   if (strcmp(scheme, "http") != 0 && strcmp(scheme, "https") != 0 && strcmp(scheme, "ftp") != 0 &&
       strcmp(scheme, "ws") != 0 && strcmp(scheme, "wss") != 0) {
+    free(scheme);
+    return strdup("null");
+  }
+
+  // For tuple origin schemes, we need hostname
+  if (!hostname || strlen(hostname) == 0) {
     free(scheme);
     return strdup("null");
   }

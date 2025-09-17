@@ -407,7 +407,7 @@ char* normalize_single_slash_schemes(const char* url) {
   size_t url_len = strlen(url);
 
   // First, look for pattern "scheme:hostname" (no slashes) where scheme is special
-  for (size_t i = 0; i < url_len - 1; i++) {
+  for (size_t i = 0; i + 1 < url_len; i++) {
     if (url[i] == ':' && url[i + 1] != '/' && url[i + 1] != '\0') {
       // Found "scheme:something" pattern where something doesn't start with slash
       size_t scheme_len = i;
@@ -446,7 +446,7 @@ char* normalize_single_slash_schemes(const char* url) {
   }
 
   // Look for pattern "scheme:/" where scheme is special
-  for (size_t i = 0; i < url_len - 2; i++) {
+  for (size_t i = 0; i + 2 < url_len; i++) {
     if (url[i] == ':' && url[i + 1] == '/' && url[i + 2] != '/') {
       // Found "scheme:/" pattern, check if scheme is special
       size_t scheme_len = i;

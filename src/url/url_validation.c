@@ -233,14 +233,15 @@ int validate_hostname_characters_with_scheme(const char* hostname, const char* s
       continue;
     }
 
-    // Reject ASCII control characters (including null bytes)
-    if (c < 0x20 || c == 0x7F) {
-      return 0;  // Control characters not allowed
+    // For special schemes, reject ASCII control characters 
+    // For non-special schemes, allow control characters (they'll be percent-encoded)
+    if ((c < 0x20 || c == 0x7F) && is_special) {
+      return 0;  // Control characters not allowed in special schemes
     }
 
-    // Reject space character in hostname
-    if (c == ' ') {
-      return 0;  // Spaces not allowed in hostname
+    // Reject space character in hostname for special schemes
+    if (c == ' ' && is_special) {
+      return 0;  // Spaces not allowed in hostname for special schemes
     }
 
     // Unicode character handling (same as before)

@@ -153,7 +153,6 @@ int parse_authority(JSRT_URL* parsed, const char* authority_str) {
           should_lowercase = 0;  // Preserve case for Windows drive letters
         }
       }
-
       if (should_lowercase) {
         // Normalize hostname case to lowercase (required for DNS hostnames per WHATWG URL spec)
         for (size_t i = 0; parsed->hostname[i]; i++) {
@@ -258,10 +257,22 @@ int parse_authority(JSRT_URL* parsed, const char* authority_str) {
     }
 
     // Apply Unicode normalization to hostname (fullwidth -> halfwidth, case normalization)
-    char* normalized_hostname = normalize_hostname_unicode(parsed->hostname);
-    if (normalized_hostname) {
-      free(parsed->hostname);
-      parsed->hostname = normalized_hostname;
+    // But skip it for Windows drive letters to preserve case
+    int is_windows_drive = 0;
+    if (parsed->protocol && strcmp(parsed->protocol, "file:") == 0 && parsed->hostname &&
+        strlen(parsed->hostname) >= 2) {
+      if (isalpha(parsed->hostname[0]) && (parsed->hostname[1] == ':' || parsed->hostname[1] == '|') &&
+          (strlen(parsed->hostname) == 2 || parsed->hostname[2] == '/' || parsed->hostname[2] == '\0')) {
+        is_windows_drive = 1;
+      }
+    }
+
+    if (!is_windows_drive) {
+      char* normalized_hostname = normalize_hostname_unicode(parsed->hostname);
+      if (normalized_hostname) {
+        free(parsed->hostname);
+        parsed->hostname = normalized_hostname;
+      }
     }
 
     // Validate hostname characters (including Unicode validation)
@@ -292,7 +303,6 @@ int parse_authority(JSRT_URL* parsed, const char* authority_str) {
           should_lowercase = 0;  // Preserve case for Windows drive letters
         }
       }
-
       if (should_lowercase) {
         // Normalize hostname case to lowercase (required for DNS hostnames per WHATWG URL spec)
         for (size_t i = 0; parsed->hostname[i]; i++) {

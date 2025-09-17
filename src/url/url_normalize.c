@@ -580,10 +580,9 @@ char* compute_origin_with_pathname(const char* protocol, const char* hostname, c
     // For blob URLs, the origin is derived from the inner URL
     // blob:https://example.com/uuid -> https://example.com
     // The inner URL is stored in the pathname
-    // For blob URLs, only http, https, ws, wss inner URLs provide tuple origins
-    // FTP and other schemes result in null origin for blob URLs
-    if (pathname && (strncmp(pathname, "http://", 7) == 0 || strncmp(pathname, "https://", 8) == 0 ||
-                     strncmp(pathname, "ws://", 5) == 0 || strncmp(pathname, "wss://", 6) == 0)) {
+    // Per WHATWG URL spec, only http/https inner URLs provide tuple origins for blob URLs
+    // All other schemes (ws, wss, ftp, about, etc.) result in null origin for blob URLs
+    if (pathname && (strncmp(pathname, "http://", 7) == 0 || strncmp(pathname, "https://", 8) == 0)) {
       // Parse the inner URL to extract its origin
       JSRT_URL* inner_url = JSRT_ParseURL(pathname, NULL);
       if (inner_url && inner_url->protocol && inner_url->hostname && strlen(inner_url->hostname) > 0) {
@@ -595,6 +594,7 @@ char* compute_origin_with_pathname(const char* protocol, const char* hostname, c
       if (inner_url)
         JSRT_FreeURL(inner_url);
     }
+    // For all other blob URL formats (including ws/wss, UUIDs, empty, etc.), origin is null
     return strdup("null");
   }
 

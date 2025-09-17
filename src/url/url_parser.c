@@ -39,16 +39,15 @@ char* parse_url_components(JSRT_URL* parsed, const char* scheme, char* ptr) {
 
   // Special validation for blob URLs
   if (strcmp(scheme, "blob") == 0) {
-    // blob URLs must have a valid inner URL after "blob:"
-    if (strlen(ptr) == 0 || strcmp(ptr, "blob:") == 0) {
-      return NULL;
-    }
+    // Blob URLs are valid even when empty (blob:) per WHATWG URL spec
+    // Only reject truly invalid cases
 
-    // The inner URL should be an absolute URL with a valid scheme
-    if (!(strncmp(ptr, "http://", 7) == 0 || strncmp(ptr, "https://", 8) == 0 || strncmp(ptr, "ftp://", 6) == 0 ||
-          strncmp(ptr, "ws://", 5) == 0 || strncmp(ptr, "wss://", 6) == 0)) {
-      return NULL;
-    }
+    // Blob URLs can contain various formats:
+    // 1. blob:http://example.com/uuid (with inner URL)
+    // 2. blob:d3958f5c-0777-0845-9dcf-2cb28783acaf (UUID only)  
+    // 3. blob: (empty)
+    // 4. blob:about:blank, blob:ws://example.org/, etc.
+    // We should accept all formats, validation is done elsewhere
 
     // file: URLs are not allowed as blob inner URLs per WPT tests
     if (strncmp(ptr, "file:", 5) == 0) {

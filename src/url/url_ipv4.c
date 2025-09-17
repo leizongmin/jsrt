@@ -134,7 +134,9 @@ int looks_like_ipv4_address(const char* hostname) {
   }
 
   // Case 3: Dotted notation - check if each part is a valid number
-  if (has_dots && !has_hex_prefix) {
+  // Note: has_hex_prefix checks if the whole string starts with 0x, but dotted notation
+  // can have individual parts that are hex (like "0x.0x.0")
+  if (has_dots) {
     char* input_copy = strdup(normalized);
     char* part = strtok(input_copy, ".");
     int valid_dotted = 1;
@@ -148,14 +150,18 @@ int looks_like_ipv4_address(const char* hostname) {
 
       // Check if this part is "0x" format
       if (strncmp(part, "0x", 2) == 0 || strncmp(part, "0X", 2) == 0) {
-        // Hex format part - check remaining characters
-        for (size_t i = 2; i < strlen(part); i++) {
-          char c = part[i];
-          if (!((c >= '0' && c <= '9') || (c >= 'a' && c <= 'f') || (c >= 'A' && c <= 'F'))) {
-            valid_dotted = 0;
-            break;
+        // Hex format part - "0x" alone (without digits) is considered valid and equals 0
+        // Check remaining characters (if any)
+        if (strlen(part) > 2) {
+          for (size_t i = 2; i < strlen(part); i++) {
+            char c = part[i];
+            if (!((c >= '0' && c <= '9') || (c >= 'a' && c <= 'f') || (c >= 'A' && c <= 'F'))) {
+              valid_dotted = 0;
+              break;
+            }
           }
         }
+        // If strlen(part) == 2, it's just "0x" which is valid and equals 0
       } else {
         // Decimal/octal format - check if all are digits
         for (size_t i = 0; i < strlen(part); i++) {
@@ -173,7 +179,7 @@ int looks_like_ipv4_address(const char* hostname) {
     return valid_dotted;
   }
 
-  // Case 4: Has both dots and hex prefix - this is not valid IPv4
+  // If none of the above cases match, it's not IPv4
   free(normalized);
   return 0;
 }

@@ -486,9 +486,9 @@ JSRT_URL* parse_absolute_url(const char* preprocessed_url) {
     char* normalized_drive = normalize_windows_drive_letters(parsed->pathname);
     if (normalized_drive == NULL) {
       // Invalid drive letter pattern (e.g., double pipes)
-      free(scheme);
+      JSRT_FreeURL(parsed);  // This frees parsed->protocol (which is independent of scheme)
       free(url_copy);
-      JSRT_FreeURL(parsed);
+      free(scheme);  // scheme still needs to be freed separately
       return NULL;
     }
     if (normalized_drive != parsed->pathname) {  // Check if it was actually changed

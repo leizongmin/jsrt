@@ -701,7 +701,7 @@ char* normalize_windows_drive_letters(const char* path) {
   if (path[0] == '/' && strlen(path) >= 7 && isalpha(path[1]) && strncmp(path + 2, "%7C", 3) == 0 && path[5] == '/') {
     // Convert /C%7C/foo to /C:/foo
     size_t old_len = strlen(path);
-    size_t new_len = old_len - 2;  // %7C (3 chars) becomes : (1 char), so -2
+    size_t new_len = old_len - 2 + 1;  // %7C (3 chars) becomes : (1 char), so -2, +1 for null terminator
     char* result = malloc(new_len);
     result[0] = '/';
     result[1] = path[1];           // Drive letter
@@ -714,7 +714,7 @@ char* normalize_windows_drive_letters(const char* path) {
   if (path[0] == '/' && strlen(path) >= 7 && isalpha(path[1]) && strncmp(path + 2, "%7c", 3) == 0 && path[5] == '/') {
     // Convert /C%7c/foo to /C:/foo
     size_t old_len = strlen(path);
-    size_t new_len = old_len - 2;  // %7c (3 chars) becomes : (1 char), so -2
+    size_t new_len = old_len - 2 + 1;  // %7c (3 chars) becomes : (1 char), so -2, +1 for null terminator
     char* result = malloc(new_len);
     result[0] = '/';
     result[1] = path[1];           // Drive letter

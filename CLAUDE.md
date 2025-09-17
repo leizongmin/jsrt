@@ -26,17 +26,12 @@ make jsrt_m     # Debug with AddressSanitizer
 make format     # Format all code (MANDATORY before commit)
 ```
 
-## AI Assistant Core Rules (八荣八耻)
+## AI Assistant Core Rules
 
-### 核心行为准则
-1. ✅ **查阅代码** > ❌ 猜测接口
-2. ✅ **寻求确认** > ❌ 模糊执行
-3. ✅ **人类确认** > ❌ 盲想业务
-4. ✅ **复用现有** > ❌ 创造接口
-5. ✅ **主动测试** > ❌ 跳过验证
-6. ✅ **遵循规范** > ❌ 破坏架构
-7. ✅ **诚实无知** > ❌ 假装理解
-8. ✅ **谨慎重构** > ❌ 盲目修改
+### Three Core Principles
+1. **Understanding First**: Read code > Guess interfaces | Confirm > Assume
+2. **Quality Assurance**: Test > Commit | Reuse > Innovate  
+3. **Honest Collaboration**: Admit ignorance > Pretend knowledge | Human decisions > AI autonomy
 
 ### Critical Development Rules
 - **MANDATORY**: Run baseline tests before modifications
@@ -45,6 +40,14 @@ make format     # Format all code (MANDATORY before commit)
 - **MANDATORY**: Report exact numbers (e.g., "653 failures" not "many")
 - **NEVER**: Modify code without understanding its purpose
 - **NEVER**: Claim improvement without concrete evidence
+
+### Verification Checklist
+Must complete after every modification:
+```bash
+□ make format    # Code formatting
+□ make test      # Unit tests (100% pass rate)
+□ make wpt       # WPT tests (failures ≤ baseline)
+```
 
 ## Agent System
 

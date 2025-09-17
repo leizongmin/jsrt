@@ -119,6 +119,7 @@ int validate_url_characters(const char* url);
 int validate_hostname_characters(const char* hostname);
 int validate_hostname_characters_allow_at(const char* hostname, int allow_at);
 int validate_credentials(const char* credentials);
+int validate_percent_encoded_characters(const char* url);
 
 // IP address functions
 char* canonicalize_ipv4_address(const char* input);

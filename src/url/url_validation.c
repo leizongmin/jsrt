@@ -326,3 +326,30 @@ int validate_hostname_characters_allow_at(const char* hostname, int allow_at) {
   free(hostname_copy);
   return 1;  // Valid hostname
 }
+
+// Validate percent-encoded characters in URL according to WHATWG URL spec
+// Check for forbidden control characters that should cause URL parsing to fail
+int validate_percent_encoded_characters(const char* url) {
+  if (!url)
+    return 1;
+
+  const char* p = url;
+  while ((p = strchr(p, '%')) != NULL) {
+    // Check if this is a valid percent-encoded sequence
+    if (p[1] && p[2] && hex_to_int(p[1]) >= 0 && hex_to_int(p[2]) >= 0) {
+      // Decode the percent-encoded byte
+      unsigned char byte = (unsigned char)((hex_to_int(p[1]) << 4) | hex_to_int(p[2]));
+
+      // Check if this is a forbidden character per WHATWG URL spec
+      // Forbidden characters include:
+      // - NULL byte (0x00)
+      // - All other C0 control characters (0x01-0x1F)
+      // Note: DEL character (0x7F) is allowed but should remain percent-encoded
+      if (byte <= 0x1F) {
+        return 0;  // Invalid: forbidden C0 control character
+      }
+    }
+    p++;  // Move to next character
+  }
+  return 1;  // Valid
+}

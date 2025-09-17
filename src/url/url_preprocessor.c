@@ -208,8 +208,9 @@ char* preprocess_url_string(const char* url, const char* base) {
     return NULL;
   }
 
-  // Check for null bytes in the URL - this is invalid per WHATWG URL spec
-  if (strstr(trimmed_url, "%00")) {
+  // Check for forbidden percent-encoded characters in the URL per WHATWG URL spec
+  // This includes null bytes and other control characters that should cause URL parsing to fail
+  if (!validate_percent_encoded_characters(trimmed_url)) {
     free(trimmed_url);
     return NULL;
   }

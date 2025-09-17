@@ -100,28 +100,38 @@ int parse_authority(JSRT_URL* parsed, const char* authority_str) {
             snprintf(parsed->hostname, strlen(canonical_ipv6) + 3, "[%s]", canonical_ipv6);
             free(canonical_ipv6);
           } else {
-            // Invalid IPv6 address
-            parsed->hostname = strdup(host_part);  // Keep original for error handling
+            // Invalid IPv6 address - still decode it
+            char* decoded_host = url_decode(host_part);
+            parsed->hostname = decoded_host ? decoded_host : strdup(host_part);
           }
           free(ipv6_part);
         } else {
-          parsed->hostname = strdup(host_part);
+          char* decoded_host = url_decode(host_part);
+          parsed->hostname = decoded_host ? decoded_host : strdup(host_part);
         }
       } else {
-        parsed->hostname = strdup(host_part);
+        char* decoded_host = url_decode(host_part);
+        parsed->hostname = decoded_host ? decoded_host : strdup(host_part);
       }
     } else {
+      // Decode percent-encoded hostname first
+      char* decoded_host = url_decode(host_part);
+      if (!decoded_host) {
+        goto cleanup_and_return_error;
+      }
+
       // For file URLs, convert pipe to colon in hostname
-      if (strcmp(parsed->protocol, "file:") == 0 && strchr(host_part, '|')) {
-        size_t len = strlen(host_part);
+      if (strcmp(parsed->protocol, "file:") == 0 && strchr(decoded_host, '|')) {
+        size_t len = strlen(decoded_host);
         char* converted_host = malloc(len + 1);
         for (size_t i = 0; i < len; i++) {
-          converted_host[i] = (host_part[i] == '|') ? ':' : host_part[i];
+          converted_host[i] = (decoded_host[i] == '|') ? ':' : decoded_host[i];
         }
         converted_host[len] = '\0';
         parsed->hostname = converted_host;
+        free(decoded_host);
       } else {
-        parsed->hostname = strdup(host_part);
+        parsed->hostname = decoded_host;
       }
     }
 
@@ -237,23 +247,35 @@ int parse_authority(JSRT_URL* parsed, const char* authority_str) {
           snprintf(parsed->hostname, strlen(canonical_ipv6) + 3, "[%s]", canonical_ipv6);
           free(canonical_ipv6);
         } else {
-          // Invalid IPv6 address
-          parsed->hostname = strdup(host_part);  // Keep original for error handling
+          // Invalid IPv6 address - still decode it
+          char* decoded_host = url_decode(host_part);
+          parsed->hostname = decoded_host ? decoded_host : strdup(host_part);
         }
         free(ipv6_part);
       } else {
-        parsed->hostname = strdup(host_part);
+        char* decoded_host = url_decode(host_part);
+        parsed->hostname = decoded_host ? decoded_host : strdup(host_part);
       }
-    } else if (strcmp(parsed->protocol, "file:") == 0 && strchr(host_part, '|')) {
-      size_t len = strlen(host_part);
-      char* converted_host = malloc(len + 1);
-      for (size_t i = 0; i < len; i++) {
-        converted_host[i] = (host_part[i] == '|') ? ':' : host_part[i];
-      }
-      converted_host[len] = '\0';
-      parsed->hostname = converted_host;
     } else {
-      parsed->hostname = strdup(host_part);
+      // Decode percent-encoded hostname first
+      char* decoded_host = url_decode(host_part);
+      if (!decoded_host) {
+        goto cleanup_and_return_error;
+      }
+
+      // For file URLs, convert pipe to colon in hostname
+      if (strcmp(parsed->protocol, "file:") == 0 && strchr(decoded_host, '|')) {
+        size_t len = strlen(decoded_host);
+        char* converted_host = malloc(len + 1);
+        for (size_t i = 0; i < len; i++) {
+          converted_host[i] = (decoded_host[i] == '|') ? ':' : decoded_host[i];
+        }
+        converted_host[len] = '\0';
+        parsed->hostname = converted_host;
+        free(decoded_host);
+      } else {
+        parsed->hostname = decoded_host;
+      }
     }
 
     // Apply Unicode normalization to hostname (fullwidth -> halfwidth, case normalization)

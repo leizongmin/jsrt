@@ -597,23 +597,31 @@ char* compute_origin(const char* protocol, const char* hostname, const char* por
     return strdup("null");
   }
 
+  // Convert hostname to ASCII form for origin (per WHATWG URL spec)
+  char* ascii_hostname = hostname_to_ascii(hostname);
+  if (!ascii_hostname) {
+    free(scheme);
+    return strdup("null");
+  }
+
   // Use normalized port for origin computation
   char* normalized_port = normalize_port(port, protocol);
 
   char* origin;
   if (!normalized_port || strlen(normalized_port) == 0) {
     // Omit default port, port 0, or when no port is specified
-    size_t origin_len = strlen(protocol) + strlen(hostname) + 4;
+    size_t origin_len = strlen(protocol) + strlen(ascii_hostname) + 4;
     origin = malloc(origin_len);
-    snprintf(origin, origin_len, "%s//%s", protocol, hostname);
+    snprintf(origin, origin_len, "%s//%s", protocol, ascii_hostname);
   } else {
     // Include custom non-default port (even if double_colon_at_pattern is present)
-    size_t origin_len = strlen(protocol) + strlen(hostname) + strlen(normalized_port) + 5;
+    size_t origin_len = strlen(protocol) + strlen(ascii_hostname) + strlen(normalized_port) + 5;
     origin = malloc(origin_len);
-    snprintf(origin, origin_len, "%s//%s:%s", protocol, hostname, normalized_port);
+    snprintf(origin, origin_len, "%s//%s:%s", protocol, ascii_hostname, normalized_port);
   }
 
   free(normalized_port);
+  free(ascii_hostname);
 
   free(scheme);
   return origin;

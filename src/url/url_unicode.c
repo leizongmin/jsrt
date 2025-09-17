@@ -1,6 +1,7 @@
 #include <ctype.h>
 #include <stdlib.h>
 #include <string.h>
+#include "../../deps/libuv/src/idna.h"
 #include "url.h"
 
 // Unicode normalization for hostnames
@@ -106,4 +107,58 @@ char* normalize_hostname_unicode(const char* hostname) {
   // Shrink buffer to actual size
   char* final_result = realloc(normalized, write_pos + 1);
   return final_result ? final_result : normalized;
+}
+
+// Convert Unicode hostname to ASCII using IDNA 2008
+// Returns ASCII representation (punycode) for Unicode domains, or copy for ASCII domains
+char* hostname_to_ascii(const char* hostname) {
+  if (!hostname || strlen(hostname) == 0) {
+    return strdup("");
+  }
+
+  // Check if hostname contains only ASCII characters
+  int has_unicode = 0;
+  for (size_t i = 0; hostname[i] != '\0'; i++) {
+    if ((unsigned char)hostname[i] > 127) {
+      has_unicode = 1;
+      break;
+    }
+  }
+
+  // If hostname is pure ASCII, just return a copy (lowercased)
+  if (!has_unicode) {
+    char* ascii_copy = strdup(hostname);
+    if (!ascii_copy)
+      return NULL;
+
+    // Convert to lowercase per WHATWG URL spec
+    for (size_t i = 0; ascii_copy[i] != '\0'; i++) {
+      ascii_copy[i] = tolower(ascii_copy[i]);
+    }
+    return ascii_copy;
+  }
+
+  // Use libuv's IDNA implementation to convert Unicode to ASCII
+  size_t hostname_len = strlen(hostname);
+
+  // Allocate buffer for ASCII output (conservative estimate)
+  // Punycode typically expands size, so we use 4x the input size as buffer
+  size_t ascii_buffer_size = hostname_len * 4 + 64;
+  char* ascii_buffer = malloc(ascii_buffer_size);
+  if (!ascii_buffer) {
+    return NULL;
+  }
+
+  // Convert using libuv's IDNA function
+  ssize_t result = uv__idna_toascii(hostname, hostname + hostname_len, ascii_buffer, ascii_buffer + ascii_buffer_size);
+
+  if (result < 0) {
+    // IDNA conversion failed - this means invalid Unicode domain
+    free(ascii_buffer);
+    return NULL;
+  }
+
+  // Shrink buffer to actual size
+  char* final_ascii = realloc(ascii_buffer, result);
+  return final_ascii ? final_ascii : ascii_buffer;
 }

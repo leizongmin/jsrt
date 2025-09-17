@@ -60,6 +60,21 @@ int parse_authority(JSRT_URL* parsed, const char* authority_str) {
       is_ipv6_with_port = 1;
     }
   } else {
+    // Check for invalid IPv6 addresses without brackets in special schemes first
+    // Per WHATWG URL spec, IPv6 addresses must be enclosed in brackets for special schemes
+    if (parsed->protocol && is_special_scheme(parsed->protocol)) {
+      // Simple check for IPv6-like patterns: contains multiple colons
+      int colon_count = 0;
+      for (const char* p = host_part; *p; p++) {
+        if (*p == ':')
+          colon_count++;
+      }
+      // If we have 2+ colons, it's likely an invalid IPv6 address without brackets
+      if (colon_count >= 2) {
+        goto cleanup_and_return_error;
+      }
+    }
+
     // Regular hostname - find rightmost colon for port
     port_colon = strrchr(host_part, ':');
   }
@@ -151,6 +166,21 @@ int parse_authority(JSRT_URL* parsed, const char* authority_str) {
       // According to WHATWG URL spec, this should fail URL parsing
       goto cleanup_and_return_error;
     } else {
+      // Check for invalid IPv6 addresses without brackets in special schemes
+      // Per WHATWG URL spec, IPv6 addresses must be enclosed in brackets for special schemes
+      if (parsed->protocol && is_special_scheme(parsed->protocol)) {
+        // Simple check for IPv6-like patterns: contains multiple colons
+        int colon_count = 0;
+        for (const char* p = parsed->hostname; *p; p++) {
+          if (*p == ':')
+            colon_count++;
+        }
+        // If we have 2+ colons and no brackets, it's likely an invalid IPv6 address
+        if (colon_count >= 2 && parsed->hostname[0] != '[') {
+          goto cleanup_and_return_error;
+        }
+      }
+
       // Not an IPv4 address - check for special cases before lowercasing
       int should_lowercase = 1;
 
@@ -313,6 +343,21 @@ int parse_authority(JSRT_URL* parsed, const char* authority_str) {
       // According to WHATWG URL spec, this should fail URL parsing
       goto cleanup_and_return_error;
     } else {
+      // Check for invalid IPv6 addresses without brackets in special schemes
+      // Per WHATWG URL spec, IPv6 addresses must be enclosed in brackets for special schemes
+      if (parsed->protocol && is_special_scheme(parsed->protocol)) {
+        // Simple check for IPv6-like patterns: contains multiple colons
+        int colon_count = 0;
+        for (const char* p = parsed->hostname; *p; p++) {
+          if (*p == ':')
+            colon_count++;
+        }
+        // If we have 2+ colons and no brackets, it's likely an invalid IPv6 address
+        if (colon_count >= 2 && parsed->hostname[0] != '[') {
+          goto cleanup_and_return_error;
+        }
+      }
+
       // Not an IPv4 address - check for special cases before lowercasing
       int should_lowercase = 1;
 

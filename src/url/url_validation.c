@@ -209,9 +209,14 @@ int validate_hostname_characters_allow_at(const char* hostname, int allow_at) {
         p += 2;
         continue;
       } else {
-        // For non-special schemes, allow lone % characters (they will be percent-encoded later)
-        // Only reject % in contexts where it would break URL structure
-        continue;
+        // Invalid percent-encoding: % not followed by two hex digits
+        // This should be rejected per WHATWG URL spec for proper hostnames
+        // But only if it's at the end or not followed by valid chars
+        if (p + 1 >= hostname + len || p + 2 >= hostname + len) {
+          return 0;  // % at end of string or with insufficient chars
+        } else {
+          return 0;  // % followed by non-hex characters
+        }
       }
     }
 

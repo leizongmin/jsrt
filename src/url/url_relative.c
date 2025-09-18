@@ -109,7 +109,9 @@ JSRT_URL* resolve_relative_url(const char* url, const char* base) {
     if (hash_pos) {
       *hash_pos = '\0';
       result->hash = malloc(strlen(hash_pos + 1) + 2);  // +1 for '#', +1 for '\0'
-      sprintf(result->hash, "#%s", hash_pos + 1);
+      if (result->hash) {
+        snprintf(result->hash, strlen(hash_pos + 1) + 2, "#%s", hash_pos + 1);
+      }
     } else {
       result->hash = strdup("");
     }
@@ -119,7 +121,9 @@ JSRT_URL* resolve_relative_url(const char* url, const char* base) {
       const char* search_end = hash_pos ? (hash_pos) : (search_pos + strlen(search_pos + 1) + 1);
       size_t search_len = search_end - search_pos;
       result->search = malloc(search_len + 2);  // +1 for '?', +1 for '\0'
-      sprintf(result->search, "?%.*s", (int)(search_len - 1), search_pos + 1);
+      if (result->search) {
+        snprintf(result->search, search_len + 2, "?%.*s", (int)(search_len - 1), search_pos + 1);
+      }
     } else {
       result->search = strdup("");
     }
@@ -143,7 +147,9 @@ JSRT_URL* resolve_relative_url(const char* url, const char* base) {
     if (hash_pos) {
       *hash_pos = '\0';
       result->hash = malloc(strlen(hash_pos + 1) + 2);  // +1 for '#', +1 for '\0'
-      sprintf(result->hash, "#%s", hash_pos + 1);
+      if (result->hash) {
+        snprintf(result->hash, strlen(hash_pos + 1) + 2, "#%s", hash_pos + 1);
+      }
     } else {
       result->hash = strdup("");
     }
@@ -154,7 +160,9 @@ JSRT_URL* resolve_relative_url(const char* url, const char* base) {
       const char* search_end = hash_pos ? hash_pos : (search_pos + strlen(search_pos + 1) + 1);
       size_t search_len = search_end - search_pos;
       result->search = malloc(search_len + 2);  // +1 for '?', +1 for '\0'
-      sprintf(result->search, "?%.*s", (int)(search_len - 1), search_pos + 1);
+      if (result->search) {
+        snprintf(result->search, search_len + 2, "?%.*s", (int)(search_len - 1), search_pos + 1);
+      }
     } else {
       result->search = strdup("");
     }
@@ -199,7 +207,9 @@ JSRT_URL* resolve_relative_url(const char* url, const char* base) {
       if (last_slash == NULL || last_slash == base_pathname) {
         // No directory or root directory
         char* temp_pathname = malloc(strlen(path_copy) + 2);
-        sprintf(temp_pathname, "/%s", path_copy);
+        if (temp_pathname) {
+          snprintf(temp_pathname, strlen(path_copy) + 2, "/%s", path_copy);
+        }
         result->pathname = url_path_encode_special(temp_pathname);
         free(temp_pathname);
       } else {
@@ -270,7 +280,18 @@ cleanup_and_normalize:
     // Add space for host part (extract from origin, excluding protocol://)
     if (result->origin && strlen(result->origin) > 0) {
       char* protocol_and_slashes_temp = malloc(strlen(result->protocol) + 3);
-      sprintf(protocol_and_slashes_temp, "%s//", result->protocol);
+      if (!protocol_and_slashes_temp) {
+        // Cleanup and bail out (do not free result->origin; keep URL object consistent)
+        free(encoded_pathname);
+        free(encoded_search);
+        free(encoded_hash);
+        if (result->href) {
+          free(result->href);
+          result->href = NULL;
+        }
+        return result;
+      }
+      snprintf(protocol_and_slashes_temp, strlen(result->protocol) + 3, "%s//", result->protocol);
       size_t prefix_len = strlen(protocol_and_slashes_temp);
       size_t origin_len = strlen(result->origin);
 
@@ -300,7 +321,17 @@ cleanup_and_normalize:
       // Insert user info before the host part in the origin
       // Origin format is "protocol://host" - we need "protocol://user:pass@host"
       char* protocol_and_slashes = malloc(strlen(result->protocol) + 3);
-      sprintf(protocol_and_slashes, "%s//", result->protocol);
+      if (!protocol_and_slashes) {
+        if (result->href) {
+          free(result->href);
+          result->href = NULL;
+        }
+        free(encoded_pathname);
+        free(encoded_search);
+        free(encoded_hash);
+        return result;
+      }
+      snprintf(protocol_and_slashes, strlen(result->protocol) + 3, "%s//", result->protocol);
 
       size_t written = snprintf(result->href, href_len, "%s", protocol_and_slashes);
 

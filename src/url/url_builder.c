@@ -239,32 +239,48 @@ char* build_url_string(const char* protocol, const char* username, const char* p
   if (hash)
     total_len += strlen(hash);
 
-  char* url_string = malloc(total_len);
-  int written = snprintf(url_string, total_len, "%s", protocol);
+  // Allocate with room for NUL terminator
+  char* url_string = malloc(total_len + 1);
+  if (!url_string) {
+    return NULL;
+  }
+  int written = snprintf(url_string, total_len + 1, "%s", protocol);
+  if (written < 0) {
+    free(url_string);
+    return NULL;
+  }
 
   // Add authority if host exists
   if (host && strlen(host) > 0) {
-    written += snprintf(url_string + written, total_len - written, "//");
+    written += snprintf(url_string + written, total_len + 1 - written, "//");
 
     // Add userinfo if exists
     if (username && strlen(username) > 0) {
       char* encoded_username = url_userinfo_encode(username);
-      written += snprintf(url_string + written, total_len - written, "%s", encoded_username);
+      if (!encoded_username) {
+        free(url_string);
+        return NULL;
+      }
+      written += snprintf(url_string + written, total_len + 1 - written, "%s", encoded_username);
       free(encoded_username);
 
       if (has_password_field && password && strlen(password) > 0) {
-        written += snprintf(url_string + written, total_len - written, ":");
+        written += snprintf(url_string + written, total_len + 1 - written, ":");
         char* encoded_password = url_userinfo_encode(password);
-        written += snprintf(url_string + written, total_len - written, "%s", encoded_password);
+        if (!encoded_password) {
+          free(url_string);
+          return NULL;
+        }
+        written += snprintf(url_string + written, total_len + 1 - written, "%s", encoded_password);
         free(encoded_password);
       }
-      written += snprintf(url_string + written, total_len - written, "@");
+      written += snprintf(url_string + written, total_len + 1 - written, "@");
     }
 
-    written += snprintf(url_string + written, total_len - written, "%s", host);
+    written += snprintf(url_string + written, total_len + 1 - written, "%s", host);
   } else if (is_special && pathname && pathname[0] == '/') {
     // Special schemes with no host but absolute path need //
-    written += snprintf(url_string + written, total_len - written, "//");
+    written += snprintf(url_string + written, total_len + 1 - written, "//");
   }
 
   // Add pathname with scheme-specific encoding
@@ -281,21 +297,34 @@ char* build_url_string(const char* protocol, const char* username, const char* p
     } else {
       encoded_pathname = strdup(pathname);
     }
-    strcat(url_string, encoded_pathname);
+    if (!encoded_pathname) {
+      free(url_string);
+      return NULL;
+    }
+    // Replace unsafe strcat with bounded snprintf using the current write cursor
+    written += snprintf(url_string + written, total_len + 1 - written, "%s", encoded_pathname);
     free(encoded_pathname);
   }
 
   // Add search
   if (search && strlen(search) > 0) {
     char* encoded_search = url_component_encode(search);
-    written += snprintf(url_string + written, total_len - written, "%s", encoded_search);
+    if (!encoded_search) {
+      free(url_string);
+      return NULL;
+    }
+    written += snprintf(url_string + written, total_len + 1 - written, "%s", encoded_search);
     free(encoded_search);
   }
 
   // Add hash
   if (hash && strlen(hash) > 0) {
     char* encoded_hash = is_special ? url_fragment_encode(hash) : url_fragment_encode_nonspecial(hash);
-    snprintf(url_string + written, total_len - written, "%s", encoded_hash);
+    if (!encoded_hash) {
+      free(url_string);
+      return NULL;
+    }
+    snprintf(url_string + written, total_len + 1 - written, "%s", encoded_hash);
     free(encoded_hash);
   }
 

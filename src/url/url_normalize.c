@@ -88,15 +88,18 @@ char* normalize_dot_segments(const char* path) {
   char* result = malloc(result_len + 1);
   result[0] = '\0';
 
+  size_t w = 0;
   if (is_absolute) {
-    strcat(result, "/");
+    result[w++] = '/';
   }
 
   for (int i = 0; i < output_count; i++) {
     if (i > 0) {
-      strcat(result, "/");
+      result[w++] = '/';
     }
-    strcat(result, output_segments[i]);
+    size_t seglen = strlen(output_segments[i]);
+    memcpy(result + w, output_segments[i], seglen);
+    w += seglen;
     free(output_segments[i]);
   }
 
@@ -105,23 +108,24 @@ char* normalize_dot_segments(const char* path) {
   if (output_count > 0) {
     // Check if original path structure suggests a trailing slash
     if (path_len > 1 && path[path_len - 1] == '/') {
-      strcat(result, "/");
+      result[w++] = '/';
     } else if (had_trailing_empty) {
       // There were empty segments at the end (before dot segments)
       // This handles cases like /foo/bar//.. where there's an implicit trailing slash
-      strcat(result, "/");
+      result[w++] = '/';
     } else if (had_trailing_dot_segment) {
       // The last segment in original path was a dot segment
       // In this case, we should add a trailing slash
       // Examples: /foo/. -> /foo/, /foo/bar/.. -> /foo/
-      strcat(result, "/");
+      result[w++] = '/';
     }
   }
 
   // Special case: if result is empty and it was an absolute path, return "/"
-  if (strlen(result) == 0 && is_absolute) {
-    strcpy(result, "/");
+  if (w == 0 && is_absolute) {
+    result[w++] = '/';
   }
+  result[w] = '\0';
 
   free(path_copy);
   free(segments);
@@ -698,10 +702,14 @@ char* normalize_windows_drive_letters(const char* path) {
     // Convert /C|/foo to /C:/foo
     size_t new_len = strlen(path) + 1;  // Same length (| becomes :)
     char* result = malloc(new_len);
+    if (!result) {
+      return NULL;
+    }
     result[0] = '/';
-    result[1] = path[1];           // Drive letter
-    result[2] = ':';               // Convert pipe to colon
-    strcpy(result + 3, path + 3);  // Copy rest of path
+    result[1] = path[1];                     // Drive letter
+    result[2] = ':';                         // Convert pipe to colon
+    size_t tail_len = strlen(path + 3) + 1;  // include NUL
+    memcpy(result + 3, path + 3, tail_len);
     return result;
   }
 
@@ -711,10 +719,14 @@ char* normalize_windows_drive_letters(const char* path) {
     size_t old_len = strlen(path);
     size_t new_len = old_len - 2 + 1;  // %7C (3 chars) becomes : (1 char), so -2, +1 for null terminator
     char* result = malloc(new_len);
+    if (!result) {
+      return NULL;
+    }
     result[0] = '/';
-    result[1] = path[1];           // Drive letter
-    result[2] = ':';               // Convert %7C to colon
-    strcpy(result + 3, path + 5);  // Copy rest of path starting from the slash after %7C
+    result[1] = path[1];                     // Drive letter
+    result[2] = ':';                         // Convert %7C to colon
+    size_t tail_len = strlen(path + 5) + 1;  // include NUL
+    memcpy(result + 3, path + 5, tail_len);  // Copy rest of path starting from the slash after %7C
     return result;
   }
 
@@ -724,10 +736,14 @@ char* normalize_windows_drive_letters(const char* path) {
     size_t old_len = strlen(path);
     size_t new_len = old_len - 2 + 1;  // %7c (3 chars) becomes : (1 char), so -2, +1 for null terminator
     char* result = malloc(new_len);
+    if (!result) {
+      return NULL;
+    }
     result[0] = '/';
-    result[1] = path[1];           // Drive letter
-    result[2] = ':';               // Convert %7c to colon
-    strcpy(result + 3, path + 5);  // Copy rest of path starting from the slash after %7c
+    result[1] = path[1];                     // Drive letter
+    result[2] = ':';                         // Convert %7c to colon
+    size_t tail_len = strlen(path + 5) + 1;  // include NUL
+    memcpy(result + 3, path + 5, tail_len);  // Copy rest of path starting from the slash after %7c
     return result;
   }
 

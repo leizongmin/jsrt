@@ -22,6 +22,9 @@ void build_href(JSRT_URL* parsed) {
   size_t href_len = strlen(parsed->protocol) + userinfo_len + strlen(parsed->host) + strlen(parsed->pathname) +
                     strlen(parsed->search) + strlen(parsed->hash) + 20;
   parsed->href = malloc(href_len);
+  if (!parsed->href) {
+    return;
+  }
 
   // Build userinfo part with proper encoding
   char userinfo[512] = "";
@@ -30,10 +33,21 @@ void build_href(JSRT_URL* parsed) {
     // Either username exists or password exists
     char* encoded_username =
         url_userinfo_encode_with_scheme_name(parsed->username ? parsed->username : "", parsed->protocol);
+    if (!encoded_username) {
+      free(parsed->href);
+      parsed->href = NULL;
+      return;
+    }
 
     if (parsed->has_password_field && parsed->password && strlen(parsed->password) > 0) {
       // Password exists, include colon and password
       char* encoded_password = url_userinfo_encode_with_scheme_name(parsed->password, parsed->protocol);
+      if (!encoded_password) {
+        free(encoded_username);
+        free(parsed->href);
+        parsed->href = NULL;
+        return;
+      }
       snprintf(userinfo, sizeof(userinfo), "%s:%s@", encoded_username, encoded_password);
       free(encoded_password);
     } else {
@@ -51,21 +65,57 @@ void build_href(JSRT_URL* parsed) {
       // Host includes port
       size_t host_len = strlen(parsed->hostname) + strlen(normalized_port) + 2;
       final_host = malloc(host_len);
+      if (!final_host) {
+        free(normalized_port);
+        return;
+      }
       snprintf(final_host, host_len, "%s:%s", parsed->hostname, normalized_port);
     } else {
       // Host without port
       final_host = strdup(parsed->hostname);
+      if (!final_host) {
+        free(normalized_port);
+        free(parsed->href);
+        parsed->href = NULL;
+        return;
+      }
     }
     free(normalized_port);
   } else {
     final_host = strdup(parsed->host ? parsed->host : "");
+    if (!final_host) {
+      free(parsed->href);
+      parsed->href = NULL;
+      return;
+    }
   }
 
   // Pathname is already percent-encoded when stored in the URL object
   // Just use it as-is for href construction (no additional encoding needed)
   char* final_pathname = strdup(parsed->pathname ? parsed->pathname : "");
+  if (!final_pathname) {
+    free(final_host);
+    free(parsed->href);
+    parsed->href = NULL;
+    return;
+  }
   char* final_search = url_component_encode(parsed->search);
+  if (!final_search) {
+    free(final_pathname);
+    free(final_host);
+    free(parsed->href);
+    parsed->href = NULL;
+    return;
+  }
   char* final_hash = is_special ? url_fragment_encode(parsed->hash) : url_fragment_encode_nonspecial(parsed->hash);
+  if (!final_hash) {
+    free(final_search);
+    free(final_pathname);
+    free(final_host);
+    free(parsed->href);
+    parsed->href = NULL;
+    return;
+  }
 
   if (is_special && strlen(final_host) > 0) {
     snprintf(parsed->href, href_len, "%s//%s%s%s%s%s", parsed->protocol, userinfo, final_host, final_pathname,
@@ -142,18 +192,27 @@ void parse_path_query_fragment(JSRT_URL* parsed, char* ptr) {
   if (fragment_pos) {
     free(parsed->hash);
     parsed->hash = strdup(fragment_pos);  // Include the #
+    if (!parsed->hash) {
+      return;
+    }
     *fragment_pos = '\0';
   }
 
   // Handle query
   if (query_pos && search_len > 0) {
     char* raw_search = malloc(search_len + 1);
+    if (!raw_search) {
+      return;
+    }
     strncpy(raw_search, query_pos, search_len);
     raw_search[search_len] = '\0';
 
     free(parsed->search);
     parsed->search = url_component_encode(raw_search);
     free(raw_search);
+    if (!parsed->search) {
+      return;
+    }
     *query_pos = '\0';
   }
 
@@ -188,6 +247,9 @@ void parse_path_query_fragment(JSRT_URL* parsed, char* ptr) {
         // Special schemes without authority syntax get "/" as default pathname
         free(parsed->pathname);
         parsed->pathname = strdup("/");
+        if (!parsed->pathname) {
+          return;
+        }
       }
       // Non-special schemes with authority syntax (foo://) keep empty pathname
       // Special schemes with authority syntax also keep their existing empty pathname

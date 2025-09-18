@@ -10,6 +10,9 @@ int parse_authority(JSRT_URL* parsed, const char* authority_str) {
   }
 
   char* authority = strdup(authority_str);
+  if (!authority) {
+    return -1;
+  }
   char* at_pos = strrchr(authority, '@');  // Use rightmost @ to handle @ in userinfo
   char* host_part = authority;
 
@@ -103,6 +106,9 @@ int parse_authority(JSRT_URL* parsed, const char* authority_str) {
         if (close_bracket) {
           size_t ipv6_len = close_bracket - host_part - 1;  // Length without brackets
           char* ipv6_part = malloc(ipv6_len + 1);
+          if (!ipv6_part) {
+            goto cleanup_and_return_error;
+          }
           strncpy(ipv6_part, host_part + 1, ipv6_len);  // Skip opening bracket
           ipv6_part[ipv6_len] = '\0';
 
@@ -112,6 +118,11 @@ int parse_authority(JSRT_URL* parsed, const char* authority_str) {
             // Format as [canonical_ipv6] for hostname
             free(parsed->hostname);
             parsed->hostname = malloc(strlen(canonical_ipv6) + 3);
+            if (!parsed->hostname) {
+              free(canonical_ipv6);
+              free(ipv6_part);
+              goto cleanup_and_return_error;
+            }
             snprintf(parsed->hostname, strlen(canonical_ipv6) + 3, "[%s]", canonical_ipv6);
             free(canonical_ipv6);
           } else {
@@ -130,6 +141,9 @@ int parse_authority(JSRT_URL* parsed, const char* authority_str) {
         char* decoded_host = url_decode_hostname(host_part);
         free(parsed->hostname);
         parsed->hostname = decoded_host ? decoded_host : strdup(host_part);
+        if (!parsed->hostname) {
+          goto cleanup_and_return_error;
+        }
       }
     } else {
       // Decode percent-encoded hostname first
@@ -143,6 +157,10 @@ int parse_authority(JSRT_URL* parsed, const char* authority_str) {
       if (strcmp(parsed->protocol, "file:") == 0 && strchr(decoded_host, '|')) {
         size_t len = strlen(decoded_host);
         char* converted_host = malloc(len + 1);
+        if (!converted_host) {
+          free(decoded_host);
+          goto cleanup_and_return_error;
+        }
         for (size_t i = 0; i < len; i++) {
           converted_host[i] = (decoded_host[i] == '|') ? ':' : decoded_host[i];
         }
@@ -191,6 +209,9 @@ int parse_authority(JSRT_URL* parsed, const char* authority_str) {
 
       // Extract scheme from protocol for default port check
       char* scheme = strdup(parsed->protocol);
+      if (!scheme) {
+        goto cleanup_and_return_error;
+      }
       char* colon = strchr(scheme, ':');
       if (colon)
         *colon = '\0';
@@ -223,6 +244,11 @@ int parse_authority(JSRT_URL* parsed, const char* authority_str) {
         if (canonical_ipv6) {
           // Format as [canonical_ipv6] for hostname
           final_hostname = malloc(strlen(canonical_ipv6) + 3);
+          if (!final_hostname) {
+            free(canonical_ipv6);
+            free(ipv6_part);
+            goto cleanup_and_return_error;
+          }
           snprintf(final_hostname, strlen(canonical_ipv6) + 3, "[%s]", canonical_ipv6);
           free(canonical_ipv6);
         } else {
@@ -382,6 +408,9 @@ int parse_authority(JSRT_URL* parsed, const char* authority_str) {
       free(final_processed_hostname);
     }
     final_processed_hostname = strdup("");
+    if (!final_processed_hostname) {
+      goto cleanup_and_return_error;
+    }
   }
 
   // Finally, replace the original hostname with the processed one
@@ -405,11 +434,17 @@ int parse_authority(JSRT_URL* parsed, const char* authority_str) {
   // Set host field
   free(parsed->host);
   if (strlen(parsed->port) > 0) {
-    parsed->host = malloc(strlen(parsed->hostname) + strlen(parsed->port) + 2);
-    snprintf(parsed->host, strlen(parsed->hostname) + strlen(parsed->port) + 2, "%s:%s", parsed->hostname,
-             parsed->port);
+    size_t host_len = strlen(parsed->hostname) + strlen(parsed->port) + 2;
+    parsed->host = malloc(host_len);
+    if (!parsed->host) {
+      goto cleanup_and_return_error;
+    }
+    snprintf(parsed->host, host_len, "%s:%s", parsed->hostname, parsed->port);
   } else {
     parsed->host = strdup(parsed->hostname);
+    if (!parsed->host) {
+      goto cleanup_and_return_error;
+    }
   }
 
   free(authority);
@@ -442,12 +477,24 @@ int parse_empty_userinfo_authority(JSRT_URL* parsed, const char* str) {
     *colon_in_userinfo = '\0';
     free(parsed->username);
     parsed->username = strdup(input);
+    if (!parsed->username) {
+      free(input);
+      return -1;
+    }
     free(parsed->password);
     parsed->password = strdup(colon_in_userinfo + 1);
+    if (!parsed->password) {
+      free(input);
+      return -1;
+    }
     parsed->has_password_field = 1;
   } else {
     free(parsed->username);
     parsed->username = strdup(input);
+    if (!parsed->username) {
+      free(input);
+      return -1;
+    }
     parsed->has_password_field = 0;
   }
 
@@ -471,9 +518,17 @@ int parse_empty_userinfo_authority(JSRT_URL* parsed, const char* str) {
       if (strlen(normalized_port) > 0) {
         size_t host_len = strlen(host_part) + strlen(normalized_port) + 2;
         parsed->host = malloc(host_len);
+        if (!parsed->host) {
+          free(input);
+          return -1;
+        }
         snprintf(parsed->host, host_len, "%s:%s", host_part, normalized_port);
       } else {
         parsed->host = strdup(host_part);
+        if (!parsed->host) {
+          free(input);
+          return -1;
+        }
       }
     } else {
       // Invalid port
@@ -483,8 +538,16 @@ int parse_empty_userinfo_authority(JSRT_URL* parsed, const char* str) {
   } else {
     free(parsed->hostname);
     parsed->hostname = strdup(host_part);
+    if (!parsed->hostname) {
+      free(input);
+      return -1;
+    }
     free(parsed->host);
     parsed->host = strdup(host_part);
+    if (!parsed->host) {
+      free(input);
+      return -1;
+    }
   }
 
   free(input);

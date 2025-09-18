@@ -71,6 +71,10 @@ JSRT_URL* JSRT_ParseURL(const char* url, const char* base) {
           // No base or file base - add file: prefix
           size_t file_url_len = strlen("file:///") + strlen(preprocessed_url) + 1;
           char* file_url = malloc(file_url_len);
+          if (!file_url) {
+            free(preprocessed_url);
+            return NULL;
+          }
           snprintf(file_url, file_url_len, "file:///%s", preprocessed_url);
           free(preprocessed_url);
           preprocessed_url = file_url;
@@ -84,6 +88,10 @@ JSRT_URL* JSRT_ParseURL(const char* url, const char* base) {
       // This is a file URL with Windows drive letter - ensure it's absolute
       size_t file_url_len = strlen("file:///") + strlen(preprocessed_url + 5) + 1;
       char* file_url = malloc(file_url_len);
+      if (!file_url) {
+        free(preprocessed_url);
+        return NULL;
+      }
       snprintf(file_url, file_url_len, "file:///%s", preprocessed_url + 5);  // Skip "file:" prefix
       free(preprocessed_url);
       preprocessed_url = file_url;

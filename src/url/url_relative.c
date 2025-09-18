@@ -41,6 +41,10 @@ JSRT_URL* resolve_relative_url(const char* url, const char* base) {
   }
 
   JSRT_URL* result = malloc(sizeof(JSRT_URL));
+  if (!result) {
+    JSRT_FreeURL(base_url);
+    return NULL;
+  }
   memset(result, 0, sizeof(JSRT_URL));
 
   // Initialize result with base URL components
@@ -53,6 +57,14 @@ JSRT_URL* resolve_relative_url(const char* url, const char* base) {
   result->search_params = JS_UNDEFINED;
   result->ctx = NULL;
 
+  // Check for allocation failures
+  if (!result->protocol || !result->username || !result->password || !result->host || !result->hostname ||
+      !result->port) {
+    JSRT_FreeURL(base_url);
+    JSRT_FreeURL(result);
+    return NULL;
+  }
+
   // Handle scheme-only relative URLs like "http:foo.com"
   // Only special schemes should be treated as relative paths with the scheme stripped
   char* colon_pos = strchr(url, ':');
@@ -61,6 +73,11 @@ JSRT_URL* resolve_relative_url(const char* url, const char* base) {
     // Extract scheme to check if it's special
     size_t scheme_len = colon_pos - url;
     char* scheme = malloc(scheme_len + 2);  // +1 for ':', +1 for '\0'
+    if (!scheme) {
+      JSRT_FreeURL(base_url);
+      JSRT_FreeURL(result);
+      return NULL;
+    }
     strncpy(scheme, url, scheme_len);
     scheme[scheme_len] = ':';
     scheme[scheme_len + 1] = '\0';
@@ -109,11 +126,33 @@ JSRT_URL* resolve_relative_url(const char* url, const char* base) {
     if (hash_pos) {
       *hash_pos = '\0';
       result->hash = malloc(strlen(hash_pos + 1) + 2);  // +1 for '#', +1 for '\0'
-      if (result->hash) {
-        snprintf(result->hash, strlen(hash_pos + 1) + 2, "#%s", hash_pos + 1);
+      if (!result->hash) {
+        free(path_copy);
+        JSRT_FreeURL(base_url);
+        JSRT_FreeURL(result);
+        return NULL;
       }
+      snprintf(result->hash, strlen(hash_pos + 1) + 2, "#%s", hash_pos + 1);
     } else {
       result->hash = strdup("");
+      if (!result->hash) {
+        free(path_copy);
+        JSRT_FreeURL(base_url);
+        JSRT_FreeURL(result);
+        return NULL;
+      }
+      if (!result->hash) {
+        free(path_copy);
+        JSRT_FreeURL(base_url);
+        JSRT_FreeURL(result);
+        return NULL;
+      }
+      if (!result->hash) {
+        free(path_copy);
+        JSRT_FreeURL(base_url);
+        JSRT_FreeURL(result);
+        return NULL;
+      }
     }
 
     if (search_pos && (!hash_pos || search_pos < hash_pos)) {
@@ -121,11 +160,27 @@ JSRT_URL* resolve_relative_url(const char* url, const char* base) {
       const char* search_end = hash_pos ? (hash_pos) : (search_pos + strlen(search_pos + 1) + 1);
       size_t search_len = search_end - search_pos;
       result->search = malloc(search_len + 2);  // +1 for '?', +1 for '\0'
-      if (result->search) {
-        snprintf(result->search, search_len + 2, "?%.*s", (int)(search_len - 1), search_pos + 1);
+      if (!result->search) {
+        free(path_copy);
+        JSRT_FreeURL(base_url);
+        JSRT_FreeURL(result);
+        return NULL;
       }
+      snprintf(result->search, search_len + 2, "?%.*s", (int)(search_len - 1), search_pos + 1);
     } else {
       result->search = strdup("");
+      if (!result->search) {
+        free(path_copy);
+        JSRT_FreeURL(base_url);
+        JSRT_FreeURL(result);
+        return NULL;
+      }
+      if (!result->search) {
+        free(path_copy);
+        JSRT_FreeURL(base_url);
+        JSRT_FreeURL(result);
+        return NULL;
+      }
     }
 
     // Encode the absolute pathname according to the scheme type
@@ -147,9 +202,13 @@ JSRT_URL* resolve_relative_url(const char* url, const char* base) {
     if (hash_pos) {
       *hash_pos = '\0';
       result->hash = malloc(strlen(hash_pos + 1) + 2);  // +1 for '#', +1 for '\0'
-      if (result->hash) {
-        snprintf(result->hash, strlen(hash_pos + 1) + 2, "#%s", hash_pos + 1);
+      if (!result->hash) {
+        free(path_copy);
+        JSRT_FreeURL(base_url);
+        JSRT_FreeURL(result);
+        return NULL;
       }
+      snprintf(result->hash, strlen(hash_pos + 1) + 2, "#%s", hash_pos + 1);
     } else {
       result->hash = strdup("");
     }
@@ -160,9 +219,13 @@ JSRT_URL* resolve_relative_url(const char* url, const char* base) {
       const char* search_end = hash_pos ? hash_pos : (search_pos + strlen(search_pos + 1) + 1);
       size_t search_len = search_end - search_pos;
       result->search = malloc(search_len + 2);  // +1 for '?', +1 for '\0'
-      if (result->search) {
-        snprintf(result->search, search_len + 2, "?%.*s", (int)(search_len - 1), search_pos + 1);
+      if (!result->search) {
+        free(path_copy);
+        JSRT_FreeURL(base_url);
+        JSRT_FreeURL(result);
+        return NULL;
       }
+      snprintf(result->search, search_len + 2, "?%.*s", (int)(search_len - 1), search_pos + 1);
     } else {
       result->search = strdup("");
     }
@@ -176,6 +239,12 @@ JSRT_URL* resolve_relative_url(const char* url, const char* base) {
       // "C|/foo/bar" -> "/C:/foo/bar"
       size_t new_len = strlen(path_copy) + 2;  // +1 for leading '/', +1 for null terminator
       char* absolute_path = malloc(new_len);
+      if (!absolute_path) {
+        free(path_copy);
+        JSRT_FreeURL(base_url);
+        JSRT_FreeURL(result);
+        return NULL;
+      }
       snprintf(absolute_path, new_len, "/%c:%s", path_copy[0], path_copy + 2);  // Convert | to :
 
       free(result->pathname);
@@ -188,9 +257,21 @@ JSRT_URL* resolve_relative_url(const char* url, const char* base) {
     if (strlen(path_copy) == 0) {
       // Empty relative URL: preserve base pathname and search, clear hash (unless already set)
       result->pathname = strdup(base_url->pathname);
+      if (!result->pathname) {
+        free(path_copy);
+        JSRT_FreeURL(base_url);
+        JSRT_FreeURL(result);
+        return NULL;
+      }
       if (strlen(result->search) == 0) {
         free(result->search);
         result->search = strdup(base_url->search ? base_url->search : "");
+        if (!result->search) {
+          free(path_copy);
+          JSRT_FreeURL(base_url);
+          JSRT_FreeURL(result);
+          return NULL;
+        }
       }
     }
     // For non-special schemes, handle relative paths differently
@@ -207,9 +288,13 @@ JSRT_URL* resolve_relative_url(const char* url, const char* base) {
       if (last_slash == NULL || last_slash == base_pathname) {
         // No directory or root directory
         char* temp_pathname = malloc(strlen(path_copy) + 2);
-        if (temp_pathname) {
-          snprintf(temp_pathname, strlen(path_copy) + 2, "/%s", path_copy);
+        if (!temp_pathname) {
+          free(path_copy);
+          JSRT_FreeURL(base_url);
+          JSRT_FreeURL(result);
+          return NULL;
         }
+        snprintf(temp_pathname, strlen(path_copy) + 2, "/%s", path_copy);
         result->pathname = url_path_encode_special(temp_pathname);
         free(temp_pathname);
       } else {
@@ -217,6 +302,12 @@ JSRT_URL* resolve_relative_url(const char* url, const char* base) {
         size_t dir_len = last_slash - base_pathname;         // Length up to but not including last slash
         size_t total_len = dir_len + strlen(path_copy) + 3;  // dir + '/' + relative_path + '\0'
         char* temp_pathname = malloc(total_len);
+        if (!temp_pathname) {
+          free(path_copy);
+          JSRT_FreeURL(base_url);
+          JSRT_FreeURL(result);
+          return NULL;
+        }
         strncpy(temp_pathname, base_pathname, dir_len);
         temp_pathname[dir_len] = '/';
         snprintf(temp_pathname + dir_len + 1, total_len - dir_len - 1, "%s", path_copy);
@@ -261,10 +352,28 @@ cleanup_and_normalize:
   // Pathname is already percent-encoded when stored in the URL object
   // Just use it as-is for href construction
   char* encoded_pathname = strdup(result->pathname ? result->pathname : "");
+  if (!encoded_pathname) {
+    JSRT_FreeURL(base_url);
+    JSRT_FreeURL(result);
+    return NULL;
+  }
   char* encoded_search = url_component_encode(result->search);
+  if (!encoded_search) {
+    free(encoded_pathname);
+    JSRT_FreeURL(base_url);
+    JSRT_FreeURL(result);
+    return NULL;
+  }
   // Use scheme-appropriate fragment encoding
   char* encoded_hash = is_special_scheme(result->protocol) ? url_fragment_encode(result->hash)
                                                            : url_fragment_encode_nonspecial(result->hash);
+  if (!encoded_hash) {
+    free(encoded_pathname);
+    free(encoded_search);
+    JSRT_FreeURL(base_url);
+    JSRT_FreeURL(result);
+    return NULL;
+  }
 
   // Build href - different logic for special vs non-special schemes
   if (is_special_scheme(result->protocol)) {
@@ -315,6 +424,14 @@ cleanup_and_normalize:
     }
 
     result->href = malloc(href_len);
+    if (!result->href) {
+      free(encoded_pathname);
+      free(encoded_search);
+      free(encoded_hash);
+      JSRT_FreeURL(base_url);
+      JSRT_FreeURL(result);
+      return NULL;
+    }
 
     // Build href with user info if present
     if ((result->username && strlen(result->username) > 0) || (result->password && strlen(result->password) > 0)) {
@@ -374,6 +491,14 @@ cleanup_and_normalize:
       size_t href_len = strlen(result->protocol) + 2 + strlen(result->host) + strlen(encoded_pathname) +
                         strlen(encoded_search) + strlen(encoded_hash) + 1;
       result->href = malloc(href_len);
+      if (!result->href) {
+        free(encoded_pathname);
+        free(encoded_search);
+        free(encoded_hash);
+        JSRT_FreeURL(base_url);
+        JSRT_FreeURL(result);
+        return NULL;
+      }
 
       snprintf(result->href, href_len, "%s//%s%s%s%s", result->protocol, result->host, encoded_pathname, encoded_search,
                encoded_hash);
@@ -382,6 +507,14 @@ cleanup_and_normalize:
       size_t href_len =
           strlen(result->protocol) + strlen(encoded_pathname) + strlen(encoded_search) + strlen(encoded_hash) + 1;
       result->href = malloc(href_len);
+      if (!result->href) {
+        free(encoded_pathname);
+        free(encoded_search);
+        free(encoded_hash);
+        JSRT_FreeURL(base_url);
+        JSRT_FreeURL(result);
+        return NULL;
+      }
 
       snprintf(result->href, href_len, "%s%s%s%s", result->protocol, encoded_pathname, encoded_search, encoded_hash);
     }

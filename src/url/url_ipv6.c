@@ -39,6 +39,9 @@ char* canonicalize_ipv6(const char* ipv6_str) {
   // Create a working copy of the address part
   size_t addr_len = addr_end - addr_start;
   char* addr = malloc(addr_len + 1);
+  if (!addr) {
+    return NULL;
+  }
   strncpy(addr, addr_start, addr_len);
   addr[addr_len] = '\0';
 
@@ -155,6 +158,10 @@ char* canonicalize_ipv6(const char* ipv6_str) {
   if (double_colon_pos >= 0) {
     if (double_colon_pos > 0) {
       char* before_dc = malloc(double_colon_pos + 1);
+      if (!before_dc) {
+        free(addr);
+        return NULL;
+      }
       strncpy(before_dc, addr, double_colon_pos);
       before_dc[double_colon_pos] = '\0';
 
@@ -195,6 +202,10 @@ char* canonicalize_ipv6(const char* ipv6_str) {
 
           if (ipv4_start > after_dc) {
             char* before_ipv4 = malloc(ipv4_start - after_dc);
+            if (!before_ipv4) {
+              free(addr);
+              return NULL;
+            }
             strncpy(before_ipv4, after_dc, ipv4_start - after_dc - 1);
             before_ipv4[ipv4_start - after_dc - 1] = '\0';
 
@@ -268,6 +279,10 @@ char* canonicalize_ipv6(const char* ipv6_str) {
 
         // Parse hex groups before IPv4
         char* hex_part = malloc(ipv4_start - addr);
+        if (!hex_part) {
+          free(addr);
+          return NULL;
+        }
         strncpy(hex_part, addr, ipv4_start - addr - 1);
         hex_part[ipv4_start - addr - 1] = '\0';
 
@@ -337,6 +352,10 @@ char* canonicalize_ipv6(const char* ipv6_str) {
 
   // Build the canonical form (without brackets for hostname storage)
   char* result = malloc(64);
+  if (!result) {
+    free(addr);
+    return NULL;
+  }
   result[0] = '\0';
   size_t result_len = 0;
   const size_t max_len = 40;  // Maximum IPv6 string length

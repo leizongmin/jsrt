@@ -32,6 +32,9 @@ char* url_encode_with_len(const char* str, size_t len) {
   }
 
   char* encoded = malloc(encoded_len + 1);
+  if (!encoded) {
+    return NULL;
+  }
   size_t j = 0;
 
   for (size_t i = 0; i < len; i++) {
@@ -82,6 +85,9 @@ char* url_component_encode(const char* str) {
   }
 
   char* encoded = malloc(encoded_len + 1);
+  if (!encoded) {
+    return NULL;
+  }
   size_t j = 0;
 
   for (size_t i = 0; i < len; i++) {
@@ -133,6 +139,9 @@ char* url_fragment_encode(const char* str) {
   }
 
   char* encoded = malloc(encoded_len + 1);
+  if (!encoded) {
+    return NULL;
+  }
   size_t j = 0;
 
   for (size_t i = 0; i < len; i++) {
@@ -169,6 +178,9 @@ char* url_nonspecial_path_encode(const char* str) {
 
   // First pass: remove tab and newline characters, calculate final length
   char* cleaned = malloc(len + 1);
+  if (!cleaned) {
+    return NULL;
+  }
   size_t cleaned_len = 0;
   for (size_t i = 0; i < len; i++) {
     unsigned char c = (unsigned char)str[i];
@@ -210,6 +222,10 @@ char* url_nonspecial_path_encode(const char* str) {
   }
 
   char* encoded = malloc(encoded_len + 1);
+  if (!encoded) {
+    free(cleaned);
+    return NULL;
+  }
   size_t j = 0;
 
   for (size_t i = 0; i < cleaned_len; i++) {
@@ -282,6 +298,9 @@ char* url_userinfo_encode_with_scheme_name(const char* str, const char* scheme) 
   if (scheme) {
     // Remove trailing colon if present
     char* scheme_clean = strdup(scheme);
+    if (!scheme_clean) {
+      return NULL;
+    }
     if (strlen(scheme_clean) > 0 && scheme_clean[strlen(scheme_clean) - 1] == ':') {
       scheme_clean[strlen(scheme_clean) - 1] = '\0';
     }
@@ -312,6 +331,9 @@ char* url_userinfo_encode_with_scheme_name(const char* str, const char* scheme) 
   }
 
   char* encoded = malloc(encoded_len + 1);
+  if (!encoded) {
+    return NULL;
+  }
   size_t j = 0;
 
   for (size_t i = 0; i < len; i++) {
@@ -348,6 +370,9 @@ char* url_userinfo_encode(const char* str) {
 // URL decode function for query parameters (+ becomes space)
 char* url_decode_query_with_length_and_output_len(const char* str, size_t len, size_t* output_len) {
   char* decoded = malloc(len * 3 + 1);  // Allocate more space for potential replacement characters
+  if (!decoded) {
+    return NULL;
+  }
   size_t i = 0, j = 0;
 
   while (i < len) {
@@ -522,6 +547,9 @@ char* url_decode_hostname(const char* str) {
 
   size_t len = strlen(str);
   char* decoded = malloc(len * 3 + 1);
+  if (!decoded) {
+    return NULL;
+  }
   size_t i = 0, j = 0;
 
   while (i < len) {
@@ -577,6 +605,9 @@ char* url_fragment_encode_nonspecial(const char* str) {
   }
 
   char* encoded = malloc(encoded_len + 1);
+  if (!encoded) {
+    return NULL;
+  }
   size_t j = 0;
 
   for (size_t i = 0; i < len; i++) {

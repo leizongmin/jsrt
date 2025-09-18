@@ -31,11 +31,9 @@ static char* JSRT_StripURLControlCharacters(const char* input, size_t input_len)
   size_t j = 0;
   for (size_t i = 0; i < input_len; i++) {
     unsigned char c = (unsigned char)input[i];
-    // Skip all C0 control characters (0x00-0x1F) including null byte
-    // This includes tab (0x09), line feed (0x0A), carriage return (0x0D) and others
     // Per WHATWG URL spec: "Remove all ASCII tab or newline from input"
-    // but browsers also strip other C0 controls in practice
-    if (c >= 0x20) {  // Only keep characters >= 0x20 (space and above)
+    // Only remove tab (0x09), line feed (0x0A), and carriage return (0x0D)
+    if (c != 0x09 && c != 0x0A && c != 0x0D) {
       result[j++] = c;
     }
   }
@@ -159,6 +157,10 @@ static JSValue JSRT_URLGetHost(JSContext* ctx, JSValueConst this_val, int argc, 
       // Host includes port
       size_t host_len = strlen(url->hostname) + strlen(normalized_port) + 2;
       char* final_host = malloc(host_len);
+      if (!final_host) {
+        free(normalized_port);
+        return JS_EXCEPTION;
+      }
       snprintf(final_host, host_len, "%s:%s", url->hostname, normalized_port);
       JSValue result = JS_NewString(ctx, final_host);
       free(final_host);
@@ -254,9 +256,17 @@ static JSValue JSRT_URLSetSearch(JSContext* ctx, JSValueConst this_val, int argc
   free(url->search);
   if (new_search[0] == '?') {
     url->search = strdup(new_search);
+    if (!url->search) {
+      JS_FreeCString(ctx, new_search);
+      return JS_EXCEPTION;
+    }
   } else {
     size_t len = strlen(new_search);
     url->search = malloc(len + 2);
+    if (!url->search) {
+      JS_FreeCString(ctx, new_search);
+      return JS_EXCEPTION;
+    }
     snprintf(url->search, len + 2, "?%s", new_search);
   }
 
@@ -276,32 +286,18 @@ static JSValue JSRT_URLSetSearch(JSContext* ctx, JSValueConst this_val, int argc
 
       // Parse new search string into existing URLSearchParams object
       JSRT_URLSearchParams* new_params = JSRT_ParseSearchParams(url->search, strlen(url->search));
-      cached_params->params = new_params->params;
-      new_params->params = NULL;  // Prevent double free
-      JSRT_FreeSearchParams(new_params);
+      if (new_params) {
+        cached_params->params = new_params->params;
+        new_params->params = NULL;  // Prevent double free
+        JSRT_FreeSearchParams(new_params);
+      } else {
+        cached_params->params = NULL;
+      }
     }
   }
 
   // Rebuild href with new search component
-  free(url->href);
-  size_t href_len = strlen(url->protocol) + 2 + strlen(url->host) + strlen(url->pathname);
-  if (url->search && strlen(url->search) > 0) {
-    href_len += strlen(url->search);
-  }
-  if (url->hash && strlen(url->hash) > 0) {
-    href_len += strlen(url->hash);
-  }
-
-  url->href = malloc(href_len + 1);
-  int written = snprintf(url->href, href_len + 1, "%s//%s%s", url->protocol, url->host, url->pathname);
-
-  if (url->search && strlen(url->search) > 0) {
-    written += snprintf(url->href + written, href_len + 1 - written, "%s", url->search);
-  }
-
-  if (url->hash && strlen(url->hash) > 0) {
-    snprintf(url->href + written, href_len + 1 - written, "%s", url->hash);
-  }
+  build_href(url);
 
   JS_FreeCString(ctx, new_search);
   return JS_UNDEFINED;
@@ -445,6 +441,9 @@ static JSValue JSRT_URLSearchParamsConstructor(JSContext* ctx, JSValueConst new_
       else if (JS_GetOpaque2(ctx, init, JSRT_URLSearchParamsClassID)) {
         JSRT_URLSearchParams* src = JS_GetOpaque2(ctx, init, JSRT_URLSearchParamsClassID);
         search_params = JSRT_CreateEmptySearchParams();
+        if (!search_params) {
+          return JS_EXCEPTION;
+        }
 
         // Copy all parameters
         JSRT_URLSearchParam* param = src->params;
@@ -482,9 +481,15 @@ static JSValue JSRT_URLSearchParamsConstructor(JSContext* ctx, JSValueConst new_
       }
       search_params = JSRT_ParseSearchParams(init_str, init_len);
       JS_FreeCString(ctx, init_str);
+      if (!search_params) {
+        return JS_EXCEPTION;
+      }
     }
   } else {
     search_params = JSRT_CreateEmptySearchParams();
+    if (!search_params) {
+      return JS_EXCEPTION;
+    }
   }
 
   JSValue obj = JS_NewObjectClass(ctx, JSRT_URLSearchParamsClassID);

@@ -11,7 +11,14 @@ char* normalize_dot_segments(const char* path) {
   // Use a simple approach: split into segments, process them, then reconstruct
   size_t path_len = strlen(path);
   char* path_copy = strdup(path);
+  if (!path_copy) {
+    return strdup("");
+  }
   char** segments = malloc(path_len * sizeof(char*));
+  if (!segments) {
+    free(path_copy);
+    return strdup("");
+  }
   int segment_count = 0;
 
   // Handle leading slash
@@ -33,6 +40,15 @@ char* normalize_dot_segments(const char* path) {
       // Extract segment (could be empty)
       size_t len = end - start;
       char* segment = malloc(len + 1);
+      if (!segment) {
+        // Free already allocated segments
+        for (int k = 0; k < segment_count; k++) {
+          free(segments[k]);
+        }
+        free(segments);
+        free(path_copy);
+        return strdup("");
+      }
       strncpy(segment, start, len);
       segment[len] = '\0';
       segments[segment_count++] = segment;
@@ -57,6 +73,15 @@ char* normalize_dot_segments(const char* path) {
 
   // Process segments using a stack approach
   char** output_segments = malloc(segment_count * sizeof(char*));
+  if (!output_segments) {
+    // Free already allocated segments
+    for (int k = 0; k < segment_count; k++) {
+      free(segments[k]);
+    }
+    free(segments);
+    free(path_copy);
+    return strdup("");
+  }
   int output_count = 0;
 
   for (int i = 0; i < segment_count; i++) {

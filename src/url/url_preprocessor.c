@@ -268,7 +268,7 @@ char* preprocess_url_string(const char* url, const char* base) {
   char* cleaned_url = remove_all_ascii_whitespace(trimmed_url);
   free(trimmed_url);
   if (!cleaned_url) {
-    return NULL;
+    return NULL;  // URL preprocessing failed (likely memory allocation error)
   }
 
   // For non-special schemes, preserve spaces before query/fragment boundaries

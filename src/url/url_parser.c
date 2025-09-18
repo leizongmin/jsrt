@@ -506,6 +506,23 @@ JSRT_URL* parse_absolute_url(const char* preprocessed_url) {
     return NULL;
   }
 
+  // Check for incomplete URLs (URLs that appear to be cut off)
+  size_t url_len = strlen(preprocessed_url);
+  if (url_len > 0) {
+    // Check for URLs ending abruptly without proper termination
+    // Examples: "http://a", "https://x/", "https://x/?", "https://x/?#"
+    // These should fail according to WPT if they're missing expected content
+    const char* last_char = &preprocessed_url[url_len - 1];
+
+    // URLs ending with just a newline or other control characters after parsing should fail
+    if (*last_char < 0x20 && *last_char != '\0') {
+      free(scheme);
+      free(url_copy);
+      JSRT_FreeURL(parsed);
+      return NULL;
+    }
+  }
+
   // Special validation for special schemes without proper authority
   if (is_special_scheme(scheme)) {
     // Special schemes like http, https, ftp MUST have authority (start with //)

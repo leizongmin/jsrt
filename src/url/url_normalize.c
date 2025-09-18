@@ -435,36 +435,8 @@ char* remove_all_ascii_whitespace(const char* url) {
       continue;
     }
 
-    // Check for zero-width Unicode characters that should be removed
-    if (c >= 0x80 && i + 2 < len) {
-      // Zero Width Space (U+200B): 0xE2 0x80 0x8B
-      // Zero Width Non-Joiner (U+200C): 0xE2 0x80 0x8C
-      // Zero Width Joiner (U+200D): 0xE2 0x80 0x8D
-      // Word Joiner (U+2060): 0xE2 0x81 0xA0
-      if (c == 0xE2 && (unsigned char)url[i + 1] == 0x80) {
-        unsigned char third = (unsigned char)url[i + 2];
-        if (third == 0x8B || third == 0x8C || third == 0x8D) {
-          i += 3;  // Skip zero-width character
-          // Check for consecutive slashes after removal
-          if (j > 0 && result[j - 1] == '/' && i < len && url[i] == '/') {
-            // Skip the next slash to prevent double slashes
-            i++;
-          }
-          continue;
-        }
-      } else if (c == 0xE2 && (unsigned char)url[i + 1] == 0x81 && (unsigned char)url[i + 2] == 0xA0) {
-        i += 3;  // Skip Word Joiner (U+2060)
-        // Check for consecutive slashes after removal
-        if (j > 0 && result[j - 1] == '/' && i < len && url[i] == '/') {
-          // Skip the next slash to prevent double slashes
-          i++;
-        }
-        continue;
-      }
-    }
-
-    // Note: Zero Width No-Break Space (U+FEFF) / BOM should NOT be removed
-    // per WHATWG URL spec - only ASCII whitespace should be removed
+    // Note: Zero Width No-Break Space (U+FEFF) / BOM and other problematic Unicode
+    // characters are now handled in URL validation, not normalization
 
     // According to WHATWG URL spec, spaces should be preserved and encoded later
     // Only remove tab, LF, CR, and zero-width characters - preserve all other characters

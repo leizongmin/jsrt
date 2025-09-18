@@ -53,7 +53,9 @@ static JSValue JSRT_URLConstructor(JSContext* ctx, JSValueConst new_target, int 
   }
 
   // Strip control characters as per URL specification
-  char* url_str = JSRT_StripURLControlCharacters(url_str_raw, url_str_len);
+  // Note: Use strlen() instead of url_str_len because JS_ToCStringLen returns the JavaScript
+  // string length (UTF-16 code units) but url_str_raw is a UTF-8 byte array
+  char* url_str = JSRT_StripURLControlCharacters(url_str_raw, strlen(url_str_raw));
   JS_FreeCString(ctx, url_str_raw);
   if (!url_str) {
     return JS_EXCEPTION;
@@ -68,7 +70,7 @@ static JSValue JSRT_URLConstructor(JSContext* ctx, JSValueConst new_target, int 
       free(url_str);
       return JS_EXCEPTION;
     }
-    base_str = JSRT_StripURLControlCharacters(base_str_raw, base_str_len);
+    base_str = JSRT_StripURLControlCharacters(base_str_raw, strlen(base_str_raw));
     JS_FreeCString(ctx, base_str_raw);
     if (!base_str) {
       free(url_str);

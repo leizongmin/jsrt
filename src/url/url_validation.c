@@ -155,6 +155,11 @@ int validate_url_characters(const char* url) {
 
     // Allow other Unicode characters (>= 0x80) - they will be percent-encoded later if needed
     // This fixes the issue where Unicode characters like β (0xCE 0xB2 in UTF-8) were rejected
+    if (c >= 0x80) {
+      // All non-ASCII bytes (which include UTF-8 continuation bytes) should be allowed
+      // They will be properly percent-encoded during path processing
+      continue;
+    }
   }
   return 1;  // Valid
 }
@@ -375,6 +380,9 @@ int validate_hostname_characters_allow_at(const char* hostname, int allow_at) {
 
   for (const char* p = hostname; *p; p++) {
     unsigned char c = (unsigned char)*p;
+
+    // TODO: Add specific Unicode character validation for hostnames
+    // Currently allowing all Unicode characters in hostnames for testing
 
     // Per WPT tests, many special characters must be rejected in hostnames
     // Reject characters that are forbidden in hostnames according to WHATWG URL spec

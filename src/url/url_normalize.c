@@ -291,10 +291,8 @@ static int is_c0_control_or_space(const unsigned char* ptr, size_t remaining_len
     if (c == 0xC2 && ptr[1] == 0xA0) {
       return 2;
     }
-    // Zero Width No-Break Space (U+FEFF) / BOM: 0xEF 0xBB 0xBF
-    if (c == 0xEF && ptr[1] == 0xBB && ptr[2] == 0xBF) {
-      return 3;
-    }
+    // Note: Zero Width No-Break Space (U+FEFF) / BOM should NOT be stripped
+    // per WHATWG URL spec - only ASCII whitespace should be removed
   }
 
   return 0;
@@ -340,11 +338,8 @@ char* strip_url_whitespace(const char* url) {
         end -= 3;
         found_whitespace = 1;
       }
-      // Zero Width No-Break Space (U+FEFF) / BOM: 0xEF 0xBB 0xBF
-      else if (check_pos[-2] == 0xEF && check_pos[-1] == 0xBB && check_pos[0] == 0xBF) {
-        end -= 3;
-        found_whitespace = 1;
-      }
+      // Note: Zero Width No-Break Space (U+FEFF) / BOM should NOT be stripped
+      // per WHATWG URL spec - only ASCII whitespace should be removed
     }
     // Check for 2-byte Unicode whitespace
     else if (end - start >= 2 && check_pos >= start + 1) {
@@ -468,16 +463,8 @@ char* remove_all_ascii_whitespace(const char* url) {
       }
     }
 
-    // Check for Zero Width No-Break Space (U+FEFF) / BOM: 0xEF 0xBB 0xBF
-    if (c == 0xEF && i + 2 < len && (unsigned char)url[i + 1] == 0xBB && (unsigned char)url[i + 2] == 0xBF) {
-      i += 3;  // Skip BOM character
-      // Check for consecutive slashes after BOM removal
-      if (j > 0 && result[j - 1] == '/' && i < len && url[i] == '/') {
-        // Skip the next slash to prevent double slashes from BOM removal
-        i++;
-      }
-      continue;
-    }
+    // Note: Zero Width No-Break Space (U+FEFF) / BOM should NOT be removed
+    // per WHATWG URL spec - only ASCII whitespace should be removed
 
     // According to WHATWG URL spec, spaces should be preserved and encoded later
     // Only remove tab, LF, CR, and zero-width characters - preserve all other characters

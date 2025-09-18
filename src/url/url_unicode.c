@@ -6,7 +6,8 @@
 
 // Unicode normalization for hostnames
 // Convert fullwidth characters to halfwidth and apply case normalization
-char* normalize_hostname_unicode(const char* hostname) {
+// For special schemes, converts ASCII to lowercase; for non-special schemes, preserves case
+char* normalize_hostname_unicode_with_case(const char* hostname, int preserve_ascii_case) {
   if (!hostname) {
     return NULL;
   }
@@ -105,8 +106,12 @@ char* normalize_hostname_unicode(const char* hostname) {
         normalized[write_pos++] = hostname[read_pos++];
       }
     } else {
-      // ASCII character - convert to lowercase
-      normalized[write_pos++] = tolower(c);
+      // ASCII character - convert to lowercase only for special schemes
+      if (preserve_ascii_case) {
+        normalized[write_pos++] = c;
+      } else {
+        normalized[write_pos++] = tolower(c);
+      }
       read_pos++;
     }
   }
@@ -118,9 +123,15 @@ char* normalize_hostname_unicode(const char* hostname) {
   return final_result ? final_result : normalized;
 }
 
+// Backward compatibility wrapper - defaults to lowercasing ASCII (for special schemes)
+char* normalize_hostname_unicode(const char* hostname) {
+  return normalize_hostname_unicode_with_case(hostname, 0);
+}
+
 // Convert Unicode hostname to ASCII using IDNA 2008
 // Returns ASCII representation (punycode) for Unicode domains, or copy for ASCII domains
-char* hostname_to_ascii(const char* hostname) {
+// For special schemes, converts to lowercase; for non-special schemes, preserves case
+char* hostname_to_ascii_with_case(const char* hostname, int preserve_ascii_case) {
   if (!hostname || strlen(hostname) == 0) {
     return strdup("");
   }
@@ -140,9 +151,11 @@ char* hostname_to_ascii(const char* hostname) {
     if (!ascii_copy)
       return NULL;
 
-    // Convert to lowercase per WHATWG URL spec
-    for (size_t i = 0; ascii_copy[i] != '\0'; i++) {
-      ascii_copy[i] = tolower(ascii_copy[i]);
+    // Convert to lowercase for special schemes only
+    if (!preserve_ascii_case) {
+      for (size_t i = 0; ascii_copy[i] != '\0'; i++) {
+        ascii_copy[i] = tolower(ascii_copy[i]);
+      }
     }
     return ascii_copy;
   }
@@ -170,4 +183,9 @@ char* hostname_to_ascii(const char* hostname) {
   // Shrink buffer to actual size
   char* final_ascii = realloc(ascii_buffer, result);
   return final_ascii ? final_ascii : ascii_buffer;
+}
+
+// Backward compatibility wrapper - defaults to lowercasing ASCII (for special schemes)
+char* hostname_to_ascii(const char* hostname) {
+  return hostname_to_ascii_with_case(hostname, 0);
 }

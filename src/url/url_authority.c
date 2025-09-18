@@ -321,7 +321,9 @@ int parse_authority(JSRT_URL* parsed, const char* authority_str) {
   char* final_processed_hostname = current_hostname;
 
   if (!is_windows_drive) {
-    char* normalized_hostname = normalize_hostname_unicode(current_hostname);
+    // For non-special schemes, preserve ASCII case; for special schemes, normalize to lowercase
+    int preserve_case = !is_special_scheme(parsed->protocol);
+    char* normalized_hostname = normalize_hostname_unicode_with_case(current_hostname, preserve_case);
     if (normalized_hostname) {
       if (final_processed_hostname != current_hostname) {
         free(final_processed_hostname);
@@ -339,9 +341,13 @@ int parse_authority(JSRT_URL* parsed, const char* authority_str) {
   }
 
   // Convert Unicode hostname to ASCII (Punycode) per WHATWG URL spec
+  // Only apply IDN conversion for special schemes (http, https, ws, wss, ftp, file)
+  // For non-special schemes, Unicode should be percent-encoded instead
   // Skip IDNA conversion for IPv6 addresses (enclosed in brackets) and Windows drive letters
-  if (!is_windows_drive && !(final_processed_hostname[0] == '[' && strchr(final_processed_hostname, ']'))) {
-    char* ascii_hostname = hostname_to_ascii(final_processed_hostname);
+  int should_apply_idna = is_special_scheme(parsed->protocol);
+  if (should_apply_idna && !is_windows_drive &&
+      !(final_processed_hostname[0] == '[' && strchr(final_processed_hostname, ']'))) {
+    char* ascii_hostname = hostname_to_ascii_with_case(final_processed_hostname, 0);  // Always lowercase for IDN
     if (ascii_hostname) {
       if (final_processed_hostname != current_hostname) {
         free(final_processed_hostname);
@@ -350,6 +356,16 @@ int parse_authority(JSRT_URL* parsed, const char* authority_str) {
     }
     // Note: If hostname_to_ascii fails, we continue with the original hostname
     // This allows for graceful handling of invalid Unicode domains
+  } else if (!should_apply_idna && !is_windows_drive &&
+             !(final_processed_hostname[0] == '[' && strchr(final_processed_hostname, ']'))) {
+    // For non-special schemes, percent-encode Unicode characters in hostname
+    char* encoded_hostname = url_component_encode(final_processed_hostname);
+    if (encoded_hostname) {
+      if (final_processed_hostname != current_hostname) {
+        free(final_processed_hostname);
+      }
+      final_processed_hostname = encoded_hostname;
+    }
   }
 
   // Try to canonicalize as IPv4 address if it looks like one

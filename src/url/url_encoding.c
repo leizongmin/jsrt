@@ -71,9 +71,9 @@ char* url_component_encode(const char* str) {
     if (c == '%' && i + 2 < len && hex_to_int(str[i + 1]) >= 0 && hex_to_int(str[i + 2]) >= 0) {
       // Already percent-encoded sequence, keep as-is
       encoded_len += 3;
-    } else if (c <= 32 || c == '"' || c == '\'' || c == '<' || c == '>' || c == '\\' || c == '^' || c == '`' ||
-               c == '{' || c == '|' || c == '}') {
-      // Encode control characters, space, and specific unsafe characters
+    } else if (c <= 32 || c >= 127 || c == '"' || c == '\'' || c == '<' || c == '>' || c == '\\' || c == '^' ||
+               c == '`' || c == '{' || c == '|' || c == '}') {
+      // Encode control characters, space, non-ASCII characters, and specific unsafe characters
       // Include single quotes and backticks per WPT requirements
       encoded_len += 3;  // %XX
     } else {
@@ -92,9 +92,9 @@ char* url_component_encode(const char* str) {
       encoded[j++] = str[i + 1];
       encoded[j++] = str[i + 2];
       i += 2;  // Skip the next two characters
-    } else if (c <= 32 || c == '"' || c == '\'' || c == '<' || c == '>' || c == '\\' || c == '^' || c == '`' ||
-               c == '{' || c == '|' || c == '}') {
-      // Encode control characters, space, and specific unsafe characters
+    } else if (c <= 32 || c >= 127 || c == '"' || c == '\'' || c == '<' || c == '>' || c == '\\' || c == '^' ||
+               c == '`' || c == '{' || c == '|' || c == '}') {
+      // Encode control characters, space, non-ASCII characters, and specific unsafe characters
       // Include single quotes and backticks per WPT requirements
       encoded[j++] = '%';
       encoded[j++] = hex_chars[c >> 4];
@@ -159,36 +159,48 @@ char* url_fragment_encode(const char* str) {
 }
 
 // Special encoding for non-special scheme paths
-// Per WPT tests, only certain spaces are encoded - trailing spaces become %20
+// Per WPT tests: trailing spaces (before end of path) should be encoded as %20
+// Tab and newline characters should be removed (not encoded)
 char* url_nonspecial_path_encode(const char* str) {
   if (!str)
     return NULL;
 
   size_t len = strlen(str);
-  size_t encoded_len = 0;
 
-  // Calculate encoded length - need special logic for trailing space handling
+  // First pass: remove tab and newline characters, calculate final length
+  char* cleaned = malloc(len + 1);
+  size_t cleaned_len = 0;
   for (size_t i = 0; i < len; i++) {
     unsigned char c = (unsigned char)str[i];
-    if (c == '%' && i + 2 < len && hex_to_int(str[i + 1]) >= 0 && hex_to_int(str[i + 2]) >= 0) {
+    if (c != '\t' && c != '\r' && c != '\n') {
+      cleaned[cleaned_len++] = c;
+    }
+  }
+  cleaned[cleaned_len] = '\0';
+
+  // Second pass: encode the cleaned string
+  size_t encoded_len = 0;
+  for (size_t i = 0; i < cleaned_len; i++) {
+    unsigned char c = (unsigned char)cleaned[i];
+    if (c == '%' && i + 2 < cleaned_len && hex_to_int(cleaned[i + 1]) >= 0 && hex_to_int(cleaned[i + 2]) >= 0) {
       // Already percent-encoded sequence, keep as-is
       encoded_len += 3;
     } else if (c == ' ') {
-      // Space handling: check if this is a trailing space that should be encoded
-      // For non-special schemes, only encode the very last space in a trailing sequence
-      size_t space_count = 0;
-      size_t space_start = i;
-      while (i + space_count < len && str[i + space_count] == ' ') {
-        space_count++;
+      // Check if this space is at the end of the path (trailing space)
+      // Trailing spaces should be encoded as %20
+      int is_trailing = 1;
+      for (size_t k = i + 1; k < cleaned_len; k++) {
+        if (cleaned[k] != ' ') {
+          is_trailing = 0;
+          break;
+        }
       }
 
-      // If this is the end of string, encode only the last space
-      if (i + space_count == len && space_count > 1) {
-        encoded_len += (space_count - 1) + 3;  // (n-1) spaces + one %20
+      if (is_trailing) {
+        encoded_len += 3;  // %20
       } else {
-        encoded_len += space_count;  // Keep all spaces as-is
+        encoded_len += 1;  // Keep space as-is
       }
-      i += space_count - 1;  // Skip counted spaces (loop will increment)
     } else if (c < 32 || c > 126) {
       // Encode other control characters and non-ASCII
       encoded_len += 3;  // %XX
@@ -200,39 +212,43 @@ char* url_nonspecial_path_encode(const char* str) {
   char* encoded = malloc(encoded_len + 1);
   size_t j = 0;
 
-  for (size_t i = 0; i < len; i++) {
-    unsigned char c = (unsigned char)str[i];
-    if (c == '%' && i + 2 < len && hex_to_int(str[i + 1]) >= 0 && hex_to_int(str[i + 2]) >= 0) {
+  for (size_t i = 0; i < cleaned_len; i++) {
+    unsigned char c = (unsigned char)cleaned[i];
+    if (c == '%' && i + 2 < cleaned_len && hex_to_int(cleaned[i + 1]) >= 0 && hex_to_int(cleaned[i + 2]) >= 0) {
       // Already percent-encoded sequence, copy as-is
-      encoded[j++] = str[i];
-      encoded[j++] = str[i + 1];
-      encoded[j++] = str[i + 2];
+      encoded[j++] = cleaned[i];
+      encoded[j++] = cleaned[i + 1];
+      encoded[j++] = cleaned[i + 2];
       i += 2;  // Skip the next two characters
     } else if (c == ' ') {
-      // Space handling: check if this is a trailing space sequence
-      size_t space_count = 0;
-      size_t space_start = i;
-      while (i + space_count < len && str[i + space_count] == ' ') {
-        space_count++;
+      // For non-special schemes, only the last trailing space should be encoded as %20
+      // Find the end of the space sequence
+      size_t space_end = i;
+      while (space_end < cleaned_len && cleaned[space_end] == ' ') {
+        space_end++;
       }
 
-      // If this is the end of string and we have multiple spaces,
-      // encode only the last space as %20
-      if (i + space_count == len && space_count > 1) {
-        // Keep (n-1) spaces as-is, encode the last one
-        for (size_t k = 0; k < space_count - 1; k++) {
+      // Check if this space sequence is at the end of the string (trailing)
+      if (space_end == cleaned_len) {
+        // This is a trailing space sequence
+        // Keep all spaces except the last one as-is, encode the last one
+        size_t spaces_to_keep = (space_end - i) - 1;
+        for (size_t k = 0; k < spaces_to_keep; k++) {
           encoded[j++] = ' ';
         }
+        // Encode the last space as %20
         encoded[j++] = '%';
         encoded[j++] = hex_chars[' ' >> 4];
         encoded[j++] = hex_chars[' ' & 15];
+        i = space_end - 1;  // Skip to end of space sequence (loop will increment)
       } else {
-        // Keep all spaces as-is for non-trailing sequences
-        for (size_t k = 0; k < space_count; k++) {
+        // This is not a trailing space sequence, keep all spaces as-is
+        size_t spaces_count = space_end - i;
+        for (size_t k = 0; k < spaces_count; k++) {
           encoded[j++] = ' ';
         }
+        i = space_end - 1;  // Skip to end of space sequence (loop will increment)
       }
-      i += space_count - 1;  // Skip processed spaces
     } else if (c < 32 || c > 126) {
       // Encode other control characters and non-ASCII
       encoded[j++] = '%';
@@ -243,6 +259,8 @@ char* url_nonspecial_path_encode(const char* str) {
     }
   }
   encoded[j] = '\0';
+
+  free(cleaned);
   return encoded;
 }
 
@@ -494,6 +512,43 @@ char* url_decode_with_length(const char* str, size_t len) {
 char* url_decode(const char* str) {
   size_t len = strlen(str);
   return url_decode_with_length(str, len);
+}
+
+// URL decode function specifically for hostnames with validation
+// Returns NULL if the decoded hostname contains forbidden characters
+char* url_decode_hostname(const char* str) {
+  if (!str)
+    return NULL;
+
+  size_t len = strlen(str);
+  char* decoded = malloc(len * 3 + 1);
+  size_t i = 0, j = 0;
+
+  while (i < len) {
+    if (str[i] == '%' && i + 2 < len) {
+      int h1 = hex_to_int(str[i + 1]);
+      int h2 = hex_to_int(str[i + 2]);
+      if (h1 >= 0 && h2 >= 0) {
+        unsigned char byte = (unsigned char)((h1 << 4) | h2);
+
+        // Check for forbidden characters in hostnames
+        if (byte == 0x00 || byte == 0x09 || byte == 0x0A || byte == 0x0D || byte == 0x20 || byte == '#' ||
+            byte == '%' || byte == '/' || byte == ':' || byte == '?' || byte == '@' || byte == '[' || byte == '\\' ||
+            byte == ']') {
+          // Forbidden character found, reject the hostname
+          free(decoded);
+          return NULL;
+        }
+
+        decoded[j++] = byte;
+        i += 3;
+        continue;
+      }
+    }
+    decoded[j++] = str[i++];
+  }
+  decoded[j] = '\0';
+  return decoded;
 }
 
 // Fragment encoding for non-special schemes (spaces are preserved)

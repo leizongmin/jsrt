@@ -67,19 +67,41 @@ char* parse_url_components(JSRT_URL* parsed, const char* scheme, char* ptr) {
     }
     return ptr;
   } else if (strcmp(scheme, "file") == 0 && *ptr != '/' && *ptr != '\\') {
-    // File URLs without slashes should be treated as opaque paths
-    // Set the pathname to the entire remaining content
-    free(parsed->pathname);
-    parsed->pathname = strdup(ptr);
+    // File URLs without slashes should be normalized to absolute paths
+    // According to WHATWG URL spec, file:path becomes file:///normalized_path
 
-    // Clear hostname since this is an opaque path
+    // Set empty hostname and host for file URLs
     free(parsed->hostname);
     parsed->hostname = strdup("");
     free(parsed->host);
     parsed->host = strdup("");
 
-    // Mark as opaque path for href building
-    parsed->opaque_path = 1;
+    // Normalize the path component
+    char* normalized_path = NULL;
+    if (strcmp(ptr, ".") == 0) {
+      // file:. becomes file:/// (root directory)
+      normalized_path = strdup("/");
+    } else if (strcmp(ptr, "..") == 0) {
+      // file:.. becomes file:/// (root directory, can't go above root)
+      normalized_path = strdup("/");
+    } else if (strncmp(ptr, "..", 2) == 0 && ptr[2] != '\0') {
+      // file:..something becomes file:///..something
+      size_t path_len = strlen(ptr) + 2;  // +1 for leading slash, +1 for null terminator
+      normalized_path = malloc(path_len);
+      snprintf(normalized_path, path_len, "/%s", ptr);
+    } else {
+      // file:path becomes file:///path
+      size_t path_len = strlen(ptr) + 2;  // +1 for leading slash, +1 for null terminator
+      normalized_path = malloc(path_len);
+      snprintf(normalized_path, path_len, "/%s", ptr);
+    }
+
+    free(parsed->pathname);
+    parsed->pathname = normalized_path;
+
+    // Don't mark as opaque path - this is a regular file URL with authority syntax
+    parsed->opaque_path = 0;
+    parsed->has_authority_syntax = 1;
 
     // Return pointer to end since we consumed everything
     return ptr + strlen(ptr);

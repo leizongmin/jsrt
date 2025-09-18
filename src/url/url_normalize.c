@@ -262,6 +262,10 @@ static int is_c0_control_or_space(const unsigned char* ptr, size_t remaining_len
     if (c == 0xC2 && ptr[1] == 0xA0) {
       return 2;
     }
+    // Zero Width No-Break Space (U+FEFF) / BOM: 0xEF 0xBB 0xBF
+    if (c == 0xEF && ptr[1] == 0xBB && ptr[2] == 0xBF) {
+      return 3;
+    }
   }
 
   return 0;
@@ -304,6 +308,11 @@ char* strip_url_whitespace(const char* url) {
     else if (end - start >= 3 && check_pos >= start + 2) {
       // U+3000 (ideographic space): 0xE3 0x80 0x80
       if (check_pos[-2] == 0xE3 && check_pos[-1] == 0x80 && check_pos[0] == 0x80) {
+        end -= 3;
+        found_whitespace = 1;
+      }
+      // Zero Width No-Break Space (U+FEFF) / BOM: 0xEF 0xBB 0xBF
+      else if (check_pos[-2] == 0xEF && check_pos[-1] == 0xBB && check_pos[0] == 0xBF) {
         end -= 3;
         found_whitespace = 1;
       }
@@ -408,7 +417,6 @@ char* remove_all_ascii_whitespace(const char* url) {
       // Zero Width Non-Joiner (U+200C): 0xE2 0x80 0x8C
       // Zero Width Joiner (U+200D): 0xE2 0x80 0x8D
       // Word Joiner (U+2060): 0xE2 0x81 0xA0
-      // Zero Width No-Break Space (U+FEFF): 0xEF 0xBB 0xBF
       if (c == 0xE2 && (unsigned char)url[i + 1] == 0x80) {
         unsigned char third = (unsigned char)url[i + 2];
         if (third == 0x8B || third == 0x8C || third == 0x8D) {
@@ -418,10 +426,13 @@ char* remove_all_ascii_whitespace(const char* url) {
       } else if (c == 0xE2 && (unsigned char)url[i + 1] == 0x81 && (unsigned char)url[i + 2] == 0xA0) {
         i += 3;  // Skip Word Joiner (U+2060)
         continue;
-      } else if (c == 0xEF && (unsigned char)url[i + 1] == 0xBB && (unsigned char)url[i + 2] == 0xBF) {
-        i += 3;  // Skip Zero Width No-Break Space (U+FEFF)
-        continue;
       }
+    }
+
+    // Check for Zero Width No-Break Space (U+FEFF) / BOM: 0xEF 0xBB 0xBF
+    if (c == 0xEF && i + 2 < len && (unsigned char)url[i + 1] == 0xBB && (unsigned char)url[i + 2] == 0xBF) {
+      i += 3;  // Skip BOM character
+      continue;
     }
 
     // According to WHATWG URL spec, spaces should be preserved and encoded later
@@ -460,9 +471,9 @@ char* normalize_spaces_before_query_fragment(const char* path) {
 
       // Check if this space sequence is trailing (at end or before ?/#)
       if (space_end == len || path[space_end] == '?' || path[space_end] == '#') {
-        // This is a trailing space sequence - collapse to single space
-        result[j++] = ' ';
-        i = space_end - 1;  // Skip the rest (loop will increment)
+        // This is a trailing space sequence before query/fragment - remove all spaces
+        // According to WHATWG URL spec, spaces before query/fragment should be removed
+        i = space_end - 1;  // Skip all spaces (loop will increment)
       } else {
         // This is a middle space sequence - keep all spaces as-is
         for (size_t k = space_start; k < space_end; k++) {

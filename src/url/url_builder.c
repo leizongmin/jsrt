@@ -163,16 +163,21 @@ void parse_path_query_fragment(JSRT_URL* parsed, char* ptr) {
     if (strcmp(parsed->pathname, "/") == 0 || strcmp(parsed->pathname, "") == 0) {
       free(parsed->pathname);
 
+      // Remove BOM characters from path before encoding
+      char* cleaned_path = remove_all_ascii_whitespace(ptr);
+
       // Encode the path properly WITHOUT decoding first
       // This preserves percent-encoded dot segments (%2e) which should NOT be normalized
       // according to WHATWG URL spec - percent-encoded dots should remain as-is
       if (strcmp(parsed->protocol, "file:") == 0) {
-        parsed->pathname = url_path_encode_file(ptr);
+        parsed->pathname = url_path_encode_file(cleaned_path);
       } else if (is_special_scheme(parsed->protocol)) {
-        parsed->pathname = url_path_encode_special(ptr);
+        parsed->pathname = url_path_encode_special(cleaned_path);
       } else {
-        parsed->pathname = url_nonspecial_path_encode(ptr);
+        parsed->pathname = url_nonspecial_path_encode(cleaned_path);
       }
+
+      free(cleaned_path);
     }
   } else {
     // Empty pathname handling:

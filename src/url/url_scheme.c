@@ -50,9 +50,17 @@ int parse_special_scheme_without_slashes(JSRT_URL* parsed, char** ptr) {
     return 0;
   }
 
-  // Special handling for file URLs without slashes - these should be opaque paths
+  // Special handling for file URLs without slashes
   if (strcmp(parsed->protocol, "file:") == 0) {
-    // For file URLs like "file:test" or "file:...", treat as opaque path
+    // Check if this is a relative path pattern like ".", "..", "..." etc.
+    if (input_ptr[0] == '.' && (input_ptr[1] == '\0' || input_ptr[1] == '.' || input_ptr[1] == '/')) {
+      // This is a relative path like "file:." or "file:.." or "file:..."
+      // These should be treated as relative URLs, not absolute opaque paths
+      // Return error to indicate this should be handled as relative URL
+      return -1;
+    }
+
+    // For other file URLs like "file:test", treat as opaque path
     free(parsed->pathname);
     parsed->pathname = strdup(input_ptr);
 

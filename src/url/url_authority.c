@@ -94,7 +94,6 @@ int parse_authority(JSRT_URL* parsed, const char* authority_str) {
 
   if (port_colon && !is_file_drive) {  // Has port and not file drive
     *port_colon = '\0';
-    free(parsed->hostname);
 
     // Handle IPv6 addresses - extract the part inside brackets
     if (is_ipv6_with_port) {
@@ -111,31 +110,36 @@ int parse_authority(JSRT_URL* parsed, const char* authority_str) {
           char* canonical_ipv6 = canonicalize_ipv6(ipv6_part);
           if (canonical_ipv6) {
             // Format as [canonical_ipv6] for hostname
+            free(parsed->hostname);
             parsed->hostname = malloc(strlen(canonical_ipv6) + 3);
             snprintf(parsed->hostname, strlen(canonical_ipv6) + 3, "[%s]", canonical_ipv6);
             free(canonical_ipv6);
           } else {
             // Invalid IPv6 address - still decode it
-            char* decoded_host = url_decode(host_part);
+            char* decoded_host = url_decode_hostname(host_part);
+            free(parsed->hostname);
             parsed->hostname = decoded_host ? decoded_host : strdup(host_part);
           }
           free(ipv6_part);
         } else {
-          char* decoded_host = url_decode(host_part);
+          char* decoded_host = url_decode_hostname(host_part);
+          free(parsed->hostname);
           parsed->hostname = decoded_host ? decoded_host : strdup(host_part);
         }
       } else {
-        char* decoded_host = url_decode(host_part);
+        char* decoded_host = url_decode_hostname(host_part);
+        free(parsed->hostname);
         parsed->hostname = decoded_host ? decoded_host : strdup(host_part);
       }
     } else {
       // Decode percent-encoded hostname first
-      char* decoded_host = url_decode(host_part);
+      char* decoded_host = url_decode_hostname(host_part);
       if (!decoded_host) {
         goto cleanup_and_return_error;
       }
 
       // For file URLs, convert pipe to colon in hostname
+      char* final_hostname;
       if (strcmp(parsed->protocol, "file:") == 0 && strchr(decoded_host, '|')) {
         size_t len = strlen(decoded_host);
         char* converted_host = malloc(len + 1);
@@ -143,69 +147,15 @@ int parse_authority(JSRT_URL* parsed, const char* authority_str) {
           converted_host[i] = (decoded_host[i] == '|') ? ':' : decoded_host[i];
         }
         converted_host[len] = '\0';
-        parsed->hostname = converted_host;
+        final_hostname = converted_host;
         free(decoded_host);
       } else {
-        parsed->hostname = decoded_host;
+        final_hostname = decoded_host;
       }
-    }
 
-    // Validate hostname characters (including Unicode validation)
-    if (!validate_hostname_characters_with_scheme(parsed->hostname, parsed->protocol)) {
-      goto cleanup_and_return_error;
-    }
-
-    // Try to canonicalize as IPv4 address if it looks like one
-    char* ipv4_canonical = canonicalize_ipv4_address(parsed->hostname);
-    if (ipv4_canonical) {
-      // Replace hostname with canonical IPv4 form
+      // Store the final hostname
       free(parsed->hostname);
-      parsed->hostname = ipv4_canonical;
-    } else if (looks_like_ipv4_address(parsed->hostname)) {
-      // Hostname looks like IPv4 but failed canonicalization - this means invalid IPv4
-      // According to WHATWG URL spec, this should fail URL parsing
-      goto cleanup_and_return_error;
-    } else {
-      // Check for invalid IPv6 addresses without brackets in special schemes
-      // Per WHATWG URL spec, IPv6 addresses must be enclosed in brackets for special schemes
-      if (parsed->protocol && is_special_scheme(parsed->protocol)) {
-        // Simple check for IPv6-like patterns: contains multiple colons
-        int colon_count = 0;
-        for (const char* p = parsed->hostname; *p; p++) {
-          if (*p == ':')
-            colon_count++;
-        }
-        // If we have 2+ colons and no brackets, it's likely an invalid IPv6 address
-        if (colon_count >= 2 && parsed->hostname[0] != '[') {
-          goto cleanup_and_return_error;
-        }
-      }
-
-      // Not an IPv4 address - check for special cases before lowercasing
-      int should_lowercase = 1;
-
-      // For file URLs, check if hostname is actually a Windows drive letter
-      if (parsed->protocol && strcmp(parsed->protocol, "file:") == 0 && parsed->hostname &&
-          strlen(parsed->hostname) >= 2) {
-        // Check for patterns like "C:" or "C|" that should be treated as drive letters
-        if (isalpha(parsed->hostname[0]) && (parsed->hostname[1] == ':' || parsed->hostname[1] == '|') &&
-            (strlen(parsed->hostname) == 2 || parsed->hostname[2] == '/' || parsed->hostname[2] == '\0')) {
-          should_lowercase = 0;  // Preserve case for Windows drive letters
-        }
-      }
-      if (should_lowercase) {
-        // Normalize hostname case to lowercase (required for DNS hostnames per WHATWG URL spec)
-        for (size_t i = 0; parsed->hostname[i]; i++) {
-          parsed->hostname[i] = tolower(parsed->hostname[i]);
-        }
-      }
-    }
-
-    // Special handling for file URLs with localhost
-    if (strcmp(parsed->protocol, "file:") == 0 && strcmp(parsed->hostname, "localhost") == 0) {
-      // For file URLs, localhost should be normalized to empty hostname
-      free(parsed->hostname);
-      parsed->hostname = strdup("");
+      parsed->hostname = final_hostname;
     }
 
     // Parse port, handling leading zeros
@@ -257,8 +207,6 @@ int parse_authority(JSRT_URL* parsed, const char* authority_str) {
       free(scheme);
     }
   } else {
-    free(parsed->hostname);
-
     // Handle IPv6 addresses without port
     if (host_part[0] == '[' && strchr(host_part, ']')) {
       char* close_bracket = strchr(host_part, ']');
@@ -271,29 +219,35 @@ int parse_authority(JSRT_URL* parsed, const char* authority_str) {
 
         // Canonicalize the IPv6 address
         char* canonical_ipv6 = canonicalize_ipv6(ipv6_part);
+        char* final_hostname;
         if (canonical_ipv6) {
           // Format as [canonical_ipv6] for hostname
-          parsed->hostname = malloc(strlen(canonical_ipv6) + 3);
-          snprintf(parsed->hostname, strlen(canonical_ipv6) + 3, "[%s]", canonical_ipv6);
+          final_hostname = malloc(strlen(canonical_ipv6) + 3);
+          snprintf(final_hostname, strlen(canonical_ipv6) + 3, "[%s]", canonical_ipv6);
           free(canonical_ipv6);
         } else {
           // Invalid IPv6 address - still decode it
-          char* decoded_host = url_decode(host_part);
-          parsed->hostname = decoded_host ? decoded_host : strdup(host_part);
+          char* decoded_host = url_decode_hostname(host_part);
+          final_hostname = decoded_host ? decoded_host : strdup(host_part);
         }
+        free(parsed->hostname);
+        parsed->hostname = final_hostname;
         free(ipv6_part);
       } else {
-        char* decoded_host = url_decode(host_part);
-        parsed->hostname = decoded_host ? decoded_host : strdup(host_part);
+        char* decoded_host = url_decode_hostname(host_part);
+        char* final_hostname = decoded_host ? decoded_host : strdup(host_part);
+        free(parsed->hostname);
+        parsed->hostname = final_hostname;
       }
     } else {
       // Decode percent-encoded hostname first
-      char* decoded_host = url_decode(host_part);
+      char* decoded_host = url_decode_hostname(host_part);
       if (!decoded_host) {
         goto cleanup_and_return_error;
       }
 
       // For file URLs, convert pipe to colon in hostname
+      char* final_hostname;
       if (strcmp(parsed->protocol, "file:") == 0 && strchr(decoded_host, '|')) {
         size_t len = strlen(decoded_host);
         char* converted_host = malloc(len + 1);
@@ -301,95 +255,151 @@ int parse_authority(JSRT_URL* parsed, const char* authority_str) {
           converted_host[i] = (decoded_host[i] == '|') ? ':' : decoded_host[i];
         }
         converted_host[len] = '\0';
-        parsed->hostname = converted_host;
+        final_hostname = converted_host;
         free(decoded_host);
       } else {
-        parsed->hostname = decoded_host;
+        final_hostname = decoded_host;
       }
-    }
 
-    // Apply Unicode normalization to hostname (fullwidth -> halfwidth, case normalization)
-    // But skip it for Windows drive letters to preserve case
-    int is_windows_drive = 0;
-    if (parsed->protocol && strcmp(parsed->protocol, "file:") == 0 && parsed->hostname &&
-        strlen(parsed->hostname) >= 2) {
-      if (isalpha(parsed->hostname[0]) && (parsed->hostname[1] == ':' || parsed->hostname[1] == '|') &&
-          (strlen(parsed->hostname) == 2 || parsed->hostname[2] == '/' || parsed->hostname[2] == '\0')) {
-        is_windows_drive = 1;
-      }
-    }
-
-    if (!is_windows_drive) {
-      char* normalized_hostname = normalize_hostname_unicode(parsed->hostname);
-      if (normalized_hostname) {
-        free(parsed->hostname);
-        parsed->hostname = normalized_hostname;
-      }
-    }
-
-    // Validate hostname characters (including Unicode validation)
-    if (!validate_hostname_characters_with_scheme(parsed->hostname, parsed->protocol)) {
-      goto cleanup_and_return_error;
-    }
-
-    // Try to canonicalize as IPv4 address if it looks like one
-    char* ipv4_canonical = canonicalize_ipv4_address(parsed->hostname);
-    if (ipv4_canonical) {
-      // Replace hostname with canonical IPv4 form
+      // Only replace hostname after successful processing
       free(parsed->hostname);
-      parsed->hostname = ipv4_canonical;
-    } else if (looks_like_ipv4_address(parsed->hostname)) {
-      // Hostname looks like IPv4 but failed canonicalization - this means invalid IPv4
-      // According to WHATWG URL spec, this should fail URL parsing
-      goto cleanup_and_return_error;
-    } else {
-      // Check for invalid IPv6 addresses without brackets in special schemes
-      // Per WHATWG URL spec, IPv6 addresses must be enclosed in brackets for special schemes
-      if (parsed->protocol && is_special_scheme(parsed->protocol)) {
-        // Simple check for IPv6-like patterns: contains multiple colons
-        int colon_count = 0;
-        for (const char* p = parsed->hostname; *p; p++) {
-          if (*p == ':')
-            colon_count++;
-        }
-        // If we have 2+ colons and no brackets, it's likely an invalid IPv6 address
-        if (colon_count >= 2 && parsed->hostname[0] != '[') {
-          goto cleanup_and_return_error;
-        }
-      }
+      parsed->hostname = final_hostname;
+    }
+  }
 
-      // Not an IPv4 address - check for special cases before lowercasing
-      int should_lowercase = 1;
+  // Common hostname processing for both branches (with and without port)
+  // Apply Unicode normalization to hostname (fullwidth -> halfwidth, case normalization)
+  // But skip it for Windows drive letters to preserve case
 
-      // For file URLs, check if hostname is actually a Windows drive letter
-      if (parsed->protocol && strcmp(parsed->protocol, "file:") == 0 && parsed->hostname &&
-          strlen(parsed->hostname) >= 2) {
-        // Check for patterns like "C:" or "C|" that should be treated as drive letters
-        if (isalpha(parsed->hostname[0]) && (parsed->hostname[1] == ':' || parsed->hostname[1] == '|') &&
-            (strlen(parsed->hostname) == 2 || parsed->hostname[2] == '/' || parsed->hostname[2] == '\0')) {
-          should_lowercase = 0;  // Preserve case for Windows drive letters
-        }
+  // Safety check: ensure hostname is valid before processing
+  if (!parsed->hostname) {
+    goto cleanup_and_return_error;
+  }
+
+  int is_windows_drive = 0;
+  if (parsed->protocol && strcmp(parsed->protocol, "file:") == 0 && parsed->hostname && strlen(parsed->hostname) >= 2) {
+    if (isalpha(parsed->hostname[0]) && (parsed->hostname[1] == ':' || parsed->hostname[1] == '|') &&
+        (strlen(parsed->hostname) == 2 || parsed->hostname[2] == '/' || parsed->hostname[2] == '\0')) {
+      is_windows_drive = 1;
+    }
+  }
+
+  char* current_hostname = parsed->hostname;
+  char* final_processed_hostname = current_hostname;
+
+  if (!is_windows_drive) {
+    char* normalized_hostname = normalize_hostname_unicode(current_hostname);
+    if (normalized_hostname) {
+      if (final_processed_hostname != current_hostname) {
+        free(final_processed_hostname);
       }
-      if (should_lowercase) {
-        // Normalize hostname case to lowercase (required for DNS hostnames per WHATWG URL spec)
-        for (size_t i = 0; parsed->hostname[i]; i++) {
-          parsed->hostname[i] = tolower(parsed->hostname[i]);
+      final_processed_hostname = normalized_hostname;
+    }
+  }
+
+  // Validate hostname characters (including Unicode validation)
+  if (!validate_hostname_characters_with_scheme(final_processed_hostname, parsed->protocol)) {
+    if (final_processed_hostname != current_hostname) {
+      free(final_processed_hostname);
+    }
+    goto cleanup_and_return_error;
+  }
+
+  // Convert Unicode hostname to ASCII (Punycode) per WHATWG URL spec
+  // Skip IDNA conversion for IPv6 addresses (enclosed in brackets) and Windows drive letters
+  if (!is_windows_drive && !(final_processed_hostname[0] == '[' && strchr(final_processed_hostname, ']'))) {
+    char* ascii_hostname = hostname_to_ascii(final_processed_hostname);
+    if (ascii_hostname) {
+      if (final_processed_hostname != current_hostname) {
+        free(final_processed_hostname);
+      }
+      final_processed_hostname = ascii_hostname;
+    }
+    // Note: If hostname_to_ascii fails, we continue with the original hostname
+    // This allows for graceful handling of invalid Unicode domains
+  }
+
+  // Try to canonicalize as IPv4 address if it looks like one
+  char* ipv4_canonical = canonicalize_ipv4_address(final_processed_hostname);
+  if (ipv4_canonical) {
+    // Replace hostname with canonical IPv4 form
+    if (final_processed_hostname != current_hostname) {
+      free(final_processed_hostname);
+    }
+    final_processed_hostname = ipv4_canonical;
+  } else if (looks_like_ipv4_address(final_processed_hostname)) {
+    // Hostname looks like IPv4 but failed canonicalization - this means invalid IPv4
+    // According to WHATWG URL spec, this should fail URL parsing
+    if (final_processed_hostname != current_hostname) {
+      free(final_processed_hostname);
+    }
+    goto cleanup_and_return_error;
+  } else {
+    // Check for invalid IPv6 addresses without brackets in special schemes
+    // Per WHATWG URL spec, IPv6 addresses must be enclosed in brackets for special schemes
+    if (parsed->protocol && is_special_scheme(parsed->protocol)) {
+      // Simple check for IPv6-like patterns: contains multiple colons
+      int colon_count = 0;
+      for (const char* p = final_processed_hostname; *p; p++) {
+        if (*p == ':')
+          colon_count++;
+      }
+      // If we have 2+ colons and no brackets, it's likely an invalid IPv6 address
+      if (colon_count >= 2 && final_processed_hostname[0] != '[') {
+        if (final_processed_hostname != current_hostname) {
+          free(final_processed_hostname);
         }
+        goto cleanup_and_return_error;
       }
     }
 
-    // Special handling for file URLs with localhost
-    if (strcmp(parsed->protocol, "file:") == 0 && strcmp(parsed->hostname, "localhost") == 0) {
-      // For file URLs, localhost should be normalized to empty hostname
-      free(parsed->hostname);
-      parsed->hostname = strdup("");
+    // Not an IPv4 address - check for special cases before lowercasing
+    int should_lowercase = 1;
+
+    // For file URLs, check if hostname is actually a Windows drive letter
+    if (parsed->protocol && strcmp(parsed->protocol, "file:") == 0 && final_processed_hostname &&
+        strlen(final_processed_hostname) >= 2) {
+      // Check for patterns like "C:" or "C|" that should be treated as drive letters
+      if (isalpha(final_processed_hostname[0]) &&
+          (final_processed_hostname[1] == ':' || final_processed_hostname[1] == '|') &&
+          (strlen(final_processed_hostname) == 2 || final_processed_hostname[2] == '/' ||
+           final_processed_hostname[2] == '\0')) {
+        should_lowercase = 0;  // Preserve case for Windows drive letters
+      }
     }
+    if (should_lowercase) {
+      // Normalize hostname case to lowercase (required for DNS hostnames per WHATWG URL spec)
+      for (size_t i = 0; final_processed_hostname[i]; i++) {
+        final_processed_hostname[i] = tolower(final_processed_hostname[i]);
+      }
+    }
+  }
+
+  // Special handling for file URLs with localhost
+  if (strcmp(parsed->protocol, "file:") == 0 && strcmp(final_processed_hostname, "localhost") == 0) {
+    // For file URLs, localhost should be normalized to empty hostname
+    if (final_processed_hostname != current_hostname) {
+      free(final_processed_hostname);
+    }
+    final_processed_hostname = strdup("");
+  }
+
+  // Finally, replace the original hostname with the processed one
+  if (final_processed_hostname != current_hostname) {
+    free(parsed->hostname);
+    parsed->hostname = final_processed_hostname;
   }
 
   // Validate that special schemes (except file:) have non-empty hostnames
   // Per WHATWG URL spec, special schemes like http, https, ws, wss, ftp require hosts
   if (is_special_scheme(parsed->protocol) && strcmp(parsed->protocol, "file:") != 0 && strlen(parsed->hostname) == 0) {
     goto cleanup_and_return_error;  // Empty host for special scheme (not file:) is invalid
+  }
+
+  // Validate that empty hostnames cannot have ports per WHATWG URL spec
+  // URLs like "data://:443" should fail
+  if (strlen(parsed->hostname) == 0 && strlen(parsed->port) > 0) {
+    goto cleanup_and_return_error;  // Empty hostname with port is invalid
   }
 
   // Set host field

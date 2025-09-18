@@ -244,10 +244,31 @@ int validate_hostname_characters_with_scheme(const char* hostname, const char* s
       return 0;  // Spaces not allowed in hostname for special schemes
     }
 
-    // Unicode character handling (same as before)
+    // Unicode character handling - be more strict for special schemes
     if (c >= 0x80) {
+      // Check for specific problematic Unicode sequences that should always be rejected
+
+      // Arabic Letter Alef with Wavy Hamza Above (U+FDD0): 0xEF 0xB7 0x90
+      if (c == 0xEF && p + 2 < hostname + len && (unsigned char)*(p + 1) == 0xB7 && (unsigned char)*(p + 2) == 0x90) {
+        return 0;  // Invalid Unicode character
+      }
+
+      // Unicode replacement character (U+FFFD): 0xEF 0xBF 0xBD
+      if (c == 0xEF && p + 2 < hostname + len && (unsigned char)*(p + 1) == 0xBF && (unsigned char)*(p + 2) == 0xBD) {
+        return 0;  // Replacement character not allowed
+      }
+
+      // Full-width percent sign (U+FF05): 0xEF 0xBC 0x85
+      if (c == 0xEF && p + 2 < hostname + len && (unsigned char)*(p + 1) == 0xBC && (unsigned char)*(p + 2) == 0x85) {
+        return 0;  // Full-width percent not allowed
+      }
+
+      // For special schemes, allow Unicode characters but validate them properly
+      // International domain names are valid and should be processed through IDNA
+      // Only reject specific problematic sequences, not all Unicode
+
       // Check for zero-width characters and other problematic Unicode
-      if (c == 0xE2 && (unsigned char)*(p + 1) == 0x80) {
+      if (c == 0xE2 && p + 2 < hostname + len && (unsigned char)*(p + 1) == 0x80) {
         unsigned char third = (unsigned char)*(p + 2);
         if (third == 0x8B || third == 0x8C || third == 0x8D || third == 0x8E || third == 0x8F || third == 0xAE ||
             third == 0xAF) {
@@ -258,23 +279,23 @@ int validate_hostname_characters_with_scheme(const char* hostname, const char* s
       }
 
       // Check for soft hyphen (U+00AD) encoded as UTF-8: 0xC2 0xAD
-      if (c == 0xC2 && (unsigned char)*(p + 1) == 0xAD) {
+      if (c == 0xC2 && p + 1 < hostname + len && (unsigned char)*(p + 1) == 0xAD) {
         // Per WHATWG URL spec, soft hyphens should be processed during IDNA processing
         p += 1;  // Skip past the 2-byte soft hyphen sequence
         continue;
       }
 
       // Other Unicode checks remain the same...
-      if (c == 0xE3 && (unsigned char)*(p + 1) == 0x80 && (unsigned char)*(p + 2) == 0x80) {
+      if (c == 0xE3 && p + 2 < hostname + len && (unsigned char)*(p + 1) == 0x80 && (unsigned char)*(p + 2) == 0x80) {
         return 0;  // Unicode whitespace not allowed in hostname
       }
-      if (c == 0xC2 && (unsigned char)*(p + 1) == 0xA0) {
+      if (c == 0xC2 && p + 1 < hostname + len && (unsigned char)*(p + 1) == 0xA0) {
         return 0;  // Non-breaking space not allowed in hostname
       }
-      if (c == 0xE2 && (unsigned char)*(p + 1) == 0x81 && (unsigned char)*(p + 2) == 0xA0) {
+      if (c == 0xE2 && p + 2 < hostname + len && (unsigned char)*(p + 1) == 0x81 && (unsigned char)*(p + 2) == 0xA0) {
         return 0;  // Word joiner not allowed
       }
-      if (c == 0xEF && (unsigned char)*(p + 1) == 0xBB && (unsigned char)*(p + 2) == 0xBF) {
+      if (c == 0xEF && p + 2 < hostname + len && (unsigned char)*(p + 1) == 0xBB && (unsigned char)*(p + 2) == 0xBF) {
         return 0;  // Zero width no-break space not allowed
       }
 

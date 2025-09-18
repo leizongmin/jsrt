@@ -236,15 +236,9 @@ char* preprocess_url_string(const char* url, const char* base) {
     return NULL;
   }
 
-  // For non-special schemes, normalize spaces before query/fragment boundaries
+  // For non-special schemes, preserve spaces before query/fragment boundaries
+  // They will be encoded later during path encoding
   char* space_normalized_url = cleaned_url;
-  if (!has_special_scheme) {
-    space_normalized_url = normalize_spaces_before_query_fragment(cleaned_url);
-    free(cleaned_url);
-    if (!space_normalized_url) {
-      return NULL;
-    }
-  }
 
   // Normalize backslashes for special schemes
   char* normalized_url = normalize_url_backslashes(space_normalized_url);
@@ -352,6 +346,17 @@ int is_relative_url(const char* cleaned_url, const char* base) {
                 // This is file: followed by drive letter - always absolute
                 free(scheme);
                 return 0;
+              }
+
+              // Special case: file URLs with relative path patterns like "file:.", "file:..", "file:..."
+              // These should be treated as relative URLs according to WPT tests
+              if (strcmp(scheme, "file:") == 0 && scheme_len + 1 < strlen(cleaned_url) &&
+                  cleaned_url[scheme_len + 1] == '.' &&
+                  (cleaned_url[scheme_len + 2] == '\0' || cleaned_url[scheme_len + 2] == '.' ||
+                   cleaned_url[scheme_len + 2] == '/')) {
+                // This is file: followed by relative path pattern - treat as relative
+                free(scheme);
+                return 1;
               }
 
               JSRT_URL* base_url = JSRT_ParseURL(base, NULL);

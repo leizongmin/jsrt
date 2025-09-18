@@ -20,6 +20,9 @@ int detect_url_scheme(const char* url, char** scheme, char** remainder) {
       ((url[0] >= 'a' && url[0] <= 'z') || (url[0] >= 'A' && url[0] <= 'Z'))) {
     size_t scheme_len = scheme_colon - url;
     *scheme = malloc(scheme_len + 1);
+    if (!*scheme) {
+      return -1;
+    }
     strncpy(*scheme, url, scheme_len);
     (*scheme)[scheme_len] = '\0';
     *remainder = scheme_colon + 1;
@@ -88,11 +91,17 @@ char* parse_url_components(JSRT_URL* parsed, const char* scheme, char* ptr) {
       // file:..something becomes file:///..something
       size_t path_len = strlen(ptr) + 2;  // +1 for leading slash, +1 for null terminator
       normalized_path = malloc(path_len);
+      if (!normalized_path) {
+        return NULL;
+      }
       snprintf(normalized_path, path_len, "/%s", ptr);
     } else {
       // file:path becomes file:///path
       size_t path_len = strlen(ptr) + 2;  // +1 for leading slash, +1 for null terminator
       normalized_path = malloc(path_len);
+      if (!normalized_path) {
+        return NULL;
+      }
       snprintf(normalized_path, path_len, "/%s", ptr);
     }
 
@@ -215,6 +224,9 @@ int parse_double_colon_at_pattern(JSRT_URL* parsed, char** ptr) {
   // Parse userinfo (everything before last @)
   size_t userinfo_len = last_at - *ptr;
   char* userinfo = malloc(userinfo_len + 1);
+  if (!userinfo) {
+    return -1;
+  }
   strncpy(userinfo, *ptr, userinfo_len);
   userinfo[userinfo_len] = '\0';
 
@@ -238,6 +250,10 @@ int parse_double_colon_at_pattern(JSRT_URL* parsed, char** ptr) {
   char* host_start = last_at + 1;
   size_t host_len = authority_end - host_start;
   char* host_part = malloc(host_len + 1);
+  if (!host_part) {
+    free(userinfo);
+    return -1;
+  }
   strncpy(host_part, host_start, host_len);
   host_part[host_len] = '\0';
 
@@ -285,6 +301,11 @@ int parse_double_colon_at_pattern(JSRT_URL* parsed, char** ptr) {
       if (strlen(normalized_port) > 0) {
         size_t full_host_len = strlen(parsed->hostname) + strlen(normalized_port) + 2;
         parsed->host = malloc(full_host_len);
+        if (!parsed->host) {
+          free(host_part);
+          free(userinfo);
+          return -1;
+        }
         snprintf(parsed->host, full_host_len, "%s:%s", parsed->hostname, normalized_port);
       } else {
         parsed->host = strdup(parsed->hostname);
@@ -379,17 +400,51 @@ JSRT_URL* create_url_structure(void) {
   memset(parsed, 0, sizeof(JSRT_URL));
 
   // Initialize with empty strings to prevent NULL dereference
+  // Check each allocation and clean up on failure
   parsed->href = strdup("");
+  if (!parsed->href)
+    goto cleanup_and_fail;
+
   parsed->protocol = strdup("");
+  if (!parsed->protocol)
+    goto cleanup_and_fail;
+
   parsed->username = strdup("");
+  if (!parsed->username)
+    goto cleanup_and_fail;
+
   parsed->password = strdup("");
+  if (!parsed->password)
+    goto cleanup_and_fail;
+
   parsed->host = strdup("");
+  if (!parsed->host)
+    goto cleanup_and_fail;
+
   parsed->hostname = strdup("");
+  if (!parsed->hostname)
+    goto cleanup_and_fail;
+
   parsed->port = strdup("");
+  if (!parsed->port)
+    goto cleanup_and_fail;
+
   parsed->pathname = strdup("");
+  if (!parsed->pathname)
+    goto cleanup_and_fail;
+
   parsed->search = strdup("");
+  if (!parsed->search)
+    goto cleanup_and_fail;
+
   parsed->hash = strdup("");
+  if (!parsed->hash)
+    goto cleanup_and_fail;
+
   parsed->origin = strdup("");
+  if (!parsed->origin)
+    goto cleanup_and_fail;
+
   parsed->search_params = JS_UNDEFINED;
   parsed->ctx = NULL;
   parsed->has_password_field = 0;
@@ -398,6 +453,11 @@ JSRT_URL* create_url_structure(void) {
   parsed->has_authority_syntax = 0;
 
   return parsed;
+
+cleanup_and_fail:
+  // Free any already allocated strings
+  JSRT_FreeURL(parsed);
+  return NULL;
 }
 
 // Main URL parsing function (refactored)
@@ -458,6 +518,12 @@ JSRT_URL* parse_absolute_url(const char* preprocessed_url) {
   // Set protocol (scheme + ":") - normalize scheme to lowercase
   free(parsed->protocol);
   parsed->protocol = malloc(strlen(scheme) + 2);
+  if (!parsed->protocol) {
+    free(scheme);
+    free(url_copy);
+    JSRT_FreeURL(parsed);
+    return NULL;
+  }
   snprintf(parsed->protocol, strlen(scheme) + 2, "%s:", scheme);
   // Normalize scheme to lowercase per WHATWG URL spec
   for (size_t i = 0; parsed->protocol[i] != ':' && parsed->protocol[i] != '\0'; i++) {

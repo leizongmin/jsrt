@@ -664,6 +664,9 @@ char* url_path_encode_special(const char* str) {
   }
 
   char* encoded = malloc(encoded_len + 1);
+  if (!encoded) {
+    return NULL;
+  }
   size_t j = 0;
 
   for (size_t i = 0; i < len; i++) {
@@ -734,6 +737,9 @@ char* url_path_encode_file(const char* str) {
   }
 
   char* encoded = malloc(encoded_len + 1);
+  if (!encoded) {
+    return NULL;
+  }
   size_t j = 0;
 
   for (size_t i = 0; i < len; i++) {
@@ -791,6 +797,9 @@ char* url_component_encode_file_path(const char* str) {
   }
 
   char* encoded = malloc(encoded_len + 1);
+  if (!encoded) {
+    return NULL;
+  }
   size_t j = 0;
 
   for (size_t i = 0; i < len; i++) {

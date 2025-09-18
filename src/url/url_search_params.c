@@ -2,15 +2,36 @@
 
 // Helper function to create a parameter with proper length handling
 JSRT_URLSearchParam* create_url_param(const char* name, size_t name_len, const char* value, size_t value_len) {
+  if (!name || !value) {
+    return NULL;
+  }
+
   JSRT_URLSearchParam* param = malloc(sizeof(JSRT_URLSearchParam));
+  if (!param) {
+    return NULL;
+  }
+
   param->name = malloc(name_len + 1);
+  if (!param->name) {
+    free(param);
+    return NULL;
+  }
+
+  param->value = malloc(value_len + 1);
+  if (!param->value) {
+    free(param->name);
+    free(param);
+    return NULL;
+  }
+
   memcpy(param->name, name, name_len);
   param->name[name_len] = '\0';
   param->name_len = name_len;
-  param->value = malloc(value_len + 1);
+
   memcpy(param->value, value, value_len);
   param->value[value_len] = '\0';
   param->value_len = value_len;
+
   param->next = NULL;
   return param;
 }
@@ -53,6 +74,9 @@ void update_parent_url_href(JSRT_URLSearchParams* search_params) {
 
     // Build the string
     new_search_str = malloc(total_len + 1);
+    if (!new_search_str) {
+      return;  // Cannot update href, memory allocation failed
+    }
     new_search_str[0] = '\0';
     param = search_params->params;
     first = true;
@@ -80,6 +104,10 @@ void update_parent_url_href(JSRT_URLSearchParams* search_params) {
   if (strlen(new_search_str) > 0) {
     size_t search_len = strlen(new_search_str) + 2;  // +1 for '?', +1 for '\0'
     url->search = malloc(search_len);
+    if (!url->search) {
+      free(new_search_str);
+      return;  // Cannot update search, memory allocation failed
+    }
     snprintf(url->search, search_len, "?%s", new_search_str);
   } else {
     url->search = strdup("");
@@ -96,6 +124,10 @@ void update_parent_url_href(JSRT_URLSearchParams* search_params) {
   }
 
   url->href = malloc(href_len + 1);
+  if (!url->href) {
+    free(new_search_str);
+    return;  // Cannot update href, memory allocation failed
+  }
   int written = snprintf(url->href, href_len + 1, "%s//%s%s", url->protocol, url->host, url->pathname);
 
   if (url->search && strlen(url->search) > 0) {
@@ -125,6 +157,10 @@ void JSRT_FreeSearchParams(JSRT_URLSearchParams* search_params) {
 
 JSRT_URLSearchParams* JSRT_ParseSearchParams(const char* search_string, size_t string_len) {
   JSRT_URLSearchParams* search_params = malloc(sizeof(JSRT_URLSearchParams));
+  if (!search_params) {
+    return NULL;
+  }
+
   search_params->params = NULL;
   search_params->parent_url = NULL;
   search_params->ctx = NULL;
@@ -160,6 +196,10 @@ JSRT_URLSearchParams* JSRT_ParseSearchParams(const char* search_string, size_t s
       }
 
       JSRT_URLSearchParam* param = malloc(sizeof(JSRT_URLSearchParam));
+      if (!param) {
+        JSRT_FreeSearchParams(search_params);
+        return NULL;
+      }
       param->next = NULL;
 
       if (eq_pos < param_start + param_len) {
@@ -191,6 +231,10 @@ JSRT_URLSearchParams* JSRT_ParseSearchParams(const char* search_string, size_t s
 
 JSRT_URLSearchParams* JSRT_CreateEmptySearchParams(void) {
   JSRT_URLSearchParams* search_params = malloc(sizeof(JSRT_URLSearchParams));
+  if (!search_params) {
+    return NULL;
+  }
+
   search_params->params = NULL;
   search_params->parent_url = NULL;
   search_params->ctx = NULL;
@@ -198,9 +242,17 @@ JSRT_URLSearchParams* JSRT_CreateEmptySearchParams(void) {
 }
 
 void JSRT_AddSearchParam(JSRT_URLSearchParams* search_params, const char* name, const char* value) {
+  if (!search_params || !name || !value) {
+    return;
+  }
+
   size_t name_len = strlen(name);
   size_t value_len = strlen(value);
   JSRT_URLSearchParam* param = create_url_param(name, name_len, value, value_len);
+
+  if (!param) {
+    return;  // Failed to create parameter
+  }
 
   // Add at end to maintain insertion order
   if (!search_params->params) {
@@ -217,7 +269,15 @@ void JSRT_AddSearchParam(JSRT_URLSearchParams* search_params, const char* name, 
 // Length-aware version for handling strings with null bytes
 void JSRT_AddSearchParamWithLength(JSRT_URLSearchParams* search_params, const char* name, size_t name_len,
                                    const char* value, size_t value_len) {
+  if (!search_params || !name || !value) {
+    return;
+  }
+
   JSRT_URLSearchParam* param = create_url_param(name, name_len, value, value_len);
+
+  if (!param) {
+    return;  // Failed to create parameter
+  }
 
   // Add at end to maintain insertion order
   if (!search_params->params) {

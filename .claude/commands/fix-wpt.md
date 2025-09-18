@@ -1,4 +1,4 @@
-@agent-jsrt-developer Fix the failing cases of make wpt N=$1
+Fix the failing cases of make wpt N=$1
 
 ## 1. Pre-fix Baseline
 Execute `make wpt N=$1` to establish the initial baseline:

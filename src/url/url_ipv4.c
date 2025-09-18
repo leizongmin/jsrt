@@ -88,11 +88,11 @@ int looks_like_ipv4_address(const char* hostname) {
     return 0;
   }
 
-  // Check if this looks like an IPv4 address
-  // According to WHATWG URL spec, a hostname looks like IPv4 if:
-  // 1. Consists entirely of digits (pure numeric hostname)
-  // 2. OR has hex prefix (0x/0X) format
-  // 3. OR is dotted notation where each part is a valid number
+  // According to WHATWG URL spec, a hostname should be processed as IPv4 if:
+  // 1. It ends with a numeric segment (like "foo.123", "example.0x10")
+  // 2. It consists entirely of digits (pure numeric hostname like "123456")
+  // 3. It has hex prefix format (0x...)
+  // 4. It's dotted notation where the last part looks numeric
 
   int has_dots = strchr(normalized, '.') != NULL;
   int has_hex_prefix = strncmp(normalized, "0x", 2) == 0 || strncmp(normalized, "0X", 2) == 0;
@@ -133,50 +133,48 @@ int looks_like_ipv4_address(const char* hostname) {
     return 1;  // Valid hex format, looks like IPv4
   }
 
-  // Case 3: Dotted notation - check if each part is a valid number
-  // Note: has_hex_prefix checks if the whole string starts with 0x, but dotted notation
-  // can have individual parts that are hex (like "0x.0x.0")
+  // Case 3: Check if hostname ends with a numeric segment
+  // Per WHATWG URL spec, hostnames like "foo.123" should be processed as IPv4
   if (has_dots) {
-    char* input_copy = strdup(normalized);
-    char* part = strtok(input_copy, ".");
-    int valid_dotted = 1;
+    // Find the last segment after the rightmost dot
+    char* last_dot = strrchr(normalized, '.');
+    if (last_dot && *(last_dot + 1) != '\0') {  // Ensure there's something after the last dot
+      char* last_segment = last_dot + 1;
 
-    while (part && valid_dotted) {
-      // Each part must be a valid number (decimal, octal, or hex like "0x123")
-      if (strlen(part) == 0) {
-        valid_dotted = 0;  // Empty part
-        break;
-      }
+      // Check if the last segment is numeric (decimal or hex)
+      int is_numeric = 1;
 
-      // Check if this part is "0x" format
-      if (strncmp(part, "0x", 2) == 0 || strncmp(part, "0X", 2) == 0) {
-        // Hex format part - "0x" alone (without digits) is considered valid and equals 0
-        // Check remaining characters (if any)
-        if (strlen(part) > 2) {
-          for (size_t i = 2; i < strlen(part); i++) {
-            char c = part[i];
+      // Check for hex format in last segment (0x...)
+      if (strncmp(last_segment, "0x", 2) == 0 || strncmp(last_segment, "0X", 2) == 0) {
+        // Hex format - check if valid hex digits after 0x
+        if (strlen(last_segment) == 2) {
+          // Just "0x" is valid and equals 0
+          is_numeric = 1;
+        } else {
+          for (size_t i = 2; i < strlen(last_segment); i++) {
+            char c = last_segment[i];
             if (!((c >= '0' && c <= '9') || (c >= 'a' && c <= 'f') || (c >= 'A' && c <= 'F'))) {
-              valid_dotted = 0;
+              is_numeric = 0;
               break;
             }
           }
         }
-        // If strlen(part) == 2, it's just "0x" which is valid and equals 0
       } else {
-        // Decimal/octal format - check if all are digits
-        for (size_t i = 0; i < strlen(part); i++) {
-          if (part[i] < '0' || part[i] > '9') {
-            valid_dotted = 0;
+        // Decimal format - check if all characters are digits
+        for (size_t i = 0; i < strlen(last_segment); i++) {
+          if (last_segment[i] < '0' || last_segment[i] > '9') {
+            is_numeric = 0;
             break;
           }
         }
       }
-      part = strtok(NULL, ".");
-    }
 
-    free(input_copy);
-    free(normalized);
-    return valid_dotted;
+      if (is_numeric) {
+        // The last segment is numeric, so this should be processed as IPv4
+        free(normalized);
+        return 1;
+      }
+    }
   }
 
   // If none of the above cases match, it's not IPv4

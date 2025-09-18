@@ -13,6 +13,11 @@ int parse_authority(JSRT_URL* parsed, const char* authority_str) {
   if (!authority) {
     return -1;
   }
+
+  // Track whether authority contains special characters that indicate userinfo/port syntax
+  int authority_has_at_sign = (strchr(authority_str, '@') != NULL);
+  int authority_has_colon_in_host = 0;  // Will be set later for host-level colons
+
   char* at_pos = strrchr(authority, '@');  // Use rightmost @ to handle @ in userinfo
   char* host_part = authority;
 
@@ -97,6 +102,7 @@ int parse_authority(JSRT_URL* parsed, const char* authority_str) {
 
   if (port_colon && !is_file_drive) {  // Has port and not file drive
     *port_colon = '\0';
+    authority_has_colon_in_host = 1;  // Mark that we found colon in host section
 
     // Handle IPv6 addresses - extract the part inside brackets
     if (is_ipv6_with_port) {
@@ -419,32 +425,37 @@ int parse_authority(JSRT_URL* parsed, const char* authority_str) {
     parsed->hostname = final_processed_hostname;
   }
 
-  // Validate that special schemes (except file:) have non-empty hostnames
-  // Per WHATWG URL spec, special schemes like http, https, ws, wss, ftp require hosts
-  if (is_special_scheme(parsed->protocol) && strcmp(parsed->protocol, "file:") != 0 && strlen(parsed->hostname) == 0) {
-    goto cleanup_and_return_error;  // Empty host for special scheme (not file:) is invalid
-  }
-
-  // Validate that URLs with authority syntax but empty hostnames are invalid
-  // If we parsed an authority section (indicated by has_authority_syntax flag) but ended up
-  // with empty hostname, this is typically invalid per WHATWG URL spec
-  if (parsed->has_authority_syntax && strlen(parsed->hostname) == 0) {
-    // Allow certain exceptions:
-    // 1. file: URLs can have empty hostnames (file:/// is valid)
-    // 2. URLs without any authority components (no userinfo, no port, no hostname)
+  // Enhanced validation for URLs with empty hostnames per WHATWG URL spec
+  if (strlen(parsed->hostname) == 0) {
     int has_userinfo = (strlen(parsed->username) > 0 || strlen(parsed->password) > 0 || parsed->has_password_field);
     int has_port = (strlen(parsed->port) > 0);
 
-    if (strcmp(parsed->protocol, "file:") != 0 && (has_userinfo || has_port)) {
-      // Non-file URLs with authority syntax but empty hostname and userinfo/port are invalid
+    // Case 1: Special schemes (except file:) MUST have non-empty hostnames
+    if (is_special_scheme(parsed->protocol) && strcmp(parsed->protocol, "file:") != 0) {
+      goto cleanup_and_return_error;  // Empty host for special scheme (not file:) is invalid
+    }
+
+    // Case 2: Any URL with userinfo but empty hostname is invalid (per WPT tests)
+    // URLs like "sc://@/", "sc://user@/", "sc://:pass@/" should fail
+    if (has_userinfo) {
       goto cleanup_and_return_error;
     }
-  }
 
-  // Validate that empty hostnames cannot have ports per WHATWG URL spec
-  // URLs like "data://:443" should fail
-  if (strlen(parsed->hostname) == 0 && strlen(parsed->port) > 0) {
-    goto cleanup_and_return_error;  // Empty hostname with port is invalid
+    // Case 3: Any URL with port but empty hostname is invalid (per WPT tests)
+    // URLs like "sc://:/", "data://:443" should fail
+    if (has_port) {
+      goto cleanup_and_return_error;
+    }
+
+    // Case 4: Authority contained @ or : but resulted in empty hostname - this is invalid per WPT
+    // This catches cases like "sc://@/" (has @) and "sc://:/" (has :)
+    if (authority_has_at_sign) {
+      goto cleanup_and_return_error;  // Empty hostname after @ is invalid
+    }
+
+    if (authority_has_colon_in_host) {
+      goto cleanup_and_return_error;  // Empty hostname with colon is invalid
+    }
   }
 
   // Set host field

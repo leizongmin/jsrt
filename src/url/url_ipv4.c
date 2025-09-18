@@ -156,11 +156,31 @@ int looks_like_ipv4_address(const char* hostname) {
         char* token = strtok(parts_copy, ".");
         int all_numeric = 1;
         while (token && all_numeric) {
-          for (size_t i = 0; i < strlen(token); i++) {
-            if (token[i] < '0' || token[i] > '9') {
-              all_numeric = 0;
-              break;
+          // Check if this token is numeric (decimal, octal, or hex)
+          int token_numeric = 1;
+
+          // Check for hex format (0x...)
+          if (strlen(token) >= 2 && (strncmp(token, "0x", 2) == 0 || strncmp(token, "0X", 2) == 0)) {
+            // Hex format - check if valid hex digits after 0x
+            for (size_t i = 2; i < strlen(token); i++) {
+              char c = token[i];
+              if (!((c >= '0' && c <= '9') || (c >= 'a' && c <= 'f') || (c >= 'A' && c <= 'F'))) {
+                token_numeric = 0;
+                break;
+              }
             }
+          } else {
+            // Decimal format - check if all characters are digits
+            for (size_t i = 0; i < strlen(token); i++) {
+              if (token[i] < '0' || token[i] > '9') {
+                token_numeric = 0;
+                break;
+              }
+            }
+          }
+
+          if (!token_numeric) {
+            all_numeric = 0;
           }
           token = strtok(NULL, ".");
         }

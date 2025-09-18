@@ -191,7 +191,42 @@ JSRT_URL* handle_protocol_relative(const char* cleaned_url, const char* base) {
 // Handle empty URL string resolution
 JSRT_URL* handle_empty_url(const char* base) {
   if (base) {
-    return JSRT_ParseURL(base, NULL);  // Parse base URL as absolute
+    // Parse base URL first
+    JSRT_URL* base_url = JSRT_ParseURL(base, NULL);
+    if (!base_url) {
+      return NULL;
+    }
+
+    // Create a new URL without query and fragment per WHATWG URL spec
+    // An empty URL resolves to the base URL without its query and fragment
+    size_t new_url_len = strlen(base_url->protocol) + strlen(base_url->host) + strlen(base_url->pathname) +
+                         strlen(base_url->username) + strlen(base_url->password) +
+                         50;  // Extra safety margin for separators
+    char* new_url = malloc(new_url_len);
+    if (!new_url) {
+      JSRT_FreeURL(base_url);
+      return NULL;
+    }
+
+    // Build URL without query and fragment
+    if (strlen(base_url->username) > 0 || strlen(base_url->password) > 0) {
+      if (strlen(base_url->password) > 0) {
+        snprintf(new_url, new_url_len, "%s//%s:%s@%s%s", base_url->protocol, base_url->username, base_url->password,
+                 base_url->host, base_url->pathname);
+      } else {
+        snprintf(new_url, new_url_len, "%s//%s@%s%s", base_url->protocol, base_url->username, base_url->host,
+                 base_url->pathname);
+      }
+    } else {
+      snprintf(new_url, new_url_len, "%s//%s%s", base_url->protocol, base_url->host, base_url->pathname);
+    }
+
+    JSRT_FreeURL(base_url);
+
+    // Parse the new URL without query/fragment
+    JSRT_URL* result = JSRT_ParseURL(new_url, NULL);
+    free(new_url);
+    return result;
   } else {
     return NULL;  // Empty URL with no base is invalid
   }

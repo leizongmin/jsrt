@@ -8,8 +8,8 @@ int jsrt_argc = 0;
 char* jsrt_argv0 = NULL;
 struct timeval jsrt_start_time = {0, 0};
 
-// Global process module object
-static JSValue g_process_module = JS_UNDEFINED;
+// Global process module object - initialize with zero, set to JS_UNDEFINED at runtime
+static JSValue g_process_module = {0};
 
 // Initialize the unified process module
 JSValue jsrt_init_unified_process_module(JSContext* ctx) {
@@ -77,7 +77,8 @@ JSValue jsrt_init_unified_process_module(JSContext* ctx) {
 
 // Get the unified process module (for jsrt:process)
 JSValue jsrt_get_process_module(JSContext* ctx) {
-  if (JS_IsUndefined(g_process_module)) {
+  // Check if module is uninitialized (zero-initialized or JS_UNDEFINED)
+  if (g_process_module.tag == 0 || JS_IsUndefined(g_process_module)) {
     return jsrt_init_unified_process_module(ctx);
   }
   return JS_DupValue(ctx, g_process_module);
@@ -101,9 +102,9 @@ JSValue node_init_module_process(JSContext* ctx) {
 
 // Cleanup function
 void jsrt_process_cleanup(JSContext* ctx) {
-  if (!JS_IsUndefined(g_process_module)) {
+  if (g_process_module.tag != 0 && !JS_IsUndefined(g_process_module)) {
     JS_FreeValue(ctx, g_process_module);
-    g_process_module = JS_UNDEFINED;
+    g_process_module = (JSValue){0};
   }
 }
 

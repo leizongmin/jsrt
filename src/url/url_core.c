@@ -2,10 +2,7 @@
 #include <errno.h>
 #include "url.h"
 
-// Include the new modular components
-#include "url_builder.c"
-#include "url_parser.c"
-#include "url_preprocessor.c"
+// The modular components are compiled separately - no need to include .c files
 
 // Free URL structure
 void JSRT_FreeURL(JSRT_URL* url) {

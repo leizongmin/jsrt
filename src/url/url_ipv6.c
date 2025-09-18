@@ -99,9 +99,16 @@ char* canonicalize_ipv6(const char* ipv6_str) {
   }
 
   // Check for invalid characters (anything other than hex digits, colons, and dots for IPv4)
+  // Per WHATWG URL spec, percent-encoded characters are not allowed in IPv6 addresses
   for (size_t i = 0; i < addr_len; i++) {
     char c = addr[i];
     if (!(isxdigit(c) || c == ':' || c == '.')) {
+      // Specifically reject percent-encoded sequences in IPv6 addresses
+      if (c == '%') {
+        // IPv6 addresses must not contain percent-encoded characters
+        free(addr);
+        return NULL;
+      }
       free(addr);
       return NULL;
     }

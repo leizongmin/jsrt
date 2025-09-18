@@ -383,11 +383,24 @@ int parse_normal_authority(JSRT_URL* parsed, char** ptr) {
       free(authority);
       return -1;
     }
-
     free(authority);
-    *ptr = authority_end;
+  } else {
+    // For empty authority, we need to validate whether this is allowed
+    // Special schemes (except file:) must have non-empty hostnames
+    if (parsed->protocol && is_special_scheme(parsed->protocol) && strcmp(parsed->protocol, "file:") != 0) {
+      return -1;  // Empty authority for special scheme (not file:) is invalid
+    }
+
+    // For non-special schemes or file:, set empty hostname and host
+    free(parsed->hostname);
+    parsed->hostname = strdup("");
+    free(parsed->host);
+    parsed->host = strdup("");
+    free(parsed->port);
+    parsed->port = strdup("");
   }
 
+  *ptr = authority_end;
   return 0;
 }
 

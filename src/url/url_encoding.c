@@ -566,10 +566,12 @@ char* url_decode_hostname(const char* str) {
       if (h1 >= 0 && h2 >= 0) {
         unsigned char byte = (unsigned char)((h1 << 4) | h2);
 
-        // Check for forbidden characters in hostnames
-        if (byte == 0x00 || byte == 0x09 || byte == 0x0A || byte == 0x0D || byte == 0x20 || byte == '#' ||
-            byte == '%' || byte == '/' || byte == ':' || byte == '?' || byte == '@' || byte == '[' || byte == '\\' ||
-            byte == ']') {
+        // Check for forbidden characters in hostnames per WHATWG URL spec
+        // Control characters (0x00-0x1F, 0x7F-0x9F) and non-breaking space (0xA0) are forbidden
+        // Special hostname delimiter characters are also forbidden
+        if (byte <= 0x20 || byte == 0x7F || (byte >= 0x80 && byte <= 0xA0) || byte == '#' || byte == '%' ||
+            byte == '/' || byte == ':' || byte == '?' || byte == '@' || byte == '[' || byte == '\\' || byte == ']' ||
+            byte == '^' || byte == '|' || byte == '`' || byte == '<' || byte == '>') {
           // Forbidden character found, reject the hostname
           free(decoded);
           return NULL;

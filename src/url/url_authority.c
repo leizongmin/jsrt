@@ -132,10 +132,10 @@ int parse_authority(JSRT_URL* parsed, const char* authority_str) {
             snprintf(parsed->hostname, strlen(canonical_ipv6) + 3, "[%s]", canonical_ipv6);
             free(canonical_ipv6);
           } else {
-            // Invalid IPv6 address - still decode it
-            char* decoded_host = url_decode_hostname(host_part);
-            free(parsed->hostname);
-            parsed->hostname = decoded_host ? decoded_host : strdup(host_part);
+            // Invalid IPv6 address - reject it entirely
+            // Per WHATWG URL spec, IPv6 addresses must not contain percent-encoded characters
+            free(ipv6_part);
+            goto cleanup_and_return_error;
           }
           free(ipv6_part);
         } else {
@@ -258,9 +258,10 @@ int parse_authority(JSRT_URL* parsed, const char* authority_str) {
           snprintf(final_hostname, strlen(canonical_ipv6) + 3, "[%s]", canonical_ipv6);
           free(canonical_ipv6);
         } else {
-          // Invalid IPv6 address - still decode it
-          char* decoded_host = url_decode_hostname(host_part);
-          final_hostname = decoded_host ? decoded_host : strdup(host_part);
+          // Invalid IPv6 address - reject it entirely
+          // Per WHATWG URL spec, IPv6 addresses must not contain percent-encoded characters
+          free(ipv6_part);
+          goto cleanup_and_return_error;
         }
         free(parsed->hostname);
         parsed->hostname = final_hostname;

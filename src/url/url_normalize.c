@@ -450,10 +450,20 @@ char* remove_all_ascii_whitespace(const char* url) {
         unsigned char third = (unsigned char)url[i + 2];
         if (third == 0x8B || third == 0x8C || third == 0x8D) {
           i += 3;  // Skip zero-width character
+          // Check for consecutive slashes after removal
+          if (j > 0 && result[j - 1] == '/' && i < len && url[i] == '/') {
+            // Skip the next slash to prevent double slashes
+            i++;
+          }
           continue;
         }
       } else if (c == 0xE2 && (unsigned char)url[i + 1] == 0x81 && (unsigned char)url[i + 2] == 0xA0) {
         i += 3;  // Skip Word Joiner (U+2060)
+        // Check for consecutive slashes after removal
+        if (j > 0 && result[j - 1] == '/' && i < len && url[i] == '/') {
+          // Skip the next slash to prevent double slashes
+          i++;
+        }
         continue;
       }
     }
@@ -462,11 +472,9 @@ char* remove_all_ascii_whitespace(const char* url) {
     if (c == 0xEF && i + 2 < len && (unsigned char)url[i + 1] == 0xBB && (unsigned char)url[i + 2] == 0xBF) {
       i += 3;  // Skip BOM character
       // Check for consecutive slashes after BOM removal
-      // If we just removed BOM and the previous char was '/' and next char is '/', skip one slash
       if (j > 0 && result[j - 1] == '/' && i < len && url[i] == '/') {
-        // Don't add the next slash, it will be added in the next iteration
-        // This collapses "/BOM/" to "/" instead of "//"
-        continue;
+        // Skip the next slash to prevent double slashes from BOM removal
+        i++;
       }
       continue;
     }

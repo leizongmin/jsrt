@@ -139,7 +139,7 @@ int looks_like_ipv4_address(const char* hostname) {
     // First check for trailing dot case (like "1.2.3.4.")
     size_t len = strlen(normalized);
     if (len > 0 && normalized[len - 1] == '.') {
-      // Has trailing dot - this should be processed as IPv4 so it can be rejected
+      // Has trailing dot - this should be processed as IPv4 (trailing dot will be removed in canonicalize)
       // Check if all segments before the trailing dot are numeric
       char* without_dot = malloc(len);
       if (!without_dot) {
@@ -148,6 +148,13 @@ int looks_like_ipv4_address(const char* hostname) {
       }
       strncpy(without_dot, normalized, len - 1);
       without_dot[len - 1] = '\0';
+
+      // If empty after removing dot, not IPv4
+      if (strlen(without_dot) == 0) {
+        free(without_dot);
+        free(normalized);
+        return 0;
+      }
 
       // Check if the part without trailing dot looks like IPv4
       int result = 0;
@@ -300,11 +307,17 @@ char* canonicalize_ipv4_address(const char* input) {
       return NULL;  // Invalid IPv4 - consecutive dots
     }
 
-    // Check for trailing dot which makes IPv4 addresses invalid per WHATWG URL spec
+    // Handle trailing dot per WHATWG URL spec: remove it and continue parsing
     size_t len = strlen(normalized_input);
     if (len > 0 && normalized_input[len - 1] == '.') {
-      free(normalized_input);
-      return NULL;  // Invalid IPv4 - trailing dot
+      // Remove the trailing dot and continue parsing
+      normalized_input[len - 1] = '\0';
+      len--;
+      // If removing the dot makes it empty, that's invalid
+      if (len == 0) {
+        free(normalized_input);
+        return NULL;
+      }
     }
 
     // Parse dotted notation (may include hex/octal parts) using normalized input

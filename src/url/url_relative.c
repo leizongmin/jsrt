@@ -276,10 +276,40 @@ JSRT_URL* resolve_relative_url(const char* url, const char* base) {
     }
     // For non-special schemes, handle relative paths differently
     else if (!is_special) {
-      // Non-special schemes: simple concatenation without directory resolution
-      // According to WHATWG URL spec, non-special schemes preserve relative paths as-is
-      char* encoded_path_copy = url_nonspecial_path_encode(path_copy);
-      result->pathname = encoded_path_copy;
+      // Non-special schemes still need proper relative path resolution
+      // According to WHATWG URL spec, relative resolution works for all schemes
+      const char* base_pathname = base_url->pathname;
+      char* last_slash = strrchr(base_pathname, '/');
+
+      if (last_slash == NULL || last_slash == base_pathname) {
+        // No directory or root directory - treat as root-level relative
+        char* temp_pathname = malloc(strlen(path_copy) + 2);
+        if (!temp_pathname) {
+          free(path_copy);
+          JSRT_FreeURL(base_url);
+          JSRT_FreeURL(result);
+          return NULL;
+        }
+        snprintf(temp_pathname, strlen(path_copy) + 2, "/%s", path_copy);
+        result->pathname = url_nonspecial_path_encode(temp_pathname);
+        free(temp_pathname);
+      } else {
+        // Copy base directory and append relative path
+        size_t dir_len = last_slash - base_pathname;         // Length up to but not including last slash
+        size_t total_len = dir_len + strlen(path_copy) + 3;  // dir + '/' + relative_path + '\0'
+        char* temp_pathname = malloc(total_len);
+        if (!temp_pathname) {
+          free(path_copy);
+          JSRT_FreeURL(base_url);
+          JSRT_FreeURL(result);
+          return NULL;
+        }
+        strncpy(temp_pathname, base_pathname, dir_len);
+        temp_pathname[dir_len] = '/';
+        snprintf(temp_pathname + dir_len + 1, total_len - dir_len - 1, "%s", path_copy);
+        result->pathname = url_nonspecial_path_encode(temp_pathname);
+        free(temp_pathname);
+      }
     } else {
       // Special schemes: traditional directory-based resolution
       const char* base_pathname = base_url->pathname;

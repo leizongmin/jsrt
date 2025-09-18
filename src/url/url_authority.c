@@ -425,6 +425,22 @@ int parse_authority(JSRT_URL* parsed, const char* authority_str) {
     goto cleanup_and_return_error;  // Empty host for special scheme (not file:) is invalid
   }
 
+  // Validate that URLs with authority syntax but empty hostnames are invalid
+  // If we parsed an authority section (indicated by has_authority_syntax flag) but ended up
+  // with empty hostname, this is typically invalid per WHATWG URL spec
+  if (parsed->has_authority_syntax && strlen(parsed->hostname) == 0) {
+    // Allow certain exceptions:
+    // 1. file: URLs can have empty hostnames (file:/// is valid)
+    // 2. URLs without any authority components (no userinfo, no port, no hostname)
+    int has_userinfo = (strlen(parsed->username) > 0 || strlen(parsed->password) > 0 || parsed->has_password_field);
+    int has_port = (strlen(parsed->port) > 0);
+
+    if (strcmp(parsed->protocol, "file:") != 0 && (has_userinfo || has_port)) {
+      // Non-file URLs with authority syntax but empty hostname and userinfo/port are invalid
+      goto cleanup_and_return_error;
+    }
+  }
+
   // Validate that empty hostnames cannot have ports per WHATWG URL spec
   // URLs like "data://:443" should fail
   if (strlen(parsed->hostname) == 0 && strlen(parsed->port) > 0) {

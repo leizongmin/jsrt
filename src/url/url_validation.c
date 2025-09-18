@@ -196,10 +196,11 @@ int validate_hostname_characters_with_scheme(const char* hostname, const char* s
   for (const char* p = hostname; *p; p++) {
     unsigned char c = (unsigned char)*p;
 
-    // Per WPT tests, many special characters are allowed in hostnames for non-special schemes
-    // Only reject characters that would truly break URL parsing structure
-    if (c == '#' || c == '/' || c == '?' || c == '@' || c == '[' || c == ']') {
-      return 0;  // Invalid hostname character that breaks URL structure
+    // Per WPT tests, many special characters must be rejected in hostnames
+    // Reject characters that are forbidden in hostnames according to WHATWG URL spec
+    if (c == '#' || c == '/' || c == '?' || c == '@' || c == '[' || c == ']' || c == ' ' || c == '<' || c == '>' ||
+        c == '\\' || c == '^' || c == '|') {
+      return 0;  // Invalid hostname character
     }
 
     // Special handling for % - different rules for different schemes
@@ -375,13 +376,11 @@ int validate_hostname_characters_allow_at(const char* hostname, int allow_at) {
   for (const char* p = hostname; *p; p++) {
     unsigned char c = (unsigned char)*p;
 
-    // Per WPT tests, many special characters are allowed in hostnames for non-special schemes
-    // Only reject characters that would truly break URL parsing structure
-    // For non-special schemes like sc:// and foo://, allow most special characters
-    // Characters like !"$&'()*+,-.;=_`{}~ should be allowed per WHATWG URL spec
-    // Only reject characters that would break basic URL structure parsing
-    if (c == '#' || c == '/' || c == '?' || (!allow_at && c == '@') || c == '[' || c == ']') {
-      return 0;  // Invalid hostname character that breaks URL structure
+    // Per WPT tests, many special characters must be rejected in hostnames
+    // Reject characters that are forbidden in hostnames according to WHATWG URL spec
+    if (c == '#' || c == '/' || c == '?' || (!allow_at && c == '@') || c == '[' || c == ']' || c == ' ' || c == '<' ||
+        c == '>' || c == '\\' || c == '^' || c == '|') {
+      return 0;  // Invalid hostname character
     }
 
     // Special handling for % - allow it for percent-encoded characters

@@ -461,6 +461,13 @@ char* remove_all_ascii_whitespace(const char* url) {
     // Check for Zero Width No-Break Space (U+FEFF) / BOM: 0xEF 0xBB 0xBF
     if (c == 0xEF && i + 2 < len && (unsigned char)url[i + 1] == 0xBB && (unsigned char)url[i + 2] == 0xBF) {
       i += 3;  // Skip BOM character
+      // Check for consecutive slashes after BOM removal
+      // If we just removed BOM and the previous char was '/' and next char is '/', skip one slash
+      if (j > 0 && result[j - 1] == '/' && i < len && url[i] == '/') {
+        // Don't add the next slash, it will be added in the next iteration
+        // This collapses "/BOM/" to "/" instead of "//"
+        continue;
+      }
       continue;
     }
 

@@ -553,7 +553,14 @@ char* url_decode_hostname(const char* str) {
   size_t i = 0, j = 0;
 
   while (i < len) {
-    if (str[i] == '%' && i + 2 < len) {
+    if (str[i] == '%') {
+      // Percent encoding must be complete and valid
+      if (i + 2 >= len) {
+        // Incomplete percent encoding at end of string
+        free(decoded);
+        return NULL;
+      }
+
       int h1 = hex_to_int(str[i + 1]);
       int h2 = hex_to_int(str[i + 2]);
       if (h1 >= 0 && h2 >= 0) {
@@ -571,6 +578,10 @@ char* url_decode_hostname(const char* str) {
         decoded[j++] = byte;
         i += 3;
         continue;
+      } else {
+        // Invalid percent encoding (e.g., %zz, %3g) - reject the hostname
+        free(decoded);
+        return NULL;
       }
     }
     decoded[j++] = str[i++];

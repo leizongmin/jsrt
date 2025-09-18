@@ -136,6 +136,44 @@ int looks_like_ipv4_address(const char* hostname) {
   // Case 3: Check if hostname ends with a numeric segment
   // Per WHATWG URL spec, hostnames like "foo.123" should be processed as IPv4
   if (has_dots) {
+    // First check for trailing dot case (like "1.2.3.4.")
+    size_t len = strlen(normalized);
+    if (len > 0 && normalized[len - 1] == '.') {
+      // Has trailing dot - this should be processed as IPv4 so it can be rejected
+      // Check if all segments before the trailing dot are numeric
+      char* without_dot = malloc(len);
+      if (!without_dot) {
+        free(normalized);
+        return 0;
+      }
+      strncpy(without_dot, normalized, len - 1);
+      without_dot[len - 1] = '\0';
+
+      // Check if the part without trailing dot looks like IPv4
+      int result = 0;
+      char* parts_copy = strdup(without_dot);
+      if (parts_copy) {
+        char* token = strtok(parts_copy, ".");
+        int all_numeric = 1;
+        while (token && all_numeric) {
+          for (size_t i = 0; i < strlen(token); i++) {
+            if (token[i] < '0' || token[i] > '9') {
+              all_numeric = 0;
+              break;
+            }
+          }
+          token = strtok(NULL, ".");
+        }
+        result = all_numeric;
+        free(parts_copy);
+      }
+      free(without_dot);
+      if (result) {
+        free(normalized);
+        return 1;  // Looks like IPv4 with trailing dot
+      }
+    }
+
     // Find the last segment after the rightmost dot
     char* last_dot = strrchr(normalized, '.');
     if (last_dot && *(last_dot + 1) != '\0') {  // Ensure there's something after the last dot
@@ -240,6 +278,13 @@ char* canonicalize_ipv4_address(const char* input) {
     if (strstr(normalized_input, "..")) {
       free(normalized_input);
       return NULL;  // Invalid IPv4 - consecutive dots
+    }
+
+    // Check for trailing dot which makes IPv4 addresses invalid per WHATWG URL spec
+    size_t len = strlen(normalized_input);
+    if (len > 0 && normalized_input[len - 1] == '.') {
+      free(normalized_input);
+      return NULL;  // Invalid IPv4 - trailing dot
     }
 
     // Parse dotted notation (may include hex/octal parts) using normalized input

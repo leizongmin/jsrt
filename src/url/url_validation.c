@@ -201,7 +201,28 @@ int validate_hostname_characters_with_scheme(const char* hostname, const char* s
     if (c == '%') {
       // Check if this is part of a valid percent-encoded sequence
       if (p + 2 < hostname + len && hex_to_int(p[1]) >= 0 && hex_to_int(p[2]) >= 0) {
-        // Valid percent-encoded sequence, skip it
+        // Valid percent-encoded sequence - check if it decodes to forbidden characters
+        int hex1 = hex_to_int(p[1]);
+        int hex2 = hex_to_int(p[2]);
+        int decoded_value = (hex1 << 4) | hex2;
+
+        // For special schemes, reject percent-encoded characters that should cause failure
+        if (is_special) {
+          // Reject percent-encoded characters >= 0x80 (non-ASCII) in hostnames for special schemes
+          // Per WHATWG URL spec, these should cause host parsing to fail
+          if (decoded_value >= 0x80) {
+            return 0;  // Invalid percent-encoded non-ASCII character in hostname
+          }
+          // Reject percent-encoded tab, newline, carriage return
+          if (decoded_value == 0x09 || decoded_value == 0x0A || decoded_value == 0x0D) {
+            return 0;  // Percent-encoded whitespace not allowed
+          }
+          // Reject percent-encoded space (0x20) in hostnames
+          if (decoded_value == 0x20) {
+            return 0;  // Percent-encoded space not allowed in hostname
+          }
+        }
+
         p += 2;
         continue;
       } else {
@@ -251,6 +272,31 @@ int validate_hostname_characters_with_scheme(const char* hostname, const char* s
       // Unicode replacement character (U+FFFD): 0xEF 0xBF 0xBD
       if (c == 0xEF && p + 2 < hostname + len && (unsigned char)*(p + 1) == 0xBF && (unsigned char)*(p + 2) == 0xBD) {
         return 0;  // Replacement character not allowed
+      }
+
+      // Ideographic space (U+3000): 0xE3 0x80 0x80 - should be rejected in hostnames
+      if (c == 0xE3 && p + 2 < hostname + len && (unsigned char)*(p + 1) == 0x80 && (unsigned char)*(p + 2) == 0x80) {
+        return 0;  // Ideographic space not allowed in hostnames
+      }
+
+      // Fullwidth percent sign (U+FF05): 0xEF 0xBC 0x85 - should be rejected
+      if (c == 0xEF && p + 2 < hostname + len && (unsigned char)*(p + 1) == 0xBC && (unsigned char)*(p + 2) == 0x85) {
+        return 0;  // Fullwidth percent sign not allowed
+      }
+
+      // Zero Width Space (U+200B): 0xE2 0x80 0x8B
+      if (c == 0xE2 && p + 2 < hostname + len && (unsigned char)*(p + 1) == 0x80 && (unsigned char)*(p + 2) == 0x8B) {
+        return 0;  // Zero width space not allowed
+      }
+
+      // Zero Width No-Break Space (U+FEFF): 0xEF 0xBB 0xBF
+      if (c == 0xEF && p + 2 < hostname + len && (unsigned char)*(p + 1) == 0xBB && (unsigned char)*(p + 2) == 0xBF) {
+        return 0;  // Zero width no-break space not allowed
+      }
+
+      // Word Joiner (U+2060): 0xE2 0x81 0xA0
+      if (c == 0xE2 && p + 2 < hostname + len && (unsigned char)*(p + 1) == 0x81 && (unsigned char)*(p + 2) == 0xA0) {
+        return 0;  // Word joiner not allowed
       }
 
       // Allow Unicode characters in hostnames for international domain names (IDN)

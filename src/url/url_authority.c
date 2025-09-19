@@ -9,6 +9,10 @@ int parse_authority(JSRT_URL* parsed, const char* authority_str) {
     return -1;
   }
 
+#ifdef DEBUG
+  fprintf(stderr, "[DEBUG] parse_authority: authority_str='%s'\n", authority_str);
+#endif
+
   char* authority = strdup(authority_str);
   if (!authority) {
     return -1;
@@ -139,11 +143,19 @@ int parse_authority(JSRT_URL* parsed, const char* authority_str) {
           }
           free(ipv6_part);
         } else {
+          // Pre-validate hostname before decoding to catch invalid percent-encoding
+          if (!validate_hostname_characters_with_scheme(host_part, parsed->protocol)) {
+            goto cleanup_and_return_error;
+          }
           char* decoded_host = url_decode_hostname(host_part);
           free(parsed->hostname);
           parsed->hostname = decoded_host ? decoded_host : strdup(host_part);
         }
       } else {
+        // Pre-validate hostname before decoding to catch invalid percent-encoding
+        if (!validate_hostname_characters_with_scheme(host_part, parsed->protocol)) {
+          goto cleanup_and_return_error;
+        }
         char* decoded_host = url_decode_hostname(host_part);
         free(parsed->hostname);
         parsed->hostname = decoded_host ? decoded_host : strdup(host_part);
@@ -267,6 +279,14 @@ int parse_authority(JSRT_URL* parsed, const char* authority_str) {
         parsed->hostname = final_hostname;
         free(ipv6_part);
       } else {
+        // Pre-validate hostname before decoding to catch invalid percent-encoding
+        if (!validate_hostname_characters_with_scheme(host_part, parsed->protocol)) {
+          goto cleanup_and_return_error;
+        }
+        // Pre-validate hostname before decoding to catch invalid percent-encoding
+        if (!validate_hostname_characters_with_scheme(host_part, parsed->protocol)) {
+          goto cleanup_and_return_error;
+        }
         char* decoded_host = url_decode_hostname(host_part);
         char* final_hostname = decoded_host ? decoded_host : strdup(host_part);
         free(parsed->hostname);

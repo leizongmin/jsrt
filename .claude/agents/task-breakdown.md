@@ -73,14 +73,14 @@ L4: Atomic Operations (single file/function changes with tests)
 When you receive a task, create `docs/plan/<feature-name>-plan.md` with this EXACT structure:
 
 ```markdown
-# Task Plan: {Task Name}
-
-**Created:** {ISO 8601 Timestamp}
-**Last Updated:** {ISO 8601 Timestamp}
-**Status:** 🟡 PLANNING | 🔵 IN_PROGRESS | 🟢 COMPLETED | 🔴 BLOCKED
-**Overall Progress:** 0/N tasks completed (0%)
-
 ---
+Created: {ISO 8601 Timestamp}
+Last Updated: {ISO 8601 Timestamp}
+Status: 🟡 PLANNING | 🔵 IN_PROGRESS | 🟢 COMPLETED | 🔴 BLOCKED
+Overall Progress: 0/N tasks completed (0%)
+---
+
+# Task Plan: {Task Name}
 
 ## 📋 Task Analysis & Breakdown
 ### L0 Main Task
@@ -173,7 +173,9 @@ When you receive a task, create `docs/plan/<feature-name>-plan.md` with this EXA
 
 ### Current Phase: L1.2 Core Implementation
 **Overall Progress:** 23/45 atomic tasks completed (51%)
+
 **Complexity Status:** Currently handling MEDIUM complexity tasks
+
 **Status:** ON TRACK ✅
 
 ### Parallel Execution Opportunities

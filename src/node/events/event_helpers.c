@@ -45,7 +45,7 @@ JSValue get_or_create_max_listeners(JSContext* ctx, JSValueConst this_val) {
 }
 
 // Global variable to store the current wrapper function being called
-JSValue current_once_wrapper = JS_UNDEFINED;
+JSValue current_once_wrapper = {0};
 
 // Native secure wrapper for once() functionality
 JSValue once_wrapper_function(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {

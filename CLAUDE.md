@@ -123,6 +123,10 @@ SHOW_ALL_FAILURES=1 make wpt N=console > target/tmp/debug.log 2>&1
 | **Examples** | `examples/` | Demo scripts |
 | **Modules** | `src/std/` | Standard library |
 
+### Code Organization Guidelines
+- **Test files**: Keep test output minimal - only print on failures or warnings
+- **Source files**: If a single file exceeds 500 lines, refactor into multiple files within a subdirectory
+
 ## Development Workflow
 
 ```bash

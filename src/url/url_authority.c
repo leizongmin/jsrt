@@ -147,7 +147,7 @@ int parse_authority(JSRT_URL* parsed, const char* authority_str) {
           if (!validate_hostname_characters_with_scheme(host_part, parsed->protocol)) {
             goto cleanup_and_return_error;
           }
-          char* decoded_host = url_decode_hostname(host_part);
+          char* decoded_host = url_decode_hostname_with_scheme(host_part, parsed->protocol);
           free(parsed->hostname);
           parsed->hostname = decoded_host ? decoded_host : strdup(host_part);
         }
@@ -156,7 +156,7 @@ int parse_authority(JSRT_URL* parsed, const char* authority_str) {
         if (!validate_hostname_characters_with_scheme(host_part, parsed->protocol)) {
           goto cleanup_and_return_error;
         }
-        char* decoded_host = url_decode_hostname(host_part);
+        char* decoded_host = url_decode_hostname_with_scheme(host_part, parsed->protocol);
         free(parsed->hostname);
         parsed->hostname = decoded_host ? decoded_host : strdup(host_part);
         if (!parsed->hostname) {
@@ -165,7 +165,7 @@ int parse_authority(JSRT_URL* parsed, const char* authority_str) {
       }
     } else {
       // Decode percent-encoded hostname first
-      char* decoded_host = url_decode_hostname(host_part);
+      char* decoded_host = url_decode_hostname_with_scheme(host_part, parsed->protocol);
       if (!decoded_host) {
         goto cleanup_and_return_error;
       }
@@ -287,14 +287,14 @@ int parse_authority(JSRT_URL* parsed, const char* authority_str) {
         if (!validate_hostname_characters_with_scheme(host_part, parsed->protocol)) {
           goto cleanup_and_return_error;
         }
-        char* decoded_host = url_decode_hostname(host_part);
+        char* decoded_host = url_decode_hostname_with_scheme(host_part, parsed->protocol);
         char* final_hostname = decoded_host ? decoded_host : strdup(host_part);
         free(parsed->hostname);
         parsed->hostname = final_hostname;
       }
     } else {
       // Decode percent-encoded hostname first
-      char* decoded_host = url_decode_hostname(host_part);
+      char* decoded_host = url_decode_hostname_with_scheme(host_part, parsed->protocol);
       if (!decoded_host) {
         goto cleanup_and_return_error;
       }
@@ -424,6 +424,11 @@ int parse_authority(JSRT_URL* parsed, const char* authority_str) {
 
     // Not an IPv4 address - check for special cases before lowercasing
     int should_lowercase = 1;
+
+    // For non-special schemes, preserve hostname case per WHATWG URL spec
+    if (parsed->protocol && !is_special_scheme(parsed->protocol)) {
+      should_lowercase = 0;  // Preserve case for non-special schemes
+    }
 
     // For file URLs, check if hostname is actually a Windows drive letter
     if (parsed->protocol && strcmp(parsed->protocol, "file:") == 0 && final_processed_hostname &&

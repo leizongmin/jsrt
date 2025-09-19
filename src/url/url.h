@@ -163,6 +163,7 @@ char* url_decode_with_length_and_output_len(const char* str, size_t len, size_t*
 char* url_decode_with_length(const char* str, size_t len);
 char* url_decode(const char* str);
 char* url_decode_hostname(const char* str);
+char* url_decode_hostname_with_scheme(const char* str, const char* scheme);
 char* url_decode_query_with_length_and_output_len(const char* str, size_t len, size_t* output_len);
 
 // URL utility functions

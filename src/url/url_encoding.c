@@ -543,7 +543,8 @@ char* url_decode(const char* str) {
 
 // URL decode function specifically for hostnames with validation
 // Returns NULL if the decoded hostname contains forbidden characters
-char* url_decode_hostname(const char* str) {
+// Decode hostname with scheme-aware validation
+char* url_decode_hostname_with_scheme(const char* str, const char* scheme) {
   if (!str)
     return NULL;
 
@@ -580,8 +581,12 @@ char* url_decode_hostname(const char* str) {
           return NULL;
         }
 
-        // Allow Unicode characters (bytes >= 0x80) - they are valid in hostnames
-        // These will be handled by IDNA processing later
+        // For special schemes, reject percent-encoded bytes >= 0x80 per WHATWG URL spec
+        if (scheme && is_special_scheme(scheme) && byte >= 0x80) {
+          // Percent-encoded non-ASCII bytes in hostnames cause parsing to fail for special schemes
+          free(decoded);
+          return NULL;
+        }
 
         decoded[j++] = byte;
         i += 3;
@@ -596,6 +601,11 @@ char* url_decode_hostname(const char* str) {
   }
   decoded[j] = '\0';
   return decoded;
+}
+
+// Backward compatibility wrapper
+char* url_decode_hostname(const char* str) {
+  return url_decode_hostname_with_scheme(str, NULL);
 }
 
 // Fragment encoding for non-special schemes (spaces are preserved)

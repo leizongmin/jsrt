@@ -7,6 +7,11 @@ void build_href(JSRT_URL* parsed) {
   if (!parsed)
     return;
 
+#ifdef DEBUG
+  fprintf(stderr, "[DEBUG] build_href: protocol='%s', host='%s', pathname='%s'\n", parsed->protocol, parsed->host,
+          parsed->pathname);
+#endif
+
   int is_special = is_special_scheme(parsed->protocol);
 
   // Calculate href length including userinfo

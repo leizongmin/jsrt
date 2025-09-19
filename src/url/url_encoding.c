@@ -129,10 +129,10 @@ char* url_fragment_encode(const char* str) {
       // Already percent-encoded sequence, keep as-is
       encoded_len += 3;
     } else if (c <= 32 || c == '"' || c == '<' || c == '>' || c == '^' || c == '{' || c == '|' || c == '}' ||
-               c == '`') {
+               c == '`' || c >= 127) {
       // Need to percent-encode unsafe characters including backtick for fragments
       // Note: backslashes (\) are allowed in fragments per WPT tests
-      // Note: Unicode characters (>= 127) are allowed in fragments per WPT tests
+      // Note: Unicode characters (>= 127) must be percent-encoded per WHATWG URL spec
       encoded_len += 3;  // %XX
     } else {
       encoded_len++;
@@ -154,10 +154,10 @@ char* url_fragment_encode(const char* str) {
       encoded[j++] = str[i + 2];
       i += 2;  // Skip the next two characters
     } else if (c <= 32 || c == '"' || c == '<' || c == '>' || c == '^' || c == '{' || c == '|' || c == '}' ||
-               c == '`') {
+               c == '`' || c >= 127) {
       // Need to percent-encode unsafe characters including backtick for fragments
       // Note: backslashes (\) are allowed in fragments per WPT tests
-      // Note: Unicode characters (>= 127) are allowed in fragments per WPT tests
+      // Note: Unicode characters (>= 127) must be percent-encoded per WHATWG URL spec
       encoded[j++] = '%';
       encoded[j++] = hex_chars[c >> 4];
       encoded[j++] = hex_chars[c & 15];
@@ -674,9 +674,9 @@ char* url_path_encode_special(const char* str) {
       // Keep as 3-character percent sequence
       encoded_len += 3;
       i += 2;  // Skip the hex digits
-    } else if (c < 32 || c == '"' || c == '<' || c == '>' || c == '\\' || c == '^' || c == '{' || c == '|' ||
+    } else if (c <= 32 || c == '"' || c == '<' || c == '>' || c == '\\' || c == '^' || c == '{' || c == '|' ||
                c == '}' || c == '`' || c == 127) {
-      // Need to percent-encode control characters and specific unsafe characters
+      // Need to percent-encode control characters, space, and specific unsafe characters
       encoded_len += 3;  // %XX
     } else if (c >= 128) {
       // UTF-8 encoded characters - percent-encode each byte
@@ -704,7 +704,7 @@ char* url_path_encode_special(const char* str) {
       encoded[j++] = str[i + 1];
       encoded[j++] = str[i + 2];
       i += 2;  // Skip the next two characters
-    } else if (c < 32 || c == '"' || c == '<' || c == '>' || c == '\\' || c == '^' || c == '{' || c == '|' ||
+    } else if (c <= 32 || c == '"' || c == '<' || c == '>' || c == '\\' || c == '^' || c == '{' || c == '|' ||
                c == '}' || c == '`' || c == 127) {
       // Need to percent-encode control characters and specific unsafe characters
       encoded[j++] = '%';

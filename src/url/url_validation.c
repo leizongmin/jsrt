@@ -29,12 +29,14 @@ int is_special_scheme(const char* protocol) {
 
   // Remove colon if present and convert to lowercase for comparison
   char* scheme = strdup(protocol);
-  if (strlen(scheme) > 0 && scheme[strlen(scheme) - 1] == ':') {
-    scheme[strlen(scheme) - 1] = '\0';
+  size_t scheme_len = strlen(scheme);  // Cache length to avoid repeated calls
+  if (scheme_len > 0 && scheme[scheme_len - 1] == ':') {
+    scheme[scheme_len - 1] = '\0';
+    scheme_len--;  // Update cached length
   }
 
   // Convert scheme to lowercase for case-insensitive comparison
-  for (size_t i = 0; i < strlen(scheme); i++) {
+  for (size_t i = 0; i < scheme_len; i++) {
     if (scheme[i] >= 'A' && scheme[i] <= 'Z') {
       scheme[i] = scheme[i] + ('a' - 'A');
     }

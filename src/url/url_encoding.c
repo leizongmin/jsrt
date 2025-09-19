@@ -1,4 +1,5 @@
 #include <ctype.h>
+#include <stdint.h>  // For SIZE_MAX
 #include <stdio.h>
 #include "url.h"
 
@@ -18,17 +19,24 @@ int hex_to_int(char c) {
 char* url_encode_with_len(const char* str, size_t len) {
   size_t encoded_len = 0;
 
-  // Calculate encoded length
+  // Calculate encoded length with overflow protection
   for (size_t i = 0; i < len; i++) {
     unsigned char c = (unsigned char)str[i];
+    size_t add_len;
     if ((c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z') || (c >= '0' && c <= '9') || c == '-' || c == '_' ||
         c == '.' || c == '~' || c == '*') {
-      encoded_len++;
+      add_len = 1;
     } else if (c == ' ') {
-      encoded_len++;  // space becomes +
+      add_len = 1;  // space becomes +
     } else {
-      encoded_len += 3;  // %XX
+      add_len = 3;  // %XX
     }
+
+    // Check for integer overflow
+    if (encoded_len > SIZE_MAX - add_len) {
+      return NULL;  // Would overflow
+    }
+    encoded_len += add_len;
   }
 
   char* encoded = malloc(encoded_len + 1);
@@ -303,8 +311,9 @@ char* url_userinfo_encode_with_scheme_name(const char* str, const char* scheme) 
     if (!scheme_clean) {
       return NULL;
     }
-    if (strlen(scheme_clean) > 0 && scheme_clean[strlen(scheme_clean) - 1] == ':') {
-      scheme_clean[strlen(scheme_clean) - 1] = '\0';
+    size_t scheme_len = strlen(scheme_clean);  // Cache length
+    if (scheme_len > 0 && scheme_clean[scheme_len - 1] == ':') {
+      scheme_clean[scheme_len - 1] = '\0';
     }
 
     // WebSocket schemes and non-special schemes: don't encode ']', '@', and ':'

@@ -264,7 +264,7 @@ int parse_double_colon_at_pattern(JSRT_URL* parsed, char** ptr) {
   size_t host_len = authority_end - host_start;
   char* host_part = malloc(host_len + 1);
   if (!host_part) {
-    free(userinfo);
+    // userinfo was already freed at line 260, don't double-free
     return -1;
   }
   strncpy(host_part, host_start, host_len);

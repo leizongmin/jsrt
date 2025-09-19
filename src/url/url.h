@@ -187,6 +187,25 @@ void JSRT_FreeSearchParams(JSRT_URLSearchParams* search_params);
 JSRT_URLSearchParam* create_url_param(const char* name, size_t name_len, const char* value, size_t value_len);
 void update_parent_url_href(JSRT_URLSearchParams* search_params);
 
+// Error handling and debugging support
+typedef enum {
+  JSRT_URL_OK = 0,
+  JSRT_URL_ERROR_INVALID_SCHEME,
+  JSRT_URL_ERROR_INVALID_AUTHORITY,
+  JSRT_URL_ERROR_INVALID_HOSTNAME,
+  JSRT_URL_ERROR_INVALID_PORT,
+  JSRT_URL_ERROR_INVALID_PATH,
+  JSRT_URL_ERROR_MEMORY_ALLOCATION,
+  JSRT_URL_ERROR_INVALID_ENCODING,
+  JSRT_URL_ERROR_BUFFER_OVERFLOW
+} JSRT_URLError;
+
+#ifdef DEBUG
+#define JSRT_URL_DEBUG_LOG(fmt, ...) fprintf(stderr, "[URL DEBUG] " fmt "\n", ##__VA_ARGS__)
+#else
+#define JSRT_URL_DEBUG_LOG(fmt, ...) ((void)0)
+#endif
+
 // External functions from encoding.h
 int JSRT_ValidateUTF8Sequence(const uint8_t* bytes, size_t len, const uint8_t** next);
 char* JSRT_StringToUTF8WithSurrogateReplacement(JSContext* ctx, JSValue str, size_t* len_p);

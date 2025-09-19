@@ -303,8 +303,24 @@ char* preprocess_url_string(const char* url, const char* base) {
   // They will be encoded later during path encoding
   char* space_normalized_url = cleaned_url;
 
-  // Normalize backslashes for special schemes
-  char* normalized_url = normalize_url_backslashes(space_normalized_url);
+  // Enhanced backslash normalization for special schemes and relative URLs
+  char* normalized_url;
+  if (has_special_scheme) {
+    // For special schemes, convert all backslashes to forward slashes
+    normalized_url = normalize_url_backslashes(space_normalized_url);
+  } else {
+    // For non-special schemes, check for relative URLs starting with backslashes
+    if (space_normalized_url[0] == '\\') {
+      // Patterns like \\server\file should be rejected for non-special schemes
+      free(space_normalized_url);
+      return NULL;
+    } else if (space_normalized_url[0] == '\\' && strchr(space_normalized_url + 1, '\\')) {
+      // Patterns like \\x\\hello should be rejected
+      free(space_normalized_url);
+      return NULL;
+    }
+    normalized_url = normalize_url_backslashes(space_normalized_url);
+  }
   free(space_normalized_url);
   if (!normalized_url) {
     return NULL;

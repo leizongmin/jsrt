@@ -228,14 +228,23 @@ void parse_path_query_fragment(JSRT_URL* parsed, char* ptr) {
       // Encode the path properly WITHOUT decoding first
       // This preserves percent-encoded dot segments (%2e) which should NOT be normalized
       // according to WHATWG URL spec - percent-encoded dots should remain as-is
+      char* encoded_pathname = NULL;
       if (strcmp(parsed->protocol, "file:") == 0) {
-        parsed->pathname = url_path_encode_file(cleaned_path);
+        encoded_pathname = url_path_encode_file(cleaned_path);
       } else if (is_special_scheme(parsed->protocol)) {
-        parsed->pathname = url_path_encode_special(cleaned_path);
+        encoded_pathname = url_path_encode_special(cleaned_path);
       } else {
-        parsed->pathname = url_nonspecial_path_encode(cleaned_path);
+        encoded_pathname = url_nonspecial_path_encode(cleaned_path);
       }
 
+      // If encoding failed, fall back to a safely encoded version
+      if (!encoded_pathname) {
+        // Use a simple fallback that just copies the original path
+        // This is better than failing the entire URL parsing
+        encoded_pathname = strdup(cleaned_path ? cleaned_path : "/");
+      }
+
+      parsed->pathname = encoded_pathname;
       free(cleaned_path);
     }
   } else {

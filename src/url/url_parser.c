@@ -37,6 +37,10 @@ char* parse_url_components(JSRT_URL* parsed, const char* scheme, char* ptr) {
   if (!parsed || !scheme || !ptr)
     return NULL;
 
+#ifdef DEBUG
+  fprintf(stderr, "[DEBUG] parse_url_components: scheme='%s', ptr='%s'\n", scheme, ptr);
+#endif
+
   // Check if this is a special scheme
   int is_special = is_special_scheme(scheme);
 
@@ -192,11 +196,20 @@ int parse_empty_authority_url(JSRT_URL* parsed, const char* scheme, char** ptr) 
 
 // Parse URLs with standard authority section
 int parse_standard_authority_url(JSRT_URL* parsed, char** ptr) {
+#ifdef DEBUG
+  fprintf(stderr, "[DEBUG] parse_standard_authority_url: ptr='%s'\n", *ptr);
+#endif
   // Special case: for double colon @ pattern (::@...@...), handle directly
   if ((*ptr)[0] == ':' && (*ptr)[1] == ':' && strchr(*ptr, '@')) {
     return parse_double_colon_at_pattern(parsed, ptr);
   } else {
-    return parse_normal_authority(parsed, ptr);
+    int result = parse_normal_authority(parsed, ptr);
+#ifdef DEBUG
+    if (result != 0) {
+      fprintf(stderr, "[DEBUG] parse_standard_authority_url: parse_normal_authority failed\n");
+    }
+#endif
+    return result;
   }
 }
 
@@ -475,6 +488,10 @@ cleanup_and_fail:
 
 // Main URL parsing function (refactored)
 JSRT_URL* parse_absolute_url(const char* preprocessed_url) {
+#ifdef DEBUG
+  fprintf(stderr, "[DEBUG] parse_absolute_url: preprocessed_url='%s'\n", preprocessed_url);
+#endif
+
   JSRT_URL* parsed = create_url_structure();
   if (!parsed)
     return NULL;
@@ -486,6 +503,9 @@ JSRT_URL* parse_absolute_url(const char* preprocessed_url) {
   char* scheme = NULL;
   char* remainder = NULL;
   if (detect_url_scheme(ptr, &scheme, &remainder) != 0) {
+#ifdef DEBUG
+    fprintf(stderr, "[DEBUG] parse_absolute_url: detect_url_scheme failed\n");
+#endif
     free(url_copy);
     JSRT_FreeURL(parsed);
     return NULL;
@@ -500,6 +520,9 @@ JSRT_URL* parse_absolute_url(const char* preprocessed_url) {
 
   // Validate scheme according to WHATWG URL spec
   if (!is_valid_scheme(scheme)) {
+#ifdef DEBUG
+    fprintf(stderr, "[DEBUG] parse_absolute_url: invalid scheme '%s'\n", scheme);
+#endif
     free(scheme);
     free(url_copy);
     JSRT_FreeURL(parsed);
@@ -514,13 +537,20 @@ JSRT_URL* parse_absolute_url(const char* preprocessed_url) {
     // These should fail according to WPT if they're missing expected content
     const char* last_char = &preprocessed_url[url_len - 1];
 
-    // URLs ending with just a newline or other control characters after parsing should fail
-    if (*last_char < 0x20 && *last_char != '\0') {
+    // URLs ending with just ASCII control characters (not UTF-8 continuation bytes) should fail
+    // UTF-8 continuation bytes (0x80-0xBF) are valid and should not be rejected
+    unsigned char last_byte = (unsigned char)*last_char;
+    if (last_byte < 0x20 && last_byte != '\0') {
+      // Only reject actual ASCII control characters, not UTF-8 continuation bytes
+#ifdef DEBUG
+      fprintf(stderr, "[DEBUG] parse_absolute_url: URL ends with ASCII control character 0x%02x\n", last_byte);
+#endif
       free(scheme);
       free(url_copy);
       JSRT_FreeURL(parsed);
       return NULL;
     }
+    // Note: UTF-8 continuation bytes (0x80-0xBF) and Unicode characters are allowed
   }
 
   // Special validation for special schemes without proper authority
@@ -563,6 +593,10 @@ JSRT_URL* parse_absolute_url(const char* preprocessed_url) {
   // Parse URL components and get pointer to path/query/fragment section
   char* path_start = parse_url_components(parsed, scheme, remainder);
   if (!path_start) {
+#ifdef DEBUG
+    fprintf(stderr, "[DEBUG] parse_absolute_url: parse_url_components failed for scheme='%s', remainder='%s'\n", scheme,
+            remainder);
+#endif
     free(scheme);
     free(url_copy);
     JSRT_FreeURL(parsed);
@@ -570,6 +604,9 @@ JSRT_URL* parse_absolute_url(const char* preprocessed_url) {
   }
 
   // Parse path, query, fragment from the remaining part
+#ifdef DEBUG
+  fprintf(stderr, "[DEBUG] parse_absolute_url: about to parse_path_query_fragment, path_start='%s'\n", path_start);
+#endif
   parse_path_query_fragment(parsed, path_start);
 
   free(scheme);

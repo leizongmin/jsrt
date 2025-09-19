@@ -137,24 +137,13 @@ int validate_url_characters(const char* url) {
       return 0;  // Other control characters
     }
 
-    // Check for full-width characters that should be rejected per WPT tests
-    // Full-width characters like ％４１ should cause URL parsing to fail
-    if (c == 0xEF && p + 2 < url + strlen(url)) {
-      unsigned char second = (unsigned char)*(p + 1);
-      unsigned char third = (unsigned char)*(p + 2);
+    // Allow all Unicode characters in URLs - they will be handled appropriately
+    // during URL component processing (percent-encoding, IDNA, etc.)
+    // Per WHATWG URL spec, Unicode characters should be allowed in the initial parsing phase
 
-      // Full-width ASCII range: U+FF01-U+FF5E
-      // ％ = U+FF05 = EF BC 85, ４ = U+FF14 = EF BC 94, １ = U+FF11 = EF BC 91
-      if (second == 0xBC && third >= 0x81 && third <= 0xBF) {
-        return 0;  // Full-width characters not allowed in URLs
-      }
-      if (second == 0xBD && third >= 0x80 && third <= 0x9E) {
-        return 0;  // Full-width characters not allowed in URLs
-      }
-    }
-
-    // Allow other Unicode characters (>= 0x80) - they will be percent-encoded later if needed
-    // This fixes the issue where Unicode characters like β (0xCE 0xB2 in UTF-8) were rejected
+    // Allow Unicode characters (>= 0x80) - they will be percent-encoded later if needed
+    // This fixes the issue where Unicode characters like 你好 (Chinese) were rejected
+    // Per WHATWG URL spec, Unicode characters should be allowed and percent-encoded as needed
     if (c >= 0x80) {
       // All non-ASCII bytes (which include UTF-8 continuation bytes) should be allowed
       // They will be properly percent-encoded during path processing
@@ -250,9 +239,9 @@ int validate_hostname_characters_with_scheme(const char* hostname, const char* s
       return 0;  // Spaces not allowed in hostname for special schemes
     }
 
-    // Unicode character handling - be more strict for special schemes
+    // Unicode character handling - allow Unicode characters for IDN support
     if (c >= 0x80) {
-      // Check for specific problematic Unicode sequences that should always be rejected
+      // Check for specific problematic Unicode sequences that should be rejected
 
       // Arabic Letter Alef with Wavy Hamza Above (U+FDD0): 0xEF 0xB7 0x90
       if (c == 0xEF && p + 2 < hostname + len && (unsigned char)*(p + 1) == 0xB7 && (unsigned char)*(p + 2) == 0x90) {
@@ -264,48 +253,12 @@ int validate_hostname_characters_with_scheme(const char* hostname, const char* s
         return 0;  // Replacement character not allowed
       }
 
-      // Full-width percent sign (U+FF05): 0xEF 0xBC 0x85
-      if (c == 0xEF && p + 2 < hostname + len && (unsigned char)*(p + 1) == 0xBC && (unsigned char)*(p + 2) == 0x85) {
-        return 0;  // Full-width percent not allowed
-      }
+      // Allow Unicode characters in hostnames for international domain names (IDN)
+      // Per WHATWG URL spec, Unicode characters should be processed through IDNA
+      // Only reject specific problematic sequences that break URL parsing
 
-      // For special schemes, allow Unicode characters but validate them properly
-      // International domain names are valid and should be processed through IDNA
-      // Only reject specific problematic sequences, not all Unicode
-
-      // Check for zero-width characters and other problematic Unicode
-      if (c == 0xE2 && p + 2 < hostname + len && (unsigned char)*(p + 1) == 0x80) {
-        unsigned char third = (unsigned char)*(p + 2);
-        if (third == 0x8B || third == 0x8C || third == 0x8D || third == 0x8E || third == 0x8F || third == 0xAE ||
-            third == 0xAF) {
-          return 0;  // Zero-width characters not allowed
-        }
-        p += 2;
-        continue;
-      }
-
-      // Check for soft hyphen (U+00AD) encoded as UTF-8: 0xC2 0xAD
-      if (c == 0xC2 && p + 1 < hostname + len && (unsigned char)*(p + 1) == 0xAD) {
-        // Per WHATWG URL spec, soft hyphens should be processed during IDNA processing
-        p += 1;  // Skip past the 2-byte soft hyphen sequence
-        continue;
-      }
-
-      // Other Unicode checks remain the same...
-      if (c == 0xE3 && p + 2 < hostname + len && (unsigned char)*(p + 1) == 0x80 && (unsigned char)*(p + 2) == 0x80) {
-        return 0;  // Unicode whitespace not allowed in hostname
-      }
-      if (c == 0xC2 && p + 1 < hostname + len && (unsigned char)*(p + 1) == 0xA0) {
-        return 0;  // Non-breaking space not allowed in hostname
-      }
-      if (c == 0xE2 && p + 2 < hostname + len && (unsigned char)*(p + 1) == 0x81 && (unsigned char)*(p + 2) == 0xA0) {
-        return 0;  // Word joiner not allowed
-      }
-      if (c == 0xEF && p + 2 < hostname + len && (unsigned char)*(p + 1) == 0xBB && (unsigned char)*(p + 2) == 0xBF) {
-        return 0;  // Zero width no-break space not allowed
-      }
-
-      // Skip past multi-byte UTF-8 sequences
+      // Skip past multi-byte UTF-8 sequences without validation
+      // IDNA processing will handle Unicode validation later
       if ((c & 0xE0) == 0xC0) {
         p += 1;  // 2-byte sequence
       } else if ((c & 0xF0) == 0xE0) {
@@ -427,56 +380,12 @@ int validate_hostname_characters_allow_at(const char* hostname, int allow_at) {
       return 0;  // Spaces not allowed in hostname
     }
 
-    // Check for problematic Unicode characters
-    // Check for UTF-8 encoded Unicode characters
+    // Allow Unicode characters (>= 0x80) for internationalized domain names
+    // Per WHATWG URL spec, Unicode characters in hostnames should be processed through IDNA
+    // Only reject specific control characters and whitespace that break URL parsing
     if (c >= 0x80) {
-      // Check for zero-width characters and other problematic Unicode
-      // Zero Width Space (U+200B): 0xE2 0x80 0x8B
-      if (c == 0xE2 && (unsigned char)*(p + 1) == 0x80) {
-        unsigned char third = (unsigned char)*(p + 2);
-        // Zero Width Space, Zero Width Non-Joiner, Zero Width Joiner, etc.
-        if (third == 0x8B || third == 0x8C || third == 0x8D || third == 0x8E || third == 0x8F || third == 0xAE ||
-            third == 0xAF) {
-          return 0;  // Zero-width characters not allowed
-        }
-        // Skip past this 3-byte sequence for further validation
-        p += 2;
-        continue;
-      }
-
-      // Check for soft hyphen (U+00AD) encoded as UTF-8: 0xC2 0xAD
-      if (c == 0xC2 && (unsigned char)*(p + 1) == 0xAD) {
-        // Per WHATWG URL spec, soft hyphens should be processed during IDNA processing
-        // For now, allow them in hostname validation
-        p += 1;  // Skip past the 2-byte soft hyphen sequence
-        continue;
-      }
-
-      // Check for Unicode whitespace characters that should be rejected
-      // U+3000 (ideographic space): 0xE3 0x80 0x80
-      if (c == 0xE3 && (unsigned char)*(p + 1) == 0x80 && (unsigned char)*(p + 2) == 0x80) {
-        return 0;  // Unicode whitespace not allowed in hostname
-      }
-
-      // U+00A0 (non-breaking space): 0xC2 0xA0
-      if (c == 0xC2 && (unsigned char)*(p + 1) == 0xA0) {
-        return 0;  // Non-breaking space not allowed in hostname
-      }
-
-      // Check for other problematic Unicode characters
-      // Word Joiner (U+2060): 0xE2 0x81 0xA0
-      if (c == 0xE2 && (unsigned char)*(p + 1) == 0x81 && (unsigned char)*(p + 2) == 0xA0) {
-        return 0;  // Word joiner not allowed
-      }
-
-      // Zero Width No-Break Space (U+FEFF): 0xEF 0xBB 0xBF
-      if (c == 0xEF && (unsigned char)*(p + 1) == 0xBB && (unsigned char)*(p + 2) == 0xBF) {
-        return 0;  // Zero width no-break space not allowed
-      }
-
-      // Allow most Unicode characters for internationalized domain names
-      // Only reject specific problematic characters above
-      // Skip past multi-byte UTF-8 sequences
+      // Skip past multi-byte UTF-8 sequences without validation
+      // IDNA processing will handle Unicode validation later
       if ((c & 0xE0) == 0xC0) {
         p += 1;  // 2-byte sequence
       } else if ((c & 0xF0) == 0xE0) {

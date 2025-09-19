@@ -60,14 +60,23 @@ static char* remove_all_ascii_whitespace(const char* url) {
     return NULL;
 
   size_t j = 0;
-  for (size_t i = 0; i < len; i++) {
-    char c = url[i];
-    // Skip ASCII whitespace characters
-    if (c != ' ' && c != '\t' && c != '\n' && c != '\r' && c != '\f' && c != 0x0B) {
-      result[j++] = c;
+  size_t i = 0;
+
+  while (i < len) {
+    unsigned char c = (unsigned char)url[i];
+
+    // Always remove tab, line feed, and carriage return
+    if (c == 0x09 || c == 0x0A || c == 0x0D) {
+      i++;
+      continue;
     }
+
+    // According to WHATWG URL spec, spaces should be preserved and encoded later
+    // Only remove tab, LF, CR - preserve all other characters including Unicode
+    result[j++] = url[i++];
   }
   result[j] = '\0';
+
   return result;
 }
 
@@ -95,9 +104,14 @@ static int validate_url_characters(const char* url) {
   // Basic validation - reject obviously invalid characters
   for (const char* p = url; *p; p++) {
     unsigned char c = (unsigned char)*p;
-    // Reject control characters except tab
-    if (c < 0x20 && c != 0x09) {
+    // Reject control characters except tab, LF, and CR (which should be stripped already)
+    if (c < 0x20 && c != 0x09 && c != 0x0A && c != 0x0D) {
       return 0;
+    }
+    // Allow Unicode characters (>= 0x80) - they will be percent-encoded as needed
+    // This fixes the issue where Unicode characters like 你好 (Chinese) were rejected
+    if (c >= 0x80) {
+      continue;  // Allow all Unicode characters
     }
   }
   return 1;

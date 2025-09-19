@@ -128,10 +128,11 @@ char* url_fragment_encode(const char* str) {
     if (c == '%' && i + 2 < len && hex_to_int(str[i + 1]) >= 0 && hex_to_int(str[i + 2]) >= 0) {
       // Already percent-encoded sequence, keep as-is
       encoded_len += 3;
-    } else if (c <= 32 || c >= 127 || c == '"' || c == '<' || c == '>' || c == '^' || c == '{' || c == '|' ||
-               c == '}' || c == '`') {
+    } else if (c <= 32 || c == '"' || c == '<' || c == '>' || c == '^' || c == '{' || c == '|' || c == '}' ||
+               c == '`') {
       // Need to percent-encode unsafe characters including backtick for fragments
       // Note: backslashes (\) are allowed in fragments per WPT tests
+      // Note: Unicode characters (>= 127) are allowed in fragments per WPT tests
       encoded_len += 3;  // %XX
     } else {
       encoded_len++;
@@ -152,10 +153,11 @@ char* url_fragment_encode(const char* str) {
       encoded[j++] = str[i + 1];
       encoded[j++] = str[i + 2];
       i += 2;  // Skip the next two characters
-    } else if (c <= 32 || c >= 127 || c == '"' || c == '<' || c == '>' || c == '^' || c == '{' || c == '|' ||
-               c == '}' || c == '`') {
+    } else if (c <= 32 || c == '"' || c == '<' || c == '>' || c == '^' || c == '{' || c == '|' || c == '}' ||
+               c == '`') {
       // Need to percent-encode unsafe characters including backtick for fragments
       // Note: backslashes (\) are allowed in fragments per WPT tests
+      // Note: Unicode characters (>= 127) are allowed in fragments per WPT tests
       encoded[j++] = '%';
       encoded[j++] = hex_chars[c >> 4];
       encoded[j++] = hex_chars[c & 15];
@@ -578,6 +580,9 @@ char* url_decode_hostname(const char* str) {
           return NULL;
         }
 
+        // Allow Unicode characters (bytes >= 0x80) - they are valid in hostnames
+        // These will be handled by IDNA processing later
+
         decoded[j++] = byte;
         i += 3;
         continue;
@@ -608,10 +613,11 @@ char* url_fragment_encode_nonspecial(const char* str) {
     if (c == '%' && i + 2 < len && hex_to_int(str[i + 1]) >= 0 && hex_to_int(str[i + 2]) >= 0) {
       // Already percent-encoded sequence, keep as-is
       encoded_len += 3;
-    } else if (c <= 32 || c >= 127 || c == '"' || c == '<' || c == '>' || c == '^' || c == '{' || c == '|' ||
-               c == '}' || c == '`') {
+    } else if (c <= 32 || c == '"' || c == '<' || c == '>' || c == '^' || c == '{' || c == '|' || c == '}' ||
+               c == '`') {
       // Need to percent-encode unsafe characters including spaces
       // WPT tests expect spaces to be encoded even for non-special schemes
+      // Note: Unicode characters (>= 127) are allowed in fragments per WPT tests
       encoded_len += 3;  // %XX
     } else {
       encoded_len++;
@@ -632,10 +638,11 @@ char* url_fragment_encode_nonspecial(const char* str) {
       encoded[j++] = str[i + 1];
       encoded[j++] = str[i + 2];
       i += 2;  // Skip the next two characters
-    } else if (c <= 32 || c >= 127 || c == '"' || c == '<' || c == '>' || c == '^' || c == '{' || c == '|' ||
-               c == '}' || c == '`') {
+    } else if (c <= 32 || c == '"' || c == '<' || c == '>' || c == '^' || c == '{' || c == '|' || c == '}' ||
+               c == '`') {
       // Need to percent-encode unsafe characters including spaces
       // WPT tests expect spaces to be encoded even for non-special schemes
+      // Note: Unicode characters (>= 127) are allowed in fragments per WPT tests
       encoded[j++] = '%';
       encoded[j++] = hex_chars[c >> 4];
       encoded[j++] = hex_chars[c & 15];

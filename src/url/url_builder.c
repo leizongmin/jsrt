@@ -14,18 +14,20 @@ void build_href(JSRT_URL* parsed) {
 
   int is_special = is_special_scheme(parsed->protocol);
 
-  // Calculate href length including userinfo
+  // Calculate href length including userinfo with URL encoding overhead
   size_t userinfo_len = 0;
   if (parsed->username && strlen(parsed->username) > 0) {
-    userinfo_len += strlen(parsed->username);
+    // URL encoding can triple the size in worst case (e.g., non-ASCII characters)
+    userinfo_len += strlen(parsed->username) * 3;
     if (parsed->password && strlen(parsed->password) > 0) {
-      userinfo_len += 1 + strlen(parsed->password);  // +1 for ':'
+      userinfo_len += 1 + strlen(parsed->password) * 3;  // +1 for ':'
     }
     userinfo_len += 1;  // +1 for '@'
   }
 
-  size_t href_len = strlen(parsed->protocol) + userinfo_len + strlen(parsed->host) + strlen(parsed->pathname) +
-                    strlen(parsed->search) + strlen(parsed->hash) + 20;
+  // Be conservative with buffer size to account for URL encoding
+  size_t href_len = strlen(parsed->protocol) + userinfo_len + strlen(parsed->host) * 3 + strlen(parsed->pathname) * 3 +
+                    strlen(parsed->search) * 3 + strlen(parsed->hash) * 3 + 50;
   parsed->href = malloc(href_len);
   if (!parsed->href) {
     return;

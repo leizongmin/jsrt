@@ -56,6 +56,10 @@ JSRT_URL* resolve_relative_url(const char* url, const char* base) {
   result->port = strdup(base_url->port);
   result->search_params = JS_UNDEFINED;
   result->ctx = NULL;
+  result->has_password_field = base_url->has_password_field;
+  result->double_colon_at_pattern = base_url->double_colon_at_pattern;
+  result->opaque_path = base_url->opaque_path;
+  result->has_authority_syntax = base_url->has_authority_syntax;
 
   // Check for allocation failures
   if (!result->protocol || !result->username || !result->password || !result->host || !result->hostname ||
@@ -621,5 +625,9 @@ cleanup_and_normalize:
   free(encoded_hash);
 
   JSRT_FreeURL(base_url);
+
+  // Build the final href string for the resolved URL
+  build_href(result);
+
   return result;
 }

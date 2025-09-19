@@ -178,8 +178,8 @@ int parse_authority_based_url(JSRT_URL* parsed, const char* scheme, char* ptr, i
 
 // Parse URLs with empty authority (like scheme:///path)
 int parse_empty_authority_url(JSRT_URL* parsed, const char* scheme, char** ptr) {
-  // Special case for file URLs: "file:///path" should have empty hostname and path="/path"
-  if (strcmp(scheme, "file") == 0) {
+  // For both file URLs and non-special schemes: "scheme:///path" should have empty hostname and path="/path"
+  if (strcmp(scheme, "file") == 0 || !is_special_scheme(scheme)) {
     // Set empty hostname and host
     free(parsed->hostname);
     parsed->hostname = strdup("");
@@ -189,7 +189,7 @@ int parse_empty_authority_url(JSRT_URL* parsed, const char* scheme, char** ptr) 
     // ptr currently points to "/path"
     return 0;
   } else {
-    // Special case for URLs like "///test" which should become "http://test/"
+    // Special schemes only: URLs like "http:///test" should become "http://test/"
     return parse_empty_authority_with_path(parsed, ptr);
   }
 }

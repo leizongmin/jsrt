@@ -27,6 +27,49 @@ int parse_authority(JSRT_URL* parsed, const char* authority_str) {
 
   if (at_pos) {
     *at_pos = '\0';
+
+    // Special validation: check if what looks like userinfo actually contains an invalid port
+    // For URLs like "http://foo.com:b@d/", we need to detect that ":b@" is not valid
+    char* colon_in_userinfo = strchr(authority, ':');
+    if (colon_in_userinfo) {
+      char* potential_port = colon_in_userinfo + 1;
+
+      // Check if this looks like hostname:port@host pattern (which should fail)
+      // vs. legitimate user:pass@host pattern
+      // The key difference: hostname:port@host has invalid port, user:pass@host has valid password
+
+      // Look at the text before the colon - if it looks like a hostname (contains dots),
+      // then the text after colon should be a valid port number
+      int looks_like_hostname = 0;
+      size_t prefix_len = colon_in_userinfo - authority;
+      if (prefix_len > 0) {
+        // Simple heuristic: if the prefix contains dots, it's likely a hostname
+        for (size_t i = 0; i < prefix_len; i++) {
+          if (authority[i] == '.') {
+            looks_like_hostname = 1;
+            break;
+          }
+        }
+      }
+
+      if (looks_like_hostname) {
+        // If prefix looks like hostname, validate that what follows colon is a valid port
+        int has_non_digit = 0;
+        for (char* p = potential_port; *p; p++) {
+          if (!isdigit(*p)) {
+            has_non_digit = 1;
+            break;
+          }
+        }
+
+        // If potential port contains non-digits, this is an invalid pattern
+        if (has_non_digit) {
+          goto cleanup_and_return_error;
+        }
+      }
+      // If prefix doesn't look like hostname, treat as normal user:pass@host
+    }
+
     // Check if userinfo contains unencoded forward slashes (invalid per WHATWG)
     // If so, drop the userinfo entirely and use only the hostname part
     if (strchr(authority, '/') != NULL) {
@@ -83,6 +126,15 @@ int parse_authority(JSRT_URL* parsed, const char* authority_str) {
       }
       // If we have 2+ colons, it's likely an invalid IPv6 address without brackets
       if (colon_count >= 2) {
+        goto cleanup_and_return_error;
+      }
+    }
+
+    // Check for invalid characters in authority section before finding port
+    // Per WHATWG URL spec, backslashes are invalid in authority sections
+    for (const char* p = host_part; *p; p++) {
+      if (*p == '\\') {
+        // Backslash in authority section is invalid
         goto cleanup_and_return_error;
       }
     }

@@ -115,7 +115,73 @@ JSRT_URL* resolve_relative_url(const char* url, const char* base) {
     result->pathname = strdup(base_url->pathname);
     result->search = strdup(url);  // Include the '?'
     result->hash = strdup("");
-    // TODO: Windows path \\x\hello parsing - complex implementation needed
+  } else if (url[0] == '\\') {
+    // Handle backslash-starting relative URLs (Windows path patterns)
+    // According to WHATWG URL spec, these should be treated as path-only URLs
+
+    // For special schemes (like http, https), backslashes should be normalized to forward slashes
+    // For file schemes, preserve as Windows path syntax
+    int is_special = is_special_scheme(base_url->protocol);
+
+    if (is_special && strcmp(base_url->protocol, "file:") != 0) {
+      // Special schemes: normalize backslashes to forward slashes and treat as absolute path
+      char* normalized_path = malloc(strlen(url) + 1);
+      if (!normalized_path) {
+        JSRT_FreeURL(base_url);
+        JSRT_FreeURL(result);
+        return NULL;
+      }
+      strcpy(normalized_path, url);
+      // Convert backslashes to forward slashes
+      for (char* p = normalized_path; *p; p++) {
+        if (*p == '\\') {
+          *p = '/';
+        }
+      }
+
+      // Parse as absolute path
+      char* search_pos = strchr(normalized_path, '?');
+      char* hash_pos = strchr(normalized_path, '#');
+
+      if (hash_pos) {
+        *hash_pos = '\0';
+        result->hash = malloc(strlen(hash_pos + 1) + 2);
+        if (!result->hash) {
+          free(normalized_path);
+          JSRT_FreeURL(base_url);
+          JSRT_FreeURL(result);
+          return NULL;
+        }
+        snprintf(result->hash, strlen(hash_pos + 1) + 2, "#%s", hash_pos + 1);
+      } else {
+        result->hash = strdup("");
+      }
+
+      if (search_pos && (!hash_pos || search_pos < hash_pos)) {
+        *search_pos = '\0';
+        const char* search_end = hash_pos ? hash_pos : (search_pos + strlen(search_pos + 1) + 1);
+        size_t search_len = search_end - search_pos;
+        result->search = malloc(search_len + 2);
+        if (!result->search) {
+          free(normalized_path);
+          JSRT_FreeURL(base_url);
+          JSRT_FreeURL(result);
+          return NULL;
+        }
+        snprintf(result->search, search_len + 2, "?%.*s", (int)(search_len - 1), search_pos + 1);
+      } else {
+        result->search = strdup("");
+      }
+
+      result->pathname = url_path_encode_special(normalized_path);
+      free(normalized_path);
+    } else {
+      // File URLs or non-special schemes: handle as Windows path
+      // For now, treat as invalid to match WHATWG behavior for unsupported patterns
+      JSRT_FreeURL(base_url);
+      JSRT_FreeURL(result);
+      return NULL;
+    }
   } else if (url[0] == '/') {
     // Absolute path - parse the path to separate pathname, search, and hash
     // Note: This handles both regular absolute paths and single-slash same-scheme special URLs

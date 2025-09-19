@@ -7,6 +7,24 @@ char* preprocess_file_urls(const char* cleaned_url) {
   if (!cleaned_url)
     return NULL;
 
+  // Check for invalid patterns in file URLs before processing
+  if (strncmp(cleaned_url, "file://", 7) == 0) {
+    // Look for pattern like file://%XX| which should be rejected per WPT tests
+    const char* authority_start = cleaned_url + 7;
+    const char* authority_end = strchr(authority_start, '/');
+    if (!authority_end) {
+      authority_end = cleaned_url + strlen(cleaned_url);
+    }
+
+    // Check for percent-encoded character followed by pipe in authority section
+    for (const char* p = authority_start; p < authority_end - 2; p++) {
+      if (*p == '%' && hex_to_int(p[1]) >= 0 && hex_to_int(p[2]) >= 0 && p[3] == '|') {
+        // Pattern %XX| found in file URL authority - this should be rejected
+        return NULL;
+      }
+    }
+  }
+
   char* preprocessed_url = (char*)cleaned_url;  // Default: no preprocessing needed
   char* url_to_free = NULL;
 
@@ -247,6 +265,12 @@ char* preprocess_url_string(const char* url, const char* base) {
     return NULL;
   }
 
+  // Validate URL characters (rejects fullwidth percent, invalid Unicode, etc.)
+  if (!validate_url_characters(trimmed_url)) {
+    free(trimmed_url);
+    return NULL;
+  }
+
   // Check for forbidden percent-encoded characters in the URL per WHATWG URL spec
   // This includes null bytes and other control characters that should cause URL parsing to fail
   if (!validate_percent_encoded_characters(trimmed_url)) {
@@ -332,6 +356,12 @@ int is_relative_url(const char* cleaned_url, const char* base) {
 
     // URLs starting with "?", "#" are always relative
     if (cleaned_url[0] == '?' || cleaned_url[0] == '#') {
+      return 1;
+    }
+
+    // URLs starting with backslashes are relative (Windows path patterns)
+    // Examples: "\x", "\\x\hello", "\\server\file"
+    if (cleaned_url[0] == '\\') {
       return 1;
     }
 

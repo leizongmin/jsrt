@@ -266,7 +266,11 @@ int JSRT_CmdRunEmbeddedBytecode(const char* executable_path, int argc, char** ar
   // Read the 8-byte size from the end
   fseek(exe_file, exe_size - 8, SEEK_SET);
   uint64_t size_be = 0;
-  fread(&size_be, 1, 8, exe_file);
+  if (fread(&size_be, 1, 8, exe_file) != 8) {
+    // Failed to read size, silently return
+    fclose(exe_file);
+    return 1;
+  }
 
   // Convert from big-endian
   long bytecode_size = 0;
@@ -283,7 +287,11 @@ int JSRT_CmdRunEmbeddedBytecode(const char* executable_path, int argc, char** ar
   // Check for boundary signature
   fseek(exe_file, exe_size - 8 - boundary_len, SEEK_SET);
   char boundary_check[64];
-  fread(boundary_check, 1, boundary_len, exe_file);
+  if (fread(boundary_check, 1, boundary_len, exe_file) != boundary_len) {
+    // Failed to read boundary, silently return
+    fclose(exe_file);
+    return 1;
+  }
   boundary_check[boundary_len] = '\0';
 
   if (strcmp(boundary_check, boundary) != 0) {

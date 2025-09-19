@@ -435,25 +435,15 @@ char* remove_all_ascii_whitespace(const char* url) {
       continue;
     }
 
-    // Handle UTF-8 sequences that may contain BOM or other characters to strip
+    // Handle UTF-8 sequences - preserve BOM characters per WHATWG URL spec
+    // BOM characters (U+FEFF) should be preserved and percent-encoded, not stripped
     if (c >= 0x80) {
-      // Check for specific UTF-8 sequences we need to remove
-      if (i + 2 < len && c == 0xEF && (unsigned char)url[i + 1] == 0xBB && (unsigned char)url[i + 2] == 0xBF) {
-        // UTF-8 BOM (U+FEFF) - remove it
-        i += 3;
-        continue;
-      }
-
-      // Check for Zero Width No-Break Space (U+FEFF) in other UTF-8 encodings
-      if (i + 2 < len && c == 0xEF && (unsigned char)url[i + 1] == 0xBF && (unsigned char)url[i + 2] == 0xBF) {
-        // U+FEFF as ZWNBSP - remove it
-        i += 3;
-        continue;
-      }
+      // No special UTF-8 sequences need to be removed
+      // All Unicode characters including BOM should be preserved for proper encoding
     }
 
-    // According to WHATWG URL spec, spaces should be preserved and encoded later
-    // Only remove tab, LF, CR, and specific Unicode characters like BOM - preserve all other characters
+    // According to WHATWG URL spec, spaces and Unicode characters should be preserved and encoded later
+    // Only remove tab, LF, CR - preserve all other characters including BOM
     result[j++] = url[i++];
   }
   result[j] = '\0';

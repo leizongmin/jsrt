@@ -614,10 +614,9 @@ char* url_fragment_encode_nonspecial(const char* str) {
       // Already percent-encoded sequence, keep as-is
       encoded_len += 3;
     } else if (c <= 32 || c == '"' || c == '<' || c == '>' || c == '^' || c == '{' || c == '|' || c == '}' ||
-               c == '`') {
-      // Need to percent-encode unsafe characters including spaces
-      // WPT tests expect spaces to be encoded even for non-special schemes
-      // Note: Unicode characters (>= 127) are allowed in fragments per WPT tests
+               c == '`' || c >= 127) {
+      // Need to percent-encode unsafe characters including spaces and Unicode characters
+      // WPT tests expect Unicode characters (>= 127) to be encoded even for non-special schemes
       encoded_len += 3;  // %XX
     } else {
       encoded_len++;
@@ -639,10 +638,9 @@ char* url_fragment_encode_nonspecial(const char* str) {
       encoded[j++] = str[i + 2];
       i += 2;  // Skip the next two characters
     } else if (c <= 32 || c == '"' || c == '<' || c == '>' || c == '^' || c == '{' || c == '|' || c == '}' ||
-               c == '`') {
-      // Need to percent-encode unsafe characters including spaces
-      // WPT tests expect spaces to be encoded even for non-special schemes
-      // Note: Unicode characters (>= 127) are allowed in fragments per WPT tests
+               c == '`' || c >= 127) {
+      // Need to percent-encode unsafe characters including spaces and Unicode characters
+      // WPT tests expect Unicode characters (>= 127) to be encoded even for non-special schemes
       encoded[j++] = '%';
       encoded[j++] = hex_chars[c >> 4];
       encoded[j++] = hex_chars[c & 15];

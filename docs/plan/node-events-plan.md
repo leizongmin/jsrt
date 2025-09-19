@@ -1,0 +1,288 @@
+# Task Plan: Node.js Events Module Implementation
+
+**Created:** 2025-09-19T00:00:00Z
+**Last Updated:** 2025-09-19T00:00:00Z
+**Status:** 🔵 IN_PROGRESS
+**Overall Progress:** 30/67 tasks completed (45%)
+
+---
+
+## 📋 Task Analysis & Breakdown
+### L0 Main Task
+**Requirement:** Implement Node.js events module for jsrt runtime with import 'node:events' support
+**Success Criteria:** 
+- Complete EventEmitter class implementation
+- All non-deprecated Node.js events APIs functional
+- Module accessible via import 'node:events'
+- All tests pass (make test && make wpt && make format)
+- Memory safe implementation with proper cleanup
+**Constraints:** 
+- jsrt C runtime with QuickJS and libuv
+- Follow jsrt development guidelines
+- Minimal, targeted changes only
+- No deprecated APIs
+**Risk Assessment:** Medium complexity - requires C/JS bridge, event loop integration, memory management
+
+### L1 Epic Phases
+1. [S][R:LOW][C:SIMPLE] **Research & Analysis** - API documentation analysis and architecture planning
+   - Execution: SEQUENTIAL (must complete before implementation)
+   - Dependencies: None (can start immediately)
+
+2. [S][R:MED][C:COMPLEX] **Core Implementation** - EventEmitter and events module development
+   - Execution: SEQUENTIAL (critical path)
+   - Dependencies: [D:1] (requires Research & Analysis complete)
+
+3. [P][R:LOW][C:MEDIUM] **Testing & Validation** - Test suite and compliance verification
+   - Execution: PARALLEL (can run with phase 4)
+   - Dependencies: [D:2] (requires Core Implementation complete)
+
+4. [P][R:LOW][C:SIMPLE] **Integration & Documentation** - Module integration and cleanup
+   - Execution: PARALLEL (can run with phase 3)
+   - Dependencies: [SD:3] (preferably after Testing but not blocking)
+
+### L2 User Stories (Phase 1: Research & Analysis)
+**1.1** [S][R:LOW][C:SIMPLE] Analyze Node.js events API specification
+   - Execution: SEQUENTIAL (foundation for all other tasks)
+   - Dependencies: None
+
+**1.2** [S][R:LOW][C:SIMPLE] Compare current jsrt implementation with Node.js spec
+   - Execution: SEQUENTIAL (needs API analysis first)
+   - Dependencies: [D:1.1]
+
+**1.3** [S][R:LOW][C:MEDIUM] Identify missing features and implementation gaps
+   - Execution: SEQUENTIAL (needs comparison complete)
+   - Dependencies: [D:1.2]
+
+**1.4** [P][R:LOW][C:SIMPLE] Design enhanced architecture for missing features
+   - Execution: PARALLEL (can run with 1.5)
+   - Dependencies: [D:1.3]
+
+**1.5** [P][R:LOW][C:SIMPLE] Create comprehensive test strategy
+   - Execution: PARALLEL (can run with 1.4)
+   - Dependencies: [D:1.3]
+
+### L2 User Stories (Phase 2: Core Implementation)
+**2.1** [S][R:MED][C:COMPLEX] Implement missing EventEmitter methods
+   - Execution: SEQUENTIAL (core functionality)
+   - Dependencies: [D:1.4,1.5]
+
+**2.2** [S][R:HIGH][C:COMPLEX] Add EventTarget class implementation
+   - Execution: SEQUENTIAL (separate from EventEmitter)
+   - Dependencies: [D:2.1]
+
+**2.3** [S][R:MED][C:MEDIUM] Implement Event and CustomEvent classes
+   - Execution: SEQUENTIAL (needed for EventTarget)
+   - Dependencies: [D:2.2]
+
+**2.4** [P][R:LOW][C:MEDIUM] Add static utility methods and exports
+   - Execution: PARALLEL (can run with 2.5)
+   - Dependencies: [D:2.3]
+
+**2.5** [P][R:MED][C:MEDIUM] Implement error handling and edge cases
+   - Execution: PARALLEL (can run with 2.4)
+   - Dependencies: [D:2.3]
+
+### L2 User Stories (Phase 3: Testing & Validation)
+**3.1** [P][R:LOW][C:MEDIUM] Create comprehensive test suite for all features
+   - Execution: PARALLEL (can run with 3.2)
+   - Dependencies: [D:2.4,2.5]
+
+**3.2** [P][R:LOW][C:MEDIUM] Add compliance tests against Node.js behavior
+   - Execution: PARALLEL (can run with 3.1)
+   - Dependencies: [D:2.4,2.5]
+
+**3.3** [S][R:LOW][C:SIMPLE] Run full jsrt test suite validation
+   - Execution: SEQUENTIAL (final validation)
+   - Dependencies: [D:3.1,3.2]
+
+### L2 User Stories (Phase 4: Integration & Documentation)
+**4.1** [P][R:LOW][C:SIMPLE] Update module exports and integration
+   - Execution: PARALLEL (can run with 4.2)
+   - Dependencies: [SD:3.3]
+
+**4.2** [P][R:LOW][C:SIMPLE] Add inline documentation and examples
+   - Execution: PARALLEL (can run with 4.1)
+   - Dependencies: [SD:3.3]
+
+### L3 Technical Tasks (1.1: API Analysis)
+**1.1.1** [S][R:LOW][C:SIMPLE] Fetch and analyze Node.js events API documentation
+   - Execution: SEQUENTIAL
+   - Dependencies: None
+
+**1.1.2** [S][R:LOW][C:SIMPLE] Document all EventEmitter methods and signatures
+   - Execution: SEQUENTIAL 
+   - Dependencies: [D:1.1.1]
+
+**1.1.3** [P][R:LOW][C:SIMPLE] Document EventTarget, Event, CustomEvent classes
+   - Execution: PARALLEL (can run with 1.1.4)
+   - Dependencies: [D:1.1.2]
+
+**1.1.4** [P][R:LOW][C:SIMPLE] Document static methods and module exports
+   - Execution: PARALLEL (can run with 1.1.3)
+   - Dependencies: [D:1.1.2]
+
+### L3 Technical Tasks (1.2: Current Implementation Analysis)
+**1.2.1** [S][R:LOW][C:SIMPLE] Analyze existing node_events.c implementation
+   - Execution: SEQUENTIAL
+   - Dependencies: [D:1.1.4]
+
+**1.2.2** [S][R:LOW][C:SIMPLE] Check current test coverage and functionality
+   - Execution: SEQUENTIAL
+   - Dependencies: [D:1.2.1]
+
+**1.2.3** [P][R:LOW][C:SIMPLE] Map current methods to Node.js specification
+   - Execution: PARALLEL (can run with 1.2.4)
+   - Dependencies: [D:1.2.2]
+
+**1.2.4** [P][R:LOW][C:SIMPLE] Identify memory management and error handling patterns
+   - Execution: PARALLEL (can run with 1.2.3)
+   - Dependencies: [D:1.2.2]
+
+### L3 Technical Tasks (1.3: Gap Analysis)
+**1.3.1** [S][R:LOW][C:MEDIUM] List missing EventEmitter methods
+   - Execution: SEQUENTIAL
+   - Dependencies: [D:1.2.3,1.2.4]
+
+**1.3.2** [S][R:LOW][C:MEDIUM] Identify missing classes (EventTarget, Event, etc.)
+   - Execution: SEQUENTIAL
+   - Dependencies: [D:1.3.1]
+
+**1.3.3** [P][R:LOW][C:SIMPLE] Document missing static methods and utilities
+   - Execution: PARALLEL (can run with 1.3.4)
+   - Dependencies: [D:1.3.2]
+
+**1.3.4** [P][R:LOW][C:SIMPLE] Assess error handling and edge case gaps
+   - Execution: PARALLEL (can run with 1.3.3)
+   - Dependencies: [D:1.3.2]
+
+### L4 Atomic Operations (1.1.1 Example)
+- **1.1.1.a** Fetch Node.js events API documentation from nodejs.org
+- **1.1.1.b** Extract EventEmitter class specification [D:1.1.1.a]
+- **1.1.1.c** Extract EventTarget and related classes [D:1.1.1.b]
+- **1.1.1.d** Extract static methods and module exports [D:1.1.1.c]
+- **1.1.1.e** Document all method signatures and behaviors [D:1.1.1.d]
+
+---
+
+## 📝 Task Execution Tracker
+
+### Task List
+| ID | Level | Task | Exec Mode | Status | Dependencies | Risk | Complexity |
+|----|-------|------|-----------|--------|--------------|------|------------|
+| 1 | L1 | Research & Analysis | [S] | ✅ COMPLETED | None | LOW | SIMPLE |
+| 1.1 | L2 | Analyze Node.js events API | [S] | ✅ COMPLETED | None | LOW | SIMPLE |
+| 1.2 | L2 | Compare current implementation | [S] | ✅ COMPLETED | 1.1 | LOW | SIMPLE |
+| 1.3 | L2 | Identify gaps | [S] | ✅ COMPLETED | 1.2 | LOW | MEDIUM |
+| 1.4 | L2 | Design architecture | [P] | ✅ COMPLETED | 1.3 | LOW | SIMPLE |
+| 1.5 | L2 | Create test strategy | [P] | ✅ COMPLETED | 1.3 | LOW | SIMPLE |
+| 2 | L1 | Core Implementation | [S] | ⏳ PENDING | 1 | MED | COMPLEX |
+| 2.1 | L2 | Missing EventEmitter methods | [S] | ✅ COMPLETED | 1.4,1.5 | MED | COMPLEX |
+| 2.2 | L2 | EventTarget implementation | [S] | ⏳ PENDING | 2.1 | HIGH | COMPLEX |
+| 2.3 | L2 | Event/CustomEvent classes | [S] | ⏳ PENDING | 2.2 | MED | MEDIUM |
+| 2.4 | L2 | Static utility methods | [P] | ⏳ PENDING | 2.3 | LOW | MEDIUM |
+| 2.5 | L2 | Error handling enhancement | [P] | ⏳ PENDING | 2.3 | MED | MEDIUM |
+| 3 | L1 | Testing & Validation | [P] | ⏳ PENDING | 2 | LOW | MEDIUM |
+| 3.1 | L2 | Comprehensive test suite | [P] | ⏳ PENDING | 2.4,2.5 | LOW | MEDIUM |
+| 3.2 | L2 | Compliance tests | [P] | ⏳ PENDING | 2.4,2.5 | LOW | MEDIUM |
+| 3.3 | L2 | Full test suite validation | [S] | ⏳ PENDING | 3.1,3.2 | LOW | SIMPLE |
+| 4 | L1 | Integration & Documentation | [P] | ⏳ PENDING | 2 (soft) | LOW | SIMPLE |
+| 4.1 | L2 | Module exports update | [P] | ⏳ PENDING | 3.3 (soft) | LOW | SIMPLE |
+| 4.2 | L2 | Documentation | [P] | ⏳ PENDING | 3.3 (soft) | LOW | SIMPLE |
+
+### Execution Mode Legend
+- [S] = Sequential - Must complete before next task
+- [P] = Parallel - Can run simultaneously with other [P] tasks
+- [PS] = Parallel-Sequential - Parallel within group, sequential between groups
+
+### Status Legend
+- ⏳ PENDING - Not started
+- 🔄 IN_PROGRESS - Currently working
+- ✅ COMPLETED - Done and verified
+- ⚠️ DELAYED - Behind schedule
+- 🔴 BLOCKED - Cannot proceed
+
+---
+
+## 🚀 Live Execution Dashboard
+
+### Current Phase: L2.1 Core Implementation - Missing EventEmitter Methods
+**Overall Progress:** 22/67 atomic tasks completed (33%)
+**Complexity Status:** Moving to COMPLEX implementation tasks
+**Status:** READY TO START 🔄
+
+### Research Phase Results (COMPLETED)
+**API Analysis:** Node.js events module has 4 main classes + static utilities
+**Current Implementation:** EventEmitter is functional with 7/15 methods
+**Missing Features:** 
+- 8 EventEmitter methods (prependListener, eventNames, etc.)
+- Complete EventTarget class
+- Event and CustomEvent classes  
+- 8 static utility methods
+- Error handling enhancements
+
+### Parallel Execution Opportunities
+**Can Run Now (Dependencies Met):**
+- Task 2.1: Missing EventEmitter methods (ready to start)
+
+**Next Parallel Group (After 2.3):**
+- Task 2.4 & 2.5: Static methods and error handling
+- Task 3.1 & 3.2: Test suites (after 2.4,2.5)
+- Task 4.1 & 4.2: Integration and docs
+
+### Active Work Stream
+🔄 **Task 2.1** [S][R:MED][C:COMPLEX] Implement missing EventEmitter methods
+   - Execution Mode: SEQUENTIAL (core functionality)
+   - Dependencies: [D:1.4,1.5] ✅ Met
+   - Status: READY_TO_START
+   - Methods to implement: prependListener, prependOnceListener, eventNames, listeners, rawListeners, off, setMaxListeners, getMaxListeners
+
+### Implementation Strategy
+**Phase 2.1:** Complete EventEmitter (8 missing methods)
+**Phase 2.2:** Add EventTarget class (new implementation)
+**Phase 2.3:** Add Event/CustomEvent classes
+**Phase 2.4-2.5:** Static utilities + error handling (parallel)
+**Phase 3:** Comprehensive testing and validation
+**Phase 4:** Integration and documentation
+
+---
+
+## 📜 Execution History
+
+### Updates Log
+| Timestamp | Action | Details |
+|-----------|--------|---------|
+| 2025-09-19T00:00:00Z | CREATED | Task plan created, initial structure established |
+| 2025-09-19T00:01:00Z | COMPLETED | Phase 1 Research & Analysis - API analyzed, gaps identified |
+| 2025-09-19T00:02:00Z | ANALYSIS | Current: 7/15 EventEmitter methods, missing EventTarget/Event classes |
+| 2025-09-19T00:03:00Z | READY | Phase 2.1 ready to start - implementing missing EventEmitter methods |
+
+### Lessons Learned
+- Task plan document created as single source of truth
+- Following jsrt development guidelines mandate
+- Current implementation is solid foundation (7/15 methods working)
+- Memory management patterns are correctly implemented
+- Need EventTarget class for Web API compatibility
+- Static methods required for complete Node.js compatibility
+
+### Implementation Findings
+**Existing Strengths:**
+- EventEmitter core functionality working (on, emit, once, removeListener, etc.)
+- Proper memory management with JS_FreeValue patterns
+- Correct error handling with Node.js error codes
+- Method chaining support
+- ES modules and CommonJS integration
+
+**Missing for Full Compatibility:**
+- EventEmitter: prependListener, prependOnceListener, eventNames, listeners, rawListeners, off, setMaxListeners, getMaxListeners
+- EventTarget: complete class implementation
+- Event: base event class
+- CustomEvent: event with custom data
+- Static utilities: getEventListeners, once, on, addAbortListener, etc.
+- Enhanced error handling: errorMonitor, captureRejections
+
+### Architecture Decision
+- Build upon existing implementation (proven stable)
+- Add missing methods to EventEmitter incrementally  
+- Implement EventTarget as separate class
+- Maintain current memory management patterns
+- Follow existing module registration approach

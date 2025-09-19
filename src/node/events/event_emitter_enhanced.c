@@ -55,24 +55,8 @@ JSValue js_event_emitter_prepend_once_listener(JSContext* ctx, JSValueConst this
     return node_throw_error(ctx, NODE_ERR_INVALID_ARG_TYPE, "listener must be a function");
   }
 
-  // Create a wrapper function that removes itself after being called
-  const char* wrapper_code =
-      "(function(emitter, event, listener) {"
-      "  function wrapper(...args) {"
-      "    emitter.removeListener(event, wrapper);"
-      "    return listener.apply(this, args);"
-      "  }"
-      "  return wrapper;"
-      "})";
-
-  JSValue wrapper_factory = JS_Eval(ctx, wrapper_code, strlen(wrapper_code), "<wrapper>", JS_EVAL_TYPE_GLOBAL);
-  if (JS_IsException(wrapper_factory))
-    return wrapper_factory;
-
-  JSValue wrapper_args[3] = {this_val, argv[0], argv[1]};
-  JSValue wrapper = JS_Call(ctx, wrapper_factory, JS_UNDEFINED, 3, wrapper_args);
-  JS_FreeValue(ctx, wrapper_factory);
-
+  // Use secure native wrapper instead of JS_Eval to prevent code injection
+  JSValue wrapper = create_prepend_once_wrapper(ctx, this_val, argv[0], argv[1]);
   if (JS_IsException(wrapper))
     return wrapper;
 

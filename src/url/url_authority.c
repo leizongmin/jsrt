@@ -2,6 +2,7 @@
 #include <errno.h>
 #include "url.h"
 
+
 // Parse authority section: [userinfo@]host[:port]
 // Returns 0 on success, -1 on error
 int parse_authority(JSRT_URL* parsed, const char* authority_str) {
@@ -355,10 +356,7 @@ int parse_authority(JSRT_URL* parsed, const char* authority_str) {
         if (!validate_hostname_characters_with_scheme(host_part, parsed->protocol)) {
           goto cleanup_and_return_error;
         }
-        // Pre-validate hostname before decoding to catch invalid percent-encoding
-        if (!validate_hostname_characters_with_scheme(host_part, parsed->protocol)) {
-          goto cleanup_and_return_error;
-        }
+
         char* decoded_host = url_decode_hostname_with_scheme(host_part, parsed->protocol);
         char* final_hostname = decoded_host ? decoded_host : strdup(host_part);
         free(parsed->hostname);

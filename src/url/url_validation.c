@@ -263,6 +263,15 @@ int validate_hostname_characters_with_scheme(const char* hostname, const char* s
     // According to WHATWG spec, if the last part looks numeric, treat as IPv4
     char* hostname_copy = strdup(hostname);
     if (hostname_copy) {
+      // Handle trailing dot case (like "1.2.3.4.5.")
+      size_t hostname_len = strlen(hostname_copy);
+      int has_trailing_dot = 0;
+
+      if (hostname_len > 0 && hostname_copy[hostname_len - 1] == '.') {
+        has_trailing_dot = 1;
+        hostname_copy[hostname_len - 1] = '\0';  // Remove trailing dot for processing
+      }
+
       char* last_dot = strrchr(hostname_copy, '.');
       int should_treat_as_ipv4 = 0;
 
@@ -281,6 +290,28 @@ int validate_hostname_characters_with_scheme(const char* hostname, const char* s
         // If last part is numeric, treat entire hostname as IPv4 attempt
         if (last_part_numeric && strlen(last_part) > 0) {
           should_treat_as_ipv4 = 1;
+        }
+      } else if (has_trailing_dot && hostname_len > 1) {
+        // Special case: if we removed a trailing dot and the remaining has dots,
+        // it might still be an IPv4 attempt (like "1.2.3.4.")
+        if (strchr(hostname_copy, '.') != NULL) {
+          // Find the last segment before the removed dot
+          char* last_dot_after_removal = strrchr(hostname_copy, '.');
+          if (last_dot_after_removal) {
+            char* last_part = last_dot_after_removal + 1;
+            int last_part_numeric = 1;
+
+            for (size_t i = 0; i < strlen(last_part); i++) {
+              if (last_part[i] < '0' || last_part[i] > '9') {
+                last_part_numeric = 0;
+                break;
+              }
+            }
+
+            if (last_part_numeric && strlen(last_part) > 0) {
+              should_treat_as_ipv4 = 1;
+            }
+          }
         }
       }
 

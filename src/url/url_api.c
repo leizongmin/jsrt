@@ -18,9 +18,43 @@ static JSClassDef JSRT_URLClass = {
     .finalizer = JSRT_URLFinalize,
 };
 
+// Helper function to validate UTF-8 sequence
+static int is_valid_utf8_sequence(const unsigned char* bytes, size_t start, size_t max_len, size_t* seq_len) {
+  if (start >= max_len)
+    return 0;
+
+  unsigned char c = bytes[start];
+
+  if (c < 0x80) {
+    // ASCII
+    *seq_len = 1;
+    return 1;
+  } else if ((c & 0xE0) == 0xC0) {
+    // 2-byte sequence
+    if (start + 1 >= max_len)
+      return 0;
+    *seq_len = 2;
+    return (bytes[start + 1] & 0xC0) == 0x80;
+  } else if ((c & 0xF0) == 0xE0) {
+    // 3-byte sequence
+    if (start + 2 >= max_len)
+      return 0;
+    *seq_len = 3;
+    return (bytes[start + 1] & 0xC0) == 0x80 && (bytes[start + 2] & 0xC0) == 0x80;
+  } else if ((c & 0xF8) == 0xF0) {
+    // 4-byte sequence
+    if (start + 3 >= max_len)
+      return 0;
+    *seq_len = 4;
+    return (bytes[start + 1] & 0xC0) == 0x80 && (bytes[start + 2] & 0xC0) == 0x80 && (bytes[start + 3] & 0xC0) == 0x80;
+  }
+
+  return 0;  // Invalid UTF-8 start byte
+}
+
 // Helper function to strip tab and newline characters from URL strings
 // According to URL spec, these characters should be removed: tab (0x09), LF (0x0A), CR (0x0D)
-// Also removes invisible Unicode characters per WHATWG URL specification preprocessing
+// Per WHATWG URL specification, only strip control characters but don't reject URLs with special characters
 static char* JSRT_StripURLControlCharacters(const char* input, size_t input_len) {
   if (!input)
     return NULL;
@@ -39,31 +73,26 @@ static char* JSRT_StripURLControlCharacters(const char* input, size_t input_len)
       continue;  // Skip these characters
     }
 
-    // Remove specific invisible Unicode characters that break URL parsing
-    // These should be stripped during preprocessing, not during hostname validation
-    if (c == 0xE2 && i + 2 < input_len) {
-      unsigned char c2 = (unsigned char)input[i + 1];
-      unsigned char c3 = (unsigned char)input[i + 2];
-
-      // Zero-width space (U+200B): 0xE2 0x80 0x8B
-      // Zero-width non-joiner (U+200C): 0xE2 0x80 0x8C
-      // Zero-width joiner (U+200D): 0xE2 0x80 0x8D
-      // Left-to-right mark (U+200E): 0xE2 0x80 0x8E
-      // Right-to-left mark (U+200F): 0xE2 0x80 0x8F
-      if (c2 == 0x80 && (c3 == 0x8B || c3 == 0x8C || c3 == 0x8D || c3 == 0x8E || c3 == 0x8F)) {
-        i += 2;  // Skip the 3-byte Unicode sequence
-        continue;
+    // For UTF-8 sequences, validate and copy them but don't reject based on specific characters
+    // Many Unicode characters that were previously rejected should be allowed per WPT tests
+    if (c >= 0x80) {
+      size_t utf8_len;
+      if (!is_valid_utf8_sequence((const unsigned char*)input, i, input_len, &utf8_len)) {
+        // Only reject truly malformed UTF-8
+        free(result);
+        return NULL;
       }
 
-      // Word joiner (U+2060): 0xE2 0x81 0xA0
-      if (c2 == 0x81 && c3 == 0xA0) {
-        i += 2;  // Skip the 3-byte Unicode sequence
-        continue;
+      // Copy the entire valid UTF-8 sequence
+      for (size_t k = 0; k < utf8_len && i + k < input_len; k++) {
+        result[j++] = input[i + k];
       }
+      i += utf8_len - 1;  // Skip the rest of the sequence (loop will increment i)
+    } else {
+      // ASCII character - copy as-is
+      // Let the URL parser handle validation and normalization of special characters
+      result[j++] = c;
     }
-
-    // Keep all other characters
-    result[j++] = c;
   }
   result[j] = '\0';
   return result;
@@ -86,7 +115,7 @@ static JSValue JSRT_URLConstructor(JSContext* ctx, JSValueConst new_target, int 
   char* url_str = JSRT_StripURLControlCharacters(url_str_raw, strlen(url_str_raw));
   JS_FreeCString(ctx, url_str_raw);
   if (!url_str) {
-    return JS_EXCEPTION;
+    return JS_ThrowTypeError(ctx, "Invalid URL");
   }
 
   const char* base_str_raw = NULL;
@@ -102,7 +131,7 @@ static JSValue JSRT_URLConstructor(JSContext* ctx, JSValueConst new_target, int 
     JS_FreeCString(ctx, base_str_raw);
     if (!base_str) {
       free(url_str);
-      return JS_EXCEPTION;
+      return JS_ThrowTypeError(ctx, "Invalid URL");
     }
   }
 

@@ -5,6 +5,15 @@
 
 static const char hex_chars[] = "0123456789ABCDEF";
 
+// Safe allocation with overflow protection
+static char* safe_malloc_for_encoding(size_t encoded_len) {
+  // Check for overflow in final allocation
+  if (encoded_len > SIZE_MAX - 1) {
+    return NULL;  // Would overflow when adding null terminator
+  }
+  return malloc(encoded_len + 1);
+}
+
 int hex_to_int(char c) {
   if (c >= '0' && c <= '9')
     return c - '0';
@@ -39,7 +48,7 @@ char* url_encode_with_len(const char* str, size_t len) {
     encoded_len += add_len;
   }
 
-  char* encoded = malloc(encoded_len + 1);
+  char* encoded = safe_malloc_for_encoding(encoded_len);
   if (!encoded) {
     return NULL;
   }
@@ -92,7 +101,7 @@ char* url_component_encode(const char* str) {
     }
   }
 
-  char* encoded = malloc(encoded_len + 1);
+  char* encoded = safe_malloc_for_encoding(encoded_len);
   if (!encoded) {
     return NULL;
   }
@@ -147,7 +156,7 @@ char* url_fragment_encode(const char* str) {
     }
   }
 
-  char* encoded = malloc(encoded_len + 1);
+  char* encoded = safe_malloc_for_encoding(encoded_len);
   if (!encoded) {
     return NULL;
   }
@@ -231,7 +240,7 @@ char* url_nonspecial_path_encode(const char* str) {
     }
   }
 
-  char* encoded = malloc(encoded_len + 1);
+  char* encoded = safe_malloc_for_encoding(encoded_len);
   if (!encoded) {
     free(cleaned);
     return NULL;
@@ -341,7 +350,7 @@ char* url_userinfo_encode_with_scheme_name(const char* str, const char* scheme) 
     }
   }
 
-  char* encoded = malloc(encoded_len + 1);
+  char* encoded = safe_malloc_for_encoding(encoded_len);
   if (!encoded) {
     return NULL;
   }
@@ -642,7 +651,7 @@ char* url_fragment_encode_nonspecial(const char* str) {
     }
   }
 
-  char* encoded = malloc(encoded_len + 1);
+  char* encoded = safe_malloc_for_encoding(encoded_len);
   if (!encoded) {
     return NULL;
   }
@@ -703,7 +712,7 @@ char* url_path_encode_special(const char* str) {
     }
   }
 
-  char* encoded = malloc(encoded_len + 1);
+  char* encoded = safe_malloc_for_encoding(encoded_len);
   if (!encoded) {
     return NULL;
   }
@@ -784,7 +793,7 @@ char* url_path_encode_file(const char* str) {
     }
   }
 
-  char* encoded = malloc(encoded_len + 1);
+  char* encoded = safe_malloc_for_encoding(encoded_len);
   if (!encoded) {
     return NULL;
   }
@@ -849,7 +858,7 @@ char* url_component_encode_file_path(const char* str) {
     }
   }
 
-  char* encoded = malloc(encoded_len + 1);
+  char* encoded = safe_malloc_for_encoding(encoded_len);
   if (!encoded) {
     return NULL;
   }

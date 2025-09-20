@@ -56,7 +56,7 @@ int is_special_scheme(const char* protocol) {
 }
 
 // Validate credentials according to WHATWG URL specification
-// Only reject the most critical characters that would break URL parsing
+// For special schemes, reject characters that should cause URL parsing to fail
 // Other characters will be percent-encoded as needed
 int validate_credentials(const char* credentials) {
   if (!credentials)
@@ -65,17 +65,18 @@ int validate_credentials(const char* credentials) {
   for (const char* p = credentials; *p; p++) {
     unsigned char c = (unsigned char)*p;
 
-    // Only reject characters that would completely break URL parsing
-    // Per WHATWG URL spec, most special characters should be percent-encoded, not rejected
-    // Note: @ should be percent-encoded as %40 in userinfo, not rejected
+    // Always reject characters that would completely break URL parsing
+    // Per WHATWG URL spec, control characters and URL structure delimiters are invalid
     if (c == 0x09 || c == 0x0A || c == 0x0D ||  // control chars: tab, LF, CR
         c == '/' || c == '?' || c == '#') {     // URL structure delimiters (except @)
       return 0;                                 // Invalid character found
     }
 
-    // Per WPT tests, most special characters should be percent-encoded, not rejected
-    // Only reject characters that would break the entire URL structure
-    // Characters like `, {, } should be percent-encoded by url_userinfo_encode
+    // Per WPT tests, backticks and curly braces in userinfo should cause URL parsing to fail
+    // These characters are problematic and should be rejected, not percent-encoded
+    if (c == '`' || c == '{' || c == '}') {
+      return 0;  // Invalid character found
+    }
 
     // Reject other ASCII control characters (< 0x20) except those already checked
     if (c < 0x20) {
@@ -88,6 +89,11 @@ int validate_credentials(const char* credentials) {
 // Validate URL characters according to WPT specification
 // Reject ASCII tab (0x09), LF (0x0A), and CR (0x0D)
 int validate_url_characters(const char* url) {
+  if (!url)
+    return 0;
+
+  size_t url_len = strlen(url);  // Compute once for efficiency
+
   for (const char* p = url; *p; p++) {
     unsigned char c = (unsigned char)*p;
 
@@ -148,14 +154,14 @@ int validate_url_characters(const char* url) {
 
     // Check for fullwidth percent character (％) which should be rejected
     // Fullwidth percent (％) is encoded as 0xEF 0xBC 0x85
-    if (c == 0xEF && p + 2 < url + strlen(url) && (unsigned char)*(p + 1) == 0xBC && (unsigned char)*(p + 2) == 0x85) {
+    if (c == 0xEF && p + 2 < url + url_len && (unsigned char)*(p + 1) == 0xBC && (unsigned char)*(p + 2) == 0x85) {
       return 0;  // Fullwidth percent character is invalid
     }
 
     // Check for other problematic Unicode sequences that should cause URL parsing to fail
     // Arabic Ligature Alef Maksura Yeh with Fathatan (U+FDD0) which can appear as ﷐
     // This is encoded as 0xEF 0xB7 0x90 and should be rejected per WPT tests
-    if (c == 0xEF && p + 2 < url + strlen(url) && (unsigned char)*(p + 1) == 0xB7 && (unsigned char)*(p + 2) == 0x90) {
+    if (c == 0xEF && p + 2 < url + url_len && (unsigned char)*(p + 1) == 0xB7 && (unsigned char)*(p + 2) == 0x90) {
       return 0;  // Invalid Unicode normalization character
     }
 
@@ -248,6 +254,77 @@ int validate_hostname_characters_with_scheme(const char* hostname, const char* s
     }
     free(canonicalized);
     return 1;  // Valid IPv6 address
+  }
+
+  // Check for invalid IPv4-like patterns
+  // Per WHATWG URL spec, hostnames that look like IPv4 but are invalid should be rejected
+  if (strchr(hostname, '.') != NULL) {
+    // This looks like it might be IPv4 - check if it's valid
+    // According to WHATWG spec, if the last part looks numeric, treat as IPv4
+    char* hostname_copy = strdup(hostname);
+    if (hostname_copy) {
+      char* last_dot = strrchr(hostname_copy, '.');
+      int should_treat_as_ipv4 = 0;
+
+      if (last_dot && last_dot[1] != '\0') {
+        // Check if the last part is numeric
+        char* last_part = last_dot + 1;
+        int last_part_numeric = 1;
+
+        for (size_t i = 0; i < strlen(last_part); i++) {
+          if (last_part[i] < '0' || last_part[i] > '9') {
+            last_part_numeric = 0;
+            break;
+          }
+        }
+
+        // If last part is numeric, treat entire hostname as IPv4 attempt
+        if (last_part_numeric && strlen(last_part) > 0) {
+          should_treat_as_ipv4 = 1;
+        }
+      }
+
+      if (should_treat_as_ipv4) {
+        // Split into parts and validate as IPv4
+        char* token = strtok(hostname_copy, ".");
+        int part_count = 0;
+        int all_parts_valid_ipv4 = 1;
+
+        while (token && part_count < 10) {  // Reasonable limit
+          part_count++;
+
+          // Check if this part is valid for IPv4 (numeric or certain formats)
+          int is_valid_ipv4_part = 0;
+
+          if (strlen(token) > 0) {
+            // Check for pure numeric (decimal)
+            int all_digits = 1;
+            for (size_t i = 0; i < strlen(token); i++) {
+              if (token[i] < '0' || token[i] > '9') {
+                all_digits = 0;
+                break;
+              }
+            }
+            is_valid_ipv4_part = all_digits;
+          }
+
+          if (!is_valid_ipv4_part) {
+            all_parts_valid_ipv4 = 0;
+            break;
+          }
+
+          token = strtok(NULL, ".");
+        }
+
+        // If treated as IPv4 but invalid, reject the entire hostname
+        if (!all_parts_valid_ipv4 || part_count < 1 || part_count > 4) {
+          free(hostname_copy);
+          return 0;  // Invalid IPv4-like hostname
+        }
+      }
+
+      free(hostname_copy);
+    }
   }
 
   for (const char* p = hostname; *p; p++) {

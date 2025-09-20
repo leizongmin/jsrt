@@ -711,35 +711,8 @@ JSRT_URL* parse_absolute_url(const char* preprocessed_url) {
 #endif
   parse_path_query_fragment(parsed, path_start);
 
-  // Now perform complete URL validation with full context
-  // Check for problematic single-character hostnames in complete URLs
-  if (parsed->hostname && strlen(parsed->hostname) == 1 && parsed->hostname[0] >= 'a' && parsed->hostname[0] <= 'z') {
-    // Check if this is a problematic pattern like "http://a" (no port, path is just "/")
-    int has_meaningful_content = 0;
-
-    // Check if there's a non-default port
-    if (parsed->port && strlen(parsed->port) > 0) {
-      has_meaningful_content = 1;
-    }
-
-    // Check if there's a meaningful path (more than just "/")
-    if (parsed->pathname && strlen(parsed->pathname) > 1) {
-      has_meaningful_content = 1;
-    }
-
-    // Check if there's a query or fragment
-    if ((parsed->search && strlen(parsed->search) > 0) || (parsed->hash && strlen(parsed->hash) > 0)) {
-      has_meaningful_content = 1;
-    }
-
-    // If it's just a single-character hostname with no meaningful content, reject it
-    if (!has_meaningful_content) {
-      free(scheme);
-      free(url_copy);
-      JSRT_FreeURL(parsed);
-      return NULL;
-    }
-  }
+  // Per WHATWG URL spec, single-character hostnames are valid
+  // Remove the overly restrictive validation that was rejecting valid URLs
 
   free(scheme);
 

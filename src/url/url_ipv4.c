@@ -133,42 +133,67 @@ int looks_like_ipv4_address(const char* hostname) {
     return 1;  // Valid hex format, looks like IPv4
   }
 
-  // Case 3: Check if hostname ends with a numeric segment
-  // Per WHATWG URL spec, hostnames like "foo.123" should be processed as IPv4
+  // Case 3: Check if hostname is a valid IPv4 address (all segments numeric)
+  // Per WHATWG URL spec, only valid IPv4 addresses should be processed as IPv4
+  // Hostnames like "foo.123" should NOT be processed as IPv4 because "foo" is not numeric
   if (has_dots) {
     // First check for trailing dot case (like "1.2.3.4.")
     size_t len = strlen(normalized);
+    char* to_check = normalized;
+    int has_trailing_dot = 0;
+
     if (len > 0 && normalized[len - 1] == '.') {
-      // Has trailing dot - this should be processed as IPv4 (trailing dot will be removed in canonicalize)
-      // Check if all segments before the trailing dot are numeric
-      char* without_dot = malloc(len);
-      if (!without_dot) {
+      // Has trailing dot - remove it for checking
+      has_trailing_dot = 1;
+      to_check = malloc(len);
+      if (!to_check) {
         free(normalized);
         return 0;
       }
-      strncpy(without_dot, normalized, len - 1);
-      without_dot[len - 1] = '\0';
+      strncpy(to_check, normalized, len - 1);
+      to_check[len - 1] = '\0';
 
       // If empty after removing dot, not IPv4
-      if (strlen(without_dot) == 0) {
-        free(without_dot);
+      if (strlen(to_check) == 0) {
+        free(to_check);
         free(normalized);
         return 0;
       }
+    }
 
-      // Check if the part without trailing dot looks like IPv4
-      int result = 0;
-      char* parts_copy = strdup(without_dot);
-      if (parts_copy) {
-        char* token = strtok(parts_copy, ".");
-        int all_numeric = 1;
-        while (token && all_numeric) {
-          // Check if this token is numeric (decimal, octal, or hex)
-          int token_numeric = 1;
+    // Check if ALL segments are numeric (required for valid IPv4)
+    int result = 0;
+    char* parts_copy = strdup(to_check);
+    if (parts_copy) {
+      char* token = strtok(parts_copy, ".");
+      int all_numeric = 1;
+      int part_count = 0;
 
-          // Check for hex format (0x...)
-          if (strlen(token) >= 2 && (strncmp(token, "0x", 2) == 0 || strncmp(token, "0X", 2) == 0)) {
-            // Hex format - check if valid hex digits after 0x
+      while (token && all_numeric) {
+        part_count++;
+
+        // If we have more than 4 parts, this is not a valid IPv4
+        if (part_count > 4) {
+          all_numeric = 0;
+          break;
+        }
+
+        // Empty parts (consecutive dots) are invalid
+        if (strlen(token) == 0) {
+          all_numeric = 0;
+          break;
+        }
+
+        // Check if this token is numeric (decimal, octal, or hex)
+        int token_numeric = 1;
+
+        // Check for hex format (0x...)
+        if (strlen(token) >= 2 && (strncmp(token, "0x", 2) == 0 || strncmp(token, "0X", 2) == 0)) {
+          // Hex format - check if valid hex digits after 0x (or just "0x" which is valid)
+          if (strlen(token) == 2) {
+            // Just "0x" is valid
+            token_numeric = 1;
+          } else {
             for (size_t i = 2; i < strlen(token); i++) {
               char c = token[i];
               if (!((c >= '0' && c <= '9') || (c >= 'a' && c <= 'f') || (c >= 'A' && c <= 'F'))) {
@@ -176,69 +201,35 @@ int looks_like_ipv4_address(const char* hostname) {
                 break;
               }
             }
-          } else {
-            // Decimal format - check if all characters are digits
-            for (size_t i = 0; i < strlen(token); i++) {
-              if (token[i] < '0' || token[i] > '9') {
-                token_numeric = 0;
-                break;
-              }
-            }
           }
-
-          if (!token_numeric) {
-            all_numeric = 0;
-          }
-          token = strtok(NULL, ".");
-        }
-        result = all_numeric;
-        free(parts_copy);
-      }
-      free(without_dot);
-      if (result) {
-        free(normalized);
-        return 1;  // Looks like IPv4 with trailing dot
-      }
-    }
-
-    // Find the last segment after the rightmost dot
-    char* last_dot = strrchr(normalized, '.');
-    if (last_dot && *(last_dot + 1) != '\0') {  // Ensure there's something after the last dot
-      char* last_segment = last_dot + 1;
-
-      // Check if the last segment is numeric (decimal or hex)
-      int is_numeric = 1;
-
-      // Check for hex format in last segment (0x...)
-      if (strncmp(last_segment, "0x", 2) == 0 || strncmp(last_segment, "0X", 2) == 0) {
-        // Hex format - check if valid hex digits after 0x
-        if (strlen(last_segment) == 2) {
-          // Just "0x" is valid and equals 0
-          is_numeric = 1;
         } else {
-          for (size_t i = 2; i < strlen(last_segment); i++) {
-            char c = last_segment[i];
-            if (!((c >= '0' && c <= '9') || (c >= 'a' && c <= 'f') || (c >= 'A' && c <= 'F'))) {
-              is_numeric = 0;
+          // Decimal/octal format - check if all characters are digits
+          for (size_t i = 0; i < strlen(token); i++) {
+            if (token[i] < '0' || token[i] > '9') {
+              token_numeric = 0;
               break;
             }
           }
         }
-      } else {
-        // Decimal format - check if all characters are digits
-        for (size_t i = 0; i < strlen(last_segment); i++) {
-          if (last_segment[i] < '0' || last_segment[i] > '9') {
-            is_numeric = 0;
-            break;
-          }
+
+        if (!token_numeric) {
+          all_numeric = 0;
         }
+        token = strtok(NULL, ".");
       }
 
-      if (is_numeric) {
-        // The last segment is numeric, so this should be processed as IPv4
-        free(normalized);
-        return 1;
-      }
+      // Valid IPv4 must have 1-4 parts, all numeric
+      result = all_numeric && part_count >= 1 && part_count <= 4;
+      free(parts_copy);
+    }
+
+    if (has_trailing_dot) {
+      free(to_check);
+    }
+
+    if (result) {
+      free(normalized);
+      return 1;  // Valid IPv4 format
     }
   }
 

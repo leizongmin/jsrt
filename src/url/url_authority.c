@@ -62,9 +62,11 @@ int parse_authority(JSRT_URL* parsed, const char* authority_str) {
           }
         }
 
-        // If potential port contains non-digits, this is an invalid pattern
+        // If potential port contains non-digits, this is an invalid pattern for hostname:port@host
+        // But we should treat it as userinfo instead per WHATWG URL spec
         if (has_non_digit) {
-          goto cleanup_and_return_error;
+          // This is not hostname:port@host pattern, treat as normal user:pass@host
+          // Continue normal parsing
         }
       }
       // If prefix doesn't look like hostname, treat as normal user:pass@host
@@ -84,16 +86,27 @@ int parse_authority(JSRT_URL* parsed, const char* authority_str) {
       parsed->password = strdup("");
       parsed->has_password_field = 0;
     } else {
-      // Valid userinfo - parse normally
+      // Valid userinfo - parse and validate
       char* colon_pos = strchr(authority, ':');
       if (colon_pos) {
         *colon_pos = '\0';
+
+        // Validate username and password for invalid characters
+        if (!validate_credentials(authority) || !validate_credentials(colon_pos + 1)) {
+          goto cleanup_and_return_error;
+        }
+
         free(parsed->username);
         parsed->username = strdup(authority);
         free(parsed->password);
         parsed->password = strdup(colon_pos + 1);
         parsed->has_password_field = 1;  // Original URL had password field
       } else {
+        // Validate username for invalid characters
+        if (!validate_credentials(authority)) {
+          goto cleanup_and_return_error;
+        }
+
         free(parsed->username);
         parsed->username = strdup(authority);
         parsed->has_password_field = 0;  // No password field in original URL
@@ -249,12 +262,19 @@ int parse_authority(JSRT_URL* parsed, const char* authority_str) {
     // Parse port, handling leading zeros
     char* port_str = port_colon + 1;
     if (strlen(port_str) > 0) {
-      // Validate port string - must contain only digits, no spaces or invalid characters
+      // Validate port string - check if it contains only digits
+      int has_invalid_chars = 0;
       for (char* p = port_str; *p; p++) {
         if (!isdigit(*p)) {
-          // Invalid port format - should throw error
-          goto cleanup_and_return_error;
+          has_invalid_chars = 1;
+          break;
         }
+      }
+
+      // Per WHATWG URL spec: ports with invalid characters should cause failure
+      // Only numeric ports in range 0-65535 are valid
+      if (has_invalid_chars) {
+        goto cleanup_and_return_error;
       }
 
       // Check for port number range (0-65535)
@@ -262,7 +282,7 @@ int parse_authority(JSRT_URL* parsed, const char* authority_str) {
       errno = 0;
       long port_long = strtol(port_str, &endptr, 10);
 
-      // Check for conversion errors or out of range
+      // Check for conversion errors or out of range - these should cause URL failure
       if (errno == ERANGE || port_long < 0 || port_long > 65535 || *endptr != '\0') {
         goto cleanup_and_return_error;
       }
@@ -573,6 +593,11 @@ int parse_authority(JSRT_URL* parsed, const char* authority_str) {
 
 cleanup_and_return_error:
   free(authority);
+  // Note: Other allocated variables are either:
+  // 1. Stored in parsed structure (ownership transferred)
+  // 2. Freed immediately after use within their scope
+  // 3. Freed in their specific error handling blocks
+  // The main authority string is the only one that needs global cleanup
   return -1;
 }
 

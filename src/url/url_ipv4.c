@@ -137,9 +137,10 @@ int looks_like_ipv4_address(const char* hostname) {
     return 1;  // Valid hex format, looks like IPv4
   }
 
-  // Case 3: Check if hostname is a valid IPv4 address (all segments numeric)
-  // Per WHATWG URL spec, only valid IPv4 addresses should be processed as IPv4
-  // Hostnames like "foo.123" should NOT be processed as IPv4 because "foo" is not numeric
+  // Case 3: Check if hostname should be treated as IPv4 (has numeric-looking segments)
+  // Per WHATWG URL spec, hostnames should be processed as IPv4 if they contain
+  // segments that look numeric (including hex like 0x4), even if other segments are not
+  // This allows proper validation and rejection of malformed IPv4 patterns like "foo.0x4"
   if (has_dots) {
     // First check for trailing dot case (like "1.2.3.4.")
     size_t len = strlen(normalized);
@@ -165,31 +166,38 @@ int looks_like_ipv4_address(const char* hostname) {
       }
     }
 
-    // Check if ALL segments are numeric (required for valid IPv4)
+    // Check if hostname should be treated as IPv4 (has numeric-looking segments)
+    // Per WHATWG URL spec, if the last segment looks numeric, treat as IPv4 attempt
+    // This allows proper validation and rejection of patterns like "foo.0x4"
     int result = 0;
     char* parts_copy = strdup(to_check);
     if (parts_copy) {
       char* token = strtok(parts_copy, ".");
-      int all_numeric = 1;
+      int has_numeric_segment = 0;
       int part_count = 0;
+      char* last_token = NULL;
 
-      while (token && all_numeric) {
+      while (token) {
         part_count++;
 
-        // If we have more than 4 parts, this is not a valid IPv4
+        // If we have more than 4 parts, this is not IPv4
         if (part_count > 4) {
-          all_numeric = 0;
           break;
         }
 
         // Empty parts (consecutive dots) are invalid
         if (strlen(token) == 0) {
-          all_numeric = 0;
           break;
         }
 
+        // Keep track of the last token
+        if (last_token) {
+          free(last_token);
+        }
+        last_token = strdup(token);
+
         // Check if this token is numeric (decimal, octal, or hex)
-        int token_numeric = 1;
+        int token_numeric = 0;
 
         // Check for hex format (0x...)
         if (strlen(token) >= 2 && (strncmp(token, "0x", 2) == 0 || strncmp(token, "0X", 2) == 0)) {
@@ -198,6 +206,7 @@ int looks_like_ipv4_address(const char* hostname) {
             // Just "0x" is valid
             token_numeric = 1;
           } else {
+            token_numeric = 1;  // Assume valid, then check
             for (size_t i = 2; i < strlen(token); i++) {
               char c = token[i];
               if (!((c >= '0' && c <= '9') || (c >= 'a' && c <= 'f') || (c >= 'A' && c <= 'F'))) {
@@ -208,6 +217,7 @@ int looks_like_ipv4_address(const char* hostname) {
           }
         } else {
           // Decimal/octal format - check if all characters are digits
+          token_numeric = 1;  // Assume valid, then check
           for (size_t i = 0; i < strlen(token); i++) {
             if (token[i] < '0' || token[i] > '9') {
               token_numeric = 0;
@@ -216,17 +226,48 @@ int looks_like_ipv4_address(const char* hostname) {
           }
         }
 
-        if (!token_numeric) {
-          all_numeric = 0;
+        if (token_numeric) {
+          has_numeric_segment = 1;
         }
+
         token = strtok(NULL, ".");
       }
 
-      // Valid IPv4 must have 1-4 parts, all numeric
-      result = all_numeric && part_count >= 1 && part_count <= 4;
+      // Per WHATWG URL spec: treat as IPv4 if last segment looks numeric
+      int last_segment_numeric = 0;
+      if (last_token) {
+        // Check if last token is numeric (hex or decimal)
+        if (strlen(last_token) >= 2 && (strncmp(last_token, "0x", 2) == 0 || strncmp(last_token, "0X", 2) == 0)) {
+          // Hex format
+          last_segment_numeric = 1;
+          if (strlen(last_token) > 2) {
+            for (size_t i = 2; i < strlen(last_token); i++) {
+              char c = last_token[i];
+              if (!((c >= '0' && c <= '9') || (c >= 'a' && c <= 'f') || (c >= 'A' && c <= 'F'))) {
+                last_segment_numeric = 0;
+                break;
+              }
+            }
+          }
+        } else {
+          // Decimal format
+          last_segment_numeric = 1;
+          for (size_t i = 0; i < strlen(last_token); i++) {
+            if (last_token[i] < '0' || last_token[i] > '9') {
+              last_segment_numeric = 0;
+              break;
+            }
+          }
+        }
+        free(last_token);
+      }
+
+      // Treat as IPv4 if last segment looks numeric
+      result = last_segment_numeric && part_count >= 1 && part_count <= 4;
 #ifdef DEBUG
-      fprintf(stderr, "[DEBUG] looks_like_ipv4_address: dotted format - all_numeric=%d, part_count=%d, result=%d\n",
-              all_numeric, part_count, result);
+      fprintf(stderr,
+              "[DEBUG] looks_like_ipv4_address: dotted format - last_segment_numeric=%d, part_count=%d, result=%d\n",
+              last_segment_numeric, part_count, result);
 #endif
       free(parts_copy);
     }
@@ -295,6 +336,20 @@ char* canonicalize_ipv4_address(const char* input) {
       free(normalized_input);
       return result;
     }
+
+    // Check for specific invalid patterns that should be rejected
+    // Numbers that are too large (overflow 32-bit) should fail
+    if (*endptr == '\0' && addr > 0xFFFFFFFFULL) {
+      free(normalized_input);
+      return NULL;  // Overflow - invalid IPv4
+    }
+
+    // If there are remaining characters after parsing, it's invalid
+    if (*endptr != '\0') {
+      free(normalized_input);
+      return NULL;  // Extra characters make it invalid
+    }
+
     free(normalized_input);
     return NULL;
   }
@@ -359,21 +414,23 @@ char* canonicalize_ipv4_address(const char* input) {
         return NULL;  // Invalid number or overflow
       }
 
-      // Special case handling for IPv4 parsing per WHATWG URL spec:
-      // 1. If strtoul couldn't parse anything, treat as 0
-      // 2. If strtoul parsed something but there are remaining characters,
-      //    check if it's a special case like "0x" (which should be treated as 0)
+      // Strict IPv4 parsing per WHATWG URL spec:
+      // If any part contains non-numeric characters (except valid hex/octal prefixes),
+      // the entire hostname should be rejected as invalid IPv4
       if (endptr == parts[i]) {
-        // No digits were parsed at all, treat as 0
-        values[i] = 0;
+        // No digits were parsed at all - this is invalid IPv4
+        // Examples: "foo", "bar", etc. should cause IPv4 parsing to fail
+        free(input_copy);
+        free(normalized_input);
+        return NULL;
       } else if (*endptr != '\0') {
-        // Some characters remain after parsing
-        // Check if this is "0x" case - if the remaining part is just "x" after parsing "0"
+        // Some characters remain after parsing - check for special cases
         if (strcmp(parts[i], "0x") == 0 || strcmp(parts[i], "0X") == 0) {
           // Special case: "0x" or "0X" without valid hex digits should be treated as 0
           values[i] = 0;
         } else {
           // Other cases with invalid characters - this is invalid IPv4
+          // Examples: "foo.0x4" should fail because "foo" contains invalid characters
           free(input_copy);
           free(normalized_input);
           return NULL;

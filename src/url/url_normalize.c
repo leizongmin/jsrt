@@ -750,6 +750,37 @@ char* normalize_windows_drive_letters(const char* path) {
     return result;
   }
 
+  // Check for bare Windows drive letter pattern at start: X| where X is a letter
+  // This handles cases like "C|" that appear in WPT tests
+  if (strlen(path) >= 2 && isalpha(path[0]) && path[1] == '|') {
+    // Convert C| to C: or C|foo to C:foo
+    size_t new_len = strlen(path) + 1;  // Same length (| becomes :)
+    char* result = malloc(new_len);
+    if (!result) {
+      return NULL;
+    }
+    result[0] = path[0];                     // Drive letter
+    result[1] = ':';                         // Convert pipe to colon
+    size_t tail_len = strlen(path + 2) + 1;  // include NUL
+    memcpy(result + 2, path + 2, tail_len);
+    return result;
+  }
+
+  // Check for Windows drive letter at start of path without leading slash: X|/ where X is a letter
+  if (strlen(path) >= 3 && isalpha(path[0]) && path[1] == '|' && path[2] == '/') {
+    // Convert C|/foo to C:/foo
+    size_t new_len = strlen(path) + 1;  // Same length (| becomes :)
+    char* result = malloc(new_len);
+    if (!result) {
+      return NULL;
+    }
+    result[0] = path[0];                     // Drive letter
+    result[1] = ':';                         // Convert pipe to colon
+    size_t tail_len = strlen(path + 2) + 1;  // include NUL
+    memcpy(result + 2, path + 2, tail_len);
+    return result;
+  }
+
   // No conversion needed
   return strdup(path);
 }

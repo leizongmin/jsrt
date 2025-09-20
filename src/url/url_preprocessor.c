@@ -9,7 +9,7 @@ char* preprocess_file_urls(const char* cleaned_url) {
 
   // Check for invalid patterns in file URLs before processing
   if (strncmp(cleaned_url, "file://", 7) == 0) {
-    // Look for pattern like file://%XX| which should be rejected per WPT tests
+    // Look for patterns that should be rejected per WPT tests
     const char* authority_start = cleaned_url + 7;
     const char* authority_end = strchr(authority_start, '/');
     if (!authority_end) {
@@ -21,6 +21,35 @@ char* preprocess_file_urls(const char* cleaned_url) {
       if (*p == '%' && hex_to_int(p[1]) >= 0 && hex_to_int(p[2]) >= 0 && p[3] == '|') {
         // Pattern %XX| found in file URL authority - this should be rejected
         return NULL;
+      }
+    }
+
+    // Check for percent-encoded characters that decode to problematic values
+    // file://%43%7C should be rejected (decodes to C|)
+    // file://C%7C should be rejected (C followed by %7C which is |)
+    for (const char* p = authority_start; p < authority_end - 5; p++) {
+      if (*p == '%' && p + 5 < authority_end && hex_to_int(p[1]) >= 0 && hex_to_int(p[2]) >= 0 && p[3] == '%' &&
+          hex_to_int(p[4]) >= 0 && hex_to_int(p[5]) >= 0) {
+        // Two consecutive percent-encoded sequences
+        int first_decoded = (hex_to_int(p[1]) << 4) | hex_to_int(p[2]);
+        int second_decoded = (hex_to_int(p[4]) << 4) | hex_to_int(p[5]);
+
+        // Check for patterns like %43%7C (C|)
+        if (isalpha(first_decoded) && second_decoded == 0x7C) {
+          return NULL;  // Reject file://%XX%7C where %XX is a letter
+        }
+      }
+    }
+
+    // Check for single-character hostname followed by %7C (pipe)
+    if (authority_end - authority_start >= 4) {
+      const char* p = authority_start;
+      if (isalpha(*p) && p[1] == '%' && p[2] && p[3] && hex_to_int(p[2]) >= 0 && hex_to_int(p[3]) >= 0) {
+        int decoded = (hex_to_int(p[2]) << 4) | hex_to_int(p[3]);
+        if (decoded == 0x7C) {  // 0x7C is '|'
+          // Pattern like file://C%7C - should be rejected
+          return NULL;
+        }
       }
     }
   }
@@ -456,17 +485,11 @@ int is_relative_url(const char* cleaned_url, const char* base) {
               }
             }
           } else {
-            // Non-special schemes: check if it's scheme-only or has content after the colon
-            if (*(p + 1) == '\0') {
-              // Scheme-only URLs like "sc:" should be treated as relative when there's a base
-              // This follows WHATWG URL spec for scheme-only relative references
-              free(scheme);
-              return 1;
-            } else {
-              // Non-special schemes with content after colon are absolute (e.g., "mailto:test" → absolute)
-              free(scheme);
-              return 0;
-            }
+            // Non-special schemes: all schemes with colons are absolute URLs
+            // Per WPT tests, scheme-only URLs like "sc:" should be parsed as absolute URLs with empty paths
+            // not as relative URLs resolved against the base
+            free(scheme);
+            return 0;
           }
         } else if (*p == '/' || *p == '?' || *p == '#') {
           // No scheme found before path/query/fragment

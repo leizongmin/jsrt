@@ -83,32 +83,62 @@ char* parse_url_components(JSRT_URL* parsed, const char* scheme, char* ptr) {
     free(parsed->host);
     parsed->host = strdup("");
 
-    // Normalize the path component
-    char* normalized_path = NULL;
-    if (strcmp(ptr, ".") == 0) {
-      // file:. becomes file:/// (root directory)
-      normalized_path = strdup("/");
-    } else if (strcmp(ptr, "..") == 0) {
-      // file:.. becomes file:/// (root directory, can't go above root)
-      normalized_path = strdup("/");
-    } else if (strncmp(ptr, "..", 2) == 0 && ptr[2] != '\0') {
-      // file:..something becomes file:///..something
-      size_t path_len = strlen(ptr) + 2;  // +1 for leading slash, +1 for null terminator
-      normalized_path = malloc(path_len);
-      if (!normalized_path) {
-        return NULL;
-      }
-      snprintf(normalized_path, path_len, "/%s", ptr);
-    } else {
-      // file:path becomes file:///path
-      size_t path_len = strlen(ptr) + 2;  // +1 for leading slash, +1 for null terminator
-      normalized_path = malloc(path_len);
-      if (!normalized_path) {
-        return NULL;
-      }
-      snprintf(normalized_path, path_len, "/%s", ptr);
+    // Extract just the path portion (before ? or #) for processing
+    char* query_pos = strchr(ptr, '?');
+    char* fragment_pos = strchr(ptr, '#');
+    char* path_end = NULL;
+
+    if (query_pos && fragment_pos) {
+      path_end = (query_pos < fragment_pos) ? query_pos : fragment_pos;
+    } else if (query_pos) {
+      path_end = query_pos;
+    } else if (fragment_pos) {
+      path_end = fragment_pos;
     }
 
+    // Create a copy of just the path portion
+    char* path_only = NULL;
+    if (path_end) {
+      size_t path_part_len = path_end - ptr;
+      path_only = malloc(path_part_len + 1);
+      if (!path_only) {
+        return NULL;
+      }
+      strncpy(path_only, ptr, path_part_len);
+      path_only[path_part_len] = '\0';
+    } else {
+      path_only = strdup(ptr);
+    }
+
+    // Normalize the path component
+    char* normalized_path = NULL;
+    if (strcmp(path_only, "") == 0 || strcmp(path_only, ".") == 0) {
+      // file: or file:. becomes file:/// (root directory)
+      normalized_path = strdup("/");
+    } else if (strcmp(path_only, "..") == 0) {
+      // file:.. becomes file:/// (root directory, can't go above root)
+      normalized_path = strdup("/");
+    } else if (strncmp(path_only, "..", 2) == 0 && path_only[2] != '\0') {
+      // file:..something becomes file:///..something
+      size_t path_len = strlen(path_only) + 2;  // +1 for leading slash, +1 for null terminator
+      normalized_path = malloc(path_len);
+      if (!normalized_path) {
+        free(path_only);
+        return NULL;
+      }
+      snprintf(normalized_path, path_len, "/%s", path_only);
+    } else {
+      // file:path becomes file:///path
+      size_t path_len = strlen(path_only) + 2;  // +1 for leading slash, +1 for null terminator
+      normalized_path = malloc(path_len);
+      if (!normalized_path) {
+        free(path_only);
+        return NULL;
+      }
+      snprintf(normalized_path, path_len, "/%s", path_only);
+    }
+
+    free(path_only);
     free(parsed->pathname);
     parsed->pathname = normalized_path;
 
@@ -116,7 +146,41 @@ char* parse_url_components(JSRT_URL* parsed, const char* scheme, char* ptr) {
     parsed->opaque_path = 0;
     parsed->has_authority_syntax = 1;
 
-    // Return pointer to end since we consumed everything
+    // Handle query and fragment portions directly since we've already set the pathname
+    if (path_end) {
+      char* remaining = path_end;
+      char* query_start = NULL;
+      char* fragment_start = NULL;
+
+      if (*remaining == '?') {
+        query_start = remaining;
+        char* fragment_pos = strchr(remaining, '#');
+        if (fragment_pos) {
+          fragment_start = fragment_pos;
+          // Null-terminate query portion
+          *fragment_pos = '\0';
+        }
+
+        // Set search (query) component
+        free(parsed->search);
+        parsed->search = strdup(query_start);
+
+        // Restore the string if we null-terminated it
+        if (fragment_start) {
+          *fragment_start = '#';
+          // Set hash (fragment) component
+          free(parsed->hash);
+          parsed->hash = strdup(fragment_start);
+        }
+      } else if (*remaining == '#') {
+        fragment_start = remaining;
+        // Set hash (fragment) component
+        free(parsed->hash);
+        parsed->hash = strdup(fragment_start);
+      }
+    }
+
+    // Return pointer to end since we've handled everything
     return ptr + strlen(ptr);
   } else if (is_special) {
     // Special schemes: handle various formats like "http:example.com/" or "http::@host:port"

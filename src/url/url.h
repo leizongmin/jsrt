@@ -120,6 +120,7 @@ int validate_url_characters(const char* url);
 int validate_hostname_characters(const char* hostname);
 int validate_hostname_characters_allow_at(const char* hostname, int allow_at);
 int validate_hostname_characters_with_scheme(const char* hostname, const char* scheme);
+int validate_hostname_characters_with_scheme_and_port(const char* hostname, const char* scheme, int has_port);
 int validate_credentials(const char* credentials);
 int validate_percent_encoded_characters(const char* url);
 
@@ -199,6 +200,33 @@ typedef enum {
   JSRT_URL_ERROR_INVALID_ENCODING,
   JSRT_URL_ERROR_BUFFER_OVERFLOW
 } JSRT_URLError;
+
+// Safe memory management macros for URL module
+#define JSRT_URL_SAFE_FREE(ptr) \
+  do {                          \
+    if (ptr) {                  \
+      free(ptr);                \
+      (ptr) = NULL;             \
+    }                           \
+  } while (0)
+
+// Safe malloc with NULL check
+#define JSRT_URL_SAFE_MALLOC(ptr, size) \
+  do {                                  \
+    (ptr) = malloc(size);               \
+    if (!(ptr)) {                       \
+      return NULL;                      \
+    }                                   \
+  } while (0)
+
+// Safe malloc for JavaScript context with proper error handling
+#define JSRT_URL_SAFE_MALLOC_JS(ctx, ptr, size) \
+  do {                                          \
+    (ptr) = malloc(size);                       \
+    if (!(ptr)) {                               \
+      return JS_ThrowOutOfMemory(ctx);          \
+    }                                           \
+  } while (0)
 
 #ifdef DEBUG
 #define JSRT_URL_DEBUG_LOG(fmt, ...) fprintf(stderr, "[URL DEBUG] " fmt "\n", ##__VA_ARGS__)

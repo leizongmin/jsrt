@@ -95,6 +95,11 @@ static JSValue JSRT_URLSearchParamsSet(JSContext* ctx, JSValueConst this_val, in
         first_match = *current;
         free(first_match->value);
         first_match->value = malloc(value_len + 1);
+        if (!first_match->value) {
+          JS_FreeCString(ctx, name);
+          JS_FreeCString(ctx, value);
+          return JS_ThrowOutOfMemory(ctx);
+        }
         memcpy(first_match->value, value, value_len);
         first_match->value[value_len] = '\0';
         first_match->value_len = value_len;
@@ -306,6 +311,15 @@ static JSValue JSRT_URLSearchParamsGetSize(JSContext* ctx, JSValueConst this_val
   return JS_NewInt32(ctx, count);
 }
 
+// Safe bounds checking macro to prevent buffer overflows
+#define SAFE_BUFFER_CHECK(ptr, result, total_len, needed_space)                         \
+  do {                                                                                  \
+    if ((ptr) + (needed_space) > (result) + (total_len) - 1) {                          \
+      free(result);                                                                     \
+      return JS_ThrowInternalError(ctx, "Buffer overflow in URLSearchParams toString"); \
+    }                                                                                   \
+  } while (0)
+
 // URLSearchParams.toString() method
 static JSValue JSRT_URLSearchParamsToString(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
   JSRT_URLSearchParams* search_params = JS_GetOpaque2(ctx, this_val, JSRT_URLSearchParamsClassID);
@@ -317,74 +331,93 @@ static JSValue JSRT_URLSearchParamsToString(JSContext* ctx, JSValueConst this_va
     return JS_NewString(ctx, "");
   }
 
-  // Calculate total length needed accounting for URL encoding expansion
+  // Calculate total length needed with overflow protection
   // In worst case, every byte could become %XX (3 bytes), plus separators
-  size_t total_len = 0;
+  size_t total_len = 1;  // Start with space for null terminator
+  size_t param_count = 0;
   JSRT_URLSearchParam* param = search_params->params;
+
   while (param) {
+    // Check for reasonable parameter limits to prevent abuse
+    if (param_count > 10000) {
+      return JS_ThrowInternalError(ctx, "Too many URLSearchParams entries");
+    }
+
+    // Check individual parameter sizes
+    if (param->name_len > SIZE_MAX / 6 || param->value_len > SIZE_MAX / 6) {
+      return JS_ThrowInternalError(ctx, "URLSearchParam entry too large");
+    }
+
+    // Calculate space needed for this parameter with overflow protection
+    size_t param_space = 0;
+
     // Worst case: every character in name and value becomes %XX (3x expansion)
-    // Plus '=' and '&' separators (which don't need encoding in query strings)
-    total_len += (param->name_len * 3) + (param->value_len * 3) + 2;
+    // Plus '=' and '&' separators
+    size_t name_space = param->name_len * 3;
+    size_t value_space = param->value_len * 3;
+
+    // Check for overflow in individual calculations
+    if (name_space / 3 != param->name_len || value_space / 3 != param->value_len) {
+      return JS_ThrowInternalError(ctx, "Integer overflow in URLSearchParams toString calculation");
+    }
+
+    param_space = name_space + value_space + 2;  // +2 for '=' and '&'
+
+    // Check for overflow when adding to total
+    if (total_len > SIZE_MAX - param_space) {
+      return JS_ThrowInternalError(ctx, "Buffer size overflow in URLSearchParams toString");
+    }
+
+    total_len += param_space;
+    param_count++;
     param = param->next;
   }
 
-  if (total_len == 0) {
+  if (total_len <= 1) {
     return JS_NewString(ctx, "");
   }
 
-  // Add extra buffer for safety
-  total_len += 1;  // For null terminator
+  // Additional safety check for final allocation size
+  if (total_len > 100 * 1024 * 1024) {  // 100MB limit
+    return JS_ThrowInternalError(ctx, "URLSearchParams string too large");
+  }
+
   char* result = malloc(total_len);
   if (!result) {
     return JS_ThrowOutOfMemory(ctx);
   }
+
   char* ptr = result;
   param = search_params->params;
   int first = 1;
 
   while (param) {
-    // Check bounds before writing separator
+    // Add separator for non-first parameters
     if (!first) {
-      if (ptr >= result + total_len - 1) {
-        free(result);
-        return JS_ThrowInternalError(ctx, "Buffer overflow in URLSearchParams toString");
-      }
+      SAFE_BUFFER_CHECK(ptr, result, total_len, 1);
       *ptr++ = '&';
     }
     first = 0;
 
-    // Encode name
+    // Encode name with bounds checking
     char* encoded_name = url_encode_with_len(param->name, param->name_len);
     if (encoded_name) {
       size_t encoded_name_len = strlen(encoded_name);
-      // Check bounds before copying encoded name
-      if (ptr + encoded_name_len >= result + total_len - 1) {
-        free(encoded_name);
-        free(result);
-        return JS_ThrowInternalError(ctx, "Buffer overflow in URLSearchParams toString");
-      }
+      SAFE_BUFFER_CHECK(ptr, result, total_len, encoded_name_len);
       memcpy(ptr, encoded_name, encoded_name_len);
       ptr += encoded_name_len;
       free(encoded_name);
     }
 
-    // Check bounds before writing '='
-    if (ptr >= result + total_len - 1) {
-      free(result);
-      return JS_ThrowInternalError(ctx, "Buffer overflow in URLSearchParams toString");
-    }
+    // Add equals sign
+    SAFE_BUFFER_CHECK(ptr, result, total_len, 1);
     *ptr++ = '=';
 
-    // Encode value
+    // Encode value with bounds checking
     char* encoded_value = url_encode_with_len(param->value, param->value_len);
     if (encoded_value) {
       size_t encoded_value_len = strlen(encoded_value);
-      // Check bounds before copying encoded value
-      if (ptr + encoded_value_len >= result + total_len - 1) {
-        free(encoded_value);
-        free(result);
-        return JS_ThrowInternalError(ctx, "Buffer overflow in URLSearchParams toString");
-      }
+      SAFE_BUFFER_CHECK(ptr, result, total_len, encoded_value_len);
       memcpy(ptr, encoded_value, encoded_value_len);
       ptr += encoded_value_len;
       free(encoded_value);

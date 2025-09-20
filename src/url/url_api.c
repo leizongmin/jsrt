@@ -88,30 +88,15 @@ static char* JSRT_StripURLControlCharacters(const char* input, size_t input_len)
         unsigned char c2 = (unsigned char)input[i + 1];
         unsigned char c3 = (unsigned char)input[i + 2];
 
-        // Check for zero-width characters that should cause URL failure per WPT
-        if (c == 0xE2) {
-          // Zero-width space (U+200B): 0xE2 0x80 0x8B
-          // Zero-width non-joiner (U+200C): 0xE2 0x80 0x8C
-          // Zero-width joiner (U+200D): 0xE2 0x80 0x8D
-          // Left-to-right mark (U+200E): 0xE2 0x80 0x8E
-          // Right-to-left mark (U+200F): 0xE2 0x80 0x8F
-          if (c2 == 0x80 && (c3 == 0x8B || c3 == 0x8C || c3 == 0x8D || c3 == 0x8E || c3 == 0x8F)) {
-            free(result);
-            return NULL;
-          }
-
-          // Word joiner (U+2060): 0xE2 0x81 0xA0
-          if (c2 == 0x81 && c3 == 0xA0) {
-            free(result);
-            return NULL;
-          }
-        } else if (c == 0xEF) {
-          // Zero Width No-Break Space / BOM (U+FEFF): 0xEF 0xBB 0xBF
-          if (c2 == 0xBB && c3 == 0xBF) {
-            free(result);
-            return NULL;
-          }
+#ifdef DEBUG
+        if (c == 0xE2 || c == 0xEF) {
+          fprintf(stderr, "[DEBUG] preprocess_url_string: checking UTF-8 sequence: 0x%02X 0x%02X 0x%02X\n", c, c2, c3);
         }
+#endif
+
+        // Note: Unicode zero-width character stripping has been moved to hostname processing
+        // to ensure context-sensitive handling per WHATWG URL specification.
+        // These characters should only be stripped from authority/hostname parts, not from paths.
       }
 
       // Copy the entire valid UTF-8 sequence

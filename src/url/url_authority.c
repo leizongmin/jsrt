@@ -2,7 +2,6 @@
 #include <errno.h>
 #include "url.h"
 
-
 // Parse authority section: [userinfo@]host[:port]
 // Returns 0 on success, -1 on error
 int parse_authority(JSRT_URL* parsed, const char* authority_str) {
@@ -120,6 +119,10 @@ int parse_authority(JSRT_URL* parsed, const char* authority_str) {
   char* port_colon = NULL;
   int is_ipv6_with_port = 0;
 
+#ifdef DEBUG
+  fprintf(stderr, "[DEBUG] parse_authority: about to parse host_part='%s'\n", host_part);
+#endif
+
   // Check if this is IPv6 with port: [ipv6]:port format
   if (host_part[0] == '[') {
     char* close_bracket = strchr(host_part, ']');
@@ -140,6 +143,10 @@ int parse_authority(JSRT_URL* parsed, const char* authority_str) {
       }
       // If we have 2+ colons, it's likely an invalid IPv6 address without brackets
       if (colon_count >= 2) {
+#ifdef DEBUG
+        fprintf(stderr, "[DEBUG] parse_authority: detected invalid IPv6 without brackets, colon_count=%d\n",
+                colon_count);
+#endif
         goto cleanup_and_return_error;
       }
     }
@@ -149,6 +156,9 @@ int parse_authority(JSRT_URL* parsed, const char* authority_str) {
     for (const char* p = host_part; *p; p++) {
       if (*p == '\\') {
         // Backslash in authority section is invalid
+#ifdef DEBUG
+        fprintf(stderr, "[DEBUG] parse_authority: invalid backslash character found\n");
+#endif
         goto cleanup_and_return_error;
       }
     }
@@ -156,6 +166,10 @@ int parse_authority(JSRT_URL* parsed, const char* authority_str) {
     // Regular hostname - find rightmost colon for port
     port_colon = strrchr(host_part, ':');
   }
+
+#ifdef DEBUG
+  fprintf(stderr, "[DEBUG] parse_authority: port_colon=%s\n", port_colon ? port_colon : "NULL");
+#endif
 
   // For file URLs, single letter + colon should be treated as drive letter, not port
   int is_file_drive = 0;
@@ -171,6 +185,9 @@ int parse_authority(JSRT_URL* parsed, const char* authority_str) {
   }
 
   if (port_colon && !is_file_drive) {  // Has port and not file drive
+#ifdef DEBUG
+    fprintf(stderr, "[DEBUG] parse_authority: processing host with port\n");
+#endif
     *port_colon = '\0';
     authority_has_colon_in_host = 1;  // Mark that we found colon in host section
 
@@ -220,6 +237,9 @@ int parse_authority(JSRT_URL* parsed, const char* authority_str) {
       } else {
         // Pre-validate hostname before decoding to catch invalid percent-encoding
         if (!validate_hostname_characters_with_scheme(host_part, parsed->protocol)) {
+#ifdef DEBUG
+          fprintf(stderr, "[DEBUG] parse_authority: hostname validation failed for '%s'\n", host_part);
+#endif
           goto cleanup_and_return_error;
         }
         char* decoded_host = url_decode_hostname_with_scheme(host_part, parsed->protocol);
@@ -233,6 +253,9 @@ int parse_authority(JSRT_URL* parsed, const char* authority_str) {
       // Decode percent-encoded hostname first
       char* decoded_host = url_decode_hostname_with_scheme(host_part, parsed->protocol);
       if (!decoded_host) {
+#ifdef DEBUG
+        fprintf(stderr, "[DEBUG] parse_authority: url_decode_hostname_with_scheme failed for '%s'\n", host_part);
+#endif
         goto cleanup_and_return_error;
       }
 
@@ -319,6 +342,9 @@ int parse_authority(JSRT_URL* parsed, const char* authority_str) {
       free(scheme);
     }
   } else {
+#ifdef DEBUG
+    fprintf(stderr, "[DEBUG] parse_authority: processing host without port\n");
+#endif
     // Handle IPv6 addresses without port
     if (host_part[0] == '[' && strchr(host_part, ']')) {
       char* close_bracket = strchr(host_part, ']');
@@ -354,6 +380,9 @@ int parse_authority(JSRT_URL* parsed, const char* authority_str) {
       } else {
         // Pre-validate hostname before decoding to catch invalid percent-encoding
         if (!validate_hostname_characters_with_scheme(host_part, parsed->protocol)) {
+#ifdef DEBUG
+          fprintf(stderr, "[DEBUG] parse_authority: hostname validation failed for '%s'\n", host_part);
+#endif
           goto cleanup_and_return_error;
         }
 
@@ -366,6 +395,9 @@ int parse_authority(JSRT_URL* parsed, const char* authority_str) {
       // Decode percent-encoded hostname first
       char* decoded_host = url_decode_hostname_with_scheme(host_part, parsed->protocol);
       if (!decoded_host) {
+#ifdef DEBUG
+        fprintf(stderr, "[DEBUG] parse_authority: url_decode_hostname_with_scheme failed for '%s'\n", host_part);
+#endif
         goto cleanup_and_return_error;
       }
 
@@ -396,8 +428,15 @@ int parse_authority(JSRT_URL* parsed, const char* authority_str) {
 
   // Safety check: ensure hostname is valid before processing
   if (!parsed->hostname) {
+#ifdef DEBUG
+    fprintf(stderr, "[DEBUG] parse_authority: hostname is NULL after processing\n");
+#endif
     goto cleanup_and_return_error;
   }
+
+#ifdef DEBUG
+  fprintf(stderr, "[DEBUG] parse_authority: hostname after processing='%s'\n", parsed->hostname);
+#endif
 
   int is_windows_drive = 0;
   if (parsed->protocol && strcmp(parsed->protocol, "file:") == 0 && parsed->hostname && strlen(parsed->hostname) >= 2) {
@@ -423,7 +462,15 @@ int parse_authority(JSRT_URL* parsed, const char* authority_str) {
   }
 
   // Validate hostname characters (including Unicode validation)
-  if (!validate_hostname_characters_with_scheme(final_processed_hostname, parsed->protocol)) {
+#ifdef DEBUG
+  fprintf(stderr, "[DEBUG] parse_authority: validating hostname characters for '%s'\n", final_processed_hostname);
+#endif
+  if (!validate_hostname_characters_with_scheme_and_port(final_processed_hostname, parsed->protocol,
+                                                         (port_colon && !is_file_drive) ? 1 : 0)) {
+#ifdef DEBUG
+    fprintf(stderr, "[DEBUG] parse_authority: hostname character validation FAILED for '%s'\n",
+            final_processed_hostname);
+#endif
     if (final_processed_hostname != current_hostname) {
       free(final_processed_hostname);
     }
@@ -459,6 +506,9 @@ int parse_authority(JSRT_URL* parsed, const char* authority_str) {
   }
 
   // Try to canonicalize as IPv4 address if it looks like one
+#ifdef DEBUG
+  fprintf(stderr, "[DEBUG] parse_authority: attempting IPv4 canonicalization for '%s'\n", final_processed_hostname);
+#endif
   char* ipv4_canonical = canonicalize_ipv4_address(final_processed_hostname);
   if (ipv4_canonical) {
     // Replace hostname with canonical IPv4 form
@@ -469,6 +519,10 @@ int parse_authority(JSRT_URL* parsed, const char* authority_str) {
   } else if (looks_like_ipv4_address(final_processed_hostname)) {
     // Hostname looks like IPv4 but failed canonicalization - this means invalid IPv4
     // According to WHATWG URL spec, this should fail URL parsing
+#ifdef DEBUG
+    fprintf(stderr, "[DEBUG] parse_authority: hostname looks like IPv4 but canonicalization failed for '%s'\n",
+            final_processed_hostname);
+#endif
     if (final_processed_hostname != current_hostname) {
       free(final_processed_hostname);
     }
@@ -590,6 +644,9 @@ int parse_authority(JSRT_URL* parsed, const char* authority_str) {
   return 0;
 
 cleanup_and_return_error:
+#ifdef DEBUG
+  fprintf(stderr, "[DEBUG] parse_authority: cleanup_and_return_error - authority parsing failed\n");
+#endif
   free(authority);
   // Note: Other allocated variables are either:
   // 1. Stored in parsed structure (ownership transferred)

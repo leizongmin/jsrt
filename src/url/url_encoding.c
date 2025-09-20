@@ -84,21 +84,29 @@ char* url_component_encode(const char* str) {
   size_t len = strlen(str);
   size_t encoded_len = 0;
 
-  // Calculate encoded length
+  // Calculate encoded length with overflow protection
   for (size_t i = 0; i < len; i++) {
     unsigned char c = (unsigned char)str[i];
+    size_t add_len;
+
     // Check if character needs encoding per URL spec
     if (c == '%' && i + 2 < len && hex_to_int(str[i + 1]) >= 0 && hex_to_int(str[i + 2]) >= 0) {
       // Already percent-encoded sequence, keep as-is
-      encoded_len += 3;
+      add_len = 3;
     } else if (c <= 32 || c >= 127 || c == '"' || c == '\'' || c == '<' || c == '>' || c == '\\' || c == '^' ||
                c == '`' || c == '{' || c == '|' || c == '}') {
       // Encode control characters, space, non-ASCII characters, and specific unsafe characters
       // Include single quotes and backticks per WPT requirements
-      encoded_len += 3;  // %XX
+      add_len = 3;  // %XX
     } else {
-      encoded_len++;
+      add_len = 1;
     }
+
+    // Check for integer overflow
+    if (encoded_len > SIZE_MAX - add_len) {
+      return NULL;  // Would overflow
+    }
+    encoded_len += add_len;
   }
 
   char* encoded = safe_malloc_for_encoding(encoded_len);
@@ -562,62 +570,165 @@ char* url_decode(const char* str) {
 // URL decode function specifically for hostnames with validation
 // Returns NULL if the decoded hostname contains forbidden characters
 // Decode hostname with scheme-aware validation
+// UTF-8 validation helper function
+static int is_valid_utf8_sequence(const unsigned char* bytes, size_t start, size_t max_len, size_t* seq_len) {
+  if (start >= max_len)
+    return 0;
+
+  unsigned char c = bytes[start];
+
+  if (c < 0x80) {
+    // ASCII
+    *seq_len = 1;
+    return 1;
+  } else if ((c & 0xE0) == 0xC0) {
+    // 2-byte sequence
+    if (start + 1 >= max_len)
+      return 0;
+    *seq_len = 2;
+    return (bytes[start + 1] & 0xC0) == 0x80;
+  } else if ((c & 0xF0) == 0xE0) {
+    // 3-byte sequence
+    if (start + 2 >= max_len)
+      return 0;
+    *seq_len = 3;
+    return (bytes[start + 1] & 0xC0) == 0x80 && (bytes[start + 2] & 0xC0) == 0x80;
+  } else if ((c & 0xF8) == 0xF0) {
+    // 4-byte sequence
+    if (start + 3 >= max_len)
+      return 0;
+    *seq_len = 4;
+    return (bytes[start + 1] & 0xC0) == 0x80 && (bytes[start + 2] & 0xC0) == 0x80 && (bytes[start + 3] & 0xC0) == 0x80;
+  }
+
+  return 0;  // Invalid UTF-8 start byte
+}
+
+// Helper function to strip Unicode zero-width characters from hostname
+static char* strip_unicode_zero_width_from_hostname(const char* input) {
+  if (!input)
+    return NULL;
+
+  size_t input_len = strlen(input);
+  char* result = malloc(input_len + 1);
+  if (!result)
+    return NULL;
+
+  size_t j = 0;
+  for (size_t i = 0; i < input_len; i++) {
+    unsigned char c = (unsigned char)input[i];
+
+    // Check for UTF-8 sequences that represent zero-width characters
+    if (c >= 0x80) {
+      size_t utf8_len;
+      if (is_valid_utf8_sequence((const unsigned char*)input, i, input_len, &utf8_len)) {
+        // Check for specific zero-width characters in hostname context
+        if (utf8_len == 3 && i + 2 < input_len) {
+          unsigned char c2 = (unsigned char)input[i + 1];
+          unsigned char c3 = (unsigned char)input[i + 2];
+
+          if (c == 0xE2) {
+            // Zero-width characters: U+200B, U+200C, U+200D, U+200E, U+200F
+            if (c2 == 0x80 && (c3 == 0x8B || c3 == 0x8C || c3 == 0x8D || c3 == 0x8E || c3 == 0x8F)) {
+              i += utf8_len - 1;  // Skip this character
+              continue;
+            }
+            // Word joiner (U+2060): 0xE2 0x81 0xA0
+            if (c2 == 0x81 && c3 == 0xA0) {
+              i += utf8_len - 1;  // Skip this character
+              continue;
+            }
+          } else if (c == 0xEF) {
+            // Zero Width No-Break Space / BOM (U+FEFF): 0xEF 0xBB 0xBF
+            if (c2 == 0xBB && c3 == 0xBF) {
+              i += utf8_len - 1;  // Skip this character
+              continue;
+            }
+          }
+        }
+
+        // Copy the entire valid UTF-8 sequence
+        for (size_t k = 0; k < utf8_len && i + k < input_len; k++) {
+          result[j++] = input[i + k];
+        }
+        i += utf8_len - 1;  // Will be incremented by loop
+      } else {
+        // Invalid UTF-8, copy as-is
+        result[j++] = c;
+      }
+    } else {
+      // ASCII character, copy as-is
+      result[j++] = c;
+    }
+  }
+
+  result[j] = '\0';
+  return result;
+}
+
 char* url_decode_hostname_with_scheme(const char* str, const char* scheme) {
   if (!str)
     return NULL;
 
-  size_t len = strlen(str);
+  // First strip Unicode zero-width characters from hostname
+  char* cleaned_hostname = strip_unicode_zero_width_from_hostname(str);
+  if (!cleaned_hostname)
+    return NULL;
+
+#ifdef DEBUG
+  fprintf(stderr, "[DEBUG] url_decode_hostname_with_scheme: input='%s', cleaned='%s', scheme='%s'\n", str,
+          cleaned_hostname, scheme ? scheme : "NULL");
+#endif
+
+  size_t len = strlen(cleaned_hostname);
   char* decoded = malloc(len * 3 + 1);
   if (!decoded) {
+    free(cleaned_hostname);
     return NULL;
   }
   size_t i = 0, j = 0;
 
   while (i < len) {
-    if (str[i] == '%') {
-      // Percent encoding must be complete and valid
-      if (i + 2 >= len) {
-        // Incomplete percent encoding at end of string
-        free(decoded);
-        return NULL;
-      }
+    if (cleaned_hostname[i] == '%') {
+      // Check if we have enough characters for complete percent encoding
+      if (i + 2 < len) {
+        int h1 = hex_to_int(cleaned_hostname[i + 1]);
+        int h2 = hex_to_int(cleaned_hostname[i + 2]);
+        if (h1 >= 0 && h2 >= 0) {
+          // Valid percent encoding found
+          unsigned char byte = (unsigned char)((h1 << 4) | h2);
 
-      int h1 = hex_to_int(str[i + 1]);
-      int h2 = hex_to_int(str[i + 2]);
-      if (h1 >= 0 && h2 >= 0) {
-        unsigned char byte = (unsigned char)((h1 << 4) | h2);
+          // Check for forbidden characters in hostnames per WHATWG URL spec
+          // Control characters (0x00-0x1F, 0x7F) and certain delimiter characters are forbidden
+          // Note: We only reject really problematic characters that would break URL parsing
+          if (byte < 0x20 || byte == 0x7F || byte == ' ' || byte == '#' || byte == '/' || byte == ':' || byte == '?' ||
+              byte == '@' || byte == '[' || byte == '\\' || byte == ']') {
+            // Forbidden character found, reject the hostname
+            free(decoded);
+            free(cleaned_hostname);
+            return NULL;
+          }
 
-        // Check for forbidden characters in hostnames per WHATWG URL spec
-        // Control characters (0x00-0x1F, 0x7F) are forbidden
-        // Also forbidden: ASCII space and certain delimiter characters
-        // However, high bytes (>= 0x80) should be allowed as they may be part of valid UTF-8
-        if (byte < 0x20 || byte == 0x7F || byte == '#' || byte == '%' || byte == '/' || byte == ':' || byte == '?' ||
-            byte == '@' || byte == '[' || byte == '\\' || byte == ']' || byte == '^' || byte == '|' || byte == '`' ||
-            byte == '<' || byte == '>') {
-          // Forbidden character found, reject the hostname
-          free(decoded);
-          return NULL;
+          // For special schemes, allow percent-encoded UTF-8 sequences that will be processed by IDNA
+          // The IDNA processing step will handle internationalized domain names properly
+          // Only reject bytes that would be invalid even after IDNA processing
+
+          decoded[j++] = byte;
+          i += 3;
+          continue;
         }
-
-        // For special schemes, reject percent-encoded bytes >= 0x80 per WHATWG URL spec
-        if (scheme && is_special_scheme(scheme) && byte >= 0x80) {
-          // Percent-encoded non-ASCII bytes in hostnames cause parsing to fail for special schemes
-          free(decoded);
-          return NULL;
-        }
-
-        decoded[j++] = byte;
-        i += 3;
-        continue;
-      } else {
-        // Invalid percent encoding (e.g., %zz, %3g) - reject the hostname
-        free(decoded);
-        return NULL;
       }
+      // Incomplete or invalid percent encoding - treat as literal character
+      decoded[j++] = cleaned_hostname[i++];
+    } else {
+      decoded[j++] = cleaned_hostname[i++];
     }
-    decoded[j++] = str[i++];
   }
   decoded[j] = '\0';
+  free(cleaned_hostname);
+#ifdef DEBUG
+  fprintf(stderr, "[DEBUG] url_decode_hostname_with_scheme: output='%s'\n", decoded);
+#endif
   return decoded;
 }
 

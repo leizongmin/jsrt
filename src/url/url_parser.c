@@ -356,6 +356,7 @@ int parse_double_colon_at_pattern(JSRT_URL* parsed, char** ptr) {
     } else if (looks_like_ipv4_address(parsed->hostname)) {
       // Hostname looks like IPv4 but failed canonicalization - this means invalid IPv4
       // According to WHATWG URL spec, this should fail URL parsing
+      free(host_part);
       return -1;
     }
 
@@ -380,7 +381,6 @@ int parse_double_colon_at_pattern(JSRT_URL* parsed, char** ptr) {
         parsed->host = malloc(full_host_len);
         if (!parsed->host) {
           free(host_part);
-          free(userinfo);
           return -1;
         }
         snprintf(parsed->host, full_host_len, "%s:%s", parsed->hostname, normalized_port);
@@ -410,6 +410,7 @@ int parse_double_colon_at_pattern(JSRT_URL* parsed, char** ptr) {
     } else if (looks_like_ipv4_address(parsed->hostname)) {
       // Hostname looks like IPv4 but failed canonicalization - this means invalid IPv4
       // According to WHATWG URL spec, this should fail URL parsing
+      free(host_part);
       return -1;
     }
 
@@ -457,6 +458,9 @@ int parse_normal_authority(JSRT_URL* parsed, char** ptr) {
     authority[authority_len] = '\0';
 
     if (parse_authority(parsed, authority) != 0) {
+#ifdef DEBUG
+      fprintf(stderr, "[DEBUG] parse_normal_authority: parse_authority failed for '%s'\n", authority);
+#endif
       free(authority);
       return -1;
     }

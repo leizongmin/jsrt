@@ -523,12 +523,24 @@ JSRT_URLSearchParams* JSRT_ParseSearchParamsFromRecord(JSContext* ctx, JSValue r
             while (*prev_next != current) {
               prev_next = &(*prev_next)->next;
             }
-            *prev_next = current->next;
-            free(current->name);
-            free(current->value);
-            JSRT_URLSearchParam* to_free = current;
-            current = current->next;
-            free(to_free);
+
+            // Save next pointer before freeing current
+            JSRT_URLSearchParam* next_param = current->next;
+            *prev_next = next_param;
+
+            // Safely free current node
+            if (current->name) {
+              free(current->name);
+              current->name = NULL;
+            }
+            if (current->value) {
+              free(current->value);
+              current->value = NULL;
+            }
+            free(current);
+
+            // Move to next parameter (safely)
+            current = next_param;
             continue;
           }
         }

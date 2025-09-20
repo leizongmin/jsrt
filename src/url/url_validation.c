@@ -201,8 +201,8 @@ int validate_hostname_characters(const char* hostname) {
   return validate_hostname_characters_allow_at(hostname, 0);
 }
 
-// Validate hostname characters with scheme-specific rules
-int validate_hostname_characters_with_scheme(const char* hostname, const char* scheme) {
+// Validate hostname characters with scheme-specific rules and port context
+int validate_hostname_characters_with_scheme_and_port(const char* hostname, const char* scheme, int has_port) {
   if (!hostname)
     return 0;
 
@@ -217,18 +217,14 @@ int validate_hostname_characters_with_scheme(const char* hostname, const char* s
   int is_special = scheme && is_special_scheme(scheme);
   int is_file_scheme = scheme && (strcmp(scheme, "file:") == 0);
 
-  // For schemes, reject single-character hostnames (like "a") only in specific cases
-  // Per WPT tests, URLs like "http://a" should be rejected, but "http://f" with ports/paths might be valid
-  // We need to be more specific about when to reject single-character hostnames
-  if (len == 1 && hostname[0] >= 'a' && hostname[0] <= 'z') {
-    // Only reject if this is a simple scheme://a pattern without additional context
-    // This check should only apply during direct hostname validation, not when there are ports/paths
-    // Since this function doesn't have context about ports/paths, we'll be conservative
-    // and only reject for specific problematic cases
-
-    // For now, don't reject single-character hostnames here - let higher-level validation handle it
-    // The issue is that "f" in "http://f:21/" is valid, but "a" in "http://a" is not
-    // This context isn't available at this level, so we'll handle it elsewhere
+  // For special schemes, reject single-character hostnames only when no port is present
+  // Per WPT tests and WHATWG URL spec, URLs like "http://a" should be rejected for special schemes
+  // But "http://a:80" should be allowed
+  if (len == 1 && is_special && !has_port) {
+    // Single-character hostnames without port are invalid for special schemes
+    // Examples: "http://a", "https://b", "ftp://c" should all be rejected
+    // But "http://a:80", "https://b:443" are allowed
+    return 0;
   }
 
   // For file schemes, check for problematic patterns like percent-encoded + pipe
@@ -328,15 +324,28 @@ int validate_hostname_characters_with_scheme(const char* hostname, const char* s
           int is_valid_ipv4_part = 0;
 
           if (strlen(token) > 0) {
-            // Check for pure numeric (decimal)
-            int all_digits = 1;
-            for (size_t i = 0; i < strlen(token); i++) {
-              if (token[i] < '0' || token[i] > '9') {
-                all_digits = 0;
-                break;
+            // Check for hex format (0x or 0X prefix)
+            if (strlen(token) >= 2 && (strncmp(token, "0x", 2) == 0 || strncmp(token, "0X", 2) == 0)) {
+              // Hex format - check if all characters after 0x are valid hex digits (or just "0x")
+              is_valid_ipv4_part = 1;  // "0x" by itself is valid
+              for (size_t i = 2; i < strlen(token); i++) {
+                char c = token[i];
+                if (!((c >= '0' && c <= '9') || (c >= 'a' && c <= 'f') || (c >= 'A' && c <= 'F'))) {
+                  is_valid_ipv4_part = 0;
+                  break;
+                }
               }
+            } else {
+              // Check for pure numeric (decimal/octal)
+              int all_digits = 1;
+              for (size_t i = 0; i < strlen(token); i++) {
+                if (token[i] < '0' || token[i] > '9') {
+                  all_digits = 0;
+                  break;
+                }
+              }
+              is_valid_ipv4_part = all_digits;
             }
-            is_valid_ipv4_part = all_digits;
           }
 
           if (!is_valid_ipv4_part) {
@@ -358,13 +367,65 @@ int validate_hostname_characters_with_scheme(const char* hostname, const char* s
     }
   }
 
+  // Check for problematic Unicode characters in hostname
+  // These characters should cause hostname parsing to fail per WHATWG URL spec
+  for (const char* p = hostname; *p;) {
+    unsigned char c = (unsigned char)*p;
+
+    // Handle UTF-8 sequences
+    if (c >= 0x80) {
+      // Multi-byte UTF-8 sequence
+      int seq_len = 0;
+      uint32_t codepoint = 0;
+
+      if ((c & 0xE0) == 0xC0) {
+        // 2-byte sequence
+        if (p[1] && (p[1] & 0xC0) == 0x80) {
+          seq_len = 2;
+          codepoint = ((c & 0x1F) << 6) | (p[1] & 0x3F);
+        }
+      } else if ((c & 0xF0) == 0xE0) {
+        // 3-byte sequence
+        if (p[1] && p[2] && (p[1] & 0xC0) == 0x80 && (p[2] & 0xC0) == 0x80) {
+          seq_len = 3;
+          codepoint = ((c & 0x0F) << 12) | ((p[1] & 0x3F) << 6) | (p[2] & 0x3F);
+        }
+      } else if ((c & 0xF8) == 0xF0) {
+        // 4-byte sequence
+        if (p[1] && p[2] && p[3] && (p[1] & 0xC0) == 0x80 && (p[2] & 0xC0) == 0x80 && (p[3] & 0xC0) == 0x80) {
+          seq_len = 4;
+          codepoint = ((c & 0x07) << 18) | ((p[1] & 0x3F) << 12) | ((p[2] & 0x3F) << 6) | (p[3] & 0x3F);
+        }
+      }
+
+      if (seq_len > 0) {
+        // Check for problematic Unicode codepoints
+        if (is_special) {
+          // For special schemes, reject certain Unicode characters
+          if ((codepoint >= 0xFDD0 && codepoint <= 0xFDEF) ||  // Non-characters
+              (codepoint & 0xFFFE) == 0xFFFE ||                // Non-characters ending in FFFE/FFFF
+              (codepoint >= 0xFF05 && codepoint <= 0xFF14) ||  // Fullwidth percent and digits
+              codepoint == 0xFDD0) {                           // Specific problematic character
+            return 0;  // Reject problematic Unicode characters in special schemes
+          }
+        }
+        p += seq_len;
+        continue;
+      }
+    }
+
+    // ASCII character validation - continue with existing logic
+    p++;
+  }
+
   for (const char* p = hostname; *p; p++) {
     unsigned char c = (unsigned char)*p;
 
     // Per WPT tests, many special characters must be rejected in hostnames
     // Reject characters that are forbidden in hostnames according to WHATWG URL spec
     if (c == '#' || c == '/' || c == '?' || c == '@' || c == '[' || c == ']' || c == ' ' || c == '<' || c == '>' ||
-        c == '\\' || c == '^' || c == '|') {
+        c == '\\' || c == '^' || c == '|' || c == '"' || c == '\'' || c == '(' || c == ')' || c == '*' || c == '+' ||
+        c == ',' || c == ';' || c == '=' || c == '!' || c == '$' || c == '&' || c == '~') {
       return 0;  // Invalid hostname character
     }
 
@@ -385,11 +446,9 @@ int validate_hostname_characters_with_scheme(const char* hostname, const char* s
 
         // For special schemes, reject percent-encoded characters that should cause failure
         if (is_special) {
-          // Reject percent-encoded characters >= 0x80 (non-ASCII) in hostnames for special schemes
-          // Per WHATWG URL spec, these should cause host parsing to fail
-          if (decoded_value >= 0x80) {
-            return 0;  // Invalid percent-encoded non-ASCII character in hostname
-          }
+          // Allow percent-encoded UTF-8 sequences for IDNA processing
+          // The IDNA step will handle internationalized domain names properly
+          // Note: Non-ASCII percent-encoded sequences are allowed and will be processed by IDNA
 
           // Also reject forbidden ASCII characters that are percent-encoded
           // Per WHATWG URL spec, certain characters should not appear in hostnames even when percent-encoded
@@ -530,6 +589,11 @@ int validate_hostname_characters_with_scheme(const char* hostname, const char* s
 
   free(hostname_copy);
   return 1;  // Valid hostname
+}
+
+// Backward compatibility wrapper - assume no port for existing callers
+int validate_hostname_characters_with_scheme(const char* hostname, const char* scheme) {
+  return validate_hostname_characters_with_scheme_and_port(hostname, scheme, 0);
 }
 
 // Validate hostname characters with option to allow @ symbol

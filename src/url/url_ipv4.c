@@ -82,6 +82,10 @@ int looks_like_ipv4_address(const char* hostname) {
     return 0;
   }
 
+#ifdef DEBUG
+  fprintf(stderr, "[DEBUG] looks_like_ipv4_address: checking '%s'\n", hostname);
+#endif
+
   // First normalize full-width characters like canonicalize_ipv4_address does
   char* normalized = normalize_fullwidth_characters(hostname);
   if (!normalized) {
@@ -220,6 +224,10 @@ int looks_like_ipv4_address(const char* hostname) {
 
       // Valid IPv4 must have 1-4 parts, all numeric
       result = all_numeric && part_count >= 1 && part_count <= 4;
+#ifdef DEBUG
+      fprintf(stderr, "[DEBUG] looks_like_ipv4_address: dotted format - all_numeric=%d, part_count=%d, result=%d\n",
+              all_numeric, part_count, result);
+#endif
       free(parts_copy);
     }
 

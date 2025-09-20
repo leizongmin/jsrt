@@ -459,9 +459,17 @@ int is_relative_url(const char* cleaned_url, const char* base) {
               }
             }
           } else {
-            // Non-special schemes with just colon are absolute (e.g., "mailto:test" → absolute)
-            free(scheme);
-            return 0;
+            // Non-special schemes: check if it's scheme-only or has content after the colon
+            if (*(p + 1) == '\0') {
+              // Scheme-only URLs like "sc:" should be treated as relative when there's a base
+              // This follows WHATWG URL spec for scheme-only relative references
+              free(scheme);
+              return 1;
+            } else {
+              // Non-special schemes with content after colon are absolute (e.g., "mailto:test" → absolute)
+              free(scheme);
+              return 0;
+            }
           }
         } else if (*p == '/' || *p == '?' || *p == '#') {
           // No scheme found before path/query/fragment

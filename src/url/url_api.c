@@ -20,6 +20,7 @@ static JSClassDef JSRT_URLClass = {
 
 // Helper function to strip tab and newline characters from URL strings
 // According to URL spec, these characters should be removed: tab (0x09), LF (0x0A), CR (0x0D)
+// Also removes invisible Unicode characters per WHATWG URL specification preprocessing
 static char* JSRT_StripURLControlCharacters(const char* input, size_t input_len) {
   if (!input)
     return NULL;
@@ -31,12 +32,38 @@ static char* JSRT_StripURLControlCharacters(const char* input, size_t input_len)
   size_t j = 0;
   for (size_t i = 0; i < input_len; i++) {
     unsigned char c = (unsigned char)input[i];
+
     // Per WHATWG URL spec: "Remove all ASCII tab or newline from input"
-    // Only remove tab (0x09), line feed (0x0A), and carriage return (0x0D)
-    // Allow all other characters including Unicode (>= 0x80)
-    if (c != 0x09 && c != 0x0A && c != 0x0D) {
-      result[j++] = c;
+    // Remove tab (0x09), line feed (0x0A), and carriage return (0x0D)
+    if (c == 0x09 || c == 0x0A || c == 0x0D) {
+      continue;  // Skip these characters
     }
+
+    // Remove specific invisible Unicode characters that break URL parsing
+    // These should be stripped during preprocessing, not during hostname validation
+    if (c == 0xE2 && i + 2 < input_len) {
+      unsigned char c2 = (unsigned char)input[i + 1];
+      unsigned char c3 = (unsigned char)input[i + 2];
+
+      // Zero-width space (U+200B): 0xE2 0x80 0x8B
+      // Zero-width non-joiner (U+200C): 0xE2 0x80 0x8C
+      // Zero-width joiner (U+200D): 0xE2 0x80 0x8D
+      // Left-to-right mark (U+200E): 0xE2 0x80 0x8E
+      // Right-to-left mark (U+200F): 0xE2 0x80 0x8F
+      if (c2 == 0x80 && (c3 == 0x8B || c3 == 0x8C || c3 == 0x8D || c3 == 0x8E || c3 == 0x8F)) {
+        i += 2;  // Skip the 3-byte Unicode sequence
+        continue;
+      }
+
+      // Word joiner (U+2060): 0xE2 0x81 0xA0
+      if (c2 == 0x81 && c3 == 0xA0) {
+        i += 2;  // Skip the 3-byte Unicode sequence
+        continue;
+      }
+    }
+
+    // Keep all other characters
+    result[j++] = c;
   }
   result[j] = '\0';
   return result;

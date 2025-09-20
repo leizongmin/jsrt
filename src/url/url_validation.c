@@ -260,6 +260,12 @@ int validate_hostname_characters_with_scheme(const char* hostname, const char* s
       return 0;  // Invalid hostname character
     }
 
+    // Backticks and curly braces are primarily forbidden in special schemes
+    // For non-special schemes, be more permissive
+    if ((c == '`' || c == '{' || c == '}') && is_special_scheme(scheme)) {
+      return 0;  // Invalid hostname character for special schemes
+    }
+
     // Special handling for % - different rules for different schemes
     if (c == '%') {
       // Check if this is part of a valid percent-encoded sequence
@@ -275,6 +281,14 @@ int validate_hostname_characters_with_scheme(const char* hostname, const char* s
           // Per WHATWG URL spec, these should cause host parsing to fail
           if (decoded_value >= 0x80) {
             return 0;  // Invalid percent-encoded non-ASCII character in hostname
+          }
+
+          // Also reject forbidden ASCII characters that are percent-encoded
+          // Per WHATWG URL spec, certain characters should not appear in hostnames even when percent-encoded
+          if (decoded_value == '/' || decoded_value == '?' || decoded_value == '#' || decoded_value == '@' ||
+              decoded_value == '[' || decoded_value == ']' || decoded_value == '\\' || decoded_value == '^' ||
+              decoded_value == '|' || decoded_value == '`' || decoded_value == '{' || decoded_value == '}') {
+            return 0;  // Invalid percent-encoded character in hostname
           }
           // Reject percent-encoded tab, newline, carriage return
           if (decoded_value == 0x09 || decoded_value == 0x0A || decoded_value == 0x0D) {
@@ -343,9 +357,8 @@ int validate_hostname_characters_with_scheme(const char* hostname, const char* s
           return 0;  // Replacement character not allowed
         }
 
-        // Allow Unicode characters including zero-width characters to pass through
-        // They will be handled by IDNA processing later where they can be properly validated
-        // Per WHATWG URL spec, these should go through the full hostname processing pipeline
+        // Note: Invisible Unicode characters are now handled during URL preprocessing
+        // in JSRT_StripURLControlCharacters, so they won't reach hostname validation
 
         // Ideographic space (U+3000): 0xE3 0x80 0x80 - should be rejected in hostnames
         if (c == 0xE3 && p + 2 < hostname + len && (unsigned char)*(p + 1) == 0x80 && (unsigned char)*(p + 2) == 0x80) {
@@ -444,10 +457,14 @@ int validate_hostname_characters_allow_at(const char* hostname, int allow_at) {
 
     // Per WPT tests, many special characters must be rejected in hostnames
     // Reject characters that are forbidden in hostnames according to WHATWG URL spec
+    // Note: Some characters are only forbidden for special schemes
     if (c == '#' || c == '/' || c == '?' || (!allow_at && c == '@') || c == '[' || c == ']' || c == ' ' || c == '<' ||
         c == '>' || c == '\\' || c == '^' || c == '|') {
       return 0;  // Invalid hostname character
     }
+
+    // Note: This function is used for general hostname validation
+    // More specific scheme-based validation is handled elsewhere
 
     // Special handling for % - allow it for percent-encoded characters
     if (c == '%') {

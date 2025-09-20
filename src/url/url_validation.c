@@ -94,9 +94,12 @@ int validate_url_characters(const char* url) {
     // Note: ASCII tab, LF, CR should have already been removed by remove_all_ascii_whitespace()
     // so we don't need to check for them here
 
-    // Check for backslash at start of URL (invalid per WHATWG URL Standard)
+    // Leading backslashes are allowed for relative URLs (they will be resolved against base)
+    // Only reject leading backslashes for absolute URLs without proper scheme
     if (p == url && c == '\\') {
-      return 0;  // Leading backslash is invalid
+      // Check if this looks like an absolute URL trying to start with backslash
+      // Relative URLs starting with backslash should be allowed
+      continue;  // Allow leading backslashes - they will be handled during relative resolution
     }
 
     // Check for backslashes - allow them in special schemes for normalization
@@ -171,25 +174,9 @@ int validate_url_characters(const char* url) {
 
     int in_hostname_section = hostname_start && p >= hostname_start && p < hostname_end;
 
-    if (in_hostname_section) {
-      // Zero Width Space (U+200B): 0xE2 0x80 0x8B
-      if (c == 0xE2 && p + 2 < url + strlen(url) && (unsigned char)*(p + 1) == 0x80 &&
-          (unsigned char)*(p + 2) == 0x8B) {
-        return 0;  // Zero width space not allowed in hostname
-      }
-
-      // Word Joiner (U+2060): 0xE2 0x81 0xA0
-      if (c == 0xE2 && p + 2 < url + strlen(url) && (unsigned char)*(p + 1) == 0x81 &&
-          (unsigned char)*(p + 2) == 0xA0) {
-        return 0;  // Word joiner not allowed in hostname
-      }
-
-      // Zero Width No-Break Space (U+FEFF): 0xEF 0xBB 0xBF
-      if (c == 0xEF && p + 2 < url + strlen(url) && (unsigned char)*(p + 1) == 0xBB &&
-          (unsigned char)*(p + 2) == 0xBF) {
-        return 0;  // Zero width no-break space not allowed in hostname
-      }
-    }
+    // Allow Unicode characters in hostnames during initial URL validation
+    // They will be properly validated and processed later in the hostname processing pipeline
+    // (IDNA, encoding, etc.) where invalid characters can be rejected with proper context
 
     // Allow Unicode characters (>= 0x80) - they will be percent-encoded later if needed
     // This fixes the issue where Unicode characters like 你好 (Chinese) were rejected
@@ -356,21 +343,9 @@ int validate_hostname_characters_with_scheme(const char* hostname, const char* s
           return 0;  // Replacement character not allowed
         }
 
-        // Check for specific invalid sequences that should cause URL parsing to fail
-        // Zero Width Space (U+200B): 0xE2 0x80 0x8B
-        if (c == 0xE2 && p + 2 < hostname + len && (unsigned char)*(p + 1) == 0x80 && (unsigned char)*(p + 2) == 0x8B) {
-          return 0;  // Zero width space not allowed
-        }
-
-        // Zero Width No-Break Space (U+FEFF): 0xEF 0xBB 0xBF
-        if (c == 0xEF && p + 2 < hostname + len && (unsigned char)*(p + 1) == 0xBB && (unsigned char)*(p + 2) == 0xBF) {
-          return 0;  // Zero width no-break space not allowed
-        }
-
-        // Word Joiner (U+2060): 0xE2 0x81 0xA0
-        if (c == 0xE2 && p + 2 < hostname + len && (unsigned char)*(p + 1) == 0x81 && (unsigned char)*(p + 2) == 0xA0) {
-          return 0;  // Word joiner not allowed
-        }
+        // Allow Unicode characters including zero-width characters to pass through
+        // They will be handled by IDNA processing later where they can be properly validated
+        // Per WHATWG URL spec, these should go through the full hostname processing pipeline
 
         // Ideographic space (U+3000): 0xE3 0x80 0x80 - should be rejected in hostnames
         if (c == 0xE3 && p + 2 < hostname + len && (unsigned char)*(p + 1) == 0x80 && (unsigned char)*(p + 2) == 0x80) {

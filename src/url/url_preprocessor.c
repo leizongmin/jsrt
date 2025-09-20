@@ -309,13 +309,10 @@ char* preprocess_url_string(const char* url, const char* base) {
     // For special schemes, convert all backslashes to forward slashes
     normalized_url = normalize_url_backslashes(space_normalized_url);
   } else {
-    // For non-special schemes, check for relative URLs starting with backslashes
-    if (space_normalized_url[0] == '\\') {
-      // Patterns like \\server\file should be rejected for non-special schemes
-      free(space_normalized_url);
-      return NULL;
-    } else if (space_normalized_url[0] == '\\' && strchr(space_normalized_url + 1, '\\')) {
-      // Patterns like \\x\\hello should be rejected
+    // For non-special schemes, allow backslash URLs when there's a base (they will be relative)
+    // Only reject if there's no base URL (making it impossible to resolve)
+    if (space_normalized_url[0] == '\\' && !base) {
+      // Backslash URLs without base should be rejected for non-special schemes
       free(space_normalized_url);
       return NULL;
     }

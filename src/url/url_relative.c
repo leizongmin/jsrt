@@ -509,7 +509,7 @@ cleanup_and_normalize:
     JSRT_FreeURL(result);
     return NULL;
   }
-  char* encoded_search = url_component_encode(result->search);
+  char* encoded_search = url_query_encode(result->search);
   if (!encoded_search) {
     free(encoded_pathname);
     JSRT_FreeURL(base_url);

@@ -349,9 +349,10 @@ char* url_userinfo_encode_with_scheme_name(const char* str, const char* scheme) 
     if ((c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z') || (c >= '0' && c <= '9') || c == '-' || c == '_' ||
         c == '.' || c == '~' || c == '*' || c == '&' || c == '(' || c == ')' || c == '!' || c == '$' || c == '\'' ||
         c == ',' || c == ';' || c == '=' || c == '+' || c == '%' || c == '<' || c == '>' || c == '[' || c == '^' ||
-        c == '`' || c == '{' || c == '|' || c == '}' || (!encode_closing_bracket && c == ']') ||
-        (!encode_at_symbol && c == '@') || (!encode_colon && c == ':')) {
+        c == '|' || (!encode_closing_bracket && c == ']') || (!encode_at_symbol && c == '@') ||
+        (!encode_colon && c == ':')) {
       // Note: @, :, ] encoding depends on scheme
+      // NOTE: Removed backticks (`) and braces ({}) from allowed chars per WHATWG URL spec
       encoded_len++;
     } else {
       encoded_len += 3;  // %XX
@@ -369,9 +370,10 @@ char* url_userinfo_encode_with_scheme_name(const char* str, const char* scheme) 
     if ((c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z') || (c >= '0' && c <= '9') || c == '-' || c == '_' ||
         c == '.' || c == '~' || c == '*' || c == '&' || c == '(' || c == ')' || c == '!' || c == '$' || c == '\'' ||
         c == ',' || c == ';' || c == '=' || c == '+' || c == '%' || c == '<' || c == '>' || c == '[' || c == '^' ||
-        c == '`' || c == '{' || c == '|' || c == '}' || (!encode_closing_bracket && c == ']') ||
-        (!encode_at_symbol && c == '@') || (!encode_colon && c == ':')) {
+        c == '|' || (!encode_closing_bracket && c == ']') || (!encode_at_symbol && c == '@') ||
+        (!encode_colon && c == ':')) {
       // Note: @, :, ] encoding depends on scheme
+      // NOTE: Removed backticks (`) and braces ({}) from allowed chars per WHATWG URL spec
       encoded[j++] = c;
     } else {
       encoded[j++] = '%';
@@ -995,6 +997,68 @@ char* url_component_encode_file_path(const char* str) {
     }
   }
 
+  encoded[j] = '\0';
+  return encoded;
+}
+
+// Query-specific encoding (single quotes should NOT be encoded in query)
+char* url_query_encode(const char* str) {
+  if (!str)
+    return NULL;
+
+  size_t len = strlen(str);
+  size_t encoded_len = 0;
+
+  // Calculate encoded length with overflow protection
+  for (size_t i = 0; i < len; i++) {
+    unsigned char c = (unsigned char)str[i];
+    size_t add_len;
+
+    // Check if character needs encoding per URL spec for query components
+    if (c == '%' && i + 2 < len && hex_to_int(str[i + 1]) >= 0 && hex_to_int(str[i + 2]) >= 0) {
+      // Already percent-encoded sequence, keep as-is
+      add_len = 3;
+    } else if (c <= 32 || c >= 127 || c == '"' || c == '<' || c == '>' || c == '\\' || c == '^' || c == '`' ||
+               c == '{' || c == '|' || c == '}') {
+      // Encode control characters, space, non-ASCII characters, and specific unsafe characters
+      // NOTE: Single quotes (') are NOT encoded in query parameters per WHATWG URL spec
+      add_len = 3;  // %XX
+    } else {
+      add_len = 1;
+    }
+
+    // Check for integer overflow
+    if (encoded_len > SIZE_MAX - add_len) {
+      return NULL;  // Would overflow
+    }
+    encoded_len += add_len;
+  }
+
+  char* encoded = safe_malloc_for_encoding(encoded_len);
+  if (!encoded) {
+    return NULL;
+  }
+  size_t j = 0;
+
+  for (size_t i = 0; i < len; i++) {
+    unsigned char c = (unsigned char)str[i];
+    if (c == '%' && i + 2 < len && hex_to_int(str[i + 1]) >= 0 && hex_to_int(str[i + 2]) >= 0) {
+      // Already percent-encoded sequence, copy as-is
+      encoded[j++] = str[i];
+      encoded[j++] = str[i + 1];
+      encoded[j++] = str[i + 2];
+      i += 2;  // Skip the next two characters
+    } else if (c <= 32 || c >= 127 || c == '"' || c == '<' || c == '>' || c == '\\' || c == '^' || c == '`' ||
+               c == '{' || c == '|' || c == '}') {
+      // Encode control characters, space, non-ASCII characters, and specific unsafe characters
+      // NOTE: Single quotes (') are NOT encoded in query parameters per WHATWG URL spec
+      encoded[j++] = '%';
+      encoded[j++] = hex_chars[c >> 4];
+      encoded[j++] = hex_chars[c & 15];
+    } else {
+      encoded[j++] = c;
+    }
+  }
   encoded[j] = '\0';
   return encoded;
 }

@@ -120,31 +120,29 @@ static JSValue JSRT_URLConstructor(JSContext* ctx, JSValueConst new_target, int 
   }
 
   size_t url_str_len;
-  const char* url_str_raw = JS_ToCStringLen(ctx, &url_str_len, argv[0]);
+  char* url_str_raw = JSRT_StringToUTF8WithSurrogateReplacement(ctx, argv[0], &url_str_len);
   if (!url_str_raw) {
     return JS_EXCEPTION;
   }
 
   // Strip control characters as per URL specification
-  // Note: Use strlen() instead of url_str_len because JS_ToCStringLen returns the JavaScript
-  // string length (UTF-16 code units) but url_str_raw is a UTF-8 byte array
-  char* url_str = JSRT_StripURLControlCharacters(url_str_raw, strlen(url_str_raw));
-  JS_FreeCString(ctx, url_str_raw);
+  char* url_str = JSRT_StripURLControlCharacters(url_str_raw, url_str_len);
+  free(url_str_raw);
   if (!url_str) {
     return JS_ThrowTypeError(ctx, "Invalid URL");
   }
 
-  const char* base_str_raw = NULL;
+  char* base_str_raw = NULL;
   char* base_str = NULL;
   if (argc >= 2 && !JS_IsUndefined(argv[1])) {
     size_t base_str_len;
-    base_str_raw = JS_ToCStringLen(ctx, &base_str_len, argv[1]);
+    base_str_raw = JSRT_StringToUTF8WithSurrogateReplacement(ctx, argv[1], &base_str_len);
     if (!base_str_raw) {
       free(url_str);
       return JS_EXCEPTION;
     }
-    base_str = JSRT_StripURLControlCharacters(base_str_raw, strlen(base_str_raw));
-    JS_FreeCString(ctx, base_str_raw);
+    base_str = JSRT_StripURLControlCharacters(base_str_raw, base_str_len);
+    free(base_str_raw);
     if (!base_str) {
       free(url_str);
       return JS_ThrowTypeError(ctx, "Invalid URL");

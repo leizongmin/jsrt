@@ -153,6 +153,7 @@ char* url_encode(const char* str);
 char* url_component_encode(const char* str);
 char* url_component_encode_file_path(const char* str);
 char* url_fragment_encode(const char* str);
+char* url_query_encode(const char* str);
 char* url_fragment_encode_nonspecial(const char* str);
 char* url_nonspecial_path_encode(const char* str);
 char* url_path_encode_special(const char* str);

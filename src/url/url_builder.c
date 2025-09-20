@@ -106,7 +106,7 @@ void build_href(JSRT_URL* parsed) {
     parsed->href = NULL;
     return;
   }
-  char* final_search = url_component_encode(parsed->search);
+  char* final_search = url_query_encode(parsed->search);
   if (!final_search) {
     free(final_pathname);
     free(final_host);
@@ -215,7 +215,7 @@ void parse_path_query_fragment(JSRT_URL* parsed, char* ptr) {
     raw_search[search_len] = '\0';
 
     free(parsed->search);
-    parsed->search = url_component_encode(raw_search);
+    parsed->search = url_query_encode(raw_search);
     free(raw_search);
     if (!parsed->search) {
       return;
@@ -386,7 +386,7 @@ char* build_url_string(const char* protocol, const char* username, const char* p
 
   // Add search
   if (search && strlen(search) > 0) {
-    char* encoded_search = url_component_encode(search);
+    char* encoded_search = url_query_encode(search);
     if (!encoded_search) {
       free(url_string);
       return NULL;

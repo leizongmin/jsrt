@@ -25,10 +25,8 @@ char* parse_url_components(JSRT_URL* parsed, const char* scheme, char* ptr) {
     // 4. blob:about:blank, blob:ws://example.org/, etc.
     // We should accept all formats, validation is done elsewhere
 
-    // file: URLs are not allowed as blob inner URLs per WPT tests
-    if (strncmp(ptr, "file:", 5) == 0) {
-      return NULL;
-    }
+    // Note: WPT tests show that blob:file: URLs should be parsed successfully
+    // The previous restriction was incorrect per urltestdata.json
   }
 
   // Handle different URL formats

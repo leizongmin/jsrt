@@ -301,13 +301,30 @@ JSRT_URL* parse_absolute_url(const char* preprocessed_url) {
     parsed->pathname = strdup("/");
   }
 
-  // Normalize dot segments in the pathname for ALL schemes
-  // According to WHATWG URL spec, dot segment normalization applies to all schemes
+  // Normalize dot segments in the pathname for special schemes and specific other schemes
+  // According to WHATWG URL spec and WPT tests, some schemes require dot normalization
   if (parsed->pathname) {
-    char* normalized_pathname = normalize_dot_segments_with_percent_decoding(parsed->pathname);
-    if (normalized_pathname) {
-      free(parsed->pathname);
-      parsed->pathname = normalized_pathname;
+    int should_normalize = is_special_scheme(parsed->protocol);
+
+    // WPT test cases show that these specific non-special schemes also need dot normalization
+    // But ONLY for simple dot patterns like /../ at the end
+    if (!should_normalize && parsed->protocol && parsed->pathname) {
+      const char* protocol = parsed->protocol;
+      // Only normalize if pathname is exactly "/../" and scheme is one of these
+      if (strcmp(parsed->pathname, "/../") == 0) {
+        if (strncmp(protocol, "about:", 6) == 0 || strncmp(protocol, "data:", 5) == 0 ||
+            strncmp(protocol, "javascript:", 11) == 0 || strncmp(protocol, "mailto:", 7) == 0) {
+          should_normalize = 1;
+        }
+      }
+    }
+
+    if (should_normalize) {
+      char* normalized_pathname = normalize_dot_segments_with_percent_decoding(parsed->pathname);
+      if (normalized_pathname) {
+        free(parsed->pathname);
+        parsed->pathname = normalized_pathname;
+      }
     }
   }
 

@@ -193,19 +193,23 @@ int handle_windows_drive_relative(const char* path_copy, JSRT_URL* result, int i
 
   // Handle "C|" (drive letter only) case
   if (strlen(path_copy) == 2) {
-    // Convert "C|" -> "/C:/"
-    char* absolute_path = malloc(5);  // "/C:/\0"
+    // Convert "C|" -> "/C:" (WPT expects /C: not /C:/)
+    char* absolute_path = malloc(4);  // "/C:\0"
     if (!absolute_path) {
       return -1;  // Error
     }
-    snprintf(absolute_path, 5, "/%c:/", path_copy[0]);
+    snprintf(absolute_path, 4, "/%c:", path_copy[0]);
     result->pathname = absolute_path;
+
+    // According to WPT test data, hostname should be preserved for C| case
+    // The test expects "file://host/C:" not "file:///C:/"
+
     return 1;  // Handled
   }
   // Handle "C|/foo/bar" case
   else if (path_copy[2] == '/') {
     // Convert Windows drive letter to absolute file path
-    // "C|/foo/bar" -> "/C:/foo/bar"
+    // "C|/foo/bar" -> "/C:/foo/bar" (WPT expects hostname preservation)
     size_t new_len = strlen(path_copy) + 2;  // +1 for leading '/', +1 for null terminator
     char* absolute_path = malloc(new_len);
     if (!absolute_path) {
@@ -214,6 +218,10 @@ int handle_windows_drive_relative(const char* path_copy, JSRT_URL* result, int i
     snprintf(absolute_path, new_len, "/%c:%s", path_copy[0], path_copy + 2);  // Convert | to :
 
     result->pathname = absolute_path;
+
+    // According to WPT test data, hostname should be preserved for drive letter cases
+    // No need to clear hostname and host
+
     return 1;  // Handled
   }
 

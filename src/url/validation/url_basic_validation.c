@@ -240,25 +240,39 @@ int validate_percent_encoded_characters(const char* url) {
 
           // Check if this percent-encoded sequence is in the authority section
           if (p >= authority_start && p < authority_end) {
-            // In authority section - apply strict validation for certain characters
-            // %80 (0x80) and %A0 (0xA0) should cause URL parsing to fail in hostnames
-            if (decoded_value == 0x80 || decoded_value == 0xA0) {
-              return 0;  // Invalid percent-encoded character in hostname
+            // Determine if this is a special scheme
+            int is_special = 0;
+            if (url) {
+              char* scheme_end = strstr(url, ":");
+              if (scheme_end) {
+                size_t scheme_len = scheme_end - url + 1;
+                char* scheme = malloc(scheme_len + 1);
+                if (scheme) {
+                  strncpy(scheme, url, scheme_len);
+                  scheme[scheme_len] = '\0';
+                  is_special = is_special_scheme(scheme);
+                  free(scheme);
+                }
+              }
             }
 
-            // Percent-encoded characters that could break parsing should also be rejected
-            // C0 control characters (0x00-0x1F) and DEL (0x7F) in hostnames
-            if (decoded_value <= 0x1F || decoded_value == 0x7F) {
-              return 0;  // Control characters not allowed in hostnames
-            }
-
-            // Check for other problematic sequences that should cause failure
-            // High-bit characters (>= 0x80) in hostname often indicate encoding issues
-            if (decoded_value >= 0x80 && decoded_value <= 0xFF) {
-              // Check for specific problematic byte values that indicate encoding issues
-              // 0x80, 0xA0 are particularly problematic in URL contexts
+            // For special schemes, apply strict validation
+            if (is_special) {
+              // %80 (0x80) and %A0 (0xA0) should cause URL parsing to fail in hostnames
               if (decoded_value == 0x80 || decoded_value == 0xA0) {
-                return 0;  // These should cause parsing failure
+                return 0;  // Invalid percent-encoded character in hostname
+              }
+
+              // Percent-encoded characters that could break parsing should also be rejected
+              // C0 control characters (0x00-0x1F) and DEL (0x7F) in hostnames
+              if (decoded_value <= 0x1F || decoded_value == 0x7F) {
+                return 0;  // Control characters not allowed in hostnames
+              }
+            } else {
+              // For non-special schemes, be more permissive with percent-encoded UTF-8
+              // Only reject null bytes and other truly problematic characters
+              if (decoded_value == 0x00) {
+                return 0;  // Null bytes are always invalid
               }
             }
           }

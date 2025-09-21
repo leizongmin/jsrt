@@ -180,11 +180,7 @@ char* compute_origin_with_pathname(const char* protocol, const char* hostname, c
                                    int double_colon_at_pattern, const char* pathname);
 int hex_to_int(char c);
 
-// URLSearchParams functions
-JSRT_URLSearchParams* JSRT_ParseSearchParams(const char* search_string, size_t string_len);
-JSRT_URLSearchParams* JSRT_ParseSearchParamsFromSequence(JSContext* ctx, JSValue seq);
-JSRT_URLSearchParams* JSRT_ParseSearchParamsFromRecord(JSContext* ctx, JSValue record);
-JSRT_URLSearchParams* JSRT_ParseSearchParamsFromFormData(JSContext* ctx, JSValueConst formdata_val);
+// URLSearchParams core functions (search_params/url_search_params_core.c)
 JSRT_URLSearchParams* JSRT_CreateEmptySearchParams(void);
 void JSRT_AddSearchParam(JSRT_URLSearchParams* search_params, const char* name, const char* value);
 void JSRT_AddSearchParamWithLength(JSRT_URLSearchParams* search_params, const char* name, size_t name_len,
@@ -192,6 +188,12 @@ void JSRT_AddSearchParamWithLength(JSRT_URLSearchParams* search_params, const ch
 void JSRT_FreeSearchParams(JSRT_URLSearchParams* search_params);
 JSRT_URLSearchParam* create_url_param(const char* name, size_t name_len, const char* value, size_t value_len);
 void update_parent_url_href(JSRT_URLSearchParams* search_params);
+
+// URLSearchParams parsing functions (search_params/url_search_params_parser.c)
+JSRT_URLSearchParams* JSRT_ParseSearchParams(const char* search_string, size_t string_len);
+JSRT_URLSearchParams* JSRT_ParseSearchParamsFromSequence(JSContext* ctx, JSValue seq);
+JSRT_URLSearchParams* JSRT_ParseSearchParamsFromRecord(JSContext* ctx, JSValue record);
+JSRT_URLSearchParams* JSRT_ParseSearchParamsFromFormData(JSContext* ctx, JSValueConst formdata_val);
 
 // Error handling and debugging support
 typedef enum {
@@ -239,8 +241,10 @@ typedef enum {
 int JSRT_ValidateUTF8Sequence(const uint8_t* bytes, size_t len, const uint8_t** next);
 char* JSRT_StringToUTF8WithSurrogateReplacement(JSContext* ctx, JSValue str, size_t* len_p);
 
-// URLSearchParams JavaScript API functions
+// URLSearchParams JavaScript API functions (search_params/url_search_params_methods.c and
+// search_params/url_search_params_iterators.c)
 void JSRT_RegisterURLSearchParamsMethods(JSContext* ctx, JSValue proto);
+void JSRT_RegisterURLSearchParamsIterators(JSContext* ctx, JSValue proto);
 
 // Runtime setup function
 void JSRT_RuntimeSetupStdURL(JSRT_Runtime* rt);

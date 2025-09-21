@@ -225,13 +225,17 @@ JSRT_URL* parse_absolute_url(const char* preprocessed_url) {
   // Special validation for schemes without proper authority or path
   if (is_special_scheme(scheme)) {
     // Special schemes like http, https, ftp MUST have authority (start with //)
-    // Exception: file: URLs can have various formats
+    // Exception: file: URLs can have various formats, including scheme-only
     if (!remainder || strlen(remainder) == 0) {
-      // Case like "http:" - special scheme with no remainder at all
-      free(scheme);
-      free(url_copy);
-      JSRT_FreeURL(parsed);
-      return NULL;
+      // Case like "http:" - most special schemes require authority
+      // Exception: file: URLs can be scheme-only and resolve to file:///
+      if (strcmp(scheme, "file") != 0) {
+        free(scheme);
+        free(url_copy);
+        JSRT_FreeURL(parsed);
+        return NULL;
+      }
+      // file: scheme-only is valid - will be normalized to file:/// below
     } else if (strncmp(remainder, "//", 2) != 0) {
       // Case like "http:something" without // - this should fail for special schemes
       // Exception: file: URLs allow "file:path" format

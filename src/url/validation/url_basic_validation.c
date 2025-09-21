@@ -93,10 +93,9 @@ int validate_url_characters(const char* url) {
   size_t url_len = strlen(url);  // Compute once for efficiency
 
   // Check for truncated URLs that appear incomplete
-  // Per WPT tests, URLs like "<", "sc://a", "http://a" should be rejected
-  if (url_len == 1 && url[0] == '<') {
-    return 0;  // Single "<" character is invalid
-  }
+  // Note: Single characters like "<" are valid relative URLs per WHATWG URL spec
+  // They should be resolved against the base URL, not rejected
+  // Only reject truly malformed URLs, not valid relative URLs
 
   // Only reject truly malformed URLs, not those with single-character hostnames
   // Single-character hostnames are valid per WHATWG URL spec

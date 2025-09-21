@@ -305,11 +305,33 @@ JSRT_URL* resolve_relative_url(const char* url, const char* base) {
       }
     }
 
-    // Encode the absolute pathname according to the scheme type
-    if (is_special_scheme(result->protocol)) {
-      result->pathname = url_path_encode_special(path_copy);
+    // Special handling for file: scheme Windows drive preservation
+    // Per WHATWG URL spec, "/" against "file:///C:/path" should resolve to "file:///C:/"
+    if (strcmp(result->protocol, "file:") == 0 && strcmp(path_copy, "/") == 0) {
+      // Check if base URL has a Windows drive letter pattern (/C:/ or /C|/)
+      const char* base_path = base_url->pathname;
+      if (base_path && strlen(base_path) >= 3 && base_path[0] == '/' && isalpha(base_path[1]) &&
+          (base_path[2] == ':' || base_path[2] == '|')) {
+        // Preserve the drive letter: "/" -> "/C:/"
+        char* drive_path = malloc(5);  // "/C:/\0"
+        if (drive_path) {
+          snprintf(drive_path, 5, "/%c:/", base_path[1]);
+          result->pathname = url_path_encode_special(drive_path);
+          free(drive_path);
+        } else {
+          result->pathname = url_path_encode_special(path_copy);
+        }
+      } else {
+        // Regular absolute path
+        result->pathname = url_path_encode_special(path_copy);
+      }
     } else {
-      result->pathname = url_nonspecial_path_encode(path_copy);
+      // Encode the absolute pathname according to the scheme type
+      if (is_special_scheme(result->protocol)) {
+        result->pathname = url_path_encode_special(path_copy);
+      } else {
+        result->pathname = url_nonspecial_path_encode(path_copy);
+      }
     }
     free(path_copy);
   } else {
@@ -353,26 +375,44 @@ JSRT_URL* resolve_relative_url(const char* url, const char* base) {
     }
 
     // Special case: Windows drive letter in relative URL for file scheme
-    // Handle relative URLs like "C|/foo/bar" when base is a file: URL
+    // Handle relative URLs like "C|" or "C|/foo/bar" when base is a file: URL
     // These should be treated as absolute paths, not relative paths
-    if (is_file_scheme && strlen(path_copy) >= 3 && isalpha(path_copy[0]) && path_copy[1] == '|' &&
-        path_copy[2] == '/') {
-      // Convert Windows drive letter to absolute file path
-      // "C|/foo/bar" -> "/C:/foo/bar"
-      size_t new_len = strlen(path_copy) + 2;  // +1 for leading '/', +1 for null terminator
-      char* absolute_path = malloc(new_len);
-      if (!absolute_path) {
+    if (is_file_scheme && strlen(path_copy) >= 2 && isalpha(path_copy[0]) && path_copy[1] == '|') {
+      // Handle "C|" (drive letter only) case
+      if (strlen(path_copy) == 2) {
+        // Convert "C|" -> "/C:/"
+        char* absolute_path = malloc(5);  // "/C:/\0"
+        if (!absolute_path) {
+          free(path_copy);
+          JSRT_FreeURL(base_url);
+          JSRT_FreeURL(result);
+          return NULL;
+        }
+        snprintf(absolute_path, 5, "/%c:/", path_copy[0]);
+        free(result->pathname);
+        result->pathname = absolute_path;
         free(path_copy);
-        JSRT_FreeURL(base_url);
-        JSRT_FreeURL(result);
-        return NULL;
+        goto cleanup_and_normalize;
       }
-      snprintf(absolute_path, new_len, "/%c:%s", path_copy[0], path_copy + 2);  // Convert | to :
+      // Handle "C|/foo/bar" case
+      else if (path_copy[2] == '/') {
+        // Convert Windows drive letter to absolute file path
+        // "C|/foo/bar" -> "/C:/foo/bar"
+        size_t new_len = strlen(path_copy) + 2;  // +1 for leading '/', +1 for null terminator
+        char* absolute_path = malloc(new_len);
+        if (!absolute_path) {
+          free(path_copy);
+          JSRT_FreeURL(base_url);
+          JSRT_FreeURL(result);
+          return NULL;
+        }
+        snprintf(absolute_path, new_len, "/%c:%s", path_copy[0], path_copy + 2);  // Convert | to :
 
-      free(result->pathname);
-      result->pathname = absolute_path;
-      free(path_copy);
-      goto cleanup_and_normalize;
+        free(result->pathname);
+        result->pathname = absolute_path;
+        free(path_copy);
+        goto cleanup_and_normalize;
+      }
     }
 
     // Special case: empty URL should resolve to base URL unchanged

@@ -231,11 +231,7 @@ typedef enum {
     }                                           \
   } while (0)
 
-#ifdef DEBUG
-#define JSRT_URL_DEBUG_LOG(fmt, ...) fprintf(stderr, "[URL DEBUG] " fmt "\n", ##__VA_ARGS__)
-#else
-#define JSRT_URL_DEBUG_LOG(fmt, ...) ((void)0)
-#endif
+// Debug logging now uses JSRT_Debug macro from debug.h
 
 // External functions from encoding.h
 int JSRT_ValidateUTF8Sequence(const uint8_t* bytes, size_t len, const uint8_t** next);

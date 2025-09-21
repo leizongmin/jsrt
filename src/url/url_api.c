@@ -88,11 +88,9 @@ static char* JSRT_StripURLControlCharacters(const char* input, size_t input_len)
         unsigned char c2 = (unsigned char)input[i + 1];
         unsigned char c3 = (unsigned char)input[i + 2];
 
-#ifdef DEBUG
         if (c == 0xE2 || c == 0xEF) {
-          fprintf(stderr, "[DEBUG] preprocess_url_string: checking UTF-8 sequence: 0x%02X 0x%02X 0x%02X\n", c, c2, c3);
+          JSRT_Debug("preprocess_url_string: checking UTF-8 sequence: 0x%02X 0x%02X 0x%02X", c, c2, c3);
         }
-#endif
 
         // Note: Unicode zero-width character stripping has been moved to hostname processing
         // to ensure context-sensitive handling per WHATWG URL specification.

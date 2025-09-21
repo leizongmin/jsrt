@@ -8,10 +8,7 @@ void build_href(JSRT_URL* parsed) {
   if (!parsed)
     return;
 
-#ifdef DEBUG
-  fprintf(stderr, "[DEBUG] build_href: protocol='%s', host='%s', pathname='%s'\n", parsed->protocol, parsed->host,
-          parsed->pathname);
-#endif
+  JSRT_Debug("build_href: protocol='%s', host='%s', pathname='%s'", parsed->protocol, parsed->host, parsed->pathname);
 
   int is_special = is_special_scheme(parsed->protocol);
 

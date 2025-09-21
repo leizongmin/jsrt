@@ -82,9 +82,7 @@ int looks_like_ipv4_address(const char* hostname) {
     return 0;
   }
 
-#ifdef DEBUG
-  fprintf(stderr, "[DEBUG] looks_like_ipv4_address: checking '%s'\n", hostname);
-#endif
+  JSRT_Debug("looks_like_ipv4_address: checking '%s'", hostname);
 
   // First normalize full-width characters like canonicalize_ipv4_address does
   char* normalized = normalize_fullwidth_characters(hostname);
@@ -264,11 +262,8 @@ int looks_like_ipv4_address(const char* hostname) {
 
       // Treat as IPv4 if last segment looks numeric
       result = last_segment_numeric && part_count >= 1 && part_count <= 4;
-#ifdef DEBUG
-      fprintf(stderr,
-              "[DEBUG] looks_like_ipv4_address: dotted format - last_segment_numeric=%d, part_count=%d, result=%d\n",
-              last_segment_numeric, part_count, result);
-#endif
+      JSRT_Debug("looks_like_ipv4_address: dotted format - last_segment_numeric=%d, part_count=%d, result=%d",
+                 last_segment_numeric, part_count, result);
       free(parts_copy);
     }
 

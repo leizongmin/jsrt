@@ -677,10 +677,8 @@ char* url_decode_hostname_with_scheme(const char* str, const char* scheme) {
   if (!cleaned_hostname)
     return NULL;
 
-#ifdef DEBUG
-  fprintf(stderr, "[DEBUG] url_decode_hostname_with_scheme: input='%s', cleaned='%s', scheme='%s'\n", str,
-          cleaned_hostname, scheme ? scheme : "NULL");
-#endif
+  JSRT_Debug("url_decode_hostname_with_scheme: input='%s', cleaned='%s', scheme='%s'", str, cleaned_hostname,
+             scheme ? scheme : "NULL");
 
   // Determine if this is a special scheme
   int is_special = scheme ? is_special_scheme(scheme) : 0;
@@ -744,9 +742,7 @@ char* url_decode_hostname_with_scheme(const char* str, const char* scheme) {
   }
   decoded[j] = '\0';
   free(cleaned_hostname);
-#ifdef DEBUG
-  fprintf(stderr, "[DEBUG] url_decode_hostname_with_scheme: output='%s'\n", decoded);
-#endif
+  JSRT_Debug("url_decode_hostname_with_scheme: output='%s'", decoded);
   return decoded;
 }
 

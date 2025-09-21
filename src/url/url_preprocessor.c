@@ -284,9 +284,7 @@ char* preprocess_url_string(const char* url, const char* base) {
   if (!url)
     return NULL;
 
-#ifdef DEBUG
-  fprintf(stderr, "[DEBUG] preprocess_url_string: url='%s'\n", url);
-#endif
+  JSRT_Debug("preprocess_url_string: url='%s'", url);
 
   // Strip leading and trailing ASCII whitespace, then remove all internal ASCII whitespace
   char* trimmed_url = strip_url_whitespace(url);

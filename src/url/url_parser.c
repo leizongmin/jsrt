@@ -11,16 +11,12 @@ int detect_url_scheme(const char* url, char** scheme, char** remainder) {
   *scheme = NULL;
   *remainder = NULL;
 
-#ifdef DEBUG
-  fprintf(stderr, "[DEBUG] detect_url_scheme: url='%s'\n", url);
-#endif
+  JSRT_Debug("detect_url_scheme: url='%s'", url);
 
   // Check for scheme and handle special cases
   char* scheme_colon = strchr(url, ':');
 
-#ifdef DEBUG
-  fprintf(stderr, "[DEBUG] detect_url_scheme: scheme_colon=%p\n", (void*)scheme_colon);
-#endif
+  JSRT_Debug("detect_url_scheme: scheme_colon=%p", (void*)scheme_colon);
 
   // URL schemes must start with a letter (per RFC 3986)
   // Paths starting with / should never be treated as having a scheme
@@ -34,15 +30,11 @@ int detect_url_scheme(const char* url, char** scheme, char** remainder) {
     strncpy(*scheme, url, scheme_len);
     (*scheme)[scheme_len] = '\0';
     *remainder = scheme_colon + 1;
-#ifdef DEBUG
-    fprintf(stderr, "[DEBUG] detect_url_scheme: scheme='%s', remainder='%s'\n", *scheme, *remainder);
-#endif
+    JSRT_Debug("detect_url_scheme: scheme='%s', remainder='%s'", *scheme, *remainder);
     return 0;
   }
 
-#ifdef DEBUG
-  fprintf(stderr, "[DEBUG] detect_url_scheme: no scheme found\n");
-#endif
+  JSRT_Debug("detect_url_scheme: no scheme found");
   return -1;  // No scheme found
 }
 
@@ -51,9 +43,7 @@ char* parse_url_components(JSRT_URL* parsed, const char* scheme, char* ptr) {
   if (!parsed || !scheme || !ptr)
     return NULL;
 
-#ifdef DEBUG
-  fprintf(stderr, "[DEBUG] parse_url_components: scheme='%s', ptr='%s'\n", scheme, ptr);
-#endif
+  JSRT_Debug("parse_url_components: scheme='%s', ptr='%s'", scheme, ptr);
 
   // Check if this is a special scheme
   int is_special = is_special_scheme(scheme);
@@ -274,19 +264,15 @@ int parse_empty_authority_url(JSRT_URL* parsed, const char* scheme, char** ptr) 
 
 // Parse URLs with standard authority section
 int parse_standard_authority_url(JSRT_URL* parsed, char** ptr) {
-#ifdef DEBUG
-  fprintf(stderr, "[DEBUG] parse_standard_authority_url: ptr='%s'\n", *ptr);
-#endif
+  JSRT_Debug("parse_standard_authority_url: ptr='%s'", *ptr);
   // Special case: for double colon @ pattern (::@...@...), handle directly
   if ((*ptr)[0] == ':' && (*ptr)[1] == ':' && strchr(*ptr, '@')) {
     return parse_double_colon_at_pattern(parsed, ptr);
   } else {
     int result = parse_normal_authority(parsed, ptr);
-#ifdef DEBUG
     if (result != 0) {
-      fprintf(stderr, "[DEBUG] parse_standard_authority_url: parse_normal_authority failed\n");
+      JSRT_Debug("parse_standard_authority_url: parse_normal_authority failed");
     }
-#endif
     return result;
   }
 }
@@ -472,9 +458,7 @@ int parse_normal_authority(JSRT_URL* parsed, char** ptr) {
     authority[authority_len] = '\0';
 
     if (parse_authority(parsed, authority) != 0) {
-#ifdef DEBUG
-      fprintf(stderr, "[DEBUG] parse_normal_authority: parse_authority failed for '%s'\n", authority);
-#endif
+      JSRT_Debug("parse_normal_authority: parse_authority failed for '%s'", authority);
       free(authority);
       return -1;
     }
@@ -570,9 +554,7 @@ cleanup_and_fail:
 
 // Main URL parsing function (refactored)
 JSRT_URL* parse_absolute_url(const char* preprocessed_url) {
-#ifdef DEBUG
-  fprintf(stderr, "[DEBUG] parse_absolute_url: preprocessed_url='%s'\n", preprocessed_url);
-#endif
+  JSRT_Debug("parse_absolute_url: preprocessed_url='%s'", preprocessed_url);
 
   JSRT_URL* parsed = create_url_structure();
   if (!parsed)
@@ -585,9 +567,7 @@ JSRT_URL* parse_absolute_url(const char* preprocessed_url) {
   char* scheme = NULL;
   char* remainder = NULL;
   if (detect_url_scheme(ptr, &scheme, &remainder) != 0) {
-#ifdef DEBUG
-    fprintf(stderr, "[DEBUG] parse_absolute_url: detect_url_scheme failed\n");
-#endif
+    JSRT_Debug("parse_absolute_url: detect_url_scheme failed");
     free(url_copy);
     JSRT_FreeURL(parsed);
     return NULL;
@@ -602,18 +582,14 @@ JSRT_URL* parse_absolute_url(const char* preprocessed_url) {
 
   // Validate scheme according to WHATWG URL spec
   if (!is_valid_scheme(scheme)) {
-#ifdef DEBUG
-    fprintf(stderr, "[DEBUG] parse_absolute_url: invalid scheme '%s'\n", scheme);
-#endif
+    JSRT_Debug("parse_absolute_url: invalid scheme '%s'", scheme);
     free(scheme);
     free(url_copy);
     JSRT_FreeURL(parsed);
     return NULL;
   }
 
-#ifdef DEBUG
-  fprintf(stderr, "[DEBUG] parse_absolute_url: valid scheme '%s', remainder='%s'\n", scheme, remainder);
-#endif
+  JSRT_Debug("parse_absolute_url: valid scheme '%s', remainder='%s'", scheme, remainder);
 
   // Check for incomplete URLs (URLs that appear to be cut off)
   size_t url_len = strlen(preprocessed_url);
@@ -641,9 +617,7 @@ JSRT_URL* parse_absolute_url(const char* preprocessed_url) {
           authority_end == preprocessed_url + strlen(preprocessed_url)) {
         // Pattern like "sc://a" or "http://a" - single letter hostname with no path
         // These look like truncated URLs and should be rejected per WPT tests
-#ifdef DEBUG
-        fprintf(stderr, "[DEBUG] parse_absolute_url: rejecting apparent truncated URL '%s'\n", preprocessed_url);
-#endif
+        JSRT_Debug("parse_absolute_url: rejecting apparent truncated URL '%s'", preprocessed_url);
         free(scheme);
         free(url_copy);
         JSRT_FreeURL(parsed);
@@ -684,9 +658,7 @@ JSRT_URL* parse_absolute_url(const char* preprocessed_url) {
     unsigned char last_byte = (unsigned char)*last_char;
     if (last_byte < 0x20 && last_byte != '\0') {
       // Only reject actual ASCII control characters, not UTF-8 continuation bytes
-#ifdef DEBUG
-      fprintf(stderr, "[DEBUG] parse_absolute_url: URL ends with ASCII control character 0x%02x\n", last_byte);
-#endif
+      JSRT_Debug("parse_absolute_url: URL ends with ASCII control character 0x%02x", last_byte);
       free(scheme);
       free(url_copy);
       JSRT_FreeURL(parsed);
@@ -739,10 +711,7 @@ JSRT_URL* parse_absolute_url(const char* preprocessed_url) {
   // Parse URL components and get pointer to path/query/fragment section
   char* path_start = parse_url_components(parsed, scheme, remainder);
   if (!path_start) {
-#ifdef DEBUG
-    fprintf(stderr, "[DEBUG] parse_absolute_url: parse_url_components failed for scheme='%s', remainder='%s'\n", scheme,
-            remainder);
-#endif
+    JSRT_Debug("parse_absolute_url: parse_url_components failed for scheme='%s', remainder='%s'", scheme, remainder);
     free(scheme);
     free(url_copy);
     JSRT_FreeURL(parsed);
@@ -750,9 +719,7 @@ JSRT_URL* parse_absolute_url(const char* preprocessed_url) {
   }
 
   // Parse path, query, fragment from the remaining part BEFORE validation
-#ifdef DEBUG
-  fprintf(stderr, "[DEBUG] parse_absolute_url: about to parse_path_query_fragment, path_start='%s'\n", path_start);
-#endif
+  JSRT_Debug("parse_absolute_url: about to parse_path_query_fragment, path_start='%s'", path_start);
   parse_path_query_fragment(parsed, path_start);
 
   // Per WHATWG URL spec, single-character hostnames are valid

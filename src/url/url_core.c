@@ -30,9 +30,7 @@ JSRT_URL* JSRT_ParseURL(const char* url, const char* base) {
   if (!url)
     return NULL;
 
-#ifdef DEBUG
-  fprintf(stderr, "[DEBUG] JSRT_ParseURL: url='%s', base='%s'\n", url, base ? base : "(null)");
-#endif
+  JSRT_Debug("JSRT_ParseURL: url='%s', base='%s'", url, base ? base : "(null)");
 
   // Handle empty URL string - per WHATWG URL spec, empty string should resolve to base
   if (strlen(url) == 0) {

@@ -656,6 +656,7 @@ void JSRT_RuntimeSetupStdURL(JSRT_Runtime* rt) {
 
   JSValue search_params_proto = JS_NewObject(ctx);
   JSRT_RegisterURLSearchParamsMethods(ctx, search_params_proto);
+  JSRT_RegisterURLSearchParamsIterators(ctx, search_params_proto);
 
   JSValue search_params_ctor =
       JS_NewCFunction2(ctx, JSRT_URLSearchParamsConstructor, "URLSearchParams", 1, JS_CFUNC_constructor, 0);

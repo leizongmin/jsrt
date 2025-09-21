@@ -104,6 +104,13 @@ char* build_url_string(const char* protocol, const char* username, const char* p
 // Relative URL resolution functions (url_relative.c)
 JSRT_URL* resolve_relative_url(const char* url, const char* base);
 
+// Relative URL helper functions (url_relative_helpers.c)
+char* handle_backslash_relative_path(const char* url, JSRT_URL* base_url, JSRT_URL* result);
+int handle_absolute_path(const char* url, JSRT_URL* base_url, JSRT_URL* result);
+int handle_windows_drive_relative(const char* path_copy, JSRT_URL* result, int is_file_scheme);
+int resolve_complex_relative_path(const char* path_copy, JSRT_URL* base_url, JSRT_URL* result, int is_special);
+int build_resolved_href(JSRT_URL* result);
+
 // Authority parsing functions (url_authority.c)
 int parse_authority(JSRT_URL* parsed, const char* authority_str);
 int parse_empty_userinfo_authority(JSRT_URL* parsed, const char* str);

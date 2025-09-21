@@ -321,6 +321,21 @@ char* preprocess_url_string(const char* url, const char* base) {
     free(scheme);
   }
 
+  // For non-special schemes, check for problematic percent-encoding + pipe patterns
+  // Per WHATWG URL spec and WPT tests, patterns like %43| should be rejected
+  if (!has_special_scheme) {
+    const char* p = trimmed_url;
+    while ((p = strchr(p, '%')) != NULL) {
+      if (p + 2 < trimmed_url + strlen(trimmed_url) && hex_to_int(p[1]) >= 0 && hex_to_int(p[2]) >= 0 &&
+          p + 3 < trimmed_url + strlen(trimmed_url) && p[3] == '|') {
+        // Pattern like %XX| found in non-special scheme URL - reject it
+        free(trimmed_url);
+        return NULL;
+      }
+      p++;
+    }
+  }
+
   // Remove internal ASCII whitespace for all schemes
   char* cleaned_url = remove_all_ascii_whitespace(trimmed_url);
   free(trimmed_url);

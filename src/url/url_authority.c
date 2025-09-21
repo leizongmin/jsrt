@@ -495,8 +495,8 @@ int parse_authority(JSRT_URL* parsed, const char* authority_str) {
     // This allows for graceful handling of invalid Unicode domains
   } else if (!should_apply_idna && !is_windows_drive &&
              !(final_processed_hostname[0] == '[' && strchr(final_processed_hostname, ']'))) {
-    // For non-special schemes, percent-encode Unicode characters in hostname
-    char* encoded_hostname = url_component_encode(final_processed_hostname);
+    // For non-special schemes, use permissive hostname encoding (only encode control chars and non-ASCII)
+    char* encoded_hostname = url_hostname_encode_nonspecial(final_processed_hostname);
     if (encoded_hostname) {
       if (final_processed_hostname != current_hostname) {
         free(final_processed_hostname);

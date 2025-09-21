@@ -1,4 +1,5 @@
 #include <ctype.h>
+#include <stdint.h>  // For SIZE_MAX
 #include <string.h>
 #include "url.h"
 
@@ -25,9 +26,37 @@ void build_href(JSRT_URL* parsed) {
     userinfo_len += 1;  // +1 for '@'
   }
 
-  // Be conservative with buffer size to account for URL encoding
-  size_t href_len = strlen(parsed->protocol) + userinfo_len + strlen(parsed->host) * 3 + strlen(parsed->pathname) * 3 +
-                    strlen(parsed->search) * 3 + strlen(parsed->hash) * 3 + 50;
+  // Be conservative with buffer size to account for URL encoding with overflow protection
+  size_t href_len = strlen(parsed->protocol);
+
+  // Check for overflow as we add each component
+  if (href_len > SIZE_MAX - userinfo_len)
+    return;
+  href_len += userinfo_len;
+
+  size_t host_encoded = strlen(parsed->host) * 3;
+  if (href_len > SIZE_MAX - host_encoded)
+    return;
+  href_len += host_encoded;
+
+  size_t pathname_encoded = strlen(parsed->pathname) * 3;
+  if (href_len > SIZE_MAX - pathname_encoded)
+    return;
+  href_len += pathname_encoded;
+
+  size_t search_encoded = strlen(parsed->search) * 3;
+  if (href_len > SIZE_MAX - search_encoded)
+    return;
+  href_len += search_encoded;
+
+  size_t hash_encoded = strlen(parsed->hash) * 3;
+  if (href_len > SIZE_MAX - hash_encoded)
+    return;
+  href_len += hash_encoded;
+
+  if (href_len > SIZE_MAX - 50)
+    return;
+  href_len += 50;
   parsed->href = malloc(href_len);
   if (!parsed->href) {
     return;
@@ -106,7 +135,7 @@ void build_href(JSRT_URL* parsed) {
     parsed->href = NULL;
     return;
   }
-  char* final_search = url_query_encode(parsed->search);
+  char* final_search = url_query_encode_with_scheme(parsed->search, parsed->protocol);
   if (!final_search) {
     free(final_pathname);
     free(final_host);
@@ -215,7 +244,7 @@ void parse_path_query_fragment(JSRT_URL* parsed, char* ptr) {
     raw_search[search_len] = '\0';
 
     free(parsed->search);
-    parsed->search = url_query_encode(raw_search);
+    parsed->search = url_query_encode_with_scheme(raw_search, parsed->protocol);
     free(raw_search);
     if (!parsed->search) {
       return;
@@ -386,7 +415,7 @@ char* build_url_string(const char* protocol, const char* username, const char* p
 
   // Add search
   if (search && strlen(search) > 0) {
-    char* encoded_search = url_query_encode(search);
+    char* encoded_search = url_query_encode_with_scheme(search, protocol);
     if (!encoded_search) {
       free(url_string);
       return NULL;

@@ -86,9 +86,25 @@ void update_parent_url_href(JSRT_URLSearchParams* search_params) {
 
       if (!first) {
         size_t current_len = strlen(new_search_str);
-        size_t remaining = total_len + 1 - current_len;  // +1 for null terminator
+        size_t remaining = total_len + 1 - current_len;                    // +1 for null terminator
+        size_t needed = strlen(encoded_name) + strlen(encoded_value) + 2;  // &name=value + null
+        if (needed > remaining) {
+          // Buffer overflow protection - shouldn't happen but fail safe
+          free(encoded_name);
+          free(encoded_value);
+          free(new_search_str);
+          return;
+        }
         snprintf(new_search_str + current_len, remaining, "&%s=%s", encoded_name, encoded_value);
       } else {
+        size_t needed = strlen(encoded_name) + strlen(encoded_value) + 2;  // name=value + null
+        if (needed > total_len + 1) {
+          // Buffer overflow protection - shouldn't happen but fail safe
+          free(encoded_name);
+          free(encoded_value);
+          free(new_search_str);
+          return;
+        }
         snprintf(new_search_str, total_len + 1, "%s=%s", encoded_name, encoded_value);  // +1 for null terminator
       }
 

@@ -682,6 +682,9 @@ char* url_decode_hostname_with_scheme(const char* str, const char* scheme) {
           cleaned_hostname, scheme ? scheme : "NULL");
 #endif
 
+  // Determine if this is a special scheme
+  int is_special = scheme ? is_special_scheme(scheme) : 0;
+
   size_t len = strlen(cleaned_hostname);
   char* decoded = malloc(len * 3 + 1);
   if (!decoded) {
@@ -711,10 +714,23 @@ char* url_decode_hostname_with_scheme(const char* str, const char* scheme) {
             return NULL;
           }
 
-          // For special schemes, allow percent-encoded UTF-8 sequences that will be processed by IDNA
-          // The IDNA processing step will handle internationalized domain names properly
-          // Only reject bytes that would be invalid even after IDNA processing
+          // For non-special schemes, preserve percent-encoded characters that don't need to be decoded
+          // This implements WHATWG URL spec behavior where non-special schemes preserve encoded forms
+          if (!is_special) {
+            // Check if the byte represents a character that should be preserved encoded
+            // Per WHATWG spec, for non-special schemes, preserve encoded form if it's safe
+            if ((byte >= 'A' && byte <= 'Z') || (byte >= 'a' && byte <= 'z') || (byte >= '0' && byte <= '9') ||
+                byte == '-' || byte == '.' || byte == '_' || byte == '~' || byte == '|') {
+              // These characters don't need encoding but should be preserved as encoded for non-special schemes
+              decoded[j++] = '%';
+              decoded[j++] = cleaned_hostname[i + 1];
+              decoded[j++] = cleaned_hostname[i + 2];
+              i += 3;
+              continue;
+            }
+          }
 
+          // For special schemes, or for non-special schemes with characters that must be decoded
           decoded[j++] = byte;
           i += 3;
           continue;
@@ -945,6 +961,68 @@ char* url_path_encode_file(const char* str) {
   return encoded;
 }
 
+// Hostname encoding for non-special schemes - more permissive than general component encoding
+char* url_hostname_encode_nonspecial(const char* str) {
+  if (!str)
+    return NULL;
+
+  size_t len = strlen(str);
+  size_t encoded_len = 0;
+
+  // Calculate encoded length with overflow protection
+  for (size_t i = 0; i < len; i++) {
+    unsigned char c = (unsigned char)str[i];
+    size_t add_len;
+
+    // Check if character needs encoding per WHATWG URL spec for non-special scheme hostnames
+    if (c == '%' && i + 2 < len && hex_to_int(str[i + 1]) >= 0 && hex_to_int(str[i + 2]) >= 0) {
+      // Already percent-encoded sequence, keep as-is
+      add_len = 3;
+    } else if (c <= 32 || c >= 127) {
+      // Only encode control characters (0-32) and non-ASCII characters (127+)
+      // Per WPT, printable ASCII characters like !"$%&'()*+,-.;=_`{}~ should NOT be encoded in non-special scheme
+      // hostnames
+      add_len = 3;  // %XX
+    } else {
+      // Printable ASCII characters (33-126) remain as-is for non-special schemes
+      add_len = 1;
+    }
+
+    // Check for integer overflow
+    if (encoded_len > SIZE_MAX - add_len) {
+      return NULL;  // Would overflow
+    }
+    encoded_len += add_len;
+  }
+
+  char* encoded = safe_malloc_for_encoding(encoded_len);
+  if (!encoded) {
+    return NULL;
+  }
+  size_t j = 0;
+
+  for (size_t i = 0; i < len; i++) {
+    unsigned char c = (unsigned char)str[i];
+    if (c == '%' && i + 2 < len && hex_to_int(str[i + 1]) >= 0 && hex_to_int(str[i + 2]) >= 0) {
+      // Already percent-encoded sequence, copy as-is
+      encoded[j++] = str[i];
+      encoded[j++] = str[i + 1];
+      encoded[j++] = str[i + 2];
+      i += 2;  // Skip the next two characters
+    } else if (c <= 32 || c >= 127) {
+      // Encode control characters and non-ASCII characters
+      encoded[j++] = '%';
+      encoded[j++] = hex_chars[c >> 4];
+      encoded[j++] = hex_chars[c & 15];
+    } else {
+      // Printable ASCII characters remain as-is
+      encoded[j++] = c;
+    }
+  }
+  encoded[j] = '\0';
+  return encoded;
+}
+
 // URL component encoding specifically for file URL paths
 // Preserves pipe characters (|) which should not be encoded in file URLs
 char* url_component_encode_file_path(const char* str) {
@@ -1052,6 +1130,73 @@ char* url_query_encode(const char* str) {
                c == '{' || c == '|' || c == '}') {
       // Encode control characters, space, non-ASCII characters, and specific unsafe characters
       // NOTE: Single quotes (') are NOT encoded in query parameters per WHATWG URL spec
+      encoded[j++] = '%';
+      encoded[j++] = hex_chars[c >> 4];
+      encoded[j++] = hex_chars[c & 15];
+    } else {
+      encoded[j++] = c;
+    }
+  }
+  encoded[j] = '\0';
+  return encoded;
+}
+
+// Query encoding with scheme awareness - single quotes need different handling
+char* url_query_encode_with_scheme(const char* str, const char* scheme) {
+  if (!str)
+    return NULL;
+
+  // Determine if this is a special scheme
+  int is_special = scheme ? is_special_scheme(scheme) : 0;
+
+  size_t len = strlen(str);
+  size_t encoded_len = 0;
+
+  // Calculate encoded length with overflow protection
+  for (size_t i = 0; i < len; i++) {
+    unsigned char c = (unsigned char)str[i];
+    size_t add_len;
+
+    // Check if character needs encoding per URL spec for query components
+    if (c == '%' && i + 2 < len && hex_to_int(str[i + 1]) >= 0 && hex_to_int(str[i + 2]) >= 0) {
+      // Already percent-encoded sequence, keep as-is
+      add_len = 3;
+    } else if (c <= 32 || c >= 127 || c == '"' || c == '<' || c == '>' || c == '\\' || c == '^' || c == '|' ||
+               (is_special && c == '\'') || (!is_special && (c == '`' || c == '{' || c == '}'))) {
+      // Encode control characters, space, non-ASCII characters, and specific unsafe characters
+      // For special schemes: encode single quotes but preserve backticks and braces in query
+      // For non-special schemes: encode backticks and braces
+      add_len = 3;  // %XX
+    } else {
+      add_len = 1;
+    }
+
+    // Check for integer overflow
+    if (encoded_len > SIZE_MAX - add_len) {
+      return NULL;  // Would overflow
+    }
+    encoded_len += add_len;
+  }
+
+  char* encoded = safe_malloc_for_encoding(encoded_len);
+  if (!encoded) {
+    return NULL;
+  }
+  size_t j = 0;
+
+  for (size_t i = 0; i < len; i++) {
+    unsigned char c = (unsigned char)str[i];
+    if (c == '%' && i + 2 < len && hex_to_int(str[i + 1]) >= 0 && hex_to_int(str[i + 2]) >= 0) {
+      // Already percent-encoded sequence, copy as-is
+      encoded[j++] = str[i];
+      encoded[j++] = str[i + 1];
+      encoded[j++] = str[i + 2];
+      i += 2;  // Skip the next two characters
+    } else if (c <= 32 || c >= 127 || c == '"' || c == '<' || c == '>' || c == '\\' || c == '^' || c == '|' ||
+               (is_special && c == '\'') || (!is_special && (c == '`' || c == '{' || c == '}'))) {
+      // Encode control characters, space, non-ASCII characters, and specific unsafe characters
+      // For special schemes: encode single quotes but preserve backticks and braces in query
+      // For non-special schemes: encode backticks and braces
       encoded[j++] = '%';
       encoded[j++] = hex_chars[c >> 4];
       encoded[j++] = hex_chars[c & 15];

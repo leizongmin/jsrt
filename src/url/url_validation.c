@@ -230,13 +230,14 @@ int validate_hostname_characters_with_scheme_and_port(const char* hostname, cons
   // Previous validation was incorrectly rejecting valid URLs like "https://x/"
   // According to the URL specification, single-character hostnames are permitted
 
-  // For file schemes, check for problematic patterns like percent-encoded + pipe
-  if (is_file_scheme) {
+  // For non-special schemes (including file), check for problematic patterns like percent-encoded + pipe
+  if (!is_special) {
     // Scan the hostname string for percent-encoded sequences followed by pipe
     for (const char* p = hostname; *p; p++) {
       if (*p == '%' && p + 2 < hostname + len && hex_to_int(p[1]) >= 0 && hex_to_int(p[2]) >= 0 &&
           p + 3 < hostname + len && p[3] == '|') {
-        // Pattern like %XX| found in file URL hostname - this should be rejected
+        // Pattern like %XX| found in non-special scheme hostname - this should be rejected
+        // per WHATWG URL spec and WPT tests (e.g., asdf://%43|/ should fail)
         return 0;
       }
     }

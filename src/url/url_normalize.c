@@ -89,10 +89,19 @@ char* normalize_dot_segments(const char* path) {
       // Single dot: skip it
       free(segments[i]);
     } else if (strcmp(segments[i], "..") == 0) {
-      // Double dot: remove previous segment if it exists
+      // Double dot: remove previous segment if it exists, but protect Windows drive letters
       if (output_count > 0) {
-        free(output_segments[output_count - 1]);
-        output_count--;
+        char* previous_segment = output_segments[output_count - 1];
+        // Check if previous segment is a Windows drive letter (e.g., "C:", "D:", etc.)
+        if (strlen(previous_segment) == 2 && isalpha(previous_segment[0]) &&
+            (previous_segment[1] == ':' || previous_segment[1] == '|')) {
+          // This is a Windows drive letter - don't remove it with ".."
+          // According to WHATWG URL spec, ".." from a drive root stays at drive root
+        } else {
+          // Normal segment - remove it
+          free(output_segments[output_count - 1]);
+          output_count--;
+        }
       }
       free(segments[i]);
     } else {

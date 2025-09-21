@@ -80,9 +80,12 @@ JSRT_URL* handle_protocol_relative(const char* cleaned_url, const char* base);
 JSRT_URL* handle_empty_url(const char* base);
 int is_relative_url(const char* cleaned_url, const char* base);
 
-// URL parsing functions (url_parser.c)
+// URL parsing functions (parser/url_main_parser.c)
 JSRT_URL* parse_absolute_url(const char* preprocessed_url);
 int detect_url_scheme(const char* url, char** scheme, char** remainder);
+JSRT_URL* create_url_structure(void);
+
+// URL component parsing functions (parser/url_component_parser.c)
 char* parse_url_components(JSRT_URL* parsed, const char* scheme, char* ptr);
 char* parse_authority_based_url_with_position(JSRT_URL* parsed, const char* scheme, char* ptr, int is_special);
 int parse_authority_based_url(JSRT_URL* parsed, const char* scheme, char* ptr, int is_special);
@@ -90,7 +93,6 @@ int parse_empty_authority_url(JSRT_URL* parsed, const char* scheme, char** ptr);
 int parse_standard_authority_url(JSRT_URL* parsed, char** ptr);
 int parse_double_colon_at_pattern(JSRT_URL* parsed, char** ptr);
 int parse_normal_authority(JSRT_URL* parsed, char** ptr);
-JSRT_URL* create_url_structure(void);
 
 // URL building functions (url_builder.c)
 void build_href(JSRT_URL* parsed);

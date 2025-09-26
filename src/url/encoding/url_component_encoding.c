@@ -144,9 +144,10 @@ char* url_path_encode_special(const char* str) {
       // Keep as 3-character percent sequence
       encoded_len += 3;
       i += 2;  // Skip the hex digits
-    } else if (c <= 32 || c == '"' || c == '<' || c == '>' || c == '\\' || c == '^' || c == '{' || c == '|' ||
-               c == '}' || c == '`' || c == 127) {
+    } else if (c <= 32 || c == '"' || c == '<' || c == '>' || c == '\\' || c == '^' || c == '{' || c == '}' ||
+               c == '`' || c == 127) {
       // Need to percent-encode control characters, space, and specific unsafe characters
+      // NOTE: Pipe character (|) is preserved per WPT specification
       encoded_len += 3;  // %XX
     } else if (c >= 128) {
       // UTF-8 encoded characters - percent-encode each byte
@@ -174,9 +175,10 @@ char* url_path_encode_special(const char* str) {
       encoded[j++] = str[i + 1];
       encoded[j++] = str[i + 2];
       i += 2;  // Skip the next two characters
-    } else if (c <= 32 || c == '"' || c == '<' || c == '>' || c == '\\' || c == '^' || c == '{' || c == '|' ||
-               c == '}' || c == '`' || c == 127) {
+    } else if (c <= 32 || c == '"' || c == '<' || c == '>' || c == '\\' || c == '^' || c == '{' || c == '}' ||
+               c == '`' || c == 127) {
       // Need to percent-encode control characters and specific unsafe characters
+      // NOTE: Pipe character (|) is preserved per WPT specification
       encoded[j++] = '%';
       encoded[j++] = hex_chars[c >> 4];
       encoded[j++] = hex_chars[c & 15];

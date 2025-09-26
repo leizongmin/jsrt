@@ -514,10 +514,12 @@ int is_relative_url(const char* cleaned_url, const char* base) {
     // Check for Windows drive letter patterns (C|/path) which should be absolute file URLs
     // BUT ONLY if this is actually intended as a file path, not a scheme
     // According to WHATWG URL spec, "c:/foo" should be treated as scheme "c:" with path "/foo"
-    // Only treat as Windows drive if we're in a file URL context
+    // HOWEVER, when we have a file: base URL, Windows drive letters should be treated as RELATIVE
+    // to preserve the base URL's hostname per WPT specification
+    // Only treat as absolute if no base URL or non-file base URL
     if (strlen(cleaned_url) >= 3 && isalpha(cleaned_url[0]) && (cleaned_url[1] == '|' || cleaned_url[1] == ':') &&
-        cleaned_url[2] == '/' && base && strncmp(base, "file:", 5) == 0) {
-      // This is a Windows drive letter in file URL context - should be treated as absolute file URL
+        cleaned_url[2] == '/' && (!base || strncmp(base, "file:", 5) != 0)) {
+      // This is a Windows drive letter without file: base - should be treated as absolute file URL
       return 0;
     }
 

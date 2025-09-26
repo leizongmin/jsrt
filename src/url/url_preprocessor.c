@@ -244,35 +244,45 @@ JSRT_URL* handle_empty_url(const char* base) {
       return NULL;
     }
 
-    // Create a new URL without query and fragment per WHATWG URL spec
-    // An empty URL resolves to the base URL without its query and fragment
-    size_t new_url_len = strlen(base_url->protocol) + strlen(base_url->host) + strlen(base_url->pathname) +
-                         strlen(base_url->username) + strlen(base_url->password) +
-                         50;  // Extra safety margin for separators
-    char* new_url = malloc(new_url_len);
-    if (!new_url) {
+    // Per WHATWG URL spec: empty string resolves to complete copy of base URL (including query/fragment)
+    // Simply return a copy of the base URL with all components preserved
+    JSRT_URL* result = malloc(sizeof(JSRT_URL));
+    if (!result) {
       JSRT_FreeURL(base_url);
       return NULL;
     }
+    memset(result, 0, sizeof(JSRT_URL));
 
-    // Build URL without query and fragment
-    if (strlen(base_url->username) > 0 || strlen(base_url->password) > 0) {
-      if (strlen(base_url->password) > 0) {
-        snprintf(new_url, new_url_len, "%s//%s:%s@%s%s", base_url->protocol, base_url->username, base_url->password,
-                 base_url->host, base_url->pathname);
-      } else {
-        snprintf(new_url, new_url_len, "%s//%s@%s%s", base_url->protocol, base_url->username, base_url->host,
-                 base_url->pathname);
-      }
-    } else {
-      snprintf(new_url, new_url_len, "%s//%s%s", base_url->protocol, base_url->host, base_url->pathname);
+    // Copy all components from base URL
+    result->protocol = strdup(base_url->protocol ? base_url->protocol : "");
+    result->username = strdup(base_url->username ? base_url->username : "");
+    result->password = strdup(base_url->password ? base_url->password : "");
+    result->host = strdup(base_url->host ? base_url->host : "");
+    result->hostname = strdup(base_url->hostname ? base_url->hostname : "");
+    result->port = strdup(base_url->port ? base_url->port : "");
+    result->pathname = strdup(base_url->pathname ? base_url->pathname : "");
+    result->search = strdup(base_url->search ? base_url->search : "");
+    result->hash = strdup(base_url->hash ? base_url->hash : "");
+    result->origin = strdup(base_url->origin ? base_url->origin : "");
+    result->href = strdup(base_url->href ? base_url->href : "");
+
+    // Copy additional fields
+    result->search_params = JS_UNDEFINED;
+    result->ctx = NULL;
+    result->has_password_field = base_url->has_password_field;
+    result->double_colon_at_pattern = base_url->double_colon_at_pattern;
+    result->opaque_path = base_url->opaque_path;
+    result->has_authority_syntax = base_url->has_authority_syntax;
+
+    // Check for allocation failures
+    if (!result->protocol || !result->username || !result->password || !result->host || !result->hostname ||
+        !result->port || !result->pathname || !result->search || !result->hash || !result->origin || !result->href) {
+      JSRT_FreeURL(base_url);
+      JSRT_FreeURL(result);
+      return NULL;
     }
 
     JSRT_FreeURL(base_url);
-
-    // Parse the new URL without query/fragment
-    JSRT_URL* result = JSRT_ParseURL(new_url, NULL);
-    free(new_url);
     return result;
   } else {
     return NULL;  // Empty URL with no base is invalid

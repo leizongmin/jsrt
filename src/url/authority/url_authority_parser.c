@@ -1,6 +1,32 @@
 #include <ctype.h>
 #include <errno.h>
 #include "../url.h"
+#include "../url_safe_string.h"
+
+// Resource tracking structure for safe cleanup
+typedef struct {
+  char* authority;
+  char* ipv6_part;
+  char* canonical_ipv6;
+  char* converted_host;
+  char* scheme;
+  char* decoded_host;
+  char* final_hostname;
+} authority_parse_context_t;
+
+// Safe cleanup function
+static void cleanup_authority_context(authority_parse_context_t* ctx) {
+  if (!ctx)
+    return;
+  free(ctx->authority);
+  free(ctx->ipv6_part);
+  free(ctx->canonical_ipv6);
+  free(ctx->converted_host);
+  free(ctx->scheme);
+  free(ctx->decoded_host);
+  free(ctx->final_hostname);
+  memset(ctx, 0, sizeof(*ctx));
+}
 
 // Parse authority section: [userinfo@]host[:port]
 // Returns 0 on success, -1 on error
@@ -11,8 +37,11 @@ int parse_authority(JSRT_URL* parsed, const char* authority_str) {
 
   JSRT_Debug("parse_authority: authority_str='%s'", authority_str);
 
-  char* authority = strdup(authority_str);
-  if (!authority) {
+  // Initialize resource tracking
+  authority_parse_context_t ctx = {0};
+
+  ctx.authority = strdup(authority_str);
+  if (!ctx.authority) {
     return -1;
   }
 
@@ -20,15 +49,15 @@ int parse_authority(JSRT_URL* parsed, const char* authority_str) {
   int authority_has_at_sign = (strchr(authority_str, '@') != NULL);
   int authority_has_colon_in_host = 0;  // Will be set later for host-level colons
 
-  char* at_pos = strrchr(authority, '@');  // Use rightmost @ to handle @ in userinfo
-  char* host_part = authority;
+  char* at_pos = strrchr(ctx.authority, '@');  // Use rightmost @ to handle @ in userinfo
+  char* host_part = ctx.authority;
 
   if (at_pos) {
     *at_pos = '\0';
 
     // Special validation: check if what looks like userinfo actually contains an invalid port
     // For URLs like "http://foo.com:b@d/", we need to detect that ":b@" is not valid
-    char* colon_in_userinfo = strchr(authority, ':');
+    char* colon_in_userinfo = strchr(ctx.authority, ':');
     if (colon_in_userinfo) {
       char* potential_port = colon_in_userinfo + 1;
 
@@ -39,11 +68,11 @@ int parse_authority(JSRT_URL* parsed, const char* authority_str) {
       // Look at the text before the colon - if it looks like a hostname (contains dots),
       // then the text after colon should be a valid port number
       int looks_like_hostname = 0;
-      size_t prefix_len = colon_in_userinfo - authority;
+      size_t prefix_len = colon_in_userinfo - ctx.authority;
       if (prefix_len > 0) {
         // Simple heuristic: if the prefix contains dots, it's likely a hostname
         for (size_t i = 0; i < prefix_len; i++) {
-          if (authority[i] == '.') {
+          if (ctx.authority[i] == '.') {
             looks_like_hostname = 1;
             break;
           }
@@ -72,7 +101,7 @@ int parse_authority(JSRT_URL* parsed, const char* authority_str) {
 
     // Check if userinfo contains unencoded forward slashes (invalid per WHATWG)
     // If so, drop the userinfo entirely and use only the hostname part
-    if (strchr(authority, '/') != NULL) {
+    if (strchr(ctx.authority, '/') != NULL) {
       // Invalid userinfo containing forward slashes - drop it completely
       // Use only the hostname part after the '@'
       host_part = at_pos + 1;
@@ -85,28 +114,28 @@ int parse_authority(JSRT_URL* parsed, const char* authority_str) {
       parsed->has_password_field = 0;
     } else {
       // Valid userinfo - parse and validate
-      char* colon_pos = strchr(authority, ':');
+      char* colon_pos = strchr(ctx.authority, ':');
       if (colon_pos) {
         *colon_pos = '\0';
 
         // Validate username and password for invalid characters
-        if (!validate_credentials(authority) || !validate_credentials(colon_pos + 1)) {
+        if (!validate_credentials(ctx.authority) || !validate_credentials(colon_pos + 1)) {
           goto cleanup_and_return_error;
         }
 
         free(parsed->username);
-        parsed->username = strdup(authority);
+        parsed->username = strdup(ctx.authority);
         free(parsed->password);
         parsed->password = strdup(colon_pos + 1);
         parsed->has_password_field = 1;  // Original URL had password field
       } else {
         // Validate username for invalid characters
-        if (!validate_credentials(authority)) {
+        if (!validate_credentials(ctx.authority)) {
           goto cleanup_and_return_error;
         }
 
         free(parsed->username);
-        parsed->username = strdup(authority);
+        parsed->username = strdup(ctx.authority);
         parsed->has_password_field = 0;  // No password field in original URL
       }
       host_part = at_pos + 1;
@@ -596,7 +625,7 @@ int parse_authority(JSRT_URL* parsed, const char* authority_str) {
     if (!parsed->host) {
       goto cleanup_and_return_error;
     }
-    snprintf(parsed->host, host_len, "%s:%s", parsed->hostname, parsed->port);
+    SAFE_SNPRINTF(parsed->host, host_len, "%s:%s", parsed->hostname, parsed->port);
   } else {
     parsed->host = strdup(parsed->hostname);
     if (!parsed->host) {
@@ -604,16 +633,11 @@ int parse_authority(JSRT_URL* parsed, const char* authority_str) {
     }
   }
 
-  free(authority);
+  cleanup_authority_context(&ctx);
   return 0;
 
 cleanup_and_return_error:
   JSRT_Debug("parse_authority: cleanup_and_return_error - authority parsing failed");
-  free(authority);
-  // Note: Other allocated variables are either:
-  // 1. Stored in parsed structure (ownership transferred)
-  // 2. Freed immediately after use within their scope
-  // 3. Freed in their specific error handling blocks
-  // The main authority string is the only one that needs global cleanup
+  cleanup_authority_context(&ctx);
   return -1;
 }

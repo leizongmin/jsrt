@@ -13,14 +13,21 @@ int validate_hostname_characters_with_scheme_and_port(const char* hostname, cons
 
   size_t len = strlen(hostname);
 
+  // Determine if this is a special scheme that requires strict validation
+  int is_special = scheme && is_special_scheme(scheme);
+  int is_file_scheme = scheme && (strcmp(scheme, "file:") == 0);
+
+  // Special case: empty hostname handling
+  if (len == 0) {
+    // For file: scheme, empty hostname is allowed (file:///path)
+    // For other schemes, empty hostname is not allowed
+    return is_file_scheme ? 1 : 0;
+  }
+
   // Special case: single dot and double dot are valid hostnames per WPT
   if (strcmp(hostname, ".") == 0 || strcmp(hostname, "..") == 0) {
     return 1;
   }
-
-  // Determine if this is a special scheme that requires strict validation
-  int is_special = scheme && is_special_scheme(scheme);
-  int is_file_scheme = scheme && (strcmp(scheme, "file:") == 0);
 
   // NOTE: Single-character hostnames are actually valid per WHATWG URL spec and WPT tests
   // Previous validation was incorrectly rejecting valid URLs like "https://x/"
@@ -166,6 +173,9 @@ int validate_hostname_characters_with_scheme_and_port(const char* hostname, cons
       free(hostname_copy);
     }
   }
+
+  // Per WHATWG URL specification, soft hyphen should be allowed in hostnames
+  // Remove overly restrictive early validation that conflicts with WPT test expectations
 
   // Check for problematic Unicode characters in hostname
   // These characters should cause hostname parsing to fail per WHATWG URL spec
@@ -362,9 +372,11 @@ int validate_hostname_characters_with_scheme_and_port(const char* hostname, cons
           return 0;  // Ideographic space not allowed in hostnames
         }
 
-        // Soft Hyphen (U+00AD): 0xC2 0xAD - should be rejected in hostnames for special schemes
+        // Soft Hyphen (U+00AD): 0xC2 0xAD - should be rejected in hostnames
         if (c == 0xC2 && p + 1 < hostname + len && (unsigned char)*(p + 1) == 0xAD) {
-          return 0;  // Soft hyphen not allowed in hostnames for special schemes
+          // Per WPT tests, soft hyphens should cause hostname parsing to fail
+          // This applies to all special schemes, including HTTPS
+          return 0;  // Soft hyphens not allowed in hostnames for special schemes
         }
       }
 

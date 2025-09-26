@@ -2,6 +2,7 @@
 #include <stdint.h>  // For SIZE_MAX
 #include <string.h>
 #include "url.h"
+#include "url_safe_string.h"
 
 // Build final href string
 void build_href(JSRT_URL* parsed) {
@@ -102,7 +103,7 @@ void build_href(JSRT_URL* parsed) {
         free(normalized_port);
         return;
       }
-      snprintf(final_host, host_len, "%s:%s", parsed->hostname, normalized_port);
+      SAFE_SNPRINTF_VOID(final_host, host_len, "%s:%s", parsed->hostname, normalized_port);
     } else {
       // Host without port
       final_host = strdup(parsed->hostname);
@@ -151,11 +152,11 @@ void build_href(JSRT_URL* parsed) {
   }
 
   if (is_special && strlen(final_host) > 0) {
-    snprintf(parsed->href, href_len, "%s//%s%s%s%s%s", parsed->protocol, userinfo, final_host, final_pathname,
-             final_search, final_hash);
+    SAFE_SNPRINTF_VOID(parsed->href, href_len, "%s//%s%s%s%s%s", parsed->protocol, userinfo, final_host, final_pathname,
+                       final_search, final_hash);
   } else if (strlen(final_host) > 0) {
-    snprintf(parsed->href, href_len, "%s//%s%s%s%s%s", parsed->protocol, userinfo, final_host, final_pathname,
-             final_search, final_hash);
+    SAFE_SNPRINTF_VOID(parsed->href, href_len, "%s//%s%s%s%s%s", parsed->protocol, userinfo, final_host, final_pathname,
+                       final_search, final_hash);
   } else if (is_special && !parsed->opaque_path) {
     // Special schemes with empty host (like file:///path) should include //
     // For file URLs, ensure proper slash handling to avoid file:////

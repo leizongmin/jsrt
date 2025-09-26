@@ -229,52 +229,53 @@ int validate_percent_encoded_characters(const char* url) {
         // Valid percent-encoded sequence - check the decoded value
         int decoded_value = (hex1 << 4) | hex2;
 
-        // Per WPT tests, certain percent-encoded characters should cause URL parsing to fail
-        // in hostname contexts. Check if we're in a hostname section.
+        // Per WHATWG URL spec, be more permissive with percent-encoded UTF-8 sequences
+        // Only reject truly problematic characters that would break URL parsing structure
+
+        // Check if we're in a hostname section
         const char* authority_start = strstr(url, "://");
+        int in_hostname = 0;
         if (authority_start) {
           authority_start += 3;  // Skip past ://
           const char* authority_end = strpbrk(authority_start, "/?#");
           if (!authority_end)
             authority_end = url + strlen(url);
+          in_hostname = (p >= authority_start && p < authority_end);
+        }
 
-          // Check if this percent-encoded sequence is in the authority section
-          if (p >= authority_start && p < authority_end) {
-            // Determine if this is a special scheme
-            int is_special = 0;
-            if (url) {
-              char* scheme_end = strstr(url, ":");
-              if (scheme_end) {
-                size_t scheme_len = scheme_end - url + 1;
-                char* scheme = malloc(scheme_len + 1);
-                if (scheme) {
-                  strncpy(scheme, url, scheme_len);
-                  scheme[scheme_len] = '\0';
-                  is_special = is_special_scheme(scheme);
-                  free(scheme);
-                }
-              }
+        // Only reject characters that would fundamentally break URL parsing
+        // Allow UTF-8 sequences like %C2%AD (soft hyphen) as they are valid Unicode
+        if (decoded_value == 0x00) {
+          return 0;  // Always reject null bytes
+        }
+
+        // For hostname contexts in special schemes, be more restrictive
+        if (in_hostname) {
+          // Determine if this is a special scheme
+          int is_special = 0;
+          char* scheme_end = strstr(url, ":");
+          if (scheme_end) {
+            size_t scheme_len = scheme_end - url;
+            char* scheme = malloc(scheme_len + 1);
+            if (scheme) {
+              strncpy(scheme, url, scheme_len);
+              scheme[scheme_len] = '\0';
+              is_special = is_special_scheme(scheme);
+              free(scheme);
             }
+          }
 
-            // For special schemes, apply strict validation
-            if (is_special) {
-              // %80 (0x80) and %A0 (0xA0) should cause URL parsing to fail in hostnames
-              if (decoded_value == 0x80 || decoded_value == 0xA0) {
-                return 0;  // Invalid percent-encoded character in hostname
-              }
-
-              // Percent-encoded characters that could break parsing should also be rejected
-              // C0 control characters (0x00-0x1F) and DEL (0x7F) in hostnames
-              if (decoded_value <= 0x1F || decoded_value == 0x7F) {
-                return 0;  // Control characters not allowed in hostnames
-              }
-            } else {
-              // For non-special schemes, be more permissive with percent-encoded UTF-8
-              // Only reject null bytes and other truly problematic characters
-              if (decoded_value == 0x00) {
-                return 0;  // Null bytes are always invalid
-              }
+          if (is_special) {
+            // Reject control characters and specific problematic bytes in hostnames
+            if (decoded_value <= 0x1F || decoded_value == 0x7F) {
+              return 0;  // C0 controls and DEL not allowed in hostnames
             }
+            // Reject 0x80 and 0xA0 specifically as per WPT tests
+            if (decoded_value == 0x80 || decoded_value == 0xA0) {
+              return 0;  // These bytes cause URL parsing to fail
+            }
+            // Allow valid UTF-8 continuation bytes (0x81-0x9F, 0xA1-0xBF)
+            // and other high bytes that may be part of valid UTF-8 sequences
           }
         }
 

@@ -34,9 +34,10 @@ JSRT_URL* resolve_relative_url(const char* url, const char* base) {
   }
 
   // Check if base URL is opaque and relative URL is incompatible
-  // An opaque URL is a non-special scheme without authority and with non-hierarchical path
-  // Opaque means: empty pathname OR pathname that doesn't start with "/"
-  int is_opaque = !is_special && (strlen(base_url->host) == 0) &&
+  // An opaque URL is a non-special scheme WITHOUT authority syntax (no //)
+  // URLs with authority syntax like "a://" are hierarchical, not opaque
+  // Only URLs like "a:path" (no //) are opaque
+  int is_opaque = !is_special && !base_url->has_authority_syntax &&
                   (base_url->pathname && (strlen(base_url->pathname) == 0 || base_url->pathname[0] != '/'));
   if (is_opaque) {
     // For opaque base URLs, only fragment URLs (#...) are allowed
@@ -143,67 +144,82 @@ JSRT_URL* resolve_relative_url(const char* url, const char* base) {
     }
   } else {
   handle_complex_relative_path:
-    // Relative path - resolve against base directory
-    // First, parse the relative path to separate path, search, and hash components
-    char* path_copy = strdup(url);
-    char* search_pos = strchr(path_copy, '?');
-    char* hash_pos = strchr(path_copy, '#');
-
-    // Extract hash component
-    if (hash_pos) {
-      *hash_pos = '\0';
-      result->hash = malloc(strlen(hash_pos + 1) + 2);  // +1 for '#', +1 for '\0'
-      if (!result->hash) {
-        free(path_copy);
+    // Special case: empty string relative URL should copy all base URL components
+    if (url[0] == '\0') {
+      result->pathname = strdup(base_url->pathname ? base_url->pathname : "");
+      result->search = strdup(base_url->search ? base_url->search : "");
+      result->hash = strdup(base_url->hash ? base_url->hash : "");
+      // Check for allocation failures
+      if (!result->pathname || !result->search || !result->hash) {
         JSRT_FreeURL(base_url);
         JSRT_FreeURL(result);
         return NULL;
       }
-      snprintf(result->hash, strlen(hash_pos + 1) + 2, "#%s", hash_pos + 1);
-    } else {
-      result->hash = strdup("");
-    }
-
-    // Extract search component
-    if (search_pos && (!hash_pos || search_pos < hash_pos)) {
-      *search_pos = '\0';
-      const char* search_end = hash_pos ? hash_pos : (search_pos + strlen(search_pos + 1) + 1);
-      size_t search_len = search_end - search_pos;
-      result->search = malloc(search_len + 2);  // +1 for '?', +1 for '\0'
-      if (!result->search) {
-        free(path_copy);
-        JSRT_FreeURL(base_url);
-        JSRT_FreeURL(result);
-        return NULL;
-      }
-      snprintf(result->search, search_len + 2, "?%.*s", (int)(search_len - 1), search_pos + 1);
-    } else {
-      result->search = strdup("");
-    }
-
-    // Special case: Windows drive letter in relative URL for file scheme
-    int drive_result = handle_windows_drive_relative(path_copy, result, is_file_scheme);
-    if (drive_result == -1) {
-      // Error occurred
-      free(path_copy);
-      JSRT_FreeURL(base_url);
-      JSRT_FreeURL(result);
-      return NULL;
-    } else if (drive_result == 1) {
-      // Handled - goto cleanup
-      free(path_copy);
+      // Skip path resolution and go directly to cleanup
       goto cleanup_and_normalize;
-    }
+    } else {
+      // Relative path - resolve against base directory
+      // First, parse the relative path to separate path, search, and hash components
+      char* path_copy = strdup(url);
+      char* search_pos = strchr(path_copy, '?');
+      char* hash_pos = strchr(path_copy, '#');
 
-    // Handle regular relative paths
-    if (!resolve_complex_relative_path(path_copy, base_url, result, is_special)) {
+      // Extract hash component
+      if (hash_pos) {
+        *hash_pos = '\0';
+        result->hash = malloc(strlen(hash_pos + 1) + 2);  // +1 for '#', +1 for '\0'
+        if (!result->hash) {
+          free(path_copy);
+          JSRT_FreeURL(base_url);
+          JSRT_FreeURL(result);
+          return NULL;
+        }
+        snprintf(result->hash, strlen(hash_pos + 1) + 2, "#%s", hash_pos + 1);
+      } else {
+        result->hash = strdup("");
+      }
+
+      // Extract search component
+      if (search_pos && (!hash_pos || search_pos < hash_pos)) {
+        *search_pos = '\0';
+        const char* search_end = hash_pos ? hash_pos : (search_pos + strlen(search_pos + 1) + 1);
+        size_t search_len = search_end - search_pos;
+        result->search = malloc(search_len + 2);  // +1 for '?', +1 for '\0'
+        if (!result->search) {
+          free(path_copy);
+          JSRT_FreeURL(base_url);
+          JSRT_FreeURL(result);
+          return NULL;
+        }
+        snprintf(result->search, search_len + 2, "?%.*s", (int)(search_len - 1), search_pos + 1);
+      } else {
+        result->search = strdup("");
+      }
+
+      // Special case: Windows drive letter in relative URL for file scheme
+      int drive_result = handle_windows_drive_relative(path_copy, result, is_file_scheme);
+      if (drive_result == -1) {
+        // Error occurred
+        free(path_copy);
+        JSRT_FreeURL(base_url);
+        JSRT_FreeURL(result);
+        return NULL;
+      } else if (drive_result == 1) {
+        // Handled - goto cleanup
+        free(path_copy);
+        goto cleanup_and_normalize;
+      }
+
+      // Handle regular relative paths
+      if (!resolve_complex_relative_path(path_copy, base_url, result, is_special)) {
+        free(path_copy);
+        JSRT_FreeURL(base_url);
+        JSRT_FreeURL(result);
+        return NULL;
+      }
+
       free(path_copy);
-      JSRT_FreeURL(base_url);
-      JSRT_FreeURL(result);
-      return NULL;
-    }
-
-    free(path_copy);
+    }  // end of else block for non-empty relative URLs
   }
 
 cleanup_and_normalize:

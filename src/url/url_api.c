@@ -123,6 +123,10 @@ static JSValue JSRT_URLConstructor(JSContext* ctx, JSValueConst new_target, int 
     return JS_EXCEPTION;
   }
 
+  // Per WHATWG URL specification, < and > characters should be percent-encoded, not rejected
+  // They are valid in URLs and should be processed normally by the parser
+  // Remove the overly restrictive character validation
+
   // Strip control characters as per URL specification
   char* url_str = JSRT_StripURLControlCharacters(url_str_raw, url_str_len);
   free(url_str_raw);

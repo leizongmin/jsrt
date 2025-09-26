@@ -34,9 +34,10 @@ JSRT_URL* resolve_relative_url(const char* url, const char* base) {
   }
 
   // Check if base URL is opaque and relative URL is incompatible
-  // An opaque URL is a non-special scheme without authority and without hierarchical path
-  // Opaque means pathname doesn't start with "/" (no hierarchical structure)
-  int is_opaque = !is_special && (strlen(base_url->host) == 0) && (base_url->pathname && base_url->pathname[0] != '/');
+  // An opaque URL is a non-special scheme without authority and with non-hierarchical path
+  // Opaque means: empty pathname OR pathname that doesn't start with "/"
+  int is_opaque = !is_special && (strlen(base_url->host) == 0) &&
+                  (base_url->pathname && (strlen(base_url->pathname) == 0 || base_url->pathname[0] != '/'));
   if (is_opaque) {
     // For opaque base URLs, only fragment URLs (#...) are allowed
     // According to WHATWG URL spec, paths and queries should fail for opaque bases

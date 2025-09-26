@@ -63,9 +63,9 @@ JSRT_URL* JSRT_ParseURL(const char* url, const char* base) {
     if (isalpha(preprocessed_url[0]) && (preprocessed_url[1] == '|' || preprocessed_url[1] == ':') &&
         preprocessed_url[2] == '/') {
       // Check if this already has a scheme (looks for colon before the drive letter)
-      // However, exclude URLs with authority patterns like "h://host" which should be parsed as schemes
+      // A colon at position 1 with a letter at position 0 indicates a valid URL scheme, not a Windows drive letter
       char* scheme_colon = strchr(preprocessed_url, ':');
-      if (!scheme_colon || (scheme_colon == &preprocessed_url[1] && strncmp(preprocessed_url + 1, "://", 3) != 0)) {
+      if (!scheme_colon || scheme_colon != &preprocessed_url[1]) {
         // Only convert to file URL if we have no base, or base is a file URL
         if (!base || strncmp(base, "file:", 5) == 0) {
           // No base or file base - add file: prefix

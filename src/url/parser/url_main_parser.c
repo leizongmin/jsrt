@@ -292,30 +292,22 @@ JSRT_URL* parse_absolute_url(const char* preprocessed_url) {
   }
 
   // Normalize dot segments in the pathname - different rules for special vs non-special schemes
-  // According to WHATWG URL spec, special schemes normalize dot segments, but non-special schemes preserve certain
-  // patterns
+  // According to WHATWG URL spec, special schemes normalize dot segments, but non-special schemes have special rules
+  // for preserving double-slash patterns after dot segment normalization
   if (parsed->pathname) {
     int is_special = is_special_scheme(parsed->protocol);
-    int should_normalize = is_special;  // Always normalize for special schemes
 
-    // For non-special schemes, be more conservative about normalization
-    if (!is_special) {
-      // Check if the path contains patterns that would result in "//" after normalization
-      // These patterns should be preserved to maintain compatibility with WPT tests
-      const char* path = parsed->pathname;
-
-      // Don't normalize paths that would create "//" after dot segment removal
-      // Examples: "/.//", "/..//", "/a/..//" should preserve their double-slash structure
-      if (strstr(path, "/.//") || strstr(path, "/..//") || (strstr(path, "/..") && strstr(path, "//")) ||
-          (strstr(path, "/.") && strstr(path, "//"))) {
-        should_normalize = 0;  // Preserve original path structure
-      } else {
-        should_normalize = 1;  // Safe to normalize other patterns
-      }
-    }
-
-    if (should_normalize) {
+    if (is_special) {
+      // Special schemes: standard dot segment normalization
       char* normalized_pathname = normalize_dot_segments_with_percent_decoding(parsed->pathname);
+      if (normalized_pathname) {
+        free(parsed->pathname);
+        parsed->pathname = normalized_pathname;
+      }
+    } else {
+      // Non-special schemes: apply dot segment normalization but preserve double-slash patterns
+      // Per WPT tests: "/..//" -> "/.//", "/a/..//" -> "/.//" etc.
+      char* normalized_pathname = normalize_dot_segments_preserve_double_slash(parsed->pathname);
       if (normalized_pathname) {
         free(parsed->pathname);
         parsed->pathname = normalized_pathname;

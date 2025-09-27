@@ -244,8 +244,8 @@ JSRT_URL* handle_empty_url(const char* base) {
       return NULL;
     }
 
-    // Per WHATWG URL spec: empty string resolves to complete copy of base URL (including query/fragment)
-    // Simply return a copy of the base URL with all components preserved
+    // Per WHATWG URL spec: empty string resolves to base URL without fragment
+    // Return a copy of the base URL with fragment removed
     JSRT_URL* result = malloc(sizeof(JSRT_URL));
     if (!result) {
       JSRT_FreeURL(base_url);
@@ -253,7 +253,7 @@ JSRT_URL* handle_empty_url(const char* base) {
     }
     memset(result, 0, sizeof(JSRT_URL));
 
-    // Copy all components from base URL
+    // Copy all components from base URL except fragment
     result->protocol = strdup(base_url->protocol ? base_url->protocol : "");
     result->username = strdup(base_url->username ? base_url->username : "");
     result->password = strdup(base_url->password ? base_url->password : "");
@@ -262,9 +262,9 @@ JSRT_URL* handle_empty_url(const char* base) {
     result->port = strdup(base_url->port ? base_url->port : "");
     result->pathname = strdup(base_url->pathname ? base_url->pathname : "");
     result->search = strdup(base_url->search ? base_url->search : "");
-    result->hash = strdup(base_url->hash ? base_url->hash : "");
+    result->hash = strdup("");  // Empty string removes fragment per WHATWG spec
     result->origin = strdup(base_url->origin ? base_url->origin : "");
-    result->href = strdup(base_url->href ? base_url->href : "");
+    result->href = NULL;  // Will be built below without fragment
 
     // Copy additional fields
     result->search_params = JS_UNDEFINED;
@@ -274,13 +274,16 @@ JSRT_URL* handle_empty_url(const char* base) {
     result->opaque_path = base_url->opaque_path;
     result->has_authority_syntax = base_url->has_authority_syntax;
 
-    // Check for allocation failures
+    // Check for allocation failures (excluding href which will be built)
     if (!result->protocol || !result->username || !result->password || !result->host || !result->hostname ||
-        !result->port || !result->pathname || !result->search || !result->hash || !result->origin || !result->href) {
+        !result->port || !result->pathname || !result->search || !result->hash || !result->origin) {
       JSRT_FreeURL(base_url);
       JSRT_FreeURL(result);
       return NULL;
     }
+
+    // Build href without fragment
+    build_href(result);
 
     JSRT_FreeURL(base_url);
     return result;

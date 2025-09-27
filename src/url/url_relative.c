@@ -106,6 +106,47 @@ JSRT_URL* resolve_relative_url(const char* url, const char* base) {
     // Only strip scheme for special schemes
     if (is_special_scheme(scheme)) {
       url = colon_pos + 1;  // Skip the scheme and colon
+
+      // Special case: if after stripping scheme we have an empty string for a special scheme,
+      // this means it was scheme-only (e.g., "file:" or "http:")
+      // For file: scheme, this should resolve to file:///
+      // For other special schemes, preserve base authority and reset path/query/fragment
+      if (url[0] == '\0') {
+        if (strcmp(scheme, "file:") == 0) {
+          // Scheme-only file: URL should resolve to file:///
+          free(result->pathname);
+          free(result->search);
+          free(result->hash);
+          result->pathname = strdup("/");
+          result->search = strdup("");
+          result->hash = strdup("");
+          if (!result->pathname || !result->search || !result->hash) {
+            free(scheme);
+            JSRT_FreeURL(base_url);
+            JSRT_FreeURL(result);
+            return NULL;
+          }
+          free(scheme);
+          goto cleanup_and_normalize;
+        } else {
+          // Other special schemes: preserve base authority, clear path/query/fragment
+          // Per WHATWG spec: "http:" against "http://example.org/foo" -> "http://example.org/"
+          free(result->pathname);
+          free(result->search);
+          free(result->hash);
+          result->pathname = strdup("/");  // Reset to root path
+          result->search = strdup("");     // Clear query
+          result->hash = strdup("");       // Clear fragment
+          if (!result->pathname || !result->search || !result->hash) {
+            free(scheme);
+            JSRT_FreeURL(base_url);
+            JSRT_FreeURL(result);
+            return NULL;
+          }
+          free(scheme);
+          goto cleanup_and_normalize;
+        }
+      }
     }
     free(scheme);
   }
@@ -144,11 +185,12 @@ JSRT_URL* resolve_relative_url(const char* url, const char* base) {
     }
   } else {
   handle_complex_relative_path:
-    // Special case: empty string relative URL should copy all base URL components
+    // Special case: empty string relative URL should copy base URL components but remove fragment
+    // According to WHATWG URL spec, empty string resolves to base URL without fragment
     if (url[0] == '\0') {
       result->pathname = strdup(base_url->pathname ? base_url->pathname : "");
       result->search = strdup(base_url->search ? base_url->search : "");
-      result->hash = strdup(base_url->hash ? base_url->hash : "");
+      result->hash = strdup("");  // Empty string removes fragment per WHATWG spec
       // Check for allocation failures
       if (!result->pathname || !result->search || !result->hash) {
         JSRT_FreeURL(base_url);

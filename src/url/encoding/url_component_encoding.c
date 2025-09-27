@@ -433,11 +433,10 @@ char* url_userinfo_encode_with_scheme_name(const char* str, const char* scheme) 
     unsigned char c = (unsigned char)str[i];
     if ((c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z') || (c >= '0' && c <= '9') || c == '-' || c == '_' ||
         c == '.' || c == '~' || c == '*' || c == '&' || c == '(' || c == ')' || c == '!' || c == '$' || c == '\'' ||
-        c == ',' || c == ';' || c == '=' || c == '+' || c == '%' || c == '<' || c == '>' || c == '[' || c == '^' ||
-        c == '|' || (!encode_closing_bracket && c == ']') || (!encode_at_symbol && c == '@') ||
-        (!encode_colon && c == ':')) {
+        c == ',' || c == ';' || c == '=' || c == '+' || c == '%' || (!encode_closing_bracket && c == ']') ||
+        (!encode_at_symbol && c == '@') || (!encode_colon && c == ':')) {
       // Note: @, :, ] encoding depends on scheme
-      // NOTE: Removed backticks (`) and braces ({}) from allowed chars per WHATWG URL spec
+      // Per WHATWG URL spec and WPT tests: encode [, <, >, ^, |, `, {, } characters
       encoded_len++;
     } else {
       encoded_len += 3;  // %XX
@@ -454,11 +453,10 @@ char* url_userinfo_encode_with_scheme_name(const char* str, const char* scheme) 
     unsigned char c = (unsigned char)str[i];
     if ((c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z') || (c >= '0' && c <= '9') || c == '-' || c == '_' ||
         c == '.' || c == '~' || c == '*' || c == '&' || c == '(' || c == ')' || c == '!' || c == '$' || c == '\'' ||
-        c == ',' || c == ';' || c == '=' || c == '+' || c == '%' || c == '<' || c == '>' || c == '[' || c == '^' ||
-        c == '|' || (!encode_closing_bracket && c == ']') || (!encode_at_symbol && c == '@') ||
-        (!encode_colon && c == ':')) {
+        c == ',' || c == ';' || c == '=' || c == '+' || c == '%' || (!encode_closing_bracket && c == ']') ||
+        (!encode_at_symbol && c == '@') || (!encode_colon && c == ':')) {
       // Note: @, :, ] encoding depends on scheme
-      // NOTE: Removed backticks (`) and braces ({}) from allowed chars per WHATWG URL spec
+      // Per WHATWG URL spec and WPT tests: encode [, <, >, ^, |, `, {, } characters
       encoded[j++] = c;
     } else {
       encoded[j++] = '%';

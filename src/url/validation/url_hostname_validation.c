@@ -239,7 +239,8 @@ int validate_hostname_characters_with_scheme_and_port(const char* hostname, cons
 
     // Reject characters that should not appear in hostnames even with percent-encoding
     // These characters cause URL parsing to fail per WPT tests
-    if (c == ' ' || c == '<' || c == '>' || c == '[' || c == ']' || c == '\\' || c == '^') {
+    if (c == ' ' || c == '<' || c == '>' || c == '[' || c == ']' || c == '\\' || c == '^' || c == '`' || c == '{' ||
+        c == '}') {
       return 0;  // Invalid hostname character
     }
 
@@ -372,11 +373,13 @@ int validate_hostname_characters_with_scheme_and_port(const char* hostname, cons
           return 0;  // Ideographic space not allowed in hostnames
         }
 
-        // Soft Hyphen (U+00AD): 0xC2 0xAD - should be rejected in hostnames
+        // Soft Hyphen (U+00AD): 0xC2 0xAD - per WPT tests, should be allowed
+        // The previous comment was incorrect - WPT actually expects URLs with soft hyphens to succeed
+        // Allow soft hyphens in hostnames as per WHATWG URL spec requirement
         if (c == 0xC2 && p + 1 < hostname + len && (unsigned char)*(p + 1) == 0xAD) {
-          // Per WPT tests, soft hyphens should cause hostname parsing to fail
-          // This applies to all special schemes, including HTTPS
-          return 0;  // Soft hyphens not allowed in hostnames for special schemes
+          // Skip the soft hyphen sequence and continue processing
+          p++;  // Skip the second byte of the UTF-8 sequence
+          continue;
         }
       }
 
@@ -469,11 +472,33 @@ int validate_hostname_characters_allow_at(const char* hostname, int allow_at) {
     // TODO: Add specific Unicode character validation for hostnames
     // Currently allowing all Unicode characters in hostnames for testing
 
-    // Per WHATWG URL specification, reject only fundamental URL structure delimiters
-    // Most other characters should be allowed and percent-encoded as needed
-    // Only reject characters that would fundamentally break URL parsing
+    // Per WHATWG URL specification, reject fundamental URL structure delimiters
+    // and characters that are invalid in hostnames according to WPT tests
     if (c == '#' || c == '/' || c == '?' || (!allow_at && c == '@')) {
       return 0;  // Invalid hostname character - these break URL structure
+    }
+
+    // Reject angle brackets and other invalid hostname characters per WPT tests
+    // URLs like "sc://a<b" and "http://a>b" should fail parsing
+    if (c == '<' || c == '>') {
+      return 0;  // Invalid hostname characters per WHATWG URL spec
+    }
+
+    // Reject backslash in hostname (except for special scheme normalization)
+    // URLs like "sc://a\\b/" should fail
+    if (c == '\\') {
+      return 0;  // Invalid hostname character
+    }
+
+    // Reject additional invalid hostname characters per WPT tests
+    // URLs like "http://a^b" should fail
+    if (c == '^' || c == '`' || c == '{' || c == '}' || c == '|') {
+      return 0;  // Invalid hostname characters
+    }
+
+    // Reject space character in hostname
+    if (c == ' ') {
+      return 0;  // Space not allowed in hostname
     }
 
     // For IPv6 brackets, only reject if not properly paired

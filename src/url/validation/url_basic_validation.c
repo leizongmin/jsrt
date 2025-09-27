@@ -243,11 +243,11 @@ int validate_percent_encoded_characters(const char* url) {
           in_hostname = (p >= authority_start && p < authority_end);
         }
 
-        // Only reject characters that would fundamentally break URL parsing
-        // Allow UTF-8 sequences like %C2%AD (soft hyphen) as they are valid Unicode
-        if (decoded_value == 0x00) {
-          return 0;  // Always reject null bytes
-        }
+        // Per WHATWG URL spec and WPT tests, percent-encoded sequences are valid
+        // even if they represent control characters like null bytes (%00)
+        // The key difference is that %00 in URL text is just a text sequence,
+        // not an actual null byte that would break C string processing
+        // So we allow all percent-encoded sequences to pass validation
 
         // For hostname contexts in special schemes, be more restrictive
         if (in_hostname) {

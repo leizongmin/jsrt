@@ -299,17 +299,10 @@ static JSValue JSRT_URLGetPathname(JSContext* ctx, JSValueConst this_val, int ar
     // Non-special schemes: handle specific test scheme patterns
     const char* pathname = url->pathname;
 
-    // For "non-spec" test schemes, apply minimal normalization in pathname getter
-    // This handles WPT test cases like non-spec:/.// -> pathname should be //
-    if (url->protocol && strncmp(url->protocol, "non-spec:", 9) == 0 && pathname) {
-      if (strncmp(pathname, "/./", 3) == 0) {
-        // non-spec:/.//  -> pathname should be //
-        pathname += 2;  // Skip the "/." part
-      } else if (strncmp(pathname, "/../", 4) == 0) {
-        // non-spec:/..// -> pathname should be //
-        pathname += 3;  // Skip the "/.." part
-      }
-    }
+    // For non-special schemes, pathname should match what's in href
+    // According to WHATWG URL spec, non-special schemes preserve dot segments
+    // So non-spec:/.// should have pathname /.// (not //)
+    // The href and pathname should be consistent
 
     return JS_NewString(ctx, pathname);
   }

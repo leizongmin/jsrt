@@ -55,6 +55,9 @@ void build_href(JSRT_URL* parsed) {
   if (href_len > SIZE_MAX - 50)
     return;
   href_len += 50;
+
+  // Free existing href if it was already allocated
+  free(parsed->href);
   parsed->href = malloc(href_len);
   if (!parsed->href) {
     return;

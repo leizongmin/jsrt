@@ -294,6 +294,19 @@ char* normalize_dot_segments_preserve_double_slash(const char* path) {
     return strdup("");
   }
 
+  // Special handling for dot-slash-slash patterns in non-special schemes
+  // According to WHATWG URL spec, these patterns should be preserved:
+  // - /.// should remain /.//
+  // - /.//path should remain /.//path
+  // The issue is that our normalize_dot_segments converts "/.//x" to "//x"
+
+  // Check if original path was /.// or /.//something
+  if (strncmp(path, "/./", 3) == 0 && strlen(path) >= 4 && path[3] == '/') {
+    // This is a /.//... pattern that should be preserved
+    free(normalized);
+    return strdup(path);  // Return original path unchanged
+  }
+
   // Now handle double-slash preservation for non-special schemes
   if (has_trailing_double_slash || has_double_slash_after_dotdot) {
     size_t norm_len = strlen(normalized);

@@ -463,6 +463,9 @@ int validate_hostname_characters_allow_at(const char* hostname, int allow_at) {
     return 1;
   }
 
+  // NOTE: Single-character hostnames are actually valid per WHATWG URL spec and WPT tests
+  // According to the URL specification, single-character hostnames are permitted
+
   // Check for IPv6 address format: starts with [ and ends with ]
   int is_ipv6 = (len >= 3 && hostname[0] == '[' && hostname[len - 1] == ']');
 

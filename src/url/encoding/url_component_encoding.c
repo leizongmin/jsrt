@@ -327,8 +327,11 @@ char* url_nonspecial_path_encode(const char* str) {
       } else {
         encoded_len += 1;  // Keep space as-is
       }
-    } else if (c < 32 || c > 126) {
-      // Encode other control characters and non-ASCII
+    } else if (c <= 32 || c == '"' || c == '<' || c == '>' || c == '^' ||
+               c == '{' || c == '}' || c == '`' || c == 127 || c >= 128) {
+      // Encode control characters, unsafe characters, and non-ASCII per URL spec
+      // Note: '[' and ']' are NOT encoded in paths per WPT tests
+      // Note: '\' is NOT encoded in non-special scheme paths (unlike special schemes)
       encoded_len += 3;  // %XX
     } else {
       encoded_len++;
@@ -379,8 +382,11 @@ char* url_nonspecial_path_encode(const char* str) {
         }
         i = space_end - 1;  // Skip to end of space sequence (loop will increment)
       }
-    } else if (c < 32 || c > 126) {
-      // Encode other control characters and non-ASCII
+    } else if (c <= 32 || c == '"' || c == '<' || c == '>' || c == '^' ||
+               c == '{' || c == '}' || c == '`' || c == 127 || c >= 128) {
+      // Encode control characters, unsafe characters, and non-ASCII per URL spec
+      // Note: '[' and ']' are NOT encoded in paths per WPT tests
+      // Note: '\' is NOT encoded in non-special scheme paths (unlike special schemes)
       encoded[j++] = '%';
       encoded[j++] = hex_chars[c >> 4];
       encoded[j++] = hex_chars[c & 15];

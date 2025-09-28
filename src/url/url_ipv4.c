@@ -260,10 +260,22 @@ int looks_like_ipv4_address(const char* hostname) {
         free(last_token);
       }
 
-      // Treat as IPv4 if last segment looks numeric
-      result = last_segment_numeric && part_count >= 1 && part_count <= 4;
-      JSRT_Debug("looks_like_ipv4_address: dotted format - last_segment_numeric=%d, part_count=%d, result=%d",
-                 last_segment_numeric, part_count, result);
+      // Check if the actual last segment (after the final dot) is empty
+      // This handles cases like "foo.09.." where strtok returns "09" as last token
+      // but the actual last segment is empty
+      const char* last_dot = strrchr(to_check, '.');
+      int actual_last_segment_empty = 0;
+      if (last_dot && strlen(last_dot + 1) == 0) {
+        actual_last_segment_empty = 1;
+      }
+
+      // Treat as IPv4 only if:
+      // 1. Last segment looks numeric (from strtok)
+      // 2. The actual last segment is not empty (no trailing dots)
+      // 3. Part count is reasonable for IPv4
+      result = last_segment_numeric && !actual_last_segment_empty && part_count >= 1 && part_count <= 4;
+      JSRT_Debug("looks_like_ipv4_address: dotted format - last_segment_numeric=%d, actual_last_segment_empty=%d, part_count=%d, result=%d",
+                 last_segment_numeric, actual_last_segment_empty, part_count, result);
       free(parts_copy);
     }
 

@@ -261,35 +261,16 @@ char* normalize_dot_segments_preserve_double_slash(const char* path) {
     return strdup("");
   }
 
-  // For non-special schemes, check if path contains /..// patterns
-  // If so, preserve the entire path without any normalization
-  if (strstr(path, "/..//") != NULL) {
-    return strdup(path);  // Return path unchanged
-  }
+  // For non-special schemes, perform standard dot segment normalization
+  // Per WHATWG URL spec and WPT tests:
+  // - "/.//path" should become "//path" (remove single dot)
+  // - "/..//" should become "//" (remove .. and stay at root)
+  // - "/a/..//" should become "//" (remove a/.. and simplify)
 
   // First decode percent-encoded dots
   char* decoded_path = decode_percent_encoded_dots(path);
   if (!decoded_path) {
     return strdup("");
-  }
-
-  // Check if the path ends with "//" pattern before normalization
-  size_t decoded_len = strlen(decoded_path);
-  int has_trailing_double_slash = 0;
-  if (decoded_len >= 2 && decoded_path[decoded_len - 2] == '/' && decoded_path[decoded_len - 1] == '/') {
-    has_trailing_double_slash = 1;
-  }
-
-  // Also check for "//..//" patterns that should become "/.//""
-  int has_double_slash_after_dotdot = 0;
-  if (decoded_len >= 5) {
-    // Look for patterns like "/..//" or "/something/..//"
-    for (size_t i = 0; i <= decoded_len - 5; i++) {
-      if (strncmp(decoded_path + i, "/..//", 5) == 0) {
-        has_double_slash_after_dotdot = 1;
-        break;
-      }
-    }
   }
 
   // Perform standard dot segment normalization
@@ -300,76 +281,21 @@ char* normalize_dot_segments_preserve_double_slash(const char* path) {
     return strdup("");
   }
 
-  // Special handling for dot-slash-slash patterns in non-special schemes
-  // According to WHATWG URL spec, these patterns should be preserved:
-  // - /.// should remain /.//
-  // - /.//path should remain /.//path
-  // The issue is that our normalize_dot_segments converts "/.//x" to "//x"
+  // Apply WPT-compliant logic for non-special schemes
+  // Based on WPT test expectations:
+  // - "/.//path" -> "//path" (normalize_dot_segments handles this correctly)
+  // - "/..//" -> "//" (need to ensure this)
+  // - "/a/..//" -> "//" (need to ensure this)
 
-  // Check if original path was /.// or /.//something
-  if (strncmp(path, "/./", 3) == 0 && strlen(path) >= 4 && path[3] == '/') {
-    // This is a /.//... pattern that should be preserved
-    free(normalized);
-    return strdup(path);  // Return original path unchanged
-  }
+  size_t norm_len = strlen(normalized);
 
-  // Now handle double-slash preservation for non-special schemes
-  if (has_trailing_double_slash || has_double_slash_after_dotdot) {
-    size_t norm_len = strlen(normalized);
-
-    // If the normalized path doesn't end with "//" but should, add it
-    if (has_trailing_double_slash && norm_len >= 1) {
-      if (norm_len == 1 && normalized[0] == '/') {
-        // Case: "/..//" -> "/" -> should be "/./"" then add extra "/"
-        char* result = malloc(4);  // "/./" + null
-        if (result) {
-          strcpy(result, "/./");
-        }
-        free(normalized);
-        return result ? result : strdup("");
-      } else if (norm_len >= 2 && normalized[norm_len - 2] != '/' && normalized[norm_len - 1] != '/') {
-        // Normal case: need to ensure it ends with "//"
-        char* result = malloc(norm_len + 2);  // +1 for extra slash, +1 for null
-        if (result) {
-          strcpy(result, normalized);
-          strcat(result, "/");
-        }
-        free(normalized);
-        return result ? result : strdup("");
-      } else if (norm_len >= 1 && normalized[norm_len - 1] == '/' &&
-                 (norm_len == 1 || normalized[norm_len - 2] != '/')) {
-        // Path ends with single slash, add another
-        char* result = malloc(norm_len + 2);  // +1 for extra slash, +1 for null
-        if (result) {
-          strcpy(result, normalized);
-          strcat(result, "/");
-        }
-        free(normalized);
-        return result ? result : strdup("");
-      }
-    }
-
-    // Special case for patterns that should become "/.//""
-    if (has_double_slash_after_dotdot) {
-      // Check if the result should be "/.//""
-      if (strcmp(normalized, "/") == 0 || strcmp(normalized, "//") == 0) {
-        char* result = malloc(5);  // "/.//\" + null
-        if (result) {
-          strcpy(result, "/.//");
-        }
-        free(normalized);
-        return result ? result : strdup("");
-      } else if (strncmp(normalized, "//", 2) == 0) {
-        // Handle cases like "//path" -> "/.//path"
-        size_t norm_len = strlen(normalized);
-        char* result = malloc(norm_len + 3);  // "/.//" + remaining path + null
-        if (result) {
-          strcpy(result, "/./");
-          strcat(result, normalized + 1);  // Skip the first "/" and keep "//path" as ".//path"
-        }
-        free(normalized);
-        return result ? result : strdup("");
-      }
+  // Special case: if normalization resulted in "/" but the original had double-slash patterns,
+  // convert to "//" per WPT expectations
+  if (norm_len == 1 && normalized[0] == '/') {
+    // Check if original path had patterns that should result in "//"
+    if (strstr(path, "/..//") != NULL) {
+      free(normalized);
+      return strdup("//");
     }
   }
 

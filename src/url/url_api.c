@@ -103,7 +103,14 @@ static char* JSRT_StripURLControlCharacters(const char* input, size_t input_len)
       }
       i += utf8_len - 1;  // Skip the rest of the sequence (loop will increment i)
     } else {
-      // ASCII character - copy as-is
+      // ASCII character
+      // Per WHATWG URL spec, null bytes should cause URL parsing to fail
+      if (c == 0x00) {
+        free(result);
+        return NULL;  // Reject URLs containing null bytes
+      }
+
+      // Copy other ASCII characters as-is
       // Let the URL parser handle validation and normalization of special characters
       result[j++] = c;
     }

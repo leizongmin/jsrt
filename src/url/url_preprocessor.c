@@ -57,11 +57,15 @@ char* preprocess_file_urls(const char* cleaned_url) {
   char* preprocessed_url = (char*)cleaned_url;  // Default: no preprocessing needed
   char* url_to_free = NULL;
 
-  // Handle "file:.//path" -> "file:path" normalization
+  // Handle "file:.//path" -> "file:////path" normalization per WHATWG URL spec
+  // According to WPT tests, file:.//p should become file:////p
   if (strncmp(cleaned_url, "file:.//", 8) == 0) {
-    size_t new_len = strlen(cleaned_url) - 3;  // Remove the "./"
+    size_t remainder_len = strlen(cleaned_url + 6);  // Length of "//p" (skip "file:.")
+    size_t new_len = 7 + remainder_len;              // strlen("file://") = 7, plus remainder
     char* normalized = malloc(new_len + 1);
-    snprintf(normalized, new_len + 1, "file:%s", cleaned_url + 8);  // Skip "file:./"
+    snprintf(normalized, new_len + 1, "file://%s", cleaned_url + 6);  // Skip "file:." and keep "//p"
+    JSRT_Debug("file:.// preprocessing: '%s' -> '%s' (expected length: %zu, actual: %zu)", cleaned_url, normalized,
+               new_len, strlen(normalized));
     preprocessed_url = normalized;
     url_to_free = normalized;
   }
@@ -298,6 +302,11 @@ char* preprocess_url_string(const char* url, const char* base) {
     return NULL;
 
   JSRT_Debug("preprocess_url_string: url='%s'", url);
+
+  // Check for file:.// pattern early
+  if (strncmp(url, "file:.//", 8) == 0) {
+    JSRT_Debug("Found file:.// pattern in original URL: '%s'", url);
+  }
 
   // Strip leading and trailing ASCII whitespace, then remove all internal ASCII whitespace
   char* trimmed_url = strip_url_whitespace(url);

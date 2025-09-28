@@ -460,6 +460,13 @@ int parse_authority(JSRT_URL* parsed, const char* authority_str) {
         free(final_processed_hostname);
       }
       final_processed_hostname = normalized_hostname;
+    } else {
+      // Unicode normalization failed (e.g., hostname contained only soft hyphens)
+      JSRT_Debug("parse_authority: Unicode normalization failed for hostname '%s'", current_hostname);
+      if (final_processed_hostname != current_hostname) {
+        free(final_processed_hostname);
+      }
+      goto cleanup_and_return_error;
     }
   }
 

@@ -13,6 +13,7 @@ char* normalize_hostname_unicode_with_case(const char* hostname, int preserve_as
     return NULL;
   }
 
+
   size_t len = strlen(hostname);
   // Allocate buffer (worst case: each byte might expand)
   char* normalized = malloc(len * 2 + 1);
@@ -36,11 +37,12 @@ char* normalize_hostname_unicode_with_case(const char* hostname, int preserve_as
           // Calculate the Unicode codepoint for 2-byte UTF-8
           unsigned int codepoint = ((c & 0x1F) << 6) | (c2 & 0x3F);
 
-          // U+00AD (soft hyphen) - should be rejected per WHATWG URL spec
-          // WPT expects URLs with soft hyphens in hostnames to fail
+          // U+00AD (soft hyphen) - should be removed per WHATWG URL spec
+          // WPT expects soft hyphens to be stripped from hostnames (unless it's the only character)
           if (codepoint == 0x00AD) {
-            free(normalized);
-            return NULL;  // Reject hostnames containing soft hyphen
+            // Skip the soft hyphen (don't copy it to output)
+            read_pos += 2;
+            continue;
           }
 
           // Other 2-byte UTF-8 sequences - copy as-is
@@ -154,6 +156,13 @@ char* normalize_hostname_unicode_with_case(const char* hostname, int preserve_as
   }
 
   normalized[write_pos] = '\0';
+
+  // Check if hostname became empty after normalization (e.g., contained only soft hyphens)
+  if (write_pos == 0) {
+    free(normalized);
+    return NULL;  // Empty hostname after normalization is invalid
+  }
+
 
   // Shrink buffer to actual size
   char* final_result = realloc(normalized, write_pos + 1);

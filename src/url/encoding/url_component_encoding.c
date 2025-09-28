@@ -148,6 +148,7 @@ char* url_path_encode_special(const char* str) {
                c == '`' || c == 127) {
       // Need to percent-encode control characters, space, and specific unsafe characters
       // NOTE: Pipe character (|) is preserved per WPT specification
+      // NOTE: '[' and ']' characters are NOT encoded in paths per WPT tests
       encoded_len += 3;  // %XX
     } else if (c >= 128) {
       // UTF-8 encoded characters - percent-encode each byte
@@ -179,6 +180,7 @@ char* url_path_encode_special(const char* str) {
                c == '`' || c == 127) {
       // Need to percent-encode control characters and specific unsafe characters
       // NOTE: Pipe character (|) is preserved per WPT specification
+      // NOTE: '[' and ']' characters are NOT encoded in paths per WPT tests
       encoded[j++] = '%';
       encoded[j++] = hex_chars[c >> 4];
       encoded[j++] = hex_chars[c & 15];
@@ -418,9 +420,10 @@ char* url_userinfo_encode_with_scheme_name(const char* str, const char* scheme) 
       scheme_clean[scheme_len - 1] = '\0';
     }
 
-    // WebSocket schemes and non-special schemes: don't encode ']', '@', and ':'
+    // Per WPT tests: always encode '[' and ']' characters in userinfo
+    // WebSocket schemes and non-special schemes: don't encode '@' and ':'
     if (strcmp(scheme_clean, "ws") == 0 || strcmp(scheme_clean, "wss") == 0 || !is_special_scheme(scheme)) {
-      encode_closing_bracket = 0;
+      encode_closing_bracket = 1;  // Always encode ']' per WPT requirements
       encode_at_symbol = 0;
       encode_colon = 0;
     }

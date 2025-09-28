@@ -754,8 +754,18 @@ function printTestSummary() {
                 console.log(`      Reason: ${t.message}`);
             });
             console.log(`\n🔴 Summary: ${failed} test case(s) failed out of ${total} total`);
+            
+            // Exit with failure code when tests fail
+            if (typeof process !== 'undefined' && process.exit) {
+                process.exit(1);
+            }
         } else {
             console.log('\n🟢 All tests passed!');
+            
+            // Exit with success code when all tests pass
+            if (typeof process !== 'undefined' && process.exit) {
+                process.exit(0);
+            }
         }
     }
 }

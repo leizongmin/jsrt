@@ -339,47 +339,62 @@ globalThis.fetch = function(url) {{
             
             # Determine test result based on output
             if result.returncode == 0:
-                # Use more reliable failure detection based on test harness output
-                # Look for final test summary lines which are more reliable than scanning for symbols
+                # Use test harness summary for reliable failure detection
+                # The WPT test harness provides clear summary information
                 has_failures = False
                 lines = result.stdout.split('\n')
                 
+                # First priority: Look for test harness summary information
+                summary_found = False
                 for line in lines:
                     line = line.strip()
-                    # Look for test harness summary patterns that indicate failures
-                    if line.startswith('Failed:') and not ('Failed: 0' in line or 'Failed: none' in line):
-                        has_failures = True
+                    # Look for our WPT test harness summary patterns
+                    if line.startswith('Total:') and 'Failed:' in line:
+                        # Format: "Total: X, Passed: Y, Failed: Z"
+                        summary_found = True
+                        try:
+                            # Extract failed count from "Total: X, Passed: Y, Failed: Z"
+                            parts = line.split(',')
+                            failed_part = [p.strip() for p in parts if 'Failed:' in p][0]
+                            failed_count = int(failed_part.split(':')[1].strip())
+                            has_failures = failed_count > 0
+                        except (ValueError, IndexError):
+                            has_failures = 'Failed: 0' not in line
                         break
-                    # Look for explicit failure markers from the test harness
-                    elif 'FAILED:' in line and 'tests failed' in line:
-                        has_failures = True
+                    elif line.startswith('Failed:') and not line.startswith('Failed tests:'):
+                        summary_found = True
+                        # Extract number of failures from "Failed: X"
+                        try:
+                            failed_count = int(line.split(':')[1].strip())
+                            has_failures = failed_count > 0
+                        except (ValueError, IndexError):
+                            # If we can't parse, check for non-zero indicators
+                            has_failures = not ('Failed: 0' in line or 'Failed: none' in line)
                         break
-                    # Look for test runner exit with failure
-                    elif line.startswith('Tests failed:') and 'Tests failed: 0' not in line:
-                        has_failures = True
+                    elif '=== WPT Test Results Summary ===' in line:
+                        # Found test summary section, continue to find actual summary
+                        summary_found = True
+                        continue
+                    elif 'All tests passed!' in line:
+                        # Clear indicator that all tests passed
+                        summary_found = True
+                        has_failures = False
                         break
-                
-                # If no clear summary found, fall back to checking for actual assertion failures
-                # but exclude legitimate test names that might contain symbols
-                if not has_failures:
-                    failure_indicators = [
-                        'AssertionError',
-                        'Test failed:',
-                        'ASSERTION FAILED',
-                        'Error: Test'
-                    ]
-                    for indicator in failure_indicators:
-                        if indicator in result.stdout:
-                            has_failures = True
-                            break
+                        
+                # Second priority: Use exit code as definitive indicator
+                # If the test process exits with non-zero, that's a failure regardless of output
+                if not summary_found:
+                    # No clear summary found, rely on process exit code
+                    has_failures = False  # Since returncode is 0, assume success
                 
                 if has_failures:
                     status = 'FAIL'
                     self.results['failed'] += 1
                 else:
-                    status = 'PASS'
+                    status = 'PASS' 
                     self.results['passed'] += 1
             else:
+                # Non-zero exit code always indicates failure
                 status = 'FAIL'
                 self.results['failed'] += 1
                 

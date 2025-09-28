@@ -129,14 +129,16 @@ JSRT_URL* resolve_relative_url(const char* url, const char* base) {
           free(scheme);
           goto cleanup_and_normalize;
         } else {
-          // Other special schemes: preserve base authority, clear path/query/fragment
-          // Per WHATWG spec: "http:" against "http://example.org/foo" -> "http://example.org/"
+          // Other special schemes: preserve base authority and path/query/fragment
+          // Per WPT tests: scheme-only URLs should inherit path/query/fragment from base
+          // "http:" against "http://example.org/foo/bar" -> "http://example.org/foo/bar"
+          // Note: This differs from some interpretations of WHATWG spec but matches WPT behavior
           free(result->pathname);
           free(result->search);
           free(result->hash);
-          result->pathname = strdup("/");  // Reset to root path
-          result->search = strdup("");     // Clear query
-          result->hash = strdup("");       // Clear fragment
+          result->pathname = strdup(base_url->pathname ? base_url->pathname : "/");
+          result->search = strdup(base_url->search ? base_url->search : "");
+          result->hash = strdup(base_url->hash ? base_url->hash : "");
           if (!result->pathname || !result->search || !result->hash) {
             free(scheme);
             JSRT_FreeURL(base_url);

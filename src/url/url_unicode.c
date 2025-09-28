@@ -13,7 +13,6 @@ char* normalize_hostname_unicode_with_case(const char* hostname, int preserve_as
     return NULL;
   }
 
-
   size_t len = strlen(hostname);
   // Allocate buffer (worst case: each byte might expand)
   char* normalized = malloc(len * 2 + 1);
@@ -162,7 +161,6 @@ char* normalize_hostname_unicode_with_case(const char* hostname, int preserve_as
     free(normalized);
     return NULL;  // Empty hostname after normalization is invalid
   }
-
 
   // Shrink buffer to actual size
   char* final_result = realloc(normalized, write_pos + 1);

@@ -190,7 +190,14 @@ void build_href(JSRT_URL* parsed) {
     }
   } else {
     // Non-special schemes or opaque paths (no authority)
-    snprintf(parsed->href, href_len, "%s%s%s%s", parsed->protocol, final_pathname, final_search, final_hash);
+    // Special case: for non-special schemes, paths starting with "//" need to be prefixed with "/."
+    // to avoid being interpreted as authority syntax per WHATWG URL spec
+    if (!is_special && final_pathname && strncmp(final_pathname, "//", 2) == 0) {
+      // Path starts with "//" in non-special scheme - prefix with "/." to create "/.//..."
+      snprintf(parsed->href, href_len, "%s/.%s%s%s", parsed->protocol, final_pathname, final_search, final_hash);
+    } else {
+      snprintf(parsed->href, href_len, "%s%s%s%s", parsed->protocol, final_pathname, final_search, final_hash);
+    }
   }
 
   // Clean up encoded strings

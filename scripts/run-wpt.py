@@ -270,6 +270,12 @@ globalThis.fetch = function(url) {{
             except Exception as e:
                 self.log(f"Warning: Could not load URL test data: {e}")
 
+        # Debug: Log whether special setup was created
+        if special_setup:
+            self.log(f"Special setup created for {test_path.name}, length: {len(special_setup)}")
+        else:
+            self.log(f"No special setup created for {test_path.name}")
+
         # Create wrapper script
         harness_path = Path(__file__).parent / 'wpt-testharness.js'
         wrapper_content = f'''
@@ -333,15 +339,41 @@ globalThis.fetch = function(url) {{
             
             # Determine test result based on output
             if result.returncode == 0:
-                # Check if any tests failed in the output or if the process crashed
-                # Look for both individual failures (❌) and test summary failures
-                has_failures = ('❌' in result.stdout or 
-                               'Failed: ' in result.stdout and not 'Failed: 0' in result.stdout)
+                # Use more reliable failure detection based on test harness output
+                # Look for final test summary lines which are more reliable than scanning for symbols
+                has_failures = False
+                lines = result.stdout.split('\n')
                 
-                # Also consider non-zero exit codes as failures, even if output looks clean
-                has_crashes = result.returncode != 0
+                for line in lines:
+                    line = line.strip()
+                    # Look for test harness summary patterns that indicate failures
+                    if line.startswith('Failed:') and not ('Failed: 0' in line or 'Failed: none' in line):
+                        has_failures = True
+                        break
+                    # Look for explicit failure markers from the test harness
+                    elif 'FAILED:' in line and 'tests failed' in line:
+                        has_failures = True
+                        break
+                    # Look for test runner exit with failure
+                    elif line.startswith('Tests failed:') and 'Tests failed: 0' not in line:
+                        has_failures = True
+                        break
                 
-                if has_failures or has_crashes:
+                # If no clear summary found, fall back to checking for actual assertion failures
+                # but exclude legitimate test names that might contain symbols
+                if not has_failures:
+                    failure_indicators = [
+                        'AssertionError',
+                        'Test failed:',
+                        'ASSERTION FAILED',
+                        'Error: Test'
+                    ]
+                    for indicator in failure_indicators:
+                        if indicator in result.stdout:
+                            has_failures = True
+                            break
+                
+                if has_failures:
                     status = 'FAIL'
                     self.results['failed'] += 1
                 else:

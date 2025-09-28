@@ -717,6 +717,26 @@ if (typeof self === 'undefined') {
     globalThis.self = globalThis;
 }
 
+// Ensure subsetTestByKey is available (fallback for resource loading issues)
+if (typeof globalThis.subsetTestByKey === 'undefined') {
+    function shouldRunSubTest(key) {
+        return true; // Run all tests when no filtering is specified
+    }
+    
+    function subsetTestByKey(key, testFunc) {
+        var args = Array.prototype.slice.call(arguments, 2);
+        if (shouldRunSubTest(key)) {
+            return testFunc.apply(null, args);
+        }
+        return null;
+    }
+    
+    globalThis.shouldRunSubTest = shouldRunSubTest;
+    globalThis.subsetTestByKey = subsetTestByKey;
+    self.shouldRunSubTest = shouldRunSubTest;
+    self.subsetTestByKey = subsetTestByKey;
+}
+
 // Test completion summary - print at the end since jsrt doesn't have process.on('exit')
 function printTestSummary() {
     const passed = wptTests.filter(t => t.status === TEST_PASS).length;

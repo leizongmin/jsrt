@@ -107,8 +107,7 @@ int validate_url_characters(const char* url) {
 
   if (authority_pattern) {
     // Check if there's a valid scheme before "://"
-    if (authority_pattern > url &&
-        ((url[0] >= 'a' && url[0] <= 'z') || (url[0] >= 'A' && url[0] <= 'Z'))) {
+    if (authority_pattern > url && ((url[0] >= 'a' && url[0] <= 'z') || (url[0] >= 'A' && url[0] <= 'Z'))) {
       has_valid_scheme = 1;
     }
   }

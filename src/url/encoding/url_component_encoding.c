@@ -327,8 +327,8 @@ char* url_nonspecial_path_encode(const char* str) {
       } else {
         encoded_len += 1;  // Keep space as-is
       }
-    } else if (c <= 32 || c == '"' || c == '<' || c == '>' || c == '^' ||
-               c == '{' || c == '}' || c == '`' || c == 127 || c >= 128) {
+    } else if (c <= 32 || c == '"' || c == '<' || c == '>' || c == '^' || c == '{' || c == '}' || c == '`' ||
+               c == 127 || c >= 128) {
       // Encode control characters, unsafe characters, and non-ASCII per URL spec
       // Note: '[' and ']' are NOT encoded in paths per WPT tests
       // Note: '\' is NOT encoded in non-special scheme paths (unlike special schemes)
@@ -382,8 +382,8 @@ char* url_nonspecial_path_encode(const char* str) {
         }
         i = space_end - 1;  // Skip to end of space sequence (loop will increment)
       }
-    } else if (c <= 32 || c == '"' || c == '<' || c == '>' || c == '^' ||
-               c == '{' || c == '}' || c == '`' || c == 127 || c >= 128) {
+    } else if (c <= 32 || c == '"' || c == '<' || c == '>' || c == '^' || c == '{' || c == '}' || c == '`' ||
+               c == 127 || c >= 128) {
       // Encode control characters, unsafe characters, and non-ASCII per URL spec
       // Note: '[' and ']' are NOT encoded in paths per WPT tests
       // Note: '\' is NOT encoded in non-special scheme paths (unlike special schemes)

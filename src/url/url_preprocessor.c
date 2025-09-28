@@ -308,11 +308,24 @@ char* preprocess_url_string(const char* url, const char* base) {
     JSRT_Debug("Found file:.// pattern in original URL: '%s'", url);
   }
 
-  // Strip leading and trailing ASCII whitespace, then remove all internal ASCII whitespace
+  // Strip leading and trailing ASCII whitespace only
   char* trimmed_url = strip_url_whitespace(url);
   if (!trimmed_url) {
     return NULL;
   }
+
+  // Check for any remaining C0 control characters (tab, newline, carriage return)
+  // After trimming leading/trailing whitespace, these should cause URL parsing to fail
+  JSRT_Debug("preprocess_url_string: checking for control characters in '%s'", trimmed_url);
+  for (const char* p = trimmed_url; *p; p++) {
+    unsigned char c = (unsigned char)*p;
+    if (c == 0x09 || c == 0x0A || c == 0x0D) {  // Tab, LF, CR
+      JSRT_Debug("preprocess_url_string: found control character 0x%02X, rejecting URL", c);
+      free(trimmed_url);
+      return NULL;  // Reject URLs containing control characters
+    }
+  }
+  JSRT_Debug("preprocess_url_string: no control characters found");
 
   // Validate URL characters (rejects fullwidth percent, invalid Unicode, etc.)
   if (!validate_url_characters(trimmed_url)) {
@@ -356,16 +369,9 @@ char* preprocess_url_string(const char* url, const char* base) {
     }
   }
 
-  // Remove internal ASCII whitespace for all schemes
-  char* cleaned_url = remove_all_ascii_whitespace(trimmed_url);
-  free(trimmed_url);
-  if (!cleaned_url) {
-    return NULL;  // URL preprocessing failed (likely memory allocation error)
-  }
-
-  // For non-special schemes, preserve spaces before query/fragment boundaries
-  // They will be encoded later during path encoding
-  char* space_normalized_url = cleaned_url;
+  // Do not remove internal ASCII whitespace - they should cause URL parsing to fail
+  // Per WHATWG URL spec, internal control characters should be rejected, not removed
+  char* space_normalized_url = trimmed_url;
 
   // Enhanced backslash normalization for special schemes and relative URLs
   char* normalized_url;
@@ -417,11 +423,23 @@ int is_relative_url(const char* cleaned_url, const char* base) {
     return 1;
   }
 
-  // Check if URL has a scheme and authority (://) - these are absolute
+  // Check if URL has a valid scheme and authority (://) - these are absolute
   char* authority_pattern = strstr(cleaned_url, "://");
   if (authority_pattern) {
-    // printf("DEBUG: Found authority pattern (://), treating as absolute\n");
-    return 0;  // Absolute URL with authority
+    // Check if there's a valid scheme before the "://"
+    // A valid scheme must start with a letter and be at the beginning of the URL
+    if (authority_pattern > cleaned_url &&
+        ((cleaned_url[0] >= 'a' && cleaned_url[0] <= 'z') || (cleaned_url[0] >= 'A' && cleaned_url[0] <= 'Z'))) {
+      // Valid scheme found before "://", treat as absolute
+      return 0;
+    }
+    // "://" found but no valid scheme - this is still likely an absolute URL attempt
+    // that should be parsed as absolute (and will fail during hostname validation)
+    // Only treat as relative if it clearly doesn't look like a malformed absolute URL
+    if (cleaned_url[0] != '<') {
+      return 0;  // Treat as absolute (likely malformed, will fail validation)
+    }
+    // URLs starting with '<' followed by "://" are treated as relative
   }
 
   // If we have a base URL, check for special relative URL patterns

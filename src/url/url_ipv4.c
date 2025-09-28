@@ -274,8 +274,10 @@ int looks_like_ipv4_address(const char* hostname) {
       // 2. The actual last segment is not empty (no trailing dots)
       // 3. Part count is reasonable for IPv4
       result = last_segment_numeric && !actual_last_segment_empty && part_count >= 1 && part_count <= 4;
-      JSRT_Debug("looks_like_ipv4_address: dotted format - last_segment_numeric=%d, actual_last_segment_empty=%d, part_count=%d, result=%d",
-                 last_segment_numeric, actual_last_segment_empty, part_count, result);
+      JSRT_Debug(
+          "looks_like_ipv4_address: dotted format - last_segment_numeric=%d, actual_last_segment_empty=%d, "
+          "part_count=%d, result=%d",
+          last_segment_numeric, actual_last_segment_empty, part_count, result);
       free(parts_copy);
     }
 

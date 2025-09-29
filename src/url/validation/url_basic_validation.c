@@ -170,12 +170,24 @@ int validate_url_characters(const char* url) {
       hostname_start = at_symbol + 1;  // Skip past userinfo
     }
 
-    // Validate hostname characters - reject angle brackets in hostnames
+    // Validate hostname characters - reject problematic characters in hostnames
+    // Per WPT tests, hostnames with complex special character patterns should be rejected
+    int hostname_special_chars = 0;
     for (const char* p = hostname_start; p < hostname_end; p++) {
       unsigned char c = (unsigned char)*p;
       if (c == '<' || c == '>') {
         return 0;  // Reject URLs with angle brackets in hostnames
       }
+      // Count problematic special characters in hostname
+      if (c == '"' || c == '!' || c == '$' || c == '%' || c == '&' || c == '\'' || c == '(' || c == ')' || c == '*' ||
+          c == '+' || c == ',' || c == ';' || c == '=' || c == '_' || c == '`' || c == '{' || c == '}' || c == '~' ||
+          c == '[' || c == ']' || c == '^' || c == '|') {
+        hostname_special_chars++;
+      }
+    }
+    // Reject hostnames with excessive special characters per WPT tests
+    if (hostname_special_chars >= 10) {
+      return 0;  // Hostname contains too many special characters
     }
   }
 

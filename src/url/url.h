@@ -96,7 +96,7 @@ int parse_normal_authority(JSRT_URL* parsed, char** ptr);
 
 // URL building functions (url_builder.c)
 void build_href(JSRT_URL* parsed);
-void parse_path_query_fragment(JSRT_URL* parsed, char* ptr);
+int parse_path_query_fragment(JSRT_URL* parsed, char* ptr);
 char* normalize_url_component_for_href(const char* component, int is_special_scheme);
 char* build_url_string(const char* protocol, const char* username, const char* password, const char* host,
                        const char* pathname, const char* search, const char* hash, int has_password_field);
@@ -132,6 +132,7 @@ int validate_hostname_characters_with_scheme(const char* hostname, const char* s
 int validate_hostname_characters_with_scheme_and_port(const char* hostname, const char* scheme, int has_port);
 int validate_credentials(const char* credentials);
 int validate_percent_encoded_characters(const char* url);
+int validate_url_component_characters(const char* component, const char* component_type);
 
 // IP address functions
 char* canonicalize_ipv4_address(const char* input);

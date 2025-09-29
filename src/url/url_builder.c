@@ -208,9 +208,9 @@ void build_href(JSRT_URL* parsed) {
 }
 
 // Parse path, query, and fragment components
-void parse_path_query_fragment(JSRT_URL* parsed, char* ptr) {
+int parse_path_query_fragment(JSRT_URL* parsed, char* ptr) {
   if (!parsed || !ptr)
-    return;
+    return -1;
 
   // Parse path, query, fragment from remaining part
   char* query_pos = strchr(ptr, '?');
@@ -234,10 +234,16 @@ void parse_path_query_fragment(JSRT_URL* parsed, char* ptr) {
 
   // Handle fragment first
   if (fragment_pos) {
+    // Validate fragment characters before accepting
+    if (!validate_url_component_characters(fragment_pos + 1, "fragment")) {
+      // Fragment contains problematic character patterns - reject URL
+      return -1;
+    }
+
     free(parsed->hash);
     parsed->hash = strdup(fragment_pos);  // Include the #
     if (!parsed->hash) {
-      return;
+      return -1;
     }
     *fragment_pos = '\0';
   }
@@ -246,22 +252,36 @@ void parse_path_query_fragment(JSRT_URL* parsed, char* ptr) {
   if (query_pos && search_len > 0) {
     char* raw_search = malloc(search_len + 1);
     if (!raw_search) {
-      return;
+      return -1;
     }
     strncpy(raw_search, query_pos, search_len);
     raw_search[search_len] = '\0';
+
+    // Validate query characters before accepting (skip the '?' prefix)
+    const char* query_content = (raw_search[0] == '?') ? raw_search + 1 : raw_search;
+    if (!validate_url_component_characters(query_content, "query")) {
+      // Query contains problematic character patterns - reject URL
+      free(raw_search);
+      return -1;
+    }
 
     free(parsed->search);
     parsed->search = url_query_encode_with_scheme(raw_search, parsed->protocol);
     free(raw_search);
     if (!parsed->search) {
-      return;
+      return -1;
     }
     *query_pos = '\0';
   }
 
   // Handle pathname
   if (strlen(ptr) > 0) {
+    // Validate pathname characters before accepting
+    if (!validate_url_component_characters(ptr, "path")) {
+      // Path contains problematic character patterns - reject URL
+      return -1;
+    }
+
     // Only update pathname if it hasn't been set by special case handling above
     if (strcmp(parsed->pathname, "/") == 0 || strcmp(parsed->pathname, "") == 0) {
       free(parsed->pathname);
@@ -301,13 +321,15 @@ void parse_path_query_fragment(JSRT_URL* parsed, char* ptr) {
         free(parsed->pathname);
         parsed->pathname = strdup("/");
         if (!parsed->pathname) {
-          return;
+          return -1;
         }
       }
       // Non-special schemes with authority syntax (foo://) keep empty pathname
       // Special schemes with authority syntax also keep their existing empty pathname
     }
   }
+
+  return 0;  // Success
 }
 
 // Apply URL component normalization for building

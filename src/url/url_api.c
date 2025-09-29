@@ -104,11 +104,8 @@ static char* JSRT_StripURLControlCharacters(const char* input, size_t input_len)
       i += utf8_len - 1;  // Skip the rest of the sequence (loop will increment i)
     } else {
       // ASCII character
-      // Per WHATWG URL spec, null bytes should cause URL parsing to fail
-      if (c == 0x00) {
-        free(result);
-        return NULL;  // Reject URLs containing null bytes
-      }
+      // Allow null bytes - they will be percent-encoded as %00 during URL processing
+      // Per WPT test data, null bytes should be accepted and encoded, not rejected
 
       // Copy other ASCII characters as-is
       // Let the URL parser handle validation and normalization of special characters

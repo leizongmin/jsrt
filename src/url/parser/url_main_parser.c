@@ -269,7 +269,13 @@ JSRT_URL* parse_absolute_url(const char* preprocessed_url) {
 
   // Parse path, query, fragment from the remaining part BEFORE validation
   JSRT_Debug("parse_absolute_url: about to parse_path_query_fragment, path_start='%s'", path_start);
-  parse_path_query_fragment(parsed, path_start);
+  if (parse_path_query_fragment(parsed, path_start) != 0) {
+    // Path/query/fragment validation failed
+    free(scheme);
+    free(url_copy);
+    JSRT_FreeURL(parsed);
+    return NULL;
+  }
 
   // Per WHATWG URL spec, single-character hostnames are valid
   // Remove the overly restrictive validation that was rejecting valid URLs

@@ -52,14 +52,15 @@ static int is_valid_utf8_sequence(const unsigned char* bytes, size_t start, size
   return 0;  // Invalid UTF-8 start byte
 }
 
-// Helper function to strip tab and newline characters from URL strings
-// According to URL spec, these characters should be removed: tab (0x09), LF (0x0A), CR (0x0D)
-// Per WHATWG URL specification, only strip control characters but don't reject URLs with special characters
+// Helper function to strip only specific control characters from URL strings
+// According to WHATWG URL spec, only tab (0x09), LF (0x0A), and CR (0x0D) should be removed
+// Other control characters (like null bytes) should be preserved for percent-encoding later
 static char* JSRT_StripURLControlCharacters(const char* input, size_t input_len) {
   if (!input)
     return NULL;
 
-  char* result = malloc(input_len + 1);
+  // Calculate maximum possible length: each byte might become %XX (3 chars)
+  char* result = malloc(input_len * 3 + 1);
   if (!result)
     return NULL;
 
@@ -103,13 +104,17 @@ static char* JSRT_StripURLControlCharacters(const char* input, size_t input_len)
       }
       i += utf8_len - 1;  // Skip the rest of the sequence (loop will increment i)
     } else {
-      // ASCII character
-      // Allow null bytes - they will be percent-encoded as %00 during URL processing
-      // Per WPT test data, null bytes should be accepted and encoded, not rejected
-
-      // Copy other ASCII characters as-is
-      // Let the URL parser handle validation and normalization of special characters
-      result[j++] = c;
+      // ASCII character - percent-encode control characters but copy others as-is
+      if (c < 0x20 && c != 0x09 && c != 0x0A && c != 0x0D) {
+        // Percent-encode C0 control characters (except tab, LF, CR which are stripped)
+        // This includes null bytes (0x00) and other control characters per WPT requirements
+        result[j++] = '%';
+        result[j++] = "0123456789ABCDEF"[c >> 4];
+        result[j++] = "0123456789ABCDEF"[c & 15];
+      } else {
+        // Copy other ASCII characters as-is
+        result[j++] = c;
+      }
     }
   }
   result[j] = '\0';

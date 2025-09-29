@@ -311,22 +311,6 @@ char* url_nonspecial_path_encode(const char* str) {
     if (c == '%' && i + 2 < cleaned_len && hex_to_int(cleaned[i + 1]) >= 0 && hex_to_int(cleaned[i + 2]) >= 0) {
       // Already percent-encoded sequence, keep as-is
       encoded_len += 3;
-    } else if (c == ' ') {
-      // Check if this space is at the end of the path (trailing space)
-      // Trailing spaces should be encoded as %20
-      int is_trailing = 1;
-      for (size_t k = i + 1; k < cleaned_len; k++) {
-        if (cleaned[k] != ' ') {
-          is_trailing = 0;
-          break;
-        }
-      }
-
-      if (is_trailing) {
-        encoded_len += 3;  // %20
-      } else {
-        encoded_len += 1;  // Keep space as-is
-      }
     } else if (c <= 32 || c == '"' || c == '<' || c == '>' || c == '^' || c == '{' || c == '}' || c == '`' ||
                c == 127 || c >= 128) {
       // Encode control characters, unsafe characters, and non-ASCII per URL spec
@@ -353,35 +337,6 @@ char* url_nonspecial_path_encode(const char* str) {
       encoded[j++] = cleaned[i + 1];
       encoded[j++] = cleaned[i + 2];
       i += 2;  // Skip the next two characters
-    } else if (c == ' ') {
-      // For non-special schemes, only the last trailing space should be encoded as %20
-      // Find the end of the space sequence
-      size_t space_end = i;
-      while (space_end < cleaned_len && cleaned[space_end] == ' ') {
-        space_end++;
-      }
-
-      // Check if this space sequence is at the end of the string (trailing)
-      if (space_end == cleaned_len) {
-        // This is a trailing space sequence
-        // Keep all spaces except the last one as-is, encode the last one
-        size_t spaces_to_keep = (space_end - i) - 1;
-        for (size_t k = 0; k < spaces_to_keep; k++) {
-          encoded[j++] = ' ';
-        }
-        // Encode the last space as %20
-        encoded[j++] = '%';
-        encoded[j++] = hex_chars[' ' >> 4];
-        encoded[j++] = hex_chars[' ' & 15];
-        i = space_end - 1;  // Skip to end of space sequence (loop will increment)
-      } else {
-        // This is not a trailing space sequence, keep all spaces as-is
-        size_t spaces_count = space_end - i;
-        for (size_t k = 0; k < spaces_count; k++) {
-          encoded[j++] = ' ';
-        }
-        i = space_end - 1;  // Skip to end of space sequence (loop will increment)
-      }
     } else if (c <= 32 || c == '"' || c == '<' || c == '>' || c == '^' || c == '{' || c == '}' || c == '`' ||
                c == 127 || c >= 128) {
       // Encode control characters, unsafe characters, and non-ASCII per URL spec
@@ -427,11 +382,17 @@ char* url_userinfo_encode_with_scheme_name(const char* str, const char* scheme) 
     }
 
     // Per WPT tests: always encode '[' and ']' characters in userinfo
-    // WebSocket schemes and non-special schemes: don't encode '@' and ':'
-    if (strcmp(scheme_clean, "ws") == 0 || strcmp(scheme_clean, "wss") == 0 || !is_special_scheme(scheme)) {
+    // For ALL schemes (special and non-special): always encode '@', ';', '=' per WPT urltestdata.json
+    // The previous logic was incorrect - WPT expects these characters encoded in ALL schemes
+    if (strcmp(scheme_clean, "ws") == 0 || strcmp(scheme_clean, "wss") == 0) {
       encode_closing_bracket = 1;  // Always encode ']' per WPT requirements
-      encode_at_symbol = 0;
+      encode_at_symbol = 0;        // WebSocket schemes are exception
       encode_colon = 0;
+    } else {
+      // For all other schemes including non-special: encode @, ;, =
+      encode_closing_bracket = 1;
+      encode_at_symbol = 1;
+      encode_colon = 1;
     }
 
     free(scheme_clean);
@@ -442,8 +403,8 @@ char* url_userinfo_encode_with_scheme_name(const char* str, const char* scheme) 
     unsigned char c = (unsigned char)str[i];
     if ((c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z') || (c >= '0' && c <= '9') || c == '-' || c == '_' ||
         c == '.' || c == '~' || c == '*' || c == '&' || c == '(' || c == ')' || c == '!' || c == '$' || c == '\'' ||
-        c == ',' || c == ';' || c == '=' || c == '+' || c == '%' || (!encode_closing_bracket && c == ']') ||
-        (!encode_at_symbol && c == '@') || (!encode_colon && c == ':')) {
+        c == ',' || c == '+' || c == '%' || (!encode_closing_bracket && c == ']') || (!encode_at_symbol && c == '@') ||
+        (!encode_colon && c == ':') || (!encode_at_symbol && c == ';') || (!encode_at_symbol && c == '=')) {
       // Note: @, :, ] encoding depends on scheme
       // Per WHATWG URL spec and WPT tests: encode [, <, >, ^, |, `, {, } characters
       encoded_len++;
@@ -462,9 +423,9 @@ char* url_userinfo_encode_with_scheme_name(const char* str, const char* scheme) 
     unsigned char c = (unsigned char)str[i];
     if ((c >= 'A' && c <= 'Z') || (c >= 'a' && c <= 'z') || (c >= '0' && c <= '9') || c == '-' || c == '_' ||
         c == '.' || c == '~' || c == '*' || c == '&' || c == '(' || c == ')' || c == '!' || c == '$' || c == '\'' ||
-        c == ',' || c == ';' || c == '=' || c == '+' || c == '%' || (!encode_closing_bracket && c == ']') ||
-        (!encode_at_symbol && c == '@') || (!encode_colon && c == ':')) {
-      // Note: @, :, ] encoding depends on scheme
+        c == ',' || c == '+' || c == '%' || (!encode_closing_bracket && c == ']') || (!encode_at_symbol && c == '@') ||
+        (!encode_colon && c == ':') || (!encode_at_symbol && c == ';') || (!encode_at_symbol && c == '=')) {
+      // Note: @, :, ], ;, = encoding depends on scheme
       // Per WHATWG URL spec and WPT tests: encode [, <, >, ^, |, `, {, } characters
       encoded[j++] = c;
     } else {

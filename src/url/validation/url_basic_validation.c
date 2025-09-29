@@ -135,8 +135,19 @@ int validate_url_characters(const char* url) {
 
   if (authority_pattern) {
     // Check if there's a valid scheme before "://"
-    if (authority_pattern > url && ((url[0] >= 'a' && url[0] <= 'z') || (url[0] >= 'A' && url[0] <= 'Z'))) {
+    // A valid scheme must start with a letter and contain only letters, digits, '+', '-', or '.'
+    size_t scheme_len = authority_pattern - url;
+    if (scheme_len > 0 && ((url[0] >= 'a' && url[0] <= 'z') || (url[0] >= 'A' && url[0] <= 'Z'))) {
       has_valid_scheme = 1;
+      // Validate the entire scheme, not just the first character
+      for (size_t i = 1; i < scheme_len; i++) {
+        char c = url[i];
+        if (!((c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9') || c == '+' || c == '-' ||
+              c == '.')) {
+          has_valid_scheme = 0;
+          break;
+        }
+      }
     }
   }
 

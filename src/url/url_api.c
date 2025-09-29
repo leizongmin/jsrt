@@ -69,9 +69,13 @@ static char* JSRT_StripURLControlCharacters(const char* input, size_t input_len)
     unsigned char c = (unsigned char)input[i];
 
     // Per WHATWG URL spec: "Remove all ASCII tab or newline from input"
-    // Remove tab (0x09), line feed (0x0A), and carriage return (0x0D)
-    if (c == 0x09 || c == 0x0A || c == 0x0D) {
-      continue;  // Skip these characters
+    // Convert tab (0x09) to space, remove line feed (0x0A) and carriage return (0x0D)
+    if (c == 0x09) {
+      result[j++] = ' ';  // Convert tab to space per WPT requirements
+      continue;
+    }
+    if (c == 0x0A || c == 0x0D) {
+      continue;  // Skip LF and CR characters
     }
 
     // For UTF-8 sequences, validate and copy them but don't reject based on specific characters

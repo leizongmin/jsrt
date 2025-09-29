@@ -304,16 +304,52 @@ char* url_nonspecial_path_encode(const char* str) {
   }
   cleaned[cleaned_len] = '\0';
 
-  // Second pass: encode the cleaned string
-  size_t encoded_len = 0;
+  // Second pass: normalize multiple consecutive spaces
+  // Per WPT tests: n consecutive spaces -> 1 space + (n-1) %20
+  char* normalized = malloc(cleaned_len * 3 + 1);  // Worst case: all spaces become %20
+  if (!normalized) {
+    free(cleaned);
+    return NULL;
+  }
+  size_t normalized_len = 0;
+
   for (size_t i = 0; i < cleaned_len; i++) {
     unsigned char c = (unsigned char)cleaned[i];
-    if (c == '%' && i + 2 < cleaned_len && hex_to_int(cleaned[i + 1]) >= 0 && hex_to_int(cleaned[i + 2]) >= 0) {
+    if (c == ' ') {
+      // Count consecutive spaces
+      size_t space_count = 1;
+      while (i + space_count < cleaned_len && cleaned[i + space_count] == ' ') {
+        space_count++;
+      }
+
+      // Apply normalization: 1 literal space + (n-1) %20
+      normalized[normalized_len++] = ' ';  // First space literal
+      for (size_t j = 1; j < space_count; j++) {
+        normalized[normalized_len++] = '%';
+        normalized[normalized_len++] = '2';
+        normalized[normalized_len++] = '0';
+      }
+
+      i += space_count - 1;  // Skip the processed spaces
+    } else {
+      normalized[normalized_len++] = c;
+    }
+  }
+  normalized[normalized_len] = '\0';
+
+  free(cleaned);  // Free original cleaned string
+
+  // Third pass: encode the normalized string
+  size_t encoded_len = 0;
+  for (size_t i = 0; i < normalized_len; i++) {
+    unsigned char c = (unsigned char)normalized[i];
+    if (c == '%' && i + 2 < normalized_len && hex_to_int(normalized[i + 1]) >= 0 && hex_to_int(normalized[i + 2]) >= 0) {
       // Already percent-encoded sequence, keep as-is
       encoded_len += 3;
-    } else if (c <= 32 || c == '"' || c == '<' || c == '>' || c == '^' || c == '{' || c == '}' || c == '`' ||
+    } else if (c < 32 || c == '"' || c == '<' || c == '>' || c == '^' || c == '{' || c == '}' || c == '`' ||
                c == 127 || c >= 128) {
       // Encode control characters, unsafe characters, and non-ASCII per URL spec
+      // Note: Spaces (0x20) are NOT encoded in non-special scheme paths per WPT tests
       // Note: '[' and ']' are NOT encoded in paths per WPT tests
       // Note: '\' is NOT encoded in non-special scheme paths (unlike special schemes)
       encoded_len += 3;  // %XX
@@ -324,22 +360,23 @@ char* url_nonspecial_path_encode(const char* str) {
 
   char* encoded = safe_malloc_for_encoding(encoded_len);
   if (!encoded) {
-    free(cleaned);
+    free(normalized);
     return NULL;
   }
   size_t j = 0;
 
-  for (size_t i = 0; i < cleaned_len; i++) {
-    unsigned char c = (unsigned char)cleaned[i];
-    if (c == '%' && i + 2 < cleaned_len && hex_to_int(cleaned[i + 1]) >= 0 && hex_to_int(cleaned[i + 2]) >= 0) {
+  for (size_t i = 0; i < normalized_len; i++) {
+    unsigned char c = (unsigned char)normalized[i];
+    if (c == '%' && i + 2 < normalized_len && hex_to_int(normalized[i + 1]) >= 0 && hex_to_int(normalized[i + 2]) >= 0) {
       // Already percent-encoded sequence, copy as-is
-      encoded[j++] = cleaned[i];
-      encoded[j++] = cleaned[i + 1];
-      encoded[j++] = cleaned[i + 2];
+      encoded[j++] = normalized[i];
+      encoded[j++] = normalized[i + 1];
+      encoded[j++] = normalized[i + 2];
       i += 2;  // Skip the next two characters
-    } else if (c <= 32 || c == '"' || c == '<' || c == '>' || c == '^' || c == '{' || c == '}' || c == '`' ||
+    } else if (c < 32 || c == '"' || c == '<' || c == '>' || c == '^' || c == '{' || c == '}' || c == '`' ||
                c == 127 || c >= 128) {
       // Encode control characters, unsafe characters, and non-ASCII per URL spec
+      // Note: Spaces (0x20) are NOT encoded in non-special scheme paths per WPT tests
       // Note: '[' and ']' are NOT encoded in paths per WPT tests
       // Note: '\' is NOT encoded in non-special scheme paths (unlike special schemes)
       encoded[j++] = '%';
@@ -351,7 +388,7 @@ char* url_nonspecial_path_encode(const char* str) {
   }
   encoded[j] = '\0';
 
-  free(cleaned);
+  free(normalized);
   return encoded;
 }
 

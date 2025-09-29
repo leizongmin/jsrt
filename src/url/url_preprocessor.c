@@ -502,14 +502,27 @@ int is_relative_url(const char* cleaned_url, const char* base) {
               // Same scheme as base: relative path
               // Different scheme from base: absolute URL
 
-              // Special case: file URLs with Windows drive letters are always absolute
-              // Example: "file:c:\foo\bar.html" should be absolute even with file: base
+              // Special case: file URLs with Windows drive letters
+              // Check if base URL also has file scheme to determine relative vs absolute
               if (strcmp(scheme, "file:") == 0 && scheme_len + 3 < strlen(cleaned_url) &&
                   isalpha(cleaned_url[scheme_len + 1]) &&
                   (cleaned_url[scheme_len + 2] == ':' || cleaned_url[scheme_len + 2] == '|')) {
-                // This is file: followed by drive letter - always absolute
-                free(scheme);
-                return 0;
+                // This is file: followed by drive letter
+                // Per WHATWG URL spec: "file:C:/" against "file://host/" should be relative
+                // Only treat as absolute if base is NOT a file URL
+                JSRT_URL* base_url = JSRT_ParseURL(base, NULL);
+                if (base_url && strcmp(base_url->protocol, "file:") == 0) {
+                  // Same file scheme as base -> treat as relative URL
+                  JSRT_FreeURL(base_url);
+                  free(scheme);
+                  return 1;
+                } else {
+                  // Different scheme from base -> absolute URL
+                  if (base_url)
+                    JSRT_FreeURL(base_url);
+                  free(scheme);
+                  return 0;
+                }
               }
 
               // Special case: file URLs with relative path patterns like "file:.", "file:..", "file:..."

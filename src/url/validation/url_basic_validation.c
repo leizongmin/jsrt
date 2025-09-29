@@ -175,7 +175,14 @@ int validate_url_characters(const char* url) {
       authority_end = url + strlen(url);
 
     // Check if there's an @ symbol indicating userinfo
-    const char* at_symbol = strchr(authority_start, '@');
+    // Note: Must find the RIGHTMOST @ symbol, as @ can appear in userinfo
+    const char* at_symbol = NULL;
+    for (const char* p = authority_end - 1; p >= authority_start; p--) {
+      if (*p == '@') {
+        at_symbol = p;
+        break;
+      }
+    }
     if (at_symbol && at_symbol < authority_end) {
       // This URL contains userinfo - check for problematic character patterns
       const char* userinfo_start = authority_start;

@@ -211,7 +211,57 @@ JSRT_URL* handle_protocol_relative(const char* cleaned_url, const char* base) {
       return NULL;
     }
 
-    // Create a full URL by combining base protocol with the protocol-relative URL
+    // Special handling for URLs with multiple leading slashes like "///path"
+    // According to WHATWG, "///path" means empty authority + path="/path"
+    // But for special schemes, extract hostname from the beginning of path
+    if (strncmp(cleaned_url, "///", 3) == 0) {
+      // For special schemes like http:, https:, etc., extract hostname from path
+      // Exception: file: URLs should NOT extract hostnames from ///path patterns
+      if (is_special_scheme(base_url->protocol) && strcmp(base_url->protocol, "file:") != 0) {
+        // Find where the path actually starts (after potential hostname)
+        const char* path_start = cleaned_url + 3;  // Skip "///"
+
+        // Skip any additional leading slashes
+        while (*path_start == '/') {
+          path_start++;
+        }
+
+        const char* hostname_end = path_start;
+
+        // Find end of potential hostname (until next slash, query, or fragment)
+        while (*hostname_end && *hostname_end != '/' && *hostname_end != '?' && *hostname_end != '#') {
+          hostname_end++;
+        }
+
+        if (hostname_end > path_start) {
+          // Extract hostname and create proper URL
+          size_t hostname_len = hostname_end - path_start;
+          size_t full_url_len =
+              strlen(base_url->protocol) + 2 + hostname_len + strlen(hostname_end) + 2;  // +2 for extra safety
+          char* full_url = malloc(full_url_len);
+          if (!full_url) {
+            JSRT_FreeURL(base_url);
+            return NULL;
+          }
+
+          // Create "protocol://hostname/path" (ensure path starts with /)
+          if (*hostname_end == '\0') {
+            // No path specified, use default "/"
+            snprintf(full_url, full_url_len, "%s//%.*s/", base_url->protocol, (int)hostname_len, path_start);
+          } else {
+            snprintf(full_url, full_url_len, "%s//%.*s%s", base_url->protocol, (int)hostname_len, path_start,
+                     hostname_end);
+          }
+          JSRT_FreeURL(base_url);
+
+          JSRT_URL* result = JSRT_ParseURL(full_url, NULL);
+          free(full_url);
+          return result;
+        }
+      }
+    }
+
+    // Standard case: Create a full URL by combining base protocol with the protocol-relative URL
     size_t full_url_len = strlen(base_url->protocol) + strlen(cleaned_url) + 2;
     char* full_url = malloc(full_url_len);
     if (!full_url) {

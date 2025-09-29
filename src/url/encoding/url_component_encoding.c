@@ -343,13 +343,14 @@ char* url_nonspecial_path_encode(const char* str) {
   size_t encoded_len = 0;
   for (size_t i = 0; i < normalized_len; i++) {
     unsigned char c = (unsigned char)normalized[i];
-    if (c == '%' && i + 2 < normalized_len && hex_to_int(normalized[i + 1]) >= 0 && hex_to_int(normalized[i + 2]) >= 0) {
+    if (c == '%' && i + 2 < normalized_len && hex_to_int(normalized[i + 1]) >= 0 &&
+        hex_to_int(normalized[i + 2]) >= 0) {
       // Already percent-encoded sequence, keep as-is
       encoded_len += 3;
-    } else if (c < 32 || c == '"' || c == '<' || c == '>' || c == '^' || c == '{' || c == '}' || c == '`' ||
+    } else if (c <= 32 || c == '"' || c == '<' || c == '>' || c == '^' || c == '{' || c == '}' || c == '`' ||
                c == 127 || c >= 128) {
-      // Encode control characters, unsafe characters, and non-ASCII per URL spec
-      // Note: Spaces (0x20) are NOT encoded in non-special scheme paths per WPT tests
+      // Encode control characters, spaces, unsafe characters, and non-ASCII per URL spec
+      // Note: Spaces (0x20) ARE encoded in non-special scheme paths per WPT test data
       // Note: '[' and ']' are NOT encoded in paths per WPT tests
       // Note: '\' is NOT encoded in non-special scheme paths (unlike special schemes)
       encoded_len += 3;  // %XX
@@ -367,16 +368,17 @@ char* url_nonspecial_path_encode(const char* str) {
 
   for (size_t i = 0; i < normalized_len; i++) {
     unsigned char c = (unsigned char)normalized[i];
-    if (c == '%' && i + 2 < normalized_len && hex_to_int(normalized[i + 1]) >= 0 && hex_to_int(normalized[i + 2]) >= 0) {
+    if (c == '%' && i + 2 < normalized_len && hex_to_int(normalized[i + 1]) >= 0 &&
+        hex_to_int(normalized[i + 2]) >= 0) {
       // Already percent-encoded sequence, copy as-is
       encoded[j++] = normalized[i];
       encoded[j++] = normalized[i + 1];
       encoded[j++] = normalized[i + 2];
       i += 2;  // Skip the next two characters
-    } else if (c < 32 || c == '"' || c == '<' || c == '>' || c == '^' || c == '{' || c == '}' || c == '`' ||
+    } else if (c <= 32 || c == '"' || c == '<' || c == '>' || c == '^' || c == '{' || c == '}' || c == '`' ||
                c == 127 || c >= 128) {
-      // Encode control characters, unsafe characters, and non-ASCII per URL spec
-      // Note: Spaces (0x20) are NOT encoded in non-special scheme paths per WPT tests
+      // Encode control characters, spaces, unsafe characters, and non-ASCII per URL spec
+      // Note: Spaces (0x20) ARE encoded in non-special scheme paths per WPT test data
       // Note: '[' and ']' are NOT encoded in paths per WPT tests
       // Note: '\' is NOT encoded in non-special scheme paths (unlike special schemes)
       encoded[j++] = '%';

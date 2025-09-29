@@ -128,6 +128,12 @@ int validate_url_characters(const char* url) {
 
   size_t url_len = strlen(url);  // Compute once for efficiency
 
+  // Reject URLs starting with invalid characters
+  // Per WHATWG URL spec and WPT tests, URLs starting with '<' should be rejected
+  if (url_len > 0 && url[0] == '<') {
+    return 0;  // URLs cannot start with '<' character
+  }
+
   // Context-aware validation for angle brackets and other special characters
   // Check for invalid characters in hostname context vs. relative URL context
   const char* authority_pattern = strstr(url, "://");

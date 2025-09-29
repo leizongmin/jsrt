@@ -186,8 +186,8 @@ JSRT_URL* resolve_relative_url(const char* url, const char* base) {
       JSRT_FreeURL(result);
       return NULL;
     }
-  } else if (strcmp(result->protocol, "file:") == 0 && strlen(url) >= 3 && 
-             isalpha(url[0]) && (url[1] == ':' || url[1] == '|') && url[2] == '/') {
+  } else if (strcmp(result->protocol, "file:") == 0 && strlen(url) >= 3 && isalpha(url[0]) &&
+             (url[1] == ':' || url[1] == '|') && url[2] == '/') {
     // Windows drive letter pattern for file URLs (e.g., "C:/", "D:/")
     // Treat as absolute path that preserves base URL's hostname
     // Add leading slash to make it a proper absolute path
@@ -198,7 +198,7 @@ JSRT_URL* resolve_relative_url(const char* url, const char* base) {
       return NULL;
     }
     snprintf(absolute_path, strlen(url) + 2, "/%s", url);
-    
+
     if (!handle_absolute_path(absolute_path, base_url, result)) {
       free(absolute_path);
       JSRT_FreeURL(base_url);

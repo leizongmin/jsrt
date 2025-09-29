@@ -115,7 +115,30 @@ char* handle_backslash_relative_path(const char* url, JSRT_URL* base_url, JSRT_U
 
 // Handle absolute path resolution (URLs starting with '/')
 int handle_absolute_path(const char* url, JSRT_URL* base_url, JSRT_URL* result) {
-  char* path_copy = strdup(url);
+  // First normalize backslashes in the path for special schemes
+  char* normalized_url = NULL;
+  int is_special = is_special_scheme(result->protocol);
+
+  if (is_special) {
+    // For special schemes, normalize backslashes to forward slashes
+    normalized_url = malloc(strlen(url) + 1);
+    if (!normalized_url) {
+      return 0;
+    }
+    strcpy(normalized_url, url);
+    for (char* p = normalized_url; *p; p++) {
+      if (*p == '\\') {
+        *p = '/';
+      }
+    }
+  } else {
+    normalized_url = strdup(url);
+    if (!normalized_url) {
+      return 0;
+    }
+  }
+
+  char* path_copy = normalized_url;
   char* search_pos = strchr(path_copy, '?');
   char* hash_pos = strchr(path_copy, '#');
 
@@ -123,14 +146,14 @@ int handle_absolute_path(const char* url, JSRT_URL* base_url, JSRT_URL* result) 
     *hash_pos = '\0';
     result->hash = malloc(strlen(hash_pos + 1) + 2);  // +1 for '#', +1 for '\0'
     if (!result->hash) {
-      free(path_copy);
+      free(normalized_url);
       return 0;
     }
     snprintf(result->hash, strlen(hash_pos + 1) + 2, "#%s", hash_pos + 1);
   } else {
     result->hash = strdup("");
     if (!result->hash) {
-      free(path_copy);
+      free(normalized_url);
       return 0;
     }
   }
@@ -141,14 +164,14 @@ int handle_absolute_path(const char* url, JSRT_URL* base_url, JSRT_URL* result) 
     size_t search_len = search_end - search_pos;
     result->search = malloc(search_len + 2);  // +1 for '?', +1 for '\0'
     if (!result->search) {
-      free(path_copy);
+      free(normalized_url);
       return 0;
     }
     snprintf(result->search, search_len + 2, "?%.*s", (int)(search_len - 1), search_pos + 1);
   } else {
     result->search = strdup("");
     if (!result->search) {
-      free(path_copy);
+      free(normalized_url);
       return 0;
     }
   }
@@ -181,7 +204,7 @@ int handle_absolute_path(const char* url, JSRT_URL* base_url, JSRT_URL* result) 
       result->pathname = url_nonspecial_path_encode(path_copy);
     }
   }
-  free(path_copy);
+  free(normalized_url);
   return 1;
 }
 

@@ -65,28 +65,28 @@ int validate_credentials(const char* credentials) {
   for (const char* p = credentials; *p; p++) {
     unsigned char c = (unsigned char)*p;
 
-    // Always reject characters that would completely break URL parsing
-    // Per WHATWG URL spec, control characters and URL structure delimiters are invalid
-    if (c == 0x09 || c == 0x0A || c == 0x0D ||  // control chars: tab, LF, CR
-        c == '/' || c == '?' || c == '#') {     // URL structure delimiters (except @)
-      return 0;                                 // Invalid character found
+    // Per WHATWG URL spec, only reject characters that would completely break URL parsing
+    // Most special characters should be allowed and will be percent-encoded appropriately
+
+    // Reject control characters (except those that are already normalized)
+    if (c == 0x09 || c == 0x0A || c == 0x0D) {  // tab, LF, CR - should be stripped during preprocessing
+      return 0;
     }
 
-    // Reject other ASCII control characters (< 0x20) except those already checked
+    // Reject other ASCII control characters (< 0x20) except space (0x20)
     if (c < 0x20) {
       return 0;
     }
 
-    // Per WPT tests, reject the most problematic special characters that cause URL parsing to fail
-    // Be more conservative - only reject characters that consistently cause failures
-    if (c == '"' || c == '<' || c == '>' ||  // quotes and angle brackets (definitely problematic)
-        c == '\\' ||                         // backslash (problematic in userinfo)
-        c == '`' ||                          // backtick (problematic)
-        c == '{' || c == '}') {              // braces (problematic)
+    // Only reject URL structure delimiters that would break parsing
+    // According to WHATWG URL spec, these are the only truly invalid characters in userinfo:
+    if (c == '/' || c == '?' || c == '#') {  // URL structure delimiters
       return 0;                              // Invalid character found
     }
 
-    // Allow other characters like [], ^, | as they may be valid in some contexts
+    // Allow all other characters - they will be percent-encoded as needed
+    // This includes: !"$%&'()*+,-.;<=>@[\]^_`{|}~ and others
+    // Per WPT tests, these should be accepted and properly encoded
     // These will be percent-encoded as needed
   }
   return 1;  // Valid - remaining characters will be percent-encoded

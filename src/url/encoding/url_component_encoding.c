@@ -347,10 +347,10 @@ char* url_nonspecial_path_encode(const char* str) {
         hex_to_int(normalized[i + 2]) >= 0) {
       // Already percent-encoded sequence, keep as-is
       encoded_len += 3;
-    } else if (c <= 32 || c == '"' || c == '<' || c == '>' || c == '^' || c == '{' || c == '}' || c == '`' ||
-               c == 127 || c >= 128) {
-      // Encode control characters, spaces, unsafe characters, and non-ASCII per URL spec
-      // Note: Spaces (0x20) ARE encoded in non-special scheme paths per WPT test data
+    } else if (c < 32 || c == '"' || c == '<' || c == '>' || c == '^' || c == '{' || c == '}' || c == '`' || c == 127 ||
+               c >= 128) {
+      // Encode control characters, unsafe characters, and non-ASCII per URL spec
+      // Note: Spaces (0x20) are NOT encoded here - they were normalized in previous pass
       // Note: '[' and ']' are NOT encoded in paths per WPT tests
       // Note: '\' is NOT encoded in non-special scheme paths (unlike special schemes)
       encoded_len += 3;  // %XX
@@ -375,10 +375,10 @@ char* url_nonspecial_path_encode(const char* str) {
       encoded[j++] = normalized[i + 1];
       encoded[j++] = normalized[i + 2];
       i += 2;  // Skip the next two characters
-    } else if (c <= 32 || c == '"' || c == '<' || c == '>' || c == '^' || c == '{' || c == '}' || c == '`' ||
-               c == 127 || c >= 128) {
-      // Encode control characters, spaces, unsafe characters, and non-ASCII per URL spec
-      // Note: Spaces (0x20) ARE encoded in non-special scheme paths per WPT test data
+    } else if (c < 32 || c == '"' || c == '<' || c == '>' || c == '^' || c == '{' || c == '}' || c == '`' || c == 127 ||
+               c >= 128) {
+      // Encode control characters, unsafe characters, and non-ASCII per URL spec
+      // Note: Spaces (0x20) are NOT encoded here - they were normalized in previous pass
       // Note: '[' and ']' are NOT encoded in paths per WPT tests
       // Note: '\' is NOT encoded in non-special scheme paths (unlike special schemes)
       encoded[j++] = '%';

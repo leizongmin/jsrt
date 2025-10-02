@@ -29,9 +29,9 @@ char* url_fragment_encode(const char* str) {
     if (c == '%' && i + 2 < len && hex_to_int(str[i + 1]) >= 0 && hex_to_int(str[i + 2]) >= 0) {
       // Already percent-encoded sequence, keep as-is
       encoded_len += 3;
-    } else if (c <= 32 || c == '"' || c == '<' || c == '>' || c == '^' || c == '{' || c == '|' || c == '}' ||
-               c == '`' || c >= 127) {
+    } else if (c <= 32 || c == '"' || c == '<' || c == '>' || c == '`' || c >= 127) {
       // Need to percent-encode unsafe characters including backtick for fragments
+      // Per WPT tests: ^, {, |, } should NOT be encoded in fragments
       // Note: backslashes (\\) are allowed in fragments per WPT tests
       // Note: Unicode characters (>= 127) must be percent-encoded per WHATWG URL spec
       encoded_len += 3;  // %XX
@@ -54,9 +54,9 @@ char* url_fragment_encode(const char* str) {
       encoded[j++] = str[i + 1];
       encoded[j++] = str[i + 2];
       i += 2;  // Skip the next two characters
-    } else if (c <= 32 || c == '"' || c == '<' || c == '>' || c == '^' || c == '{' || c == '|' || c == '}' ||
-               c == '`' || c >= 127) {
+    } else if (c <= 32 || c == '"' || c == '<' || c == '>' || c == '`' || c >= 127) {
       // Need to percent-encode unsafe characters including backtick for fragments
+      // Per WPT tests: ^, {, |, } should NOT be encoded in fragments
       // Note: backslashes (\\) are allowed in fragments per WPT tests
       // Note: Unicode characters (>= 127) must be percent-encoded per WHATWG URL spec
       encoded[j++] = '%';
@@ -85,9 +85,9 @@ char* url_fragment_encode_nonspecial(const char* str) {
     if (c == '%' && i + 2 < len && hex_to_int(str[i + 1]) >= 0 && hex_to_int(str[i + 2]) >= 0) {
       // Already percent-encoded sequence, keep as-is
       encoded_len += 3;
-    } else if (c <= 32 || c == '"' || c == '<' || c == '>' || c == '^' || c == '{' || c == '|' || c == '}' ||
-               c == '`' || c >= 127) {
+    } else if (c <= 32 || c == '"' || c == '<' || c == '>' || c == '`' || c >= 127) {
       // Need to percent-encode unsafe characters including spaces and Unicode characters
+      // Per WPT tests: ^, {, |, } should NOT be encoded in fragments
       // WPT tests expect Unicode characters (>= 127) to be encoded even for non-special schemes
       encoded_len += 3;  // %XX
     } else {
@@ -109,9 +109,9 @@ char* url_fragment_encode_nonspecial(const char* str) {
       encoded[j++] = str[i + 1];
       encoded[j++] = str[i + 2];
       i += 2;  // Skip the next two characters
-    } else if (c <= 32 || c == '"' || c == '<' || c == '>' || c == '^' || c == '{' || c == '|' || c == '}' ||
-               c == '`' || c >= 127) {
+    } else if (c <= 32 || c == '"' || c == '<' || c == '>' || c == '`' || c >= 127) {
       // Need to percent-encode unsafe characters including spaces and Unicode characters
+      // Per WPT tests: ^, {, |, } should NOT be encoded in fragments
       // WPT tests expect Unicode characters (>= 127) to be encoded even for non-special schemes
       encoded[j++] = '%';
       encoded[j++] = hex_chars[c >> 4];
@@ -282,7 +282,7 @@ char* url_path_encode_file(const char* str) {
 }
 
 // Special encoding for non-special scheme paths
-// Per WPT tests: trailing spaces (before end of path) should be encoded as %20
+// Per WPT tests: ALL spaces should be encoded as %20 in non-special paths
 // Tab and newline characters should be removed (not encoded)
 char* url_nonspecial_path_encode(const char* str) {
   if (!str)
@@ -304,66 +304,17 @@ char* url_nonspecial_path_encode(const char* str) {
   }
   cleaned[cleaned_len] = '\0';
 
-  // Second pass: handle spaces per WPT requirements
-  // Per WPT tests: for non-special opaque paths, spaces are kept literal EXCEPT
-  // trailing spaces before end/query/fragment where only the LAST space becomes %20
-  char* normalized = malloc(cleaned_len * 3 + 1);  // Worst case
-  if (!normalized) {
-    free(cleaned);
-    return NULL;
-  }
-  size_t normalized_len = 0;
-
+  // Second pass: encode characters including spaces
+  size_t encoded_len = 0;
   for (size_t i = 0; i < cleaned_len; i++) {
     unsigned char c = (unsigned char)cleaned[i];
-    if (c == ' ') {
-      // Count consecutive spaces
-      size_t space_count = 1;
-      while (i + space_count < cleaned_len && cleaned[i + space_count] == ' ') {
-        space_count++;
-      }
-
-      // Check if this is a trailing space sequence (before end or before ?/#)
-      size_t next_pos = i + space_count;
-      int is_trailing = (next_pos >= cleaned_len || cleaned[next_pos] == '?' || cleaned[next_pos] == '#');
-
-      if (is_trailing) {
-        // Trailing spaces: all literal except last one becomes %20
-        for (size_t j = 0; j < space_count - 1; j++) {
-          normalized[normalized_len++] = ' ';
-        }
-        // Last space becomes %20
-        normalized[normalized_len++] = '%';
-        normalized[normalized_len++] = '2';
-        normalized[normalized_len++] = '0';
-      } else {
-        // Non-trailing spaces: all literal
-        for (size_t j = 0; j < space_count; j++) {
-          normalized[normalized_len++] = ' ';
-        }
-      }
-
-      i += space_count - 1;  // Skip processed spaces
-    } else {
-      normalized[normalized_len++] = c;
-    }
-  }
-  normalized[normalized_len] = '\0';
-
-  free(cleaned);
-
-  // Third pass: encode other characters (but not spaces which were handled above)
-  size_t encoded_len = 0;
-  for (size_t i = 0; i < normalized_len; i++) {
-    unsigned char c = (unsigned char)normalized[i];
-    if (c == '%' && i + 2 < normalized_len && hex_to_int(normalized[i + 1]) >= 0 &&
-        hex_to_int(normalized[i + 2]) >= 0) {
+    if (c == '%' && i + 2 < cleaned_len && hex_to_int(cleaned[i + 1]) >= 0 && hex_to_int(cleaned[i + 2]) >= 0) {
       // Already percent-encoded sequence, keep as-is
       encoded_len += 3;
-    } else if (c < 32 || c == '"' || c == '<' || c == '>' || c == '^' || c == '{' || c == '}' || c == '`' || c == 127 ||
-               c >= 128) {
-      // Encode control characters, unsafe characters, and non-ASCII
-      // Note: spaces (0x20) are NOT encoded here - they were handled in previous pass
+    } else if (c <= 32 || c == '"' || c == '<' || c == '>' || c == '^' || c == '{' || c == '}' || c == '`' ||
+               c == 127 || c >= 128) {
+      // Encode control characters, spaces, unsafe characters, and non-ASCII
+      // Per WPT tests: spaces (0x20) MUST be encoded as %20 in non-special paths
       // Note: '[' and ']' are NOT encoded in paths per WPT tests
       // Note: '\' is NOT encoded in non-special scheme paths (unlike special schemes)
       encoded_len += 3;  // %XX
@@ -374,24 +325,23 @@ char* url_nonspecial_path_encode(const char* str) {
 
   char* encoded = safe_malloc_for_encoding(encoded_len);
   if (!encoded) {
-    free(normalized);
+    free(cleaned);
     return NULL;
   }
   size_t j = 0;
 
-  for (size_t i = 0; i < normalized_len; i++) {
-    unsigned char c = (unsigned char)normalized[i];
-    if (c == '%' && i + 2 < normalized_len && hex_to_int(normalized[i + 1]) >= 0 &&
-        hex_to_int(normalized[i + 2]) >= 0) {
+  for (size_t i = 0; i < cleaned_len; i++) {
+    unsigned char c = (unsigned char)cleaned[i];
+    if (c == '%' && i + 2 < cleaned_len && hex_to_int(cleaned[i + 1]) >= 0 && hex_to_int(cleaned[i + 2]) >= 0) {
       // Already percent-encoded sequence, copy as-is
-      encoded[j++] = normalized[i];
-      encoded[j++] = normalized[i + 1];
-      encoded[j++] = normalized[i + 2];
+      encoded[j++] = cleaned[i];
+      encoded[j++] = cleaned[i + 1];
+      encoded[j++] = cleaned[i + 2];
       i += 2;  // Skip the next two characters
-    } else if (c < 32 || c == '"' || c == '<' || c == '>' || c == '^' || c == '{' || c == '}' || c == '`' || c == 127 ||
-               c >= 128) {
-      // Encode control characters, unsafe characters, and non-ASCII
-      // Note: spaces (0x20) are NOT encoded here - they were handled in previous pass
+    } else if (c <= 32 || c == '"' || c == '<' || c == '>' || c == '^' || c == '{' || c == '}' || c == '`' ||
+               c == 127 || c >= 128) {
+      // Encode control characters, spaces, unsafe characters, and non-ASCII
+      // Per WPT tests: spaces (0x20) MUST be encoded as %20 in non-special paths
       // Note: '[' and ']' are NOT encoded in paths per WPT tests
       // Note: '\' is NOT encoded in non-special scheme paths (unlike special schemes)
       encoded[j++] = '%';
@@ -403,7 +353,7 @@ char* url_nonspecial_path_encode(const char* str) {
   }
   encoded[j] = '\0';
 
-  free(normalized);
+  free(cleaned);
   return encoded;
 }
 
@@ -433,19 +383,13 @@ char* url_userinfo_encode_with_scheme_name(const char* str, const char* scheme) 
       scheme_clean[scheme_len - 1] = '\0';
     }
 
-    // Per WPT tests: always encode '[' and ']' characters in userinfo
-    // For ALL schemes (special and non-special): always encode '@', ';', '=' per WPT urltestdata.json
-    // The previous logic was incorrect - WPT expects these characters encoded in ALL schemes
-    if (strcmp(scheme_clean, "ws") == 0 || strcmp(scheme_clean, "wss") == 0) {
-      encode_closing_bracket = 1;  // Always encode ']' per WPT requirements
-      encode_at_symbol = 0;        // WebSocket schemes are exception
-      encode_colon = 0;
-    } else {
-      // For all other schemes including non-special: encode @, ;, =
-      encode_closing_bracket = 1;
-      encode_at_symbol = 1;
-      encode_colon = 1;
-    }
+    // Per WPT tests: userinfo encoding rules
+    // For ALL schemes: always encode '[', ']', '<', '>', '^', '|', '`', '{', '}'
+    // For ALL schemes: always encode ';', '<', '=', '>', '@' per WPT urltestdata.json
+    // ws/wss are NOT exceptions - wss is a special scheme and follows special scheme rules
+    encode_closing_bracket = 1;  // Always encode ']' per WPT requirements
+    encode_at_symbol = 1;        // Always encode '@', ';', '='
+    encode_colon = 1;            // Always encode ':'
 
     free(scheme_clean);
   }
@@ -702,11 +646,11 @@ char* url_query_encode_with_scheme(const char* str, const char* scheme) {
     if (c == '%' && i + 2 < len && hex_to_int(str[i + 1]) >= 0 && hex_to_int(str[i + 2]) >= 0) {
       // Already percent-encoded sequence, keep as-is
       add_len = 3;
-    } else if (c <= 32 || c >= 127 || c == '"' || c == '<' || c == '>' || c == '\\' || c == '^' || c == '|' ||
-               (is_special && c == '\'') || (!is_special && (c == '`' || c == '{' || c == '}'))) {
+    } else if (c <= 32 || c >= 127 || c == '"' || c == '<' || c == '>' || (is_special && c == '\'')) {
       // Encode control characters, space, non-ASCII characters, and specific unsafe characters
-      // For special schemes: encode single quotes but preserve backticks and braces in query
-      // For non-special schemes: encode backticks and braces
+      // Per WPT tests: \, ^, _, `, {, |, } should NOT be encoded in query strings
+      // For special schemes: encode single quotes (')
+      // For non-special schemes: do NOT encode single quotes (')
       add_len = 3;  // %XX
     } else {
       add_len = 1;
@@ -733,11 +677,11 @@ char* url_query_encode_with_scheme(const char* str, const char* scheme) {
       encoded[j++] = str[i + 1];
       encoded[j++] = str[i + 2];
       i += 2;  // Skip the next two characters
-    } else if (c <= 32 || c >= 127 || c == '"' || c == '<' || c == '>' || c == '\\' || c == '^' || c == '|' ||
-               (is_special && c == '\'') || (!is_special && (c == '`' || c == '{' || c == '}'))) {
+    } else if (c <= 32 || c >= 127 || c == '"' || c == '<' || c == '>' || (is_special && c == '\'')) {
       // Encode control characters, space, non-ASCII characters, and specific unsafe characters
-      // For special schemes: encode single quotes but preserve backticks and braces in query
-      // For non-special schemes: encode backticks and braces
+      // Per WPT tests: \, ^, _, `, {, |, } should NOT be encoded in query strings
+      // For special schemes: encode single quotes (')
+      // For non-special schemes: do NOT encode single quotes (')
       encoded[j++] = '%';
       encoded[j++] = hex_chars[c >> 4];
       encoded[j++] = hex_chars[c & 15];

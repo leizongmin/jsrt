@@ -287,9 +287,20 @@ char* normalize_url_backslashes(const char* url) {
     is_special = 1;
   }
 
-  // Find fragment position - backslashes after # are never normalized
+  // Find query and fragment positions - backslashes after ? or # are never normalized
+  // Per WHATWG URL spec: backslash normalization only applies to scheme, authority, and path
+  char* query_pos = strchr(url, '?');
   char* fragment_pos = strchr(url, '#');
-  size_t stop_pos = fragment_pos ? (fragment_pos - url) : len;
+
+  // Stop normalization at the first of query or fragment
+  size_t stop_pos = len;
+  if (query_pos && fragment_pos) {
+    stop_pos = (query_pos < fragment_pos) ? (query_pos - url) : (fragment_pos - url);
+  } else if (query_pos) {
+    stop_pos = query_pos - url;
+  } else if (fragment_pos) {
+    stop_pos = fragment_pos - url;
+  }
 
   // Track if we're in the path section
   int in_path_section = 0;

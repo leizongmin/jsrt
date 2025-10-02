@@ -364,18 +364,10 @@ char* preprocess_url_string(const char* url, const char* base) {
     return NULL;
   }
 
-  // Check for any remaining C0 control characters (tab, newline, carriage return)
-  // After trimming leading/trailing whitespace, these should cause URL parsing to fail
-  JSRT_Debug("preprocess_url_string: checking for control characters in '%s'", trimmed_url);
-  for (const char* p = trimmed_url; *p; p++) {
-    unsigned char c = (unsigned char)*p;
-    if (c == 0x09 || c == 0x0A || c == 0x0D) {  // Tab, LF, CR
-      JSRT_Debug("preprocess_url_string: found control character 0x%02X, rejecting URL", c);
-      free(trimmed_url);
-      return NULL;  // Reject URLs containing control characters
-    }
-  }
-  JSRT_Debug("preprocess_url_string: no control characters found");
+  // Note: C0 control characters (tab, newline, carriage return) will be removed by
+  // remove_all_ascii_whitespace() function later in the parsing pipeline
+  // Per WHATWG URL spec, these characters should be removed, not rejected
+  JSRT_Debug("preprocess_url_string: control characters (tabs, LF, CR) will be removed during parsing");
 
   // Validate URL characters (rejects fullwidth percent, invalid Unicode, etc.)
   if (!validate_url_characters(trimmed_url)) {

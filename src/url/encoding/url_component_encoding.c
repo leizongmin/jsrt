@@ -304,9 +304,10 @@ char* url_nonspecial_path_encode(const char* str) {
   }
   cleaned[cleaned_len] = '\0';
 
-  // Second pass: normalize multiple consecutive spaces
-  // Per WPT tests: n consecutive spaces -> 1 space + (n-1) %20
-  char* normalized = malloc(cleaned_len * 3 + 1);  // Worst case: all spaces become %20
+  // Second pass: handle spaces per WPT requirements
+  // Per WPT tests: for non-special opaque paths, spaces are kept literal EXCEPT
+  // trailing spaces before end/query/fragment where only the LAST space becomes %20
+  char* normalized = malloc(cleaned_len * 3 + 1);  // Worst case
   if (!normalized) {
     free(cleaned);
     return NULL;
@@ -322,24 +323,36 @@ char* url_nonspecial_path_encode(const char* str) {
         space_count++;
       }
 
-      // Apply normalization: 1 literal space + (n-1) %20
-      normalized[normalized_len++] = ' ';  // First space literal
-      for (size_t j = 1; j < space_count; j++) {
+      // Check if this is a trailing space sequence (before end or before ?/#)
+      size_t next_pos = i + space_count;
+      int is_trailing = (next_pos >= cleaned_len || cleaned[next_pos] == '?' || cleaned[next_pos] == '#');
+
+      if (is_trailing) {
+        // Trailing spaces: all literal except last one becomes %20
+        for (size_t j = 0; j < space_count - 1; j++) {
+          normalized[normalized_len++] = ' ';
+        }
+        // Last space becomes %20
         normalized[normalized_len++] = '%';
         normalized[normalized_len++] = '2';
         normalized[normalized_len++] = '0';
+      } else {
+        // Non-trailing spaces: all literal
+        for (size_t j = 0; j < space_count; j++) {
+          normalized[normalized_len++] = ' ';
+        }
       }
 
-      i += space_count - 1;  // Skip the processed spaces
+      i += space_count - 1;  // Skip processed spaces
     } else {
       normalized[normalized_len++] = c;
     }
   }
   normalized[normalized_len] = '\0';
 
-  free(cleaned);  // Free original cleaned string
+  free(cleaned);
 
-  // Third pass: encode the normalized string
+  // Third pass: encode other characters (but not spaces which were handled above)
   size_t encoded_len = 0;
   for (size_t i = 0; i < normalized_len; i++) {
     unsigned char c = (unsigned char)normalized[i];
@@ -349,8 +362,8 @@ char* url_nonspecial_path_encode(const char* str) {
       encoded_len += 3;
     } else if (c < 32 || c == '"' || c == '<' || c == '>' || c == '^' || c == '{' || c == '}' || c == '`' || c == 127 ||
                c >= 128) {
-      // Encode control characters, unsafe characters, and non-ASCII per URL spec
-      // Note: Spaces (0x20) are NOT encoded here - they were normalized in previous pass
+      // Encode control characters, unsafe characters, and non-ASCII
+      // Note: spaces (0x20) are NOT encoded here - they were handled in previous pass
       // Note: '[' and ']' are NOT encoded in paths per WPT tests
       // Note: '\' is NOT encoded in non-special scheme paths (unlike special schemes)
       encoded_len += 3;  // %XX
@@ -377,8 +390,8 @@ char* url_nonspecial_path_encode(const char* str) {
       i += 2;  // Skip the next two characters
     } else if (c < 32 || c == '"' || c == '<' || c == '>' || c == '^' || c == '{' || c == '}' || c == '`' || c == 127 ||
                c >= 128) {
-      // Encode control characters, unsafe characters, and non-ASCII per URL spec
-      // Note: Spaces (0x20) are NOT encoded here - they were normalized in previous pass
+      // Encode control characters, unsafe characters, and non-ASCII
+      // Note: spaces (0x20) are NOT encoded here - they were handled in previous pass
       // Note: '[' and ']' are NOT encoded in paths per WPT tests
       // Note: '\' is NOT encoded in non-special scheme paths (unlike special schemes)
       encoded[j++] = '%';

@@ -442,30 +442,38 @@ char* url_decode_hostname_with_scheme(const char* str, const char* scheme) {
           // Valid percent encoding found
           unsigned char byte = (unsigned char)((h1 << 4) | h2);
 
-          // Check for forbidden characters in hostnames per WHATWG URL spec
-          // Control characters (0x00-0x1F, 0x7F) and certain delimiter characters are forbidden
-          // Note: We only reject really problematic characters that would break URL parsing
-          if (byte < 0x20 || byte == 0x7F || byte == ' ' || byte == '#' || byte == '/' || byte == ':' || byte == '?' ||
-              byte == '@' || byte == '[' || byte == '\\' || byte == ']') {
-            // Forbidden character found, reject the hostname
-            free(decoded);
-            free(cleaned_hostname);
-            return NULL;
-          }
-
-          // For non-special schemes, preserve percent-encoded characters that don't need to be decoded
-          // This implements WHATWG URL spec behavior where non-special schemes preserve encoded forms
+          // For non-special schemes, preserve percent-encoded control characters
+          // Per WHATWG URL spec, non-special schemes keep control chars encoded
           if (!is_special) {
-            // Check if the byte represents a character that should be preserved encoded
-            // Per WHATWG spec, for non-special schemes, preserve encoded form if it's safe
-            if ((byte >= 'A' && byte <= 'Z') || (byte >= 'a' && byte <= 'z') || (byte >= '0' && byte <= '9') ||
-                byte == '-' || byte == '.' || byte == '_' || byte == '~' || byte == '|') {
-              // These characters don't need encoding but should be preserved as encoded for non-special schemes
+            // Preserve percent-encoded control characters (0x00-0x1F, 0x7F) and delimiters
+            if (byte < 0x20 || byte == 0x7F || byte == ' ' || byte == '#' || byte == '/' || byte == ':' ||
+                byte == '?' || byte == '@' || byte == '[' || byte == '\\' || byte == ']') {
+              // Keep these characters percent-encoded for non-special schemes
               decoded[j++] = '%';
               decoded[j++] = cleaned_hostname[i + 1];
               decoded[j++] = cleaned_hostname[i + 2];
               i += 3;
               continue;
+            }
+            // Also preserve alphanumeric and safe characters as encoded
+            if ((byte >= 'A' && byte <= 'Z') || (byte >= 'a' && byte <= 'z') || (byte >= '0' && byte <= '9') ||
+                byte == '-' || byte == '.' || byte == '_' || byte == '~' || byte == '|') {
+              // These characters don't need encoding but preserve as encoded for non-special schemes
+              decoded[j++] = '%';
+              decoded[j++] = cleaned_hostname[i + 1];
+              decoded[j++] = cleaned_hostname[i + 2];
+              i += 3;
+              continue;
+            }
+          } else {
+            // For special schemes, reject forbidden characters
+            // Control characters (0x00-0x1F, 0x7F) and certain delimiter characters are forbidden
+            if (byte < 0x20 || byte == 0x7F || byte == ' ' || byte == '#' || byte == '/' || byte == ':' ||
+                byte == '?' || byte == '@' || byte == '[' || byte == '\\' || byte == ']') {
+              // Forbidden character found in special scheme hostname, reject
+              free(decoded);
+              free(cleaned_hostname);
+              return NULL;
             }
           }
 

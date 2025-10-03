@@ -124,24 +124,17 @@ static char* JSRT_StripURLControlCharacters(const char* input, size_t input_len)
     } else {
       // ASCII character
       if (c < 0x20 && c != 0x09 && c != 0x0A && c != 0x0D) {
-        // Other C0 control characters (0x00-0x08, 0x0B-0x1F)
-        if (c == 0x00) {
-          // Null byte: must reject regardless of position
-          // Cannot handle null bytes due to C string limitations (strlen, strchr, etc. will truncate)
-          // Per WHATWG spec, null bytes in hostnames should cause validation failure
-          if (in_middle) {
-            // Reject null bytes in middle of URL
-            free(result);
-            return NULL;
-          }
-          // Skip leading/trailing null bytes
-          continue;
+        // C0 control characters (0x00-0x08, 0x0B-0x1F): percent-encode them immediately
+        // This includes null bytes (0x00) which must be percent-encoded to %00
+        // Per WHATWG URL spec, C0 controls in paths/query/fragment should be percent-encoded
+        // We percent-encode them here to avoid C string limitations (null terminator issues)
+        if (in_middle) {
+          // Percent-encode C0 controls in the middle of URL
+          result[j++] = '%';
+          result[j++] = "0123456789ABCDEF"[c >> 4];
+          result[j++] = "0123456789ABCDEF"[c & 15];
         }
-        // Other C0 controls (0x01-0x08, 0x0B-0x1F): percent-encode them
-        // These will be handled by the URL parser's percent-encoding logic
-        result[j++] = '%';
-        result[j++] = "0123456789ABCDEF"[c >> 4];
-        result[j++] = "0123456789ABCDEF"[c & 15];
+        // Skip leading/trailing C0 controls (they're stripped per WHATWG spec)
         continue;
       }
       // Copy other ASCII characters as-is

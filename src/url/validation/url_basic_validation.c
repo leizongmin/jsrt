@@ -307,10 +307,9 @@ int validate_url_characters(const char* url) {
         }
       }
 
-      // For non-hostname contexts in special schemes, also reject C0 controls
-      // but be more lenient (they may be percent-encoded in paths/query/fragment)
-      // However, for consistency with WHATWG spec, reject them here
-      // They should have been stripped during preprocessing if at leading/trailing positions
+      // For non-hostname contexts (paths/query/fragment), C0 controls are allowed
+      // They will be percent-encoded during URL component processing
+      // Per WHATWG URL spec, only reject C0 controls in hostnames, not in other components
     }
 
     // Allow Unicode replacement character (U+FFFD) - it will be percent-encoded as %EF%BF%BD
@@ -408,6 +407,13 @@ int validate_percent_encoded_characters(const char* url) {
 
         // For hostname contexts in special schemes, be more restrictive
         if (in_hostname) {
+          // Per WHATWG URL spec, only null bytes (%00) cause failure in hostnames
+          // Other C0 controls (%01-%1F) and DEL (%7F) are allowed (already percent-encoded)
+          if (decoded_value == 0x00) {
+            return 0;  // Null bytes not allowed in hostnames (all schemes)
+          }
+
+          // Additional checks for special schemes
           // Determine if this is a special scheme
           int is_special = 0;
           char* scheme_end = strstr(url, ":");
@@ -423,13 +429,9 @@ int validate_percent_encoded_characters(const char* url) {
           }
 
           if (is_special) {
-            // Reject control characters and specific problematic bytes in hostnames
-            if (decoded_value <= 0x1F || decoded_value == 0x7F) {
-              return 0;  // C0 controls and DEL not allowed in hostnames
-            }
-            // Reject 0x80 and 0xA0 specifically as per WPT tests
+            // Reject 0x80 and 0xA0 specifically for special schemes as per WPT tests
             if (decoded_value == 0x80 || decoded_value == 0xA0) {
-              return 0;  // These bytes cause URL parsing to fail
+              return 0;  // These bytes cause URL parsing to fail in special schemes
             }
             // Allow valid UTF-8 continuation bytes (0x81-0x9F, 0xA1-0xBF)
             // and other high bytes that may be part of valid UTF-8 sequences

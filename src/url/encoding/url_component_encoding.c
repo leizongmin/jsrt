@@ -281,42 +281,52 @@ char* url_path_encode_file(const char* str) {
   return encoded;
 }
 
-// Special encoding for non-special scheme paths
-// Per WPT tests: ALL spaces should be encoded as %20 in non-special paths
-// Tab and newline characters should be removed (not encoded)
+// Special encoding for non-special scheme paths (opaque paths)
+// Per WHATWG URL spec: opaque paths preserve spaces EXCEPT trailing spaces
+// Multiple trailing spaces get collapsed to one space and encoded as single %20
 char* url_nonspecial_path_encode(const char* str) {
   if (!str)
     return NULL;
 
   size_t len = strlen(str);
 
-  // First pass: remove tab and newline characters, calculate final length
-  char* cleaned = malloc(len + 1);
-  if (!cleaned) {
-    return NULL;
-  }
-  size_t cleaned_len = 0;
+  // Tab, newline, CR should already be removed by preprocessing
+  // Calculate encoded length with special handling for trailing spaces
+  size_t encoded_len = 0;
   for (size_t i = 0; i < len; i++) {
     unsigned char c = (unsigned char)str[i];
-    if (c != '\t' && c != '\r' && c != '\n') {
-      cleaned[cleaned_len++] = c;
-    }
-  }
-  cleaned[cleaned_len] = '\0';
 
-  // Second pass: encode characters including spaces
-  size_t encoded_len = 0;
-  for (size_t i = 0; i < cleaned_len; i++) {
-    unsigned char c = (unsigned char)cleaned[i];
-    if (c == '%' && i + 2 < cleaned_len && hex_to_int(cleaned[i + 1]) >= 0 && hex_to_int(cleaned[i + 2]) >= 0) {
+    if (c == '%' && i + 2 < len && hex_to_int(str[i + 1]) >= 0 && hex_to_int(str[i + 2]) >= 0) {
       // Already percent-encoded sequence, keep as-is
       encoded_len += 3;
-    } else if (c <= 32 || c == '"' || c == '<' || c == '>' || c == '^' || c == '{' || c == '}' || c == '`' ||
-               c == 127 || c >= 128) {
-      // Encode control characters, spaces, unsafe characters, and non-ASCII
-      // Per WPT tests: spaces (0x20) MUST be encoded as %20 in non-special paths
+    } else if (c == ' ') {
+      // Check if this is part of a trailing space sequence
+      int is_trailing = 1;
+      size_t remaining_spaces = 0;
+      for (size_t k = i; k < len && str[k] == ' '; k++) {
+        remaining_spaces++;
+      }
+      for (size_t k = i + remaining_spaces; k < len; k++) {
+        if (str[k] != ' ') {
+          is_trailing = 0;
+          break;
+        }
+      }
+      if (is_trailing && remaining_spaces > 0) {
+        // Trailing space sequence: keep (N-1) literal spaces, encode last one as %20
+        // For example: "  " -> " %20", " " -> "%20", "   " -> "  %20"
+        for (size_t s = 1; s < remaining_spaces; s++) {
+          encoded_len++;  // Literal space
+        }
+        encoded_len += 3;           // Last space as %20
+        i += remaining_spaces - 1;  // Skip to end of sequence
+      } else {
+        encoded_len++;  // Keep middle space as-is
+      }
+    } else if (c < 0x20 || c == '"' || c == '<' || c == '>' || c == '`' || c == 127 || c >= 128) {
+      // Encode control characters (but NOT space 0x20 unless trailing), unsafe characters, and non-ASCII
       // Note: '[' and ']' are NOT encoded in paths per WPT tests
-      // Note: '\' is NOT encoded in non-special scheme paths (unlike special schemes)
+      // Note: '\', '^', '{', '}' are NOT encoded in non-special scheme paths
       encoded_len += 3;  // %XX
     } else {
       encoded_len++;
@@ -325,25 +335,47 @@ char* url_nonspecial_path_encode(const char* str) {
 
   char* encoded = safe_malloc_for_encoding(encoded_len);
   if (!encoded) {
-    free(cleaned);
     return NULL;
   }
   size_t j = 0;
 
-  for (size_t i = 0; i < cleaned_len; i++) {
-    unsigned char c = (unsigned char)cleaned[i];
-    if (c == '%' && i + 2 < cleaned_len && hex_to_int(cleaned[i + 1]) >= 0 && hex_to_int(cleaned[i + 2]) >= 0) {
+  for (size_t i = 0; i < len; i++) {
+    unsigned char c = (unsigned char)str[i];
+
+    if (c == '%' && i + 2 < len && hex_to_int(str[i + 1]) >= 0 && hex_to_int(str[i + 2]) >= 0) {
       // Already percent-encoded sequence, copy as-is
-      encoded[j++] = cleaned[i];
-      encoded[j++] = cleaned[i + 1];
-      encoded[j++] = cleaned[i + 2];
+      encoded[j++] = str[i];
+      encoded[j++] = str[i + 1];
+      encoded[j++] = str[i + 2];
       i += 2;  // Skip the next two characters
-    } else if (c <= 32 || c == '"' || c == '<' || c == '>' || c == '^' || c == '{' || c == '}' || c == '`' ||
-               c == 127 || c >= 128) {
-      // Encode control characters, spaces, unsafe characters, and non-ASCII
-      // Per WPT tests: spaces (0x20) MUST be encoded as %20 in non-special paths
-      // Note: '[' and ']' are NOT encoded in paths per WPT tests
-      // Note: '\' is NOT encoded in non-special scheme paths (unlike special schemes)
+    } else if (c == ' ') {
+      // Check if this is part of a trailing space sequence
+      int is_trailing = 1;
+      size_t remaining_spaces = 0;
+      for (size_t k = i; k < len && str[k] == ' '; k++) {
+        remaining_spaces++;
+      }
+      for (size_t k = i + remaining_spaces; k < len; k++) {
+        if (str[k] != ' ') {
+          is_trailing = 0;
+          break;
+        }
+      }
+      if (is_trailing && remaining_spaces > 0) {
+        // Trailing space sequence: keep (N-1) literal spaces, encode last one as %20
+        for (size_t s = 1; s < remaining_spaces; s++) {
+          encoded[j++] = ' ';  // Literal spaces
+        }
+        encoded[j++] = '%';
+        encoded[j++] = '2';
+        encoded[j++] = '0';
+        i += remaining_spaces - 1;  // Skip to end of sequence
+      } else {
+        // Keep middle space as-is
+        encoded[j++] = ' ';
+      }
+    } else if (c < 0x20 || c == '"' || c == '<' || c == '>' || c == '`' || c == 127 || c >= 128) {
+      // Encode control characters, unsafe characters, and non-ASCII
       encoded[j++] = '%';
       encoded[j++] = hex_chars[c >> 4];
       encoded[j++] = hex_chars[c & 15];
@@ -353,7 +385,6 @@ char* url_nonspecial_path_encode(const char* str) {
   }
   encoded[j] = '\0';
 
-  free(cleaned);
   return encoded;
 }
 

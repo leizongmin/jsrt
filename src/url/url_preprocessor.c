@@ -364,33 +364,36 @@ char* preprocess_url_string(const char* url, const char* base) {
     return NULL;
   }
 
-  // Note: C0 control characters (tab, newline, carriage return) will be removed by
-  // remove_all_ascii_whitespace() function later in the parsing pipeline
-  // Per WHATWG URL spec, these characters should be removed, not rejected
-  JSRT_Debug("preprocess_url_string: control characters (tabs, LF, CR) will be removed during parsing");
+  // Remove tab, newline, and carriage return from the URL per WHATWG URL spec
+  // These characters should be stripped from the URL string during preprocessing
+  char* whitespace_removed_url = remove_all_ascii_whitespace(trimmed_url);
+  free(trimmed_url);
+  if (!whitespace_removed_url) {
+    return NULL;
+  }
 
   // Validate URL characters (rejects fullwidth percent, invalid Unicode, etc.)
-  if (!validate_url_characters(trimmed_url)) {
-    free(trimmed_url);
+  if (!validate_url_characters(whitespace_removed_url)) {
+    free(whitespace_removed_url);
     return NULL;
   }
 
   // Check for forbidden percent-encoded characters in the URL per WHATWG URL spec
   // This includes null bytes and other control characters that should cause URL parsing to fail
-  if (!validate_percent_encoded_characters(trimmed_url)) {
-    free(trimmed_url);
+  if (!validate_percent_encoded_characters(whitespace_removed_url)) {
+    free(whitespace_removed_url);
     return NULL;
   }
 
   // Determine if this URL has a special scheme first
-  char* initial_colon_pos = strchr(trimmed_url, ':');
+  char* initial_colon_pos = strchr(whitespace_removed_url, ':');
   int has_special_scheme = 0;
 
-  if (initial_colon_pos && initial_colon_pos > trimmed_url) {
+  if (initial_colon_pos && initial_colon_pos > whitespace_removed_url) {
     // Extract potential scheme
-    size_t scheme_len = initial_colon_pos - trimmed_url;
+    size_t scheme_len = initial_colon_pos - whitespace_removed_url;
     char* scheme = malloc(scheme_len + 1);
-    strncpy(scheme, trimmed_url, scheme_len);
+    strncpy(scheme, whitespace_removed_url, scheme_len);
     scheme[scheme_len] = '\0';
     has_special_scheme = is_valid_scheme(scheme) && is_special_scheme(scheme);
     free(scheme);
@@ -399,21 +402,21 @@ char* preprocess_url_string(const char* url, const char* base) {
   // For non-special schemes, check for problematic percent-encoding + pipe patterns
   // Per WHATWG URL spec and WPT tests, patterns like %43| should be rejected
   if (!has_special_scheme) {
-    const char* p = trimmed_url;
+    const char* p = whitespace_removed_url;
     while ((p = strchr(p, '%')) != NULL) {
-      if (p + 2 < trimmed_url + strlen(trimmed_url) && hex_to_int(p[1]) >= 0 && hex_to_int(p[2]) >= 0 &&
-          p + 3 < trimmed_url + strlen(trimmed_url) && p[3] == '|') {
+      if (p + 2 < whitespace_removed_url + strlen(whitespace_removed_url) && hex_to_int(p[1]) >= 0 &&
+          hex_to_int(p[2]) >= 0 && p + 3 < whitespace_removed_url + strlen(whitespace_removed_url) && p[3] == '|') {
         // Pattern like %XX| found in non-special scheme URL - reject it
-        free(trimmed_url);
+        free(whitespace_removed_url);
         return NULL;
       }
       p++;
     }
   }
 
-  // Do not remove internal ASCII whitespace - they should cause URL parsing to fail
-  // Per WHATWG URL spec, internal control characters should be rejected, not removed
-  char* space_normalized_url = trimmed_url;
+  // Spaces remain in the URL - they will be handled during path encoding
+  // For opaque paths, spaces are preserved; for special scheme paths, they're encoded
+  char* space_normalized_url = whitespace_removed_url;
 
   // Enhanced backslash normalization for special schemes and relative URLs
   char* normalized_url;

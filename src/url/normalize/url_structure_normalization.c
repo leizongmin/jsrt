@@ -208,7 +208,8 @@ char* remove_all_ascii_whitespace(const char* url) {
 }
 
 // Normalize spaces in URL path specifically for the query/fragment boundary issue
-// This handles the special case where spaces before ? or # should be collapsed to single %20
+// This handles the special case where trailing spaces before ? or # should be collapsed to single space
+// The space will then be percent-encoded later during path encoding
 char* normalize_spaces_before_query_fragment(const char* path) {
   if (!path)
     return NULL;
@@ -234,8 +235,10 @@ char* normalize_spaces_before_query_fragment(const char* path) {
 
       // Check if this space sequence is trailing (at end or before ?/#)
       if (space_end == len || path[space_end] == '?' || path[space_end] == '#') {
-        // This is a trailing space sequence before query/fragment - remove all spaces
-        // According to WHATWG URL spec, spaces before query/fragment should be removed
+        // This is a trailing space sequence before query/fragment
+        // Collapse all trailing spaces to a single space
+        // The space will be percent-encoded during path encoding for opaque paths
+        result[j++] = ' ';
         i = space_end - 1;  // Skip all spaces (loop will increment)
       } else {
         // This is a middle space sequence - keep all spaces as-is

@@ -284,7 +284,7 @@ char* url_path_encode_file(const char* str) {
 // Special encoding for non-special scheme paths (opaque paths)
 // Per WHATWG URL spec: opaque paths are very permissive - preserve almost all printable chars
 // Only encode control characters (< 0x20), DEL (0x7F), and non-ASCII (>= 0x80)
-// Spaces, tab, newline should already be removed by preprocessing
+// Special case: trailing spaces before ? or # need encoding (keep N-1 literal, encode last as %20)
 char* url_nonspecial_path_encode(const char* str) {
   if (!str)
     return NULL;
@@ -300,6 +300,25 @@ char* url_nonspecial_path_encode(const char* str) {
     if (c == '%' && i + 2 < len && hex_to_int(str[i + 1]) >= 0 && hex_to_int(str[i + 2]) >= 0) {
       // Already percent-encoded sequence, keep as-is
       encoded_len += 3;
+    } else if (c == ' ') {
+      // Check if this is part of a trailing space sequence before ? or #
+      size_t space_start = i;
+      size_t space_count = 0;
+      while (i < len && str[i] == ' ') {
+        space_count++;
+        i++;
+      }
+      // Check if spaces are followed by ? or # (or end of string)
+      if (i >= len || str[i] == '?' || str[i] == '#') {
+        // Trailing spaces before delimiter: keep (N-1) literal + encode last as %20
+        if (space_count > 0) {
+          encoded_len += (space_count - 1) + 3;  // (N-1) spaces + %20
+        }
+      } else {
+        // Middle spaces: keep all literal
+        encoded_len += space_count;
+      }
+      i--;  // Adjust since loop will increment
     } else if (c < 0x20 || c == '"' || c == '<' || c == '>' || c == '`' || c == 0x7F || c >= 0x80) {
       // Encode: control characters, ", <, >, `, DEL, and non-ASCII
       // Per WPT tests, these specific characters must be encoded even in opaque paths
@@ -326,6 +345,32 @@ char* url_nonspecial_path_encode(const char* str) {
       encoded[j++] = str[i + 1];
       encoded[j++] = str[i + 2];
       i += 2;  // Skip the next two characters
+    } else if (c == ' ') {
+      // Check if this is part of a trailing space sequence before ? or #
+      size_t space_count = 0;
+      size_t start_i = i;
+      while (i < len && str[i] == ' ') {
+        space_count++;
+        i++;
+      }
+      // Check if spaces are followed by ? or # (or end of string)
+      if (i >= len || str[i] == '?' || str[i] == '#') {
+        // Trailing spaces before delimiter: keep (N-1) literal + encode last as %20
+        for (size_t s = 1; s < space_count; s++) {
+          encoded[j++] = ' ';
+        }
+        if (space_count > 0) {
+          encoded[j++] = '%';
+          encoded[j++] = '2';
+          encoded[j++] = '0';
+        }
+      } else {
+        // Middle spaces: keep all literal
+        for (size_t s = 0; s < space_count; s++) {
+          encoded[j++] = ' ';
+        }
+      }
+      i--;  // Adjust since loop will increment
     } else if (c < 0x20 || c == '"' || c == '<' || c == '>' || c == '`' || c == 0x7F || c >= 0x80) {
       // Encode: control characters, ", <, >, `, DEL, and non-ASCII
       encoded[j++] = '%';

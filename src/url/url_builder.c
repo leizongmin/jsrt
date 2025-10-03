@@ -298,7 +298,14 @@ int parse_path_query_fragment(JSRT_URL* parsed, char* ptr) {
       } else if (is_special_scheme(parsed->protocol)) {
         encoded_pathname = url_path_encode_special(cleaned_path);
       } else {
-        encoded_pathname = url_nonspecial_path_encode(cleaned_path);
+        // Non-special schemes: distinguish between opaque paths and paths with authority
+        if (parsed->has_authority_syntax) {
+          // Has authority (foo://host/path) - encode spaces and special chars ^{}
+          encoded_pathname = url_path_encode_nonspecial_with_authority(cleaned_path);
+        } else {
+          // Opaque path (foo:path) - preserve spaces except trailing
+          encoded_pathname = url_nonspecial_path_encode(cleaned_path);
+        }
       }
 
       // If encoding failed, fall back to a safely encoded version

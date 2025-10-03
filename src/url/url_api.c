@@ -287,34 +287,10 @@ static JSValue JSRT_URLGetPathname(JSContext* ctx, JSValueConst this_val, int ar
   if (!url)
     return JS_EXCEPTION;
 
-  // For non-special schemes, return the raw pathname without encoding
-  // For special schemes, return the percent-encoded pathname (except file URLs preserve pipes)
-  if (is_special_scheme(url->protocol)) {
-    char* encoded_pathname;
-    if (strcmp(url->protocol, "file:") == 0) {
-      // File URLs preserve pipe characters in pathname
-      encoded_pathname = strdup(url->pathname ? url->pathname : "");
-    } else {
-      // Other special schemes use component encoding
-      encoded_pathname = url_component_encode(url->pathname);
-    }
-    if (!encoded_pathname)
-      return JS_EXCEPTION;
-
-    JSValue result = JS_NewString(ctx, encoded_pathname);
-    free(encoded_pathname);
-    return result;
-  } else {
-    // Non-special schemes: handle specific test scheme patterns
-    const char* pathname = url->pathname;
-
-    // For non-special schemes, pathname should match what's in href
-    // According to WHATWG URL spec, non-special schemes preserve dot segments
-    // So non-spec:/.// should have pathname /.// (not //)
-    // The href and pathname should be consistent
-
-    return JS_NewString(ctx, pathname);
-  }
+  // Pathname is already stored in properly encoded form during URL parsing
+  // Just return it as-is (no additional encoding needed)
+  // The encoding was already applied in parse_path_query_fragment() based on scheme type
+  return JS_NewString(ctx, url->pathname ? url->pathname : "");
 }
 
 static JSValue JSRT_URLGetSearch(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {

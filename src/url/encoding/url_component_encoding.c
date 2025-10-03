@@ -147,7 +147,7 @@ char* url_path_encode_special(const char* str) {
     } else if (c <= 32 || c == '"' || c == '<' || c == '>' || c == '\\' || c == '^' || c == '{' || c == '}' ||
                c == '`' || c == 127) {
       // Need to percent-encode control characters, space, and specific unsafe characters
-      // NOTE: Pipe character (|) is preserved per WPT specification
+      // NOTE: Single quote ('), pipe (|) are preserved per WPT specification for special scheme paths
       // NOTE: '[' and ']' characters are NOT encoded in paths per WPT tests
       encoded_len += 3;  // %XX
     } else if (c >= 128) {
@@ -179,7 +179,7 @@ char* url_path_encode_special(const char* str) {
     } else if (c <= 32 || c == '"' || c == '<' || c == '>' || c == '\\' || c == '^' || c == '{' || c == '}' ||
                c == '`' || c == 127) {
       // Need to percent-encode control characters and specific unsafe characters
-      // NOTE: Pipe character (|) is preserved per WPT specification
+      // NOTE: Single quote ('), pipe (|) are preserved per WPT specification for special scheme paths
       // NOTE: '[' and ']' characters are NOT encoded in paths per WPT tests
       encoded[j++] = '%';
       encoded[j++] = hex_chars[c >> 4];
@@ -282,8 +282,9 @@ char* url_path_encode_file(const char* str) {
 }
 
 // Special encoding for non-special scheme paths (opaque paths)
-// Per WHATWG URL spec: opaque paths preserve spaces EXCEPT trailing spaces
-// Multiple trailing spaces get collapsed to one space and encoded as single %20
+// Per WHATWG URL spec: opaque paths are very permissive - preserve almost all printable chars
+// Only encode control characters (< 0x20), DEL (0x7F), and non-ASCII (>= 0x80)
+// Spaces, tab, newline should already be removed by preprocessing
 char* url_nonspecial_path_encode(const char* str) {
   if (!str)
     return NULL;
@@ -291,7 +292,7 @@ char* url_nonspecial_path_encode(const char* str) {
   size_t len = strlen(str);
 
   // Tab, newline, CR should already be removed by preprocessing
-  // Calculate encoded length with special handling for trailing spaces
+  // Calculate encoded length - opaque paths preserve most printable characters
   size_t encoded_len = 0;
   for (size_t i = 0; i < len; i++) {
     unsigned char c = (unsigned char)str[i];
@@ -299,34 +300,69 @@ char* url_nonspecial_path_encode(const char* str) {
     if (c == '%' && i + 2 < len && hex_to_int(str[i + 1]) >= 0 && hex_to_int(str[i + 2]) >= 0) {
       // Already percent-encoded sequence, keep as-is
       encoded_len += 3;
-    } else if (c == ' ') {
-      // Check if this is part of a trailing space sequence
-      int is_trailing = 1;
-      size_t remaining_spaces = 0;
-      for (size_t k = i; k < len && str[k] == ' '; k++) {
-        remaining_spaces++;
-      }
-      for (size_t k = i + remaining_spaces; k < len; k++) {
-        if (str[k] != ' ') {
-          is_trailing = 0;
-          break;
-        }
-      }
-      if (is_trailing && remaining_spaces > 0) {
-        // Trailing space sequence: keep (N-1) literal spaces, encode last one as %20
-        // For example: "  " -> " %20", " " -> "%20", "   " -> "  %20"
-        for (size_t s = 1; s < remaining_spaces; s++) {
-          encoded_len++;  // Literal space
-        }
-        encoded_len += 3;           // Last space as %20
-        i += remaining_spaces - 1;  // Skip to end of sequence
-      } else {
-        encoded_len++;  // Keep middle space as-is
-      }
-    } else if (c < 0x20 || c == '"' || c == '<' || c == '>' || c == '`' || c == 127 || c >= 128) {
-      // Encode control characters (but NOT space 0x20 unless trailing), unsafe characters, and non-ASCII
-      // Note: '[' and ']' are NOT encoded in paths per WPT tests
-      // Note: '\', '^', '{', '}' are NOT encoded in non-special scheme paths
+    } else if (c < 0x20 || c == '"' || c == '<' || c == '>' || c == '`' || c == 0x7F || c >= 0x80) {
+      // Encode: control characters, ", <, >, `, DEL, and non-ASCII
+      // Per WPT tests, these specific characters must be encoded even in opaque paths
+      // But preserve: \, ^, {, |, }, and most other printable ASCII
+      encoded_len += 3;  // %XX
+    } else {
+      // Preserve other printable ASCII characters
+      encoded_len++;
+    }
+  }
+
+  char* encoded = safe_malloc_for_encoding(encoded_len);
+  if (!encoded) {
+    return NULL;
+  }
+  size_t j = 0;
+
+  for (size_t i = 0; i < len; i++) {
+    unsigned char c = (unsigned char)str[i];
+
+    if (c == '%' && i + 2 < len && hex_to_int(str[i + 1]) >= 0 && hex_to_int(str[i + 2]) >= 0) {
+      // Already percent-encoded sequence, copy as-is
+      encoded[j++] = str[i];
+      encoded[j++] = str[i + 1];
+      encoded[j++] = str[i + 2];
+      i += 2;  // Skip the next two characters
+    } else if (c < 0x20 || c == '"' || c == '<' || c == '>' || c == '`' || c == 0x7F || c >= 0x80) {
+      // Encode: control characters, ", <, >, `, DEL, and non-ASCII
+      encoded[j++] = '%';
+      encoded[j++] = hex_chars[c >> 4];
+      encoded[j++] = hex_chars[c & 15];
+    } else {
+      // Preserve other printable ASCII characters
+      encoded[j++] = c;
+    }
+  }
+  encoded[j] = '\0';
+
+  return encoded;
+}
+
+// Path encoding for non-special schemes WITH authority (foo://host/path)
+// Different from opaque paths - encodes spaces and special chars like ^{}
+char* url_path_encode_nonspecial_with_authority(const char* str) {
+  if (!str)
+    return NULL;
+
+  size_t len = strlen(str);
+  size_t encoded_len = 0;
+
+  // Calculate encoded length
+  for (size_t i = 0; i < len; i++) {
+    unsigned char c = (unsigned char)str[i];
+
+    if (c == '%' && i + 2 < len && hex_to_int(str[i + 1]) >= 0 && hex_to_int(str[i + 2]) >= 0) {
+      // Already percent-encoded sequence, keep as-is
+      encoded_len += 3;
+    } else if (c <= 32 || c == '"' || c == '<' || c == '>' || c == '^' || c == '`' || c == '{' || c == '}' ||
+               c == 127 || c >= 128) {
+      // Encode spaces, control chars, and special chars ^{}
+      // NOTE: backslash (\) is preserved in non-special scheme paths (no normalization)
+      // NOTE: pipe (|) is preserved per WPT tests
+      // NOTE: single quote (') is preserved per WPT tests
       encoded_len += 3;  // %XX
     } else {
       encoded_len++;
@@ -348,34 +384,12 @@ char* url_nonspecial_path_encode(const char* str) {
       encoded[j++] = str[i + 1];
       encoded[j++] = str[i + 2];
       i += 2;  // Skip the next two characters
-    } else if (c == ' ') {
-      // Check if this is part of a trailing space sequence
-      int is_trailing = 1;
-      size_t remaining_spaces = 0;
-      for (size_t k = i; k < len && str[k] == ' '; k++) {
-        remaining_spaces++;
-      }
-      for (size_t k = i + remaining_spaces; k < len; k++) {
-        if (str[k] != ' ') {
-          is_trailing = 0;
-          break;
-        }
-      }
-      if (is_trailing && remaining_spaces > 0) {
-        // Trailing space sequence: keep (N-1) literal spaces, encode last one as %20
-        for (size_t s = 1; s < remaining_spaces; s++) {
-          encoded[j++] = ' ';  // Literal spaces
-        }
-        encoded[j++] = '%';
-        encoded[j++] = '2';
-        encoded[j++] = '0';
-        i += remaining_spaces - 1;  // Skip to end of sequence
-      } else {
-        // Keep middle space as-is
-        encoded[j++] = ' ';
-      }
-    } else if (c < 0x20 || c == '"' || c == '<' || c == '>' || c == '`' || c == 127 || c >= 128) {
-      // Encode control characters, unsafe characters, and non-ASCII
+    } else if (c <= 32 || c == '"' || c == '<' || c == '>' || c == '^' || c == '`' || c == '{' || c == '}' ||
+               c == 127 || c >= 128) {
+      // Encode spaces, control chars, and special chars ^{}
+      // NOTE: backslash (\) is preserved in non-special scheme paths (no normalization)
+      // NOTE: pipe (|) is preserved per WPT tests
+      // NOTE: single quote (') is preserved per WPT tests
       encoded[j++] = '%';
       encoded[j++] = hex_chars[c >> 4];
       encoded[j++] = hex_chars[c & 15];
@@ -383,8 +397,8 @@ char* url_nonspecial_path_encode(const char* str) {
       encoded[j++] = c;
     }
   }
-  encoded[j] = '\0';
 
+  encoded[j] = '\0';
   return encoded;
 }
 
@@ -494,13 +508,12 @@ char* url_hostname_encode_nonspecial(const char* str) {
     if (c == '%' && i + 2 < len && hex_to_int(str[i + 1]) >= 0 && hex_to_int(str[i + 2]) >= 0) {
       // Already percent-encoded sequence, keep as-is
       add_len = 3;
-    } else if (c <= 32 || c >= 127) {
-      // Only encode control characters (0-32) and non-ASCII characters (127+)
-      // Per WPT, printable ASCII characters like !"$%&'()*+,-.;=_`{}~ should NOT be encoded in non-special scheme
-      // hostnames
+    } else if (c < 0x20 || c == 0x7F || c > 0x7F) {
+      // Only encode: control characters (0x00-0x1F), DEL (0x7F), and non-ASCII (0x80+)
+      // Per WPT, printable ASCII characters like space, !"$%&'()*+,-.;=_`{}~ should NOT be encoded
       add_len = 3;  // %XX
     } else {
-      // Printable ASCII characters (33-126) remain as-is for non-special schemes
+      // Printable ASCII characters (0x20-0x7E except 0x7F) remain as-is
       add_len = 1;
     }
 
@@ -525,13 +538,13 @@ char* url_hostname_encode_nonspecial(const char* str) {
       encoded[j++] = str[i + 1];
       encoded[j++] = str[i + 2];
       i += 2;  // Skip the next two characters
-    } else if (c <= 32 || c >= 127) {
-      // Encode control characters and non-ASCII characters
+    } else if (c < 0x20 || c == 0x7F || c > 0x7F) {
+      // Encode: control characters (0x00-0x1F), DEL (0x7F), and non-ASCII (0x80+)
       encoded[j++] = '%';
       encoded[j++] = hex_chars[c >> 4];
       encoded[j++] = hex_chars[c & 15];
     } else {
-      // Printable ASCII characters remain as-is
+      // Printable ASCII characters (0x20-0x7E except 0x7F) remain as-is
       encoded[j++] = c;
     }
   }

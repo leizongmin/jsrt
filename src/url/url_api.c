@@ -59,7 +59,22 @@ static char* JSRT_StripURLControlCharacters(const char* input, size_t input_len)
   if (!input)
     return NULL;
 
-  // Calculate maximum possible length: each byte might become %XX (3 chars)
+  // First pass: find the range after stripping leading/trailing C0 controls and spaces
+  // This mimics what strip_url_whitespace will do later
+  size_t start = 0;
+  size_t end = input_len;
+
+  // Skip leading C0 controls and spaces
+  while (start < end && (unsigned char)input[start] <= 0x20) {
+    start++;
+  }
+
+  // Skip trailing C0 controls and spaces
+  while (end > start && (unsigned char)input[end - 1] <= 0x20) {
+    end--;
+  }
+
+  // Calculate maximum possible length
   char* result = malloc(input_len * 3 + 1);
   if (!result)
     return NULL;
@@ -73,6 +88,9 @@ static char* JSRT_StripURLControlCharacters(const char* input, size_t input_len)
     if (c == 0x09 || c == 0x0A || c == 0x0D) {
       continue;  // Skip tab, LF and CR characters completely
     }
+
+    // Check if we're in the middle range (not leading/trailing)
+    int in_middle = (i >= start && i < end);
 
     // For UTF-8 sequences, validate and copy them but don't reject based on specific characters
     // Many Unicode characters that were previously rejected should be allowed per WPT tests
@@ -104,17 +122,30 @@ static char* JSRT_StripURLControlCharacters(const char* input, size_t input_len)
       }
       i += utf8_len - 1;  // Skip the rest of the sequence (loop will increment i)
     } else {
-      // ASCII character - percent-encode control characters but copy others as-is
+      // ASCII character
       if (c < 0x20 && c != 0x09 && c != 0x0A && c != 0x0D) {
-        // Percent-encode C0 control characters (except tab, LF, CR which are stripped)
-        // This includes null bytes (0x00) and other control characters per WPT requirements
+        // Other C0 control characters (0x00-0x08, 0x0B-0x1F)
+        if (c == 0x00) {
+          // Null byte: must reject regardless of position
+          // Cannot handle null bytes due to C string limitations (strlen, strchr, etc. will truncate)
+          // Per WHATWG spec, null bytes in hostnames should cause validation failure
+          if (in_middle) {
+            // Reject null bytes in middle of URL
+            free(result);
+            return NULL;
+          }
+          // Skip leading/trailing null bytes
+          continue;
+        }
+        // Other C0 controls (0x01-0x08, 0x0B-0x1F): percent-encode them
+        // These will be handled by the URL parser's percent-encoding logic
         result[j++] = '%';
         result[j++] = "0123456789ABCDEF"[c >> 4];
         result[j++] = "0123456789ABCDEF"[c & 15];
-      } else {
-        // Copy other ASCII characters as-is
-        result[j++] = c;
+        continue;
       }
+      // Copy other ASCII characters as-is
+      result[j++] = c;
     }
   }
   result[j] = '\0';

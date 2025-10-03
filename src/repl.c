@@ -310,10 +310,12 @@ int JSRT_CmdRunREPL(int argc, char** argv) {
               dbuf_init(&dbuf);
               JSRT_GetJSValuePrettyString(&dbuf, rt->ctx, result_val, NULL, true);
               if (dbuf.buf && dbuf.size > 0) {
-                // Remove trailing newline if present
+                // Null-terminate the buffer for safe printing
+                dbuf_putc(&dbuf, '\0');
+                // Remove trailing newline if present (before null terminator)
                 char* output = (char*)dbuf.buf;
-                if (output[dbuf.size - 1] == '\n') {
-                  output[dbuf.size - 1] = '\0';
+                if (dbuf.size >= 2 && output[dbuf.size - 2] == '\n') {
+                  output[dbuf.size - 2] = '\0';
                 }
                 printf("%s\n", output);
               }
@@ -400,10 +402,12 @@ int JSRT_CmdRunREPL(int argc, char** argv) {
             dbuf_init(&dbuf);
             JSRT_GetJSValuePrettyString(&dbuf, rt->ctx, result_val, NULL, true);
             if (dbuf.buf && dbuf.size > 0) {
-              // Remove trailing newline if present
+              // Null-terminate the buffer for safe printing
+              dbuf_putc(&dbuf, '\0');
+              // Remove trailing newline if present (before null terminator)
               char* output = (char*)dbuf.buf;
-              if (output[dbuf.size - 1] == '\n') {
-                output[dbuf.size - 1] = '\0';
+              if (dbuf.size >= 2 && output[dbuf.size - 2] == '\n') {
+                output[dbuf.size - 2] = '\0';
               }
               printf("%s\n", output);
             }

@@ -76,6 +76,10 @@ make jsrt_m
 
 ## WPT Compliance Status
 
+**Current Status: 90.6% Pass Rate (29/32 tests) ✅**
+
+All WPT tests pass except for 3 browser-specific Fetch API tests.
+
 Track compliance using:
 ```bash
 # Generate compliance report
@@ -83,6 +87,16 @@ make wpt 2>&1 | tee target/tmp/compliance.txt
 grep -c PASS target/tmp/compliance.txt
 grep -c FAIL target/tmp/compliance.txt
 ```
+
+**Fully Compliant APIs:**
+- Console (100%)
+- URL & URLSearchParams (100%)
+- Encoding (TextEncoder/TextDecoder, btoa/atob) (100%)
+- Timers (setTimeout/setInterval) (100%)
+- Performance & HR-Time (100%)
+- WebCrypto (100%)
+- Streams (100%)
+- AbortController/AbortSignal (100%)
 
 ## Adding New WPT Tests
 

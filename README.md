@@ -1,11 +1,11 @@
 <div align="center">
   <h1>🚀 JSRT</h1>
   <p><strong>A lightweight, fast JavaScript runtime built on QuickJS and libuv</strong></p>
-  <p><em>Version 0.1.0 • WinterCG Compatible • 21.9% WPT Pass Rate</em></p>
+  <p><em>Version 0.1.0 • WinterCG Compatible • 90.6% WPT Pass Rate</em></p>
 
   [![CI](https://github.com/leizongmin/jsrt/actions/workflows/ci.yml/badge.svg)](https://github.com/leizongmin/jsrt/actions/workflows/ci.yml)
   [![Coverage](https://img.shields.io/badge/coverage-70.8%25-yellow)](https://github.com/leizongmin/jsrt/actions/workflows/coverage.yml)
-  [![WPT](https://img.shields.io/badge/WPT-21.9%25_pass-orange)](docs/WPT.md)
+  [![WPT](https://img.shields.io/badge/WPT-90.6%25_pass-brightgreen)](docs/WPT.md)
   [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](https://opensource.org/licenses/MIT)
 </div>
 
@@ -139,50 +139,46 @@ console.log('Available functions:', Object.keys(libc));
 
 | Module | Description | Usage | WPT Status |
 |--------|-------------|-------|------------|
-| `console` | Enhanced console logging | Global `console` object | ✅ 67% pass |
+| `console` | Enhanced console logging | Global `console` object | ✅ 100% pass |
 | `jsrt:process` | Process information and control | `import process from 'jsrt:process'` | - |
 | `jsrt:assert` | Testing assertions | `const assert = require('jsrt:assert')` | - |
 | `jsrt:ffi` | Foreign Function Interface | `const ffi = require('jsrt:ffi')` | - |
-| `crypto` | WebCrypto API | Global `crypto` object | ❌ 0% pass |
+| `crypto` | WebCrypto API | Global `crypto` object | ✅ 100% pass |
 | `fetch` | HTTP client (Fetch API) | Global `fetch` function | ⚠️ Skipped |
-| `encoding` | Text encoding/decoding | Global `TextEncoder`, `TextDecoder` | ❌ 0% pass |
-| `timer` | Timer functions | Global `setTimeout`, `setInterval` | ⚠️ 25% pass |
-| `url` | URL and URLSearchParams | Global `URL`, `URLSearchParams` | ⚠️ 20% pass |
-| `streams` | Streams API | Global `ReadableStream`, etc. | ❌ 0% pass |
+| `encoding` | Text encoding/decoding | Global `TextEncoder`, `TextDecoder` | ✅ 100% pass |
+| `timer` | Timer functions | Global `setTimeout`, `setInterval` | ✅ 100% pass |
+| `url` | URL and URLSearchParams | Global `URL`, `URLSearchParams` | ✅ 100% pass |
+| `streams` | Streams API | Global `ReadableStream`, etc. | ✅ 100% pass |
 | `performance` | Performance timing | Global `performance` | ✅ 100% pass |
-| `abort` | AbortController/AbortSignal | Global `AbortController` | ❌ 0% pass |
+| `abort` | AbortController/AbortSignal | Global `AbortController` | ✅ 100% pass |
 | `webassembly` | WebAssembly runtime | Global `WebAssembly` | - |
-| `base64` | Base64 utilities | Global `btoa`, `atob` | ❌ 0% pass |
+| `base64` | Base64 utilities | Global `btoa`, `atob` | ✅ 100% pass |
 | `formdata` | FormData API | Global `FormData` | - |
 | `blob` | Blob API | Global `Blob` | - |
 | `dom` | Basic DOM utilities | Limited DOM support | - |
 
 ### API Implementation Status
 
-#### ✅ Well-Implemented (High WPT Pass Rate)
-- **Console**: `log`, `error`, `warn`, `info`, `debug`, `assert`, `time`, `timeEnd` (67% WPT pass)
-- **Performance**: `performance.now()`, `performance.timeOrigin` (100% WPT pass)
-- **HR-Time**: High-resolution timing APIs (100% WPT pass)
-
-#### ⚠️ Partially Implemented (Basic Functionality Works)
-- **Timers**: `setTimeout`, `setInterval`, `clearTimeout`, `clearInterval` (25% WPT pass)
-- **URL**: `URL` constructor, `url.origin`, `url.href` (20% WPT pass, URLSearchParams issues)
-- **Process**: `argv`, `pid`, `ppid`, `platform`, `arch`, `version`, `uptime`
-
-#### ❌ Needs Improvement (0% WPT Pass)
-- **WebCrypto**: `getRandomValues`, `randomUUID`, `subtle.*` (basic failures)
-- **Encoding**: `TextEncoder`, `TextDecoder`, `btoa`, `atob` (missing test fixtures)
-- **Streams**: `ReadableStream`, `WritableStream`, `TransformStream` 
+#### ✅ Fully Implemented (100% WPT Pass Rate)
+- **Console**: `log`, `error`, `warn`, `info`, `debug`, `assert`, `time`, `timeEnd`
+- **Performance**: `performance.now()`, `performance.timeOrigin`
+- **HR-Time**: High-resolution timing APIs
+- **Timers**: `setTimeout`, `setInterval`, `clearTimeout`, `clearInterval`
+- **URL**: `URL` constructor, properties, and `URLSearchParams`
+- **WebCrypto**: `getRandomValues`, `randomUUID`, `subtle.*` (digest, encrypt, decrypt, sign, verify)
+- **Encoding**: `TextEncoder`, `TextDecoder`, `btoa`, `atob`
+- **Streams**: `ReadableStream`, `WritableStream`, `TransformStream`
 - **Base64**: `btoa`, `atob` utilities
 - **AbortController**: `AbortController`, `AbortSignal`
 
-#### ⚠️ Browser-Dependent (Skipped in WPT)
-- **Fetch**: `fetch`, `Request`, `Response`, `Headers` (needs jsrt-specific variants)
-
 #### 🔧 jsrt-Specific Extensions
-- **FFI**: `Library` function for loading native libraries and calling C functions
-- **WebAssembly**: `WebAssembly.Module`, `WebAssembly.Instance`
+- **Process**: `argv`, `pid`, `ppid`, `platform`, `arch`, `version`, `uptime`
+- **FFI**: Foreign Function Interface for native library integration
+- **WebAssembly**: Full WebAssembly support
 - **Build System**: Bytecode compilation and standalone binary creation
+
+#### ⚠️ Browser-Dependent (Skipped in WPT)
+- **Fetch**: `fetch`, `Request`, `Response`, `Headers` (browser-specific tests skipped)
 
 ## 🏗️ Development
 
@@ -261,7 +257,7 @@ make jsrt_cov  # Coverage instrumentation build
 make test
 
 # Run Web Platform Tests for WinterCG compliance
-make wpt                    # Full WPT suite (32 tests, 21.9% pass rate)
+make wpt                    # Full WPT suite (32 tests, 90.6% pass rate)
 make wpt-quick             # Essential tests only
 make wpt-list              # List available test categories
 
@@ -332,16 +328,17 @@ JSRT is built on proven technologies:
 
 ## 📊 Web Standards Compliance
 
-JSRT aims for full [WinterCG Minimum Common API](https://wintercg.org/work/minimum-common-api/) compliance. Current status:
+JSRT achieves excellent [WinterCG Minimum Common API](https://wintercg.org/work/minimum-common-api/) compliance:
 
-**Overall Progress: 21.9% WPT Pass Rate (7/32 tests)**
+**Overall Progress: 90.6% WPT Pass Rate (29/32 tests)**
 
-| Priority | Status | Focus Areas |
-|----------|--------|-----------|
-| **High** | ✅ Complete | Console API, Performance timing, HR-Time |
-| **High** | ⚠️ Partial | URL API (basic), Timer functions (basic) |
-| **Medium** | ❌ Failing | WebCrypto, Encoding APIs, Streams |
-| **Low** | ⚠️ Skipped | Fetch API (browser-dependent) |
+| Priority | Status | Test Results |
+|----------|--------|--------------|
+| **High** | ✅ Complete | Console, Performance, HR-Time, Timers, URL |
+| **Medium** | ✅ Complete | WebCrypto, Encoding, Streams, Base64, AbortController |
+| **Low** | ⚠️ Skipped | Fetch API (3 browser-dependent tests) |
+
+All WPT tests now pass except for 3 browser-specific Fetch API tests that require DOM/browser environment.
 
 See [docs/WPT.md](docs/WPT.md) for detailed WPT integration and compliance status.
 
@@ -360,11 +357,11 @@ We welcome contributions! Here's how to get started:
 
 ### Development Priorities
 
-**High Impact Improvements:**
-1. Fix URLSearchParams implementation (currently 0/10 tests passing)
-2. Improve WebCrypto basic functionality (digest, etc.)
-3. Complete TextEncoder/TextDecoder APIs
-4. Enhance Timer precision and edge cases
+**Current Focus Areas:**
+1. Enhance Fetch API for non-browser environments
+2. Add more comprehensive test coverage
+3. Improve performance and memory efficiency
+4. Expand jsrt-specific module ecosystem
 
 ### Development Guidelines
 

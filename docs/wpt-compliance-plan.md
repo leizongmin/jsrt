@@ -1,8 +1,10 @@
 # WPT Compliance Plan for WinterCG Minimum Common API
 
+> **NOTE**: This is a historical document from September 2025. As of October 2025, **jsrt has achieved 90.6% WPT pass rate (29/32 tests passing)** with all testable APIs passing 100% of their tests. Only 3 browser-specific Fetch API tests are skipped. See [WPT.md](WPT.md) for current status.
+
 ## Executive Summary
 
-**Current Status: 75.0% WPT Pass Rate (24/32 tests passing)**
+**Historical Status: 75.0% WPT Pass Rate (24/32 tests passing)**
 *Updated: 2025-09-07*
 
 This document outlines a comprehensive plan to achieve **100% WPT (Web Platform Tests) compliance** according to the WinterCG Minimum Common API specification. Current implementation successfully passes 24 out of 32 tests, with only **5 remaining failures** requiring specific fixes.

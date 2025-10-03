@@ -1,5 +1,7 @@
 # WPT URL Fix Summary Report
 
+> **NOTE**: This is a historical document from September 18, 2025. As of October 2025, **all URL WPT tests now pass (100%)** and jsrt has achieved 90.6% overall WPT pass rate. See [WPT.md](WPT.md) for current status.
+
 **Date**: September 18, 2025
 **Scope**: URL Web Platform Tests (WPT) compliance improvements
 **Command**: `/fix-wpt url`

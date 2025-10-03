@@ -319,10 +319,10 @@ char* url_nonspecial_path_encode(const char* str) {
         encoded_len += space_count;
       }
       i--;  // Adjust since loop will increment
-    } else if (c < 0x20 || c == '"' || c == '<' || c == '>' || c == '`' || c == 0x7F || c >= 0x80) {
-      // Encode: control characters, ", <, >, `, DEL, and non-ASCII
-      // Per WPT tests, these specific characters must be encoded even in opaque paths
-      // But preserve: \, ^, {, |, }, and most other printable ASCII
+    } else if (c < 0x20 || c == 0x7F || c >= 0x80) {
+      // Encode: control characters (0x00-0x1F), DEL (0x7F), and non-ASCII (>= 0x80)
+      // Per WHATWG URL spec, opaque paths preserve ALL other printable ASCII (0x21-0x7E)
+      // This includes: !", $, %, &, ', (, ), *, +, ,, -, ., ;, <, =, >, @, [, \, ], ^, _, `, {, |, }, ~
       encoded_len += 3;  // %XX
     } else {
       // Preserve other printable ASCII characters
@@ -371,8 +371,9 @@ char* url_nonspecial_path_encode(const char* str) {
         }
       }
       i--;  // Adjust since loop will increment
-    } else if (c < 0x20 || c == '"' || c == '<' || c == '>' || c == '`' || c == 0x7F || c >= 0x80) {
-      // Encode: control characters, ", <, >, `, DEL, and non-ASCII
+    } else if (c < 0x20 || c == 0x7F || c >= 0x80) {
+      // Encode: control characters (0x00-0x1F), DEL (0x7F), and non-ASCII (>= 0x80)
+      // Per WHATWG URL spec, opaque paths preserve ALL other printable ASCII (0x21-0x7E)
       encoded[j++] = '%';
       encoded[j++] = hex_chars[c >> 4];
       encoded[j++] = hex_chars[c & 15];

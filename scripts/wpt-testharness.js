@@ -750,7 +750,8 @@ function printTestSummary() {
         if (failed > 0) {
             console.log('\n🔴 Failed tests:');
             wptTests.filter(t => t.status === TEST_FAIL).forEach(t => {
-                console.log(`  ❌ FAILED: ${t.name}`);
+                // Use JSON.stringify to show the full test name without truncation
+                console.log(`  ❌ FAILED: ${JSON.stringify(t.name)}`);
                 console.log(`      Reason: ${t.message}`);
             });
             console.log(`\n🔴 Summary: ${failed} test case(s) failed out of ${total} total`);

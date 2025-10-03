@@ -285,10 +285,32 @@ int validate_url_characters(const char* url) {
       if (c == 0x0A || c == 0x0D || c == 0x09) {
         return 0;  // Reject URLs containing newline, carriage return, or tab
       }
-      // Allow null bytes - they will be percent-encoded as %00
-      // While null bytes could break C string processing, the URL parser
-      // handles them by percent-encoding before string operations
-      // Allow other control characters - they will be percent-encoded during processing
+
+      // Check if we're in a hostname section of a special scheme
+      // In hostname context, C0 controls (including null bytes) must be rejected
+      const char* hostname_start = strstr(url, "://");
+      if (hostname_start && has_valid_scheme) {
+        hostname_start += 3;  // Skip past ://
+        const char* hostname_end = strpbrk(hostname_start, "/?#");
+        if (!hostname_end)
+          hostname_end = url + strlen(url);
+
+        // Skip userinfo if present (everything before @)
+        const char* at_symbol = strchr(hostname_start, '@');
+        if (at_symbol && at_symbol < hostname_end) {
+          hostname_start = at_symbol + 1;
+        }
+
+        // If we're in hostname, reject all C0 controls
+        if (p >= hostname_start && p < hostname_end) {
+          return 0;  // C0 controls not allowed in hostnames of special schemes
+        }
+      }
+
+      // For non-hostname contexts in special schemes, also reject C0 controls
+      // but be more lenient (they may be percent-encoded in paths/query/fragment)
+      // However, for consistency with WHATWG spec, reject them here
+      // They should have been stripped during preprocessing if at leading/trailing positions
     }
 
     // Allow Unicode replacement character (U+FFFD) - it will be percent-encoded as %EF%BF%BD

@@ -70,6 +70,10 @@ const char* errno_to_node_code(int err) {
       return "ENFILE";
     case ENOSPC:
       return "ENOSPC";
+    case ELOOP:
+      return "ELOOP";
+    case ENAMETOOLONG:
+      return "ENAMETOOLONG";
     default:
       return "UNKNOWN";
   }

@@ -74,6 +74,34 @@ JSValue js_fs_ftruncate_sync(JSContext* ctx, JSValueConst this_val, int argc, JS
 JSValue js_fs_mkdtemp_sync(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv);
 JSValue js_fs_fsync_sync(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv);
 JSValue js_fs_fdatasync_sync(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv);
+JSValue js_fs_statfs_sync(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv);
+
+// Phase 1: New stat variants
+JSValue js_fs_fstat_sync(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv);
+JSValue js_fs_lstat_sync(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv);
+
+// Phase 1: FD-based permissions and times
+// Platform Support:
+//   - fchmodSync: Unix only (Windows: not supported)
+//   - fchownSync/lchownSync: Unix only (Windows: ownership not available)
+//   - futimesSync: Cross-platform (Unix: futimes, Windows: _futime with 1s precision)
+//   - lutimesSync: Unix only (requires utimensat with AT_SYMLINK_NOFOLLOW)
+JSValue js_fs_fchmod_sync(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv);
+JSValue js_fs_fchown_sync(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv);
+JSValue js_fs_lchown_sync(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv);
+JSValue js_fs_futimes_sync(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv);
+JSValue js_fs_lutimes_sync(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv);
+
+// Phase 1: Recursive operations
+JSValue js_fs_rm_sync(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv);
+JSValue js_fs_cp_sync(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv);
+
+// Phase 1: Directory operations
+JSValue js_fs_opendir_sync(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv);
+
+// Phase 1: Vectored I/O
+JSValue js_fs_readv_sync(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv);
+JSValue js_fs_writev_sync(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv);
 
 // Asynchronous file operations (declared in fs_async.c as static)
 // These functions are not exposed in the header as they are only used internally

@@ -51,6 +51,29 @@ JSValue JSRT_InitNodeFs(JSContext* ctx) {
   JS_SetPropertyStr(ctx, fs_module, "mkdtempSync", JS_NewCFunction(ctx, js_fs_mkdtemp_sync, "mkdtempSync", 2));
   JS_SetPropertyStr(ctx, fs_module, "fsyncSync", JS_NewCFunction(ctx, js_fs_fsync_sync, "fsyncSync", 1));
   JS_SetPropertyStr(ctx, fs_module, "fdatasyncSync", JS_NewCFunction(ctx, js_fs_fdatasync_sync, "fdatasyncSync", 1));
+  JS_SetPropertyStr(ctx, fs_module, "statfsSync", JS_NewCFunction(ctx, js_fs_statfs_sync, "statfsSync", 1));
+
+  // Phase 1: New stat variants
+  JS_SetPropertyStr(ctx, fs_module, "fstatSync", JS_NewCFunction(ctx, js_fs_fstat_sync, "fstatSync", 1));
+  JS_SetPropertyStr(ctx, fs_module, "lstatSync", JS_NewCFunction(ctx, js_fs_lstat_sync, "lstatSync", 1));
+
+  // Phase 1: FD-based permissions and times
+  JS_SetPropertyStr(ctx, fs_module, "fchmodSync", JS_NewCFunction(ctx, js_fs_fchmod_sync, "fchmodSync", 2));
+  JS_SetPropertyStr(ctx, fs_module, "fchownSync", JS_NewCFunction(ctx, js_fs_fchown_sync, "fchownSync", 3));
+  JS_SetPropertyStr(ctx, fs_module, "lchownSync", JS_NewCFunction(ctx, js_fs_lchown_sync, "lchownSync", 3));
+  JS_SetPropertyStr(ctx, fs_module, "futimesSync", JS_NewCFunction(ctx, js_fs_futimes_sync, "futimesSync", 3));
+  JS_SetPropertyStr(ctx, fs_module, "lutimesSync", JS_NewCFunction(ctx, js_fs_lutimes_sync, "lutimesSync", 3));
+
+  // Phase 1: Recursive operations
+  JS_SetPropertyStr(ctx, fs_module, "rmSync", JS_NewCFunction(ctx, js_fs_rm_sync, "rmSync", 2));
+  JS_SetPropertyStr(ctx, fs_module, "cpSync", JS_NewCFunction(ctx, js_fs_cp_sync, "cpSync", 3));
+
+  // Phase 1: Directory operations
+  JS_SetPropertyStr(ctx, fs_module, "opendirSync", JS_NewCFunction(ctx, js_fs_opendir_sync, "opendirSync", 1));
+
+  // Phase 1: Vectored I/O
+  JS_SetPropertyStr(ctx, fs_module, "readvSync", JS_NewCFunction(ctx, js_fs_readv_sync, "readvSync", 3));
+  JS_SetPropertyStr(ctx, fs_module, "writevSync", JS_NewCFunction(ctx, js_fs_writev_sync, "writevSync", 3));
 
   // Asynchronous file operations
   JS_SetPropertyStr(ctx, fs_module, "readFile", JS_NewCFunction(ctx, js_fs_read_file, "readFile", 2));
@@ -122,6 +145,29 @@ int js_node_fs_init(JSContext* ctx, JSModuleDef* m) {
   JS_SetModuleExport(ctx, m, "mkdtempSync", JS_GetPropertyStr(ctx, fs_module, "mkdtempSync"));
   JS_SetModuleExport(ctx, m, "fsyncSync", JS_GetPropertyStr(ctx, fs_module, "fsyncSync"));
   JS_SetModuleExport(ctx, m, "fdatasyncSync", JS_GetPropertyStr(ctx, fs_module, "fdatasyncSync"));
+  JS_SetModuleExport(ctx, m, "statfsSync", JS_GetPropertyStr(ctx, fs_module, "statfsSync"));
+
+  // Export Phase 1: New stat variants
+  JS_SetModuleExport(ctx, m, "fstatSync", JS_GetPropertyStr(ctx, fs_module, "fstatSync"));
+  JS_SetModuleExport(ctx, m, "lstatSync", JS_GetPropertyStr(ctx, fs_module, "lstatSync"));
+
+  // Export Phase 1: FD-based permissions and times
+  JS_SetModuleExport(ctx, m, "fchmodSync", JS_GetPropertyStr(ctx, fs_module, "fchmodSync"));
+  JS_SetModuleExport(ctx, m, "fchownSync", JS_GetPropertyStr(ctx, fs_module, "fchownSync"));
+  JS_SetModuleExport(ctx, m, "lchownSync", JS_GetPropertyStr(ctx, fs_module, "lchownSync"));
+  JS_SetModuleExport(ctx, m, "futimesSync", JS_GetPropertyStr(ctx, fs_module, "futimesSync"));
+  JS_SetModuleExport(ctx, m, "lutimesSync", JS_GetPropertyStr(ctx, fs_module, "lutimesSync"));
+
+  // Export Phase 1: Recursive operations
+  JS_SetModuleExport(ctx, m, "rmSync", JS_GetPropertyStr(ctx, fs_module, "rmSync"));
+  JS_SetModuleExport(ctx, m, "cpSync", JS_GetPropertyStr(ctx, fs_module, "cpSync"));
+
+  // Export Phase 1: Directory operations
+  JS_SetModuleExport(ctx, m, "opendirSync", JS_GetPropertyStr(ctx, fs_module, "opendirSync"));
+
+  // Export Phase 1: Vectored I/O
+  JS_SetModuleExport(ctx, m, "readvSync", JS_GetPropertyStr(ctx, fs_module, "readvSync"));
+  JS_SetModuleExport(ctx, m, "writevSync", JS_GetPropertyStr(ctx, fs_module, "writevSync"));
 
   // Export constants
   JS_SetModuleExport(ctx, m, "constants", JS_GetPropertyStr(ctx, fs_module, "constants"));

@@ -1,6 +1,8 @@
 #include "fs_common.h"
 #ifdef _WIN32
 #include <io.h>
+#else
+#include <sys/uio.h>  // For readv/writev and struct iovec
 #endif
 
 // Helper function to parse file flags
@@ -357,4 +359,246 @@ JSValue js_fs_utimes_sync(JSContext* ctx, JSValueConst this_val, int argc, JSVal
 
   JS_FreeCString(ctx, path);
   return JS_UNDEFINED;
+}
+
+// fs.readvSync(fd, buffers[, position])
+JSValue js_fs_readv_sync(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
+  if (argc < 2) {
+    return JS_ThrowTypeError(ctx, "fd and buffers are required");
+  }
+
+  int32_t fd;
+  if (JS_ToInt32(ctx, &fd, argv[0]) < 0) {
+    return JS_EXCEPTION;
+  }
+
+  // Check if buffers is an array
+  if (!JS_IsArray(ctx, argv[1])) {
+    return JS_ThrowTypeError(ctx, "buffers must be an array");
+  }
+
+  // Get array length
+  JSValue length_val = JS_GetPropertyStr(ctx, argv[1], "length");
+  int32_t num_buffers;
+  if (JS_ToInt32(ctx, &num_buffers, length_val) < 0) {
+    JS_FreeValue(ctx, length_val);
+    return JS_EXCEPTION;
+  }
+  JS_FreeValue(ctx, length_val);
+
+  if (num_buffers <= 0) {
+    return JS_ThrowTypeError(ctx, "buffers array must not be empty");
+  }
+
+#ifdef _WIN32
+  // Windows doesn't have readv, emulate it
+  off_t position = -1;
+  if (argc >= 3 && !JS_IsNull(argv[2]) && !JS_IsUndefined(argv[2])) {
+    int64_t pos_val;
+    if (JS_ToInt64(ctx, &pos_val, argv[2]) < 0) {
+      return JS_EXCEPTION;
+    }
+    position = (off_t)pos_val;
+    if (_lseeki64(fd, position, SEEK_SET) == -1) {
+      return JS_Throw(ctx, create_fs_error(ctx, errno, "lseek", NULL));
+    }
+  }
+
+  ssize_t total_read = 0;
+  for (int32_t i = 0; i < num_buffers; i++) {
+    JSValue buf = JS_GetPropertyUint32(ctx, argv[1], i);
+    if (JS_IsException(buf)) {
+      return JS_EXCEPTION;
+    }
+
+    size_t buf_size;
+    uint8_t* buffer = JS_GetArrayBuffer(ctx, &buf_size, buf);
+    JS_FreeValue(ctx, buf);
+
+    if (!buffer) {
+      return JS_ThrowTypeError(ctx, "all elements must be ArrayBuffers");
+    }
+
+    ssize_t bytes_read = _read(fd, buffer, buf_size);
+    if (bytes_read < 0) {
+      return JS_Throw(ctx, create_fs_error(ctx, errno, "read", NULL));
+    }
+
+    total_read += bytes_read;
+    if (bytes_read < (ssize_t)buf_size) {
+      break;  // EOF or partial read
+    }
+  }
+
+  return JS_NewInt32(ctx, (int32_t)total_read);
+#else
+  // Use readv on Unix systems
+  struct iovec* iov = js_malloc(ctx, sizeof(struct iovec) * num_buffers);
+  if (!iov) {
+    return JS_EXCEPTION;
+  }
+
+  // Populate iovec array
+  for (int32_t i = 0; i < num_buffers; i++) {
+    JSValue buf = JS_GetPropertyUint32(ctx, argv[1], i);
+    if (JS_IsException(buf)) {
+      js_free(ctx, iov);
+      return JS_EXCEPTION;
+    }
+
+    size_t buf_size;
+    uint8_t* buffer = JS_GetArrayBuffer(ctx, &buf_size, buf);
+    JS_FreeValue(ctx, buf);
+
+    if (!buffer) {
+      js_free(ctx, iov);
+      return JS_ThrowTypeError(ctx, "all elements must be ArrayBuffers");
+    }
+
+    iov[i].iov_base = buffer;
+    iov[i].iov_len = buf_size;
+  }
+
+  // Handle position parameter
+  ssize_t bytes_read;
+  if (argc >= 3 && !JS_IsNull(argv[2]) && !JS_IsUndefined(argv[2])) {
+    int64_t position;
+    if (JS_ToInt64(ctx, &position, argv[2]) < 0) {
+      js_free(ctx, iov);
+      return JS_EXCEPTION;
+    }
+    bytes_read = preadv(fd, iov, num_buffers, (off_t)position);
+  } else {
+    bytes_read = readv(fd, iov, num_buffers);
+  }
+
+  js_free(ctx, iov);
+
+  if (bytes_read < 0) {
+    return JS_Throw(ctx, create_fs_error(ctx, errno, "read", NULL));
+  }
+
+  return JS_NewInt32(ctx, (int32_t)bytes_read);
+#endif
+}
+
+// fs.writevSync(fd, buffers[, position])
+JSValue js_fs_writev_sync(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
+  if (argc < 2) {
+    return JS_ThrowTypeError(ctx, "fd and buffers are required");
+  }
+
+  int32_t fd;
+  if (JS_ToInt32(ctx, &fd, argv[0]) < 0) {
+    return JS_EXCEPTION;
+  }
+
+  // Check if buffers is an array
+  if (!JS_IsArray(ctx, argv[1])) {
+    return JS_ThrowTypeError(ctx, "buffers must be an array");
+  }
+
+  // Get array length
+  JSValue length_val = JS_GetPropertyStr(ctx, argv[1], "length");
+  int32_t num_buffers;
+  if (JS_ToInt32(ctx, &num_buffers, length_val) < 0) {
+    JS_FreeValue(ctx, length_val);
+    return JS_EXCEPTION;
+  }
+  JS_FreeValue(ctx, length_val);
+
+  if (num_buffers <= 0) {
+    return JS_ThrowTypeError(ctx, "buffers array must not be empty");
+  }
+
+#ifdef _WIN32
+  // Windows doesn't have writev, emulate it
+  off_t position = -1;
+  if (argc >= 3 && !JS_IsNull(argv[2]) && !JS_IsUndefined(argv[2])) {
+    int64_t pos_val;
+    if (JS_ToInt64(ctx, &pos_val, argv[2]) < 0) {
+      return JS_EXCEPTION;
+    }
+    position = (off_t)pos_val;
+    if (_lseeki64(fd, position, SEEK_SET) == -1) {
+      return JS_Throw(ctx, create_fs_error(ctx, errno, "lseek", NULL));
+    }
+  }
+
+  ssize_t total_written = 0;
+  for (int32_t i = 0; i < num_buffers; i++) {
+    JSValue buf = JS_GetPropertyUint32(ctx, argv[1], i);
+    if (JS_IsException(buf)) {
+      return JS_EXCEPTION;
+    }
+
+    size_t buf_size;
+    const uint8_t* buffer = JS_GetArrayBuffer(ctx, &buf_size, buf);
+    JS_FreeValue(ctx, buf);
+
+    if (!buffer) {
+      return JS_ThrowTypeError(ctx, "all elements must be ArrayBuffers");
+    }
+
+    ssize_t bytes_written = _write(fd, buffer, buf_size);
+    if (bytes_written < 0) {
+      return JS_Throw(ctx, create_fs_error(ctx, errno, "write", NULL));
+    }
+
+    total_written += bytes_written;
+    if (bytes_written < (ssize_t)buf_size) {
+      break;  // Partial write
+    }
+  }
+
+  return JS_NewInt32(ctx, (int32_t)total_written);
+#else
+  // Use writev on Unix systems
+  struct iovec* iov = js_malloc(ctx, sizeof(struct iovec) * num_buffers);
+  if (!iov) {
+    return JS_EXCEPTION;
+  }
+
+  // Populate iovec array
+  for (int32_t i = 0; i < num_buffers; i++) {
+    JSValue buf = JS_GetPropertyUint32(ctx, argv[1], i);
+    if (JS_IsException(buf)) {
+      js_free(ctx, iov);
+      return JS_EXCEPTION;
+    }
+
+    size_t buf_size;
+    const uint8_t* buffer = JS_GetArrayBuffer(ctx, &buf_size, buf);
+    JS_FreeValue(ctx, buf);
+
+    if (!buffer) {
+      js_free(ctx, iov);
+      return JS_ThrowTypeError(ctx, "all elements must be ArrayBuffers");
+    }
+
+    iov[i].iov_base = (void*)buffer;
+    iov[i].iov_len = buf_size;
+  }
+
+  // Handle position parameter
+  ssize_t bytes_written;
+  if (argc >= 3 && !JS_IsNull(argv[2]) && !JS_IsUndefined(argv[2])) {
+    int64_t position;
+    if (JS_ToInt64(ctx, &position, argv[2]) < 0) {
+      js_free(ctx, iov);
+      return JS_EXCEPTION;
+    }
+    bytes_written = pwritev(fd, iov, num_buffers, (off_t)position);
+  } else {
+    bytes_written = writev(fd, iov, num_buffers);
+  }
+
+  js_free(ctx, iov);
+
+  if (bytes_written < 0) {
+    return JS_Throw(ctx, create_fs_error(ctx, errno, "write", NULL));
+  }
+
+  return JS_NewInt32(ctx, (int32_t)bytes_written);
+#endif
 }

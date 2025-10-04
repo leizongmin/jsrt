@@ -10,6 +10,7 @@
 #define mkstemp _mktemp_s
 #else
 #include <sys/stat.h>
+#include <sys/statvfs.h>  // For statfs/statvfs
 #include <unistd.h>
 #endif
 
@@ -310,4 +311,87 @@ JSValue js_fs_fdatasync_sync(JSContext* ctx, JSValueConst this_val, int argc, JS
 #endif
 
   return JS_UNDEFINED;
+}
+
+// fs.statfsSync(path)
+JSValue js_fs_statfs_sync(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
+  if (argc < 1) {
+    return JS_ThrowTypeError(ctx, "path is required");
+  }
+
+  const char* path = JS_ToCString(ctx, argv[0]);
+  if (!path) {
+    return JS_EXCEPTION;
+  }
+
+#ifdef _WIN32
+  // Windows: Use GetDiskFreeSpaceEx
+  ULARGE_INTEGER available_bytes, total_bytes, free_bytes;
+
+  if (!GetDiskFreeSpaceExA(path, &available_bytes, &total_bytes, &free_bytes)) {
+    DWORD error = GetLastError();
+    JSValue fs_error;
+
+    switch (error) {
+      case ERROR_PATH_NOT_FOUND:
+      case ERROR_FILE_NOT_FOUND:
+        fs_error = create_fs_error(ctx, ENOENT, "statfs", path);
+        break;
+      case ERROR_ACCESS_DENIED:
+        fs_error = create_fs_error(ctx, EACCES, "statfs", path);
+        break;
+      default:
+        fs_error = create_fs_error(ctx, EIO, "statfs", path);
+        break;
+    }
+
+    JS_FreeCString(ctx, path);
+    return JS_Throw(ctx, fs_error);
+  }
+
+  JSValue result = JS_NewObject(ctx);
+
+  // Note: Windows doesn't provide all the info that Unix statfs does
+  // We'll provide what we can
+  JS_SetPropertyStr(ctx, result, "type", JS_NewInt64(ctx, 0));      // Not available on Windows
+  JS_SetPropertyStr(ctx, result, "bsize", JS_NewInt64(ctx, 4096));  // Assume 4KB block size
+  JS_SetPropertyStr(ctx, result, "blocks", JS_NewInt64(ctx, total_bytes.QuadPart / 4096));
+  JS_SetPropertyStr(ctx, result, "bfree", JS_NewInt64(ctx, free_bytes.QuadPart / 4096));
+  JS_SetPropertyStr(ctx, result, "bavail", JS_NewInt64(ctx, available_bytes.QuadPart / 4096));
+  JS_SetPropertyStr(ctx, result, "files", JS_NewInt64(ctx, 0));  // Not available on Windows
+  JS_SetPropertyStr(ctx, result, "ffree", JS_NewInt64(ctx, 0));  // Not available on Windows
+
+  JS_FreeCString(ctx, path);
+  return result;
+
+#else
+  // Unix/Linux: Use statvfs
+  struct statvfs buf;
+
+  if (statvfs(path, &buf) < 0) {
+    JSValue error = create_fs_error(ctx, errno, "statfs", path);
+    JS_FreeCString(ctx, path);
+    return JS_Throw(ctx, error);
+  }
+
+  JSValue result = JS_NewObject(ctx);
+
+  // File system type
+  JS_SetPropertyStr(ctx, result, "type", JS_NewInt64(ctx, buf.f_fsid));
+  // Block size
+  JS_SetPropertyStr(ctx, result, "bsize", JS_NewInt64(ctx, buf.f_bsize));
+  // Total blocks
+  JS_SetPropertyStr(ctx, result, "blocks", JS_NewInt64(ctx, buf.f_blocks));
+  // Free blocks
+  JS_SetPropertyStr(ctx, result, "bfree", JS_NewInt64(ctx, buf.f_bfree));
+  // Available blocks (for unprivileged users)
+  JS_SetPropertyStr(ctx, result, "bavail", JS_NewInt64(ctx, buf.f_bavail));
+  // Total inodes
+  JS_SetPropertyStr(ctx, result, "files", JS_NewInt64(ctx, buf.f_files));
+  // Free inodes
+  JS_SetPropertyStr(ctx, result, "ffree", JS_NewInt64(ctx, buf.f_ffree));
+
+  JS_FreeCString(ctx, path);
+  return result;
+#endif
 }

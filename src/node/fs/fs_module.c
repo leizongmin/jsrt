@@ -1,13 +1,36 @@
 #include "fs_common.h"
 
-// Forward declarations for async functions (defined in fs_async.c)
+// Forward declarations for async functions (libuv-based in fs_async_core.c)
+extern JSValue js_fs_read_file_async(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv);
+extern JSValue js_fs_write_file_async(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv);
+extern JSValue js_fs_unlink_async(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv);
+extern JSValue js_fs_mkdir_async(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv);
+extern JSValue js_fs_rmdir_async(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv);
+extern JSValue js_fs_rename_async(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv);
+extern JSValue js_fs_access_async(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv);
+extern JSValue js_fs_stat_async(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv);
+extern JSValue js_fs_lstat_async(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv);
+extern JSValue js_fs_fstat_async(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv);
+extern JSValue js_fs_chmod_async(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv);
+extern JSValue js_fs_fchmod_async(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv);
+extern JSValue js_fs_lchmod_async(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv);
+extern JSValue js_fs_chown_async(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv);
+extern JSValue js_fs_fchown_async(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv);
+extern JSValue js_fs_lchown_async(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv);
+extern JSValue js_fs_utimes_async(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv);
+extern JSValue js_fs_futimes_async(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv);
+extern JSValue js_fs_lutimes_async(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv);
+extern JSValue js_fs_link_async(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv);
+extern JSValue js_fs_symlink_async(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv);
+extern JSValue js_fs_readlink_async(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv);
+extern JSValue js_fs_realpath_async(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv);
+extern JSValue js_fs_open_async(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv);
+extern JSValue js_fs_close_async(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv);
+extern JSValue js_fs_readdir_async(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv);
+
+// OLD blocking async functions (defined in fs_async.c) - deprecated
 extern JSValue js_fs_append_file(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv);
 extern JSValue js_fs_copy_file(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv);
-extern JSValue js_fs_rename(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv);
-extern JSValue js_fs_rmdir(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv);
-extern JSValue js_fs_access(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv);
-extern JSValue js_fs_read_file(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv);
-extern JSValue js_fs_write_file(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv);
 
 // Module initialization
 JSValue JSRT_InitNodeFs(JSContext* ctx) {
@@ -75,14 +98,37 @@ JSValue JSRT_InitNodeFs(JSContext* ctx) {
   JS_SetPropertyStr(ctx, fs_module, "readvSync", JS_NewCFunction(ctx, js_fs_readv_sync, "readvSync", 3));
   JS_SetPropertyStr(ctx, fs_module, "writevSync", JS_NewCFunction(ctx, js_fs_writev_sync, "writevSync", 3));
 
-  // Asynchronous file operations
-  JS_SetPropertyStr(ctx, fs_module, "readFile", JS_NewCFunction(ctx, js_fs_read_file, "readFile", 2));
-  JS_SetPropertyStr(ctx, fs_module, "writeFile", JS_NewCFunction(ctx, js_fs_write_file, "writeFile", 3));
+  // Asynchronous file operations (libuv-based - true async!)
+  JS_SetPropertyStr(ctx, fs_module, "readFile", JS_NewCFunction(ctx, js_fs_read_file_async, "readFile", 2));
+  JS_SetPropertyStr(ctx, fs_module, "writeFile", JS_NewCFunction(ctx, js_fs_write_file_async, "writeFile", 3));
+  JS_SetPropertyStr(ctx, fs_module, "mkdir", JS_NewCFunction(ctx, js_fs_mkdir_async, "mkdir", 3));
+  JS_SetPropertyStr(ctx, fs_module, "rmdir", JS_NewCFunction(ctx, js_fs_rmdir_async, "rmdir", 2));
+  JS_SetPropertyStr(ctx, fs_module, "rename", JS_NewCFunction(ctx, js_fs_rename_async, "rename", 3));
+  JS_SetPropertyStr(ctx, fs_module, "access", JS_NewCFunction(ctx, js_fs_access_async, "access", 3));
+  JS_SetPropertyStr(ctx, fs_module, "unlink", JS_NewCFunction(ctx, js_fs_unlink_async, "unlink", 2));
+  JS_SetPropertyStr(ctx, fs_module, "stat", JS_NewCFunction(ctx, js_fs_stat_async, "stat", 2));
+  JS_SetPropertyStr(ctx, fs_module, "lstat", JS_NewCFunction(ctx, js_fs_lstat_async, "lstat", 2));
+  JS_SetPropertyStr(ctx, fs_module, "fstat", JS_NewCFunction(ctx, js_fs_fstat_async, "fstat", 2));
+  JS_SetPropertyStr(ctx, fs_module, "chmod", JS_NewCFunction(ctx, js_fs_chmod_async, "chmod", 3));
+  JS_SetPropertyStr(ctx, fs_module, "fchmod", JS_NewCFunction(ctx, js_fs_fchmod_async, "fchmod", 3));
+  JS_SetPropertyStr(ctx, fs_module, "lchmod", JS_NewCFunction(ctx, js_fs_lchmod_async, "lchmod", 3));
+  JS_SetPropertyStr(ctx, fs_module, "chown", JS_NewCFunction(ctx, js_fs_chown_async, "chown", 4));
+  JS_SetPropertyStr(ctx, fs_module, "fchown", JS_NewCFunction(ctx, js_fs_fchown_async, "fchown", 4));
+  JS_SetPropertyStr(ctx, fs_module, "lchown", JS_NewCFunction(ctx, js_fs_lchown_async, "lchown", 4));
+  JS_SetPropertyStr(ctx, fs_module, "utimes", JS_NewCFunction(ctx, js_fs_utimes_async, "utimes", 4));
+  JS_SetPropertyStr(ctx, fs_module, "futimes", JS_NewCFunction(ctx, js_fs_futimes_async, "futimes", 4));
+  JS_SetPropertyStr(ctx, fs_module, "lutimes", JS_NewCFunction(ctx, js_fs_lutimes_async, "lutimes", 4));
+  JS_SetPropertyStr(ctx, fs_module, "link", JS_NewCFunction(ctx, js_fs_link_async, "link", 3));
+  JS_SetPropertyStr(ctx, fs_module, "symlink", JS_NewCFunction(ctx, js_fs_symlink_async, "symlink", 4));
+  JS_SetPropertyStr(ctx, fs_module, "readlink", JS_NewCFunction(ctx, js_fs_readlink_async, "readlink", 3));
+  JS_SetPropertyStr(ctx, fs_module, "realpath", JS_NewCFunction(ctx, js_fs_realpath_async, "realpath", 3));
+  JS_SetPropertyStr(ctx, fs_module, "open", JS_NewCFunction(ctx, js_fs_open_async, "open", 4));
+  JS_SetPropertyStr(ctx, fs_module, "close", JS_NewCFunction(ctx, js_fs_close_async, "close", 2));
+  JS_SetPropertyStr(ctx, fs_module, "readdir", JS_NewCFunction(ctx, js_fs_readdir_async, "readdir", 3));
+
+  // OLD blocking async (deprecated - keep for compatibility)
   JS_SetPropertyStr(ctx, fs_module, "appendFile", JS_NewCFunction(ctx, js_fs_append_file, "appendFile", 3));
   JS_SetPropertyStr(ctx, fs_module, "copyFile", JS_NewCFunction(ctx, js_fs_copy_file, "copyFile", 3));
-  JS_SetPropertyStr(ctx, fs_module, "rename", JS_NewCFunction(ctx, js_fs_rename, "rename", 3));
-  JS_SetPropertyStr(ctx, fs_module, "rmdir", JS_NewCFunction(ctx, js_fs_rmdir, "rmdir", 2));
-  JS_SetPropertyStr(ctx, fs_module, "access", JS_NewCFunction(ctx, js_fs_access, "access", 3));
 
   // Constants
   JSValue constants = JS_NewObject(ctx);
@@ -113,14 +159,37 @@ int js_node_fs_init(JSContext* ctx, JSModuleDef* m) {
   JS_SetModuleExport(ctx, m, "mkdirSync", JS_GetPropertyStr(ctx, fs_module, "mkdirSync"));
   JS_SetModuleExport(ctx, m, "unlinkSync", JS_GetPropertyStr(ctx, fs_module, "unlinkSync"));
 
-  // Export individual functions - asynchronous
+  // Export individual functions - asynchronous (libuv-based)
   JS_SetModuleExport(ctx, m, "readFile", JS_GetPropertyStr(ctx, fs_module, "readFile"));
   JS_SetModuleExport(ctx, m, "writeFile", JS_GetPropertyStr(ctx, fs_module, "writeFile"));
+  JS_SetModuleExport(ctx, m, "mkdir", JS_GetPropertyStr(ctx, fs_module, "mkdir"));
+  JS_SetModuleExport(ctx, m, "rmdir", JS_GetPropertyStr(ctx, fs_module, "rmdir"));
+  JS_SetModuleExport(ctx, m, "rename", JS_GetPropertyStr(ctx, fs_module, "rename"));
+  JS_SetModuleExport(ctx, m, "access", JS_GetPropertyStr(ctx, fs_module, "access"));
+  JS_SetModuleExport(ctx, m, "unlink", JS_GetPropertyStr(ctx, fs_module, "unlink"));
+  JS_SetModuleExport(ctx, m, "stat", JS_GetPropertyStr(ctx, fs_module, "stat"));
+  JS_SetModuleExport(ctx, m, "lstat", JS_GetPropertyStr(ctx, fs_module, "lstat"));
+  JS_SetModuleExport(ctx, m, "fstat", JS_GetPropertyStr(ctx, fs_module, "fstat"));
+  JS_SetModuleExport(ctx, m, "chmod", JS_GetPropertyStr(ctx, fs_module, "chmod"));
+  JS_SetModuleExport(ctx, m, "fchmod", JS_GetPropertyStr(ctx, fs_module, "fchmod"));
+  JS_SetModuleExport(ctx, m, "lchmod", JS_GetPropertyStr(ctx, fs_module, "lchmod"));
+  JS_SetModuleExport(ctx, m, "chown", JS_GetPropertyStr(ctx, fs_module, "chown"));
+  JS_SetModuleExport(ctx, m, "fchown", JS_GetPropertyStr(ctx, fs_module, "fchown"));
+  JS_SetModuleExport(ctx, m, "lchown", JS_GetPropertyStr(ctx, fs_module, "lchown"));
+  JS_SetModuleExport(ctx, m, "utimes", JS_GetPropertyStr(ctx, fs_module, "utimes"));
+  JS_SetModuleExport(ctx, m, "futimes", JS_GetPropertyStr(ctx, fs_module, "futimes"));
+  JS_SetModuleExport(ctx, m, "lutimes", JS_GetPropertyStr(ctx, fs_module, "lutimes"));
+  JS_SetModuleExport(ctx, m, "link", JS_GetPropertyStr(ctx, fs_module, "link"));
+  JS_SetModuleExport(ctx, m, "symlink", JS_GetPropertyStr(ctx, fs_module, "symlink"));
+  JS_SetModuleExport(ctx, m, "readlink", JS_GetPropertyStr(ctx, fs_module, "readlink"));
+  JS_SetModuleExport(ctx, m, "realpath", JS_GetPropertyStr(ctx, fs_module, "realpath"));
+  JS_SetModuleExport(ctx, m, "open", JS_GetPropertyStr(ctx, fs_module, "open"));
+  JS_SetModuleExport(ctx, m, "close", JS_GetPropertyStr(ctx, fs_module, "close"));
+  JS_SetModuleExport(ctx, m, "readdir", JS_GetPropertyStr(ctx, fs_module, "readdir"));
+
+  // Export deprecated blocking async functions
   JS_SetModuleExport(ctx, m, "appendFile", JS_GetPropertyStr(ctx, fs_module, "appendFile"));
   JS_SetModuleExport(ctx, m, "copyFile", JS_GetPropertyStr(ctx, fs_module, "copyFile"));
-  JS_SetModuleExport(ctx, m, "rename", JS_GetPropertyStr(ctx, fs_module, "rename"));
-  JS_SetModuleExport(ctx, m, "rmdir", JS_GetPropertyStr(ctx, fs_module, "rmdir"));
-  JS_SetModuleExport(ctx, m, "access", JS_GetPropertyStr(ctx, fs_module, "access"));
 
   // Export file descriptor operations
   JS_SetModuleExport(ctx, m, "openSync", JS_GetPropertyStr(ctx, fs_module, "openSync"));

@@ -106,6 +106,10 @@ JSValue js_fs_writev_sync(JSContext* ctx, JSValueConst this_val, int argc, JSVal
 // Asynchronous file operations (declared in fs_async.c as static)
 // These functions are not exposed in the header as they are only used internally
 
+// Phase 3: Promise API
+JSValue JSRT_InitNodeFsPromises(JSContext* ctx);
+void fs_promises_init(JSContext* ctx);
+
 // Module initialization
 JSValue JSRT_InitNodeFs(JSContext* ctx);
 int js_node_fs_init(JSContext* ctx, JSModuleDef* m);

@@ -34,6 +34,9 @@ extern JSValue js_fs_copy_file(JSContext* ctx, JSValueConst this_val, int argc, 
 
 // Module initialization
 JSValue JSRT_InitNodeFs(JSContext* ctx) {
+  // Initialize Promise API (registers FileHandle class)
+  fs_promises_init(ctx);
+
   JSValue fs_module = JS_NewObject(ctx);
 
   // Synchronous file operations
@@ -138,6 +141,10 @@ JSValue JSRT_InitNodeFs(JSContext* ctx) {
   JS_SetPropertyStr(ctx, constants, "X_OK", JS_NewInt32(ctx, X_OK));
   JS_SetPropertyStr(ctx, fs_module, "constants", constants);
 
+  // Phase 3: Promise API namespace
+  JSValue promises = JSRT_InitNodeFsPromises(ctx);
+  JS_SetPropertyStr(ctx, fs_module, "promises", promises);
+
   return fs_module;
 }
 
@@ -240,6 +247,9 @@ int js_node_fs_init(JSContext* ctx, JSModuleDef* m) {
 
   // Export constants
   JS_SetModuleExport(ctx, m, "constants", JS_GetPropertyStr(ctx, fs_module, "constants"));
+
+  // Export Phase 3: Promise API namespace
+  JS_SetModuleExport(ctx, m, "promises", JS_GetPropertyStr(ctx, fs_module, "promises"));
 
   // Also export the whole module as default
   JS_SetModuleExport(ctx, m, "default", fs_module);

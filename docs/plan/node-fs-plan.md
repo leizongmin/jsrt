@@ -1,10 +1,11 @@
 ---
 Created: 2025-10-04T00:00:00Z
-Last Updated: 2025-10-05T01:30:00Z
+Last Updated: 2025-10-05T02:00:00Z
 Status: 🔵 IN_PROGRESS
-Overall Progress: 50 sync + 25 async APIs (79%)
+Overall Progress: 42 sync + 25 async + Promise infrastructure (75%)
 Phase 1: ✅ COMPLETED (2025-10-04)
 Phase 2: 🔄 PARTIAL (2025-10-05) - 25/33 async APIs with libuv
+Phase 3: 🔄 STARTED (2025-10-05) - Core infrastructure + FileHandle
 ---
 
 # Task Plan: Node.js fs Module Compatibility Implementation
@@ -61,6 +62,12 @@ Phase 2: 🔄 PARTIAL (2025-10-05) - 25/33 async APIs with libuv
 **Status:** Core infrastructure complete, 25 async APIs using libuv
 **Remaining:** 8 APIs (appendFile, copyFile, rm, cp, read/write/readv/writev, opendir)
 
+### Phase 3: Promise API & FileHandle (Core Started) 🔄 STARTED
+**Start Date:** 2025-10-05
+**Status:** Core infrastructure complete, FileHandle class implemented
+**Completed:** Tasks 3.1-3.5 (Promise infrastructure, FileHandle.open/close)
+**Remaining:** FileHandle methods (Tasks 3.6-3.14), Promise wrappers (Tasks 3.15-3.22)
+
 **New Sync APIs Implemented (14 methods):**
 - ✅ **Stat Variants**: fstatSync, lstatSync
 - ✅ **FD Permissions**: fchmodSync, fchownSync, lchownSync
@@ -101,10 +108,10 @@ Phase 2: 🔄 PARTIAL (2025-10-05) - 25/33 async APIs with libuv
 **Implemented Constants (4):**
 - ✅ F_OK, R_OK, W_OK, X_OK
 
-**Code Structure (~5,900 lines as of Phase 2 partial):**
+**Code Structure (~6,600 lines as of Phase 3 start):**
 ```
 /home/lei/work/jsrt/src/node/fs/
-├── fs_module.c         - Module initialization and exports
+├── fs_module.c         - Module initialization and exports (+ promises namespace)
 ├── fs_common.c/h       - Common utilities and error handling
 ├── fs_sync_io.c        - Sync I/O (read/write/append/exists/unlink)
 ├── fs_sync_dir.c       - Directory operations + Dir class (opendirSync)
@@ -115,18 +122,20 @@ Phase 2: 🔄 PARTIAL (2025-10-05) - 25/33 async APIs with libuv
 ├── fs_sync_ops.c       - File operations (copy/rename/access)
 ├── fs_sync_link.c      - Link operations (link/symlink/readlink/realpath)
 ├── fs_sync_advanced.c  - Advanced operations (truncate/fsync/mkdtemp/statfs)
-├── fs_async_libuv.c/h  - Async infrastructure (completion callbacks) [NEW Phase 2]
-├── fs_async_core.c     - 25 true async operations with libuv [NEW Phase 2]
+├── fs_async_libuv.c/h  - Async infrastructure (completion callbacks) [Phase 2]
+├── fs_async_core.c     - 25 true async operations with libuv [Phase 2]
+├── fs_promises.c       - Promise API + FileHandle class [NEW Phase 3]
 └── fs_async.c          - Old blocking async (deprecated: appendFile, copyFile)
 ```
 
 **What's Working:**
 - ✅ All sync operations (42 APIs)
 - ✅ True async I/O with libuv (25 APIs, non-blocking)
+- ✅ Promise API infrastructure (fs.promises namespace)
+- ✅ FileHandle class with finalizer and async close()
+- ✅ fsPromises.open() returning Promise<FileHandle>
 - ✅ Multi-step async operations (readFile: open→stat→read→close)
-- ✅ File descriptor management (sync + async)
-- ✅ Permission and ownership control (sync + async)
-- ✅ Symbolic link support (sync + async)
+- ✅ File descriptor management (sync + async + Promise)
 - ✅ Dir class with QuickJS finalizer
 
 ---
@@ -137,9 +146,9 @@ Phase 2: 🔄 PARTIAL (2025-10-05) - 25/33 async APIs with libuv
 - **Total Node.js fs APIs**: ~95 methods + 7 classes + constants
 - **Sync APIs**: 42/42 (100%) ✅
 - **Async Callback APIs**: 25/40 (63%) 🔄
-- **Promise APIs**: 0/40 (0%) ⏳
-- **Classes**: 2/7 (29%) - Stats, Dir
-- **Overall**: 67/95 methods (71%)
+- **Promise APIs**: 1/40 (3%) 🔄 - Infrastructure ready
+- **Classes**: 3/7 (43%) - Stats, Dir, FileHandle
+- **Overall**: 68/95 methods (72%) + Promise infrastructure
 
 **Coverage by Category:**
 | Category | Total | Implemented | Remaining | % Complete |
@@ -152,8 +161,8 @@ Phase 2: 🔄 PARTIAL (2025-10-05) - 25/33 async APIs with libuv
 | Sync Links | 4 | 4 | 0 | 100% ✅ |
 | Sync Advanced | 6 | 6 | 0 | 100% ✅ |
 | Async Callbacks | 40 | 25 | 15 | 63% 🔄 |
-| Promise API | 40+ | 0 | 40+ | 0% |
-| Classes | 7 | 2 | 5 | 29% (Stats, Dir) |
+| Promise API | 40+ | 1 | 39+ | 3% (open) |
+| Classes | 7 | 3 | 4 | 43% (Stats, Dir, FileHandle) |
 
 **What's Missing (Priority Order):**
 
@@ -164,10 +173,12 @@ Phase 2: 🔄 PARTIAL (2025-10-05) - 25/33 async APIs with libuv
    - ⏳ opendir (Dir iterator async)
    - ⏳ truncate, ftruncate, fsync, fdatasync, mkdtemp, statfs
 
-2. **High Priority - Promise API (40+ methods):**
-   - ⏳ Complete fs.promises.* namespace (0% implemented)
-   - ⏳ FileHandle class with all methods
-   - ⏳ Modern async/await support
+2. **High Priority - Promise API (39 methods remaining):**
+   - ✅ fs.promises infrastructure complete
+   - ✅ FileHandle class with finalizer
+   - ✅ fsPromises.open() implemented
+   - ⏳ FileHandle methods (read, write, stat, etc. - 9 methods)
+   - ⏳ fs.promises.* wrappers (readFile, writeFile, stat, etc. - 30 methods)
 
 3. **Medium Priority - Classes (5 missing):**
    - Dir (directory iterator)

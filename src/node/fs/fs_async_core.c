@@ -81,6 +81,7 @@ static void readfile_fstat_cb(uv_fs_t* req) {
   // Allocate buffer for file data
   work->buffer = malloc(file_size + 1);  // +1 for null terminator (text files)
   work->buffer_size = file_size;
+  work->owns_buffer = 1;  // We allocated this buffer, must free it
 
   if (!work->buffer) {
     // Allocation failed - close fd and report error
@@ -308,6 +309,7 @@ JSValue js_fs_write_file_async(JSContext* ctx, JSValueConst this_val, int argc, 
   work->buffer = malloc(data_len);
   memcpy(work->buffer, data, data_len);
   work->buffer_size = data_len;
+  work->owns_buffer = 1;  // We allocated this buffer, must free it
   work->flags = 0;
 
   JS_FreeCString(ctx, path);
@@ -1694,6 +1696,7 @@ JSValue js_fs_append_file_async(JSContext* ctx, JSValueConst this_val, int argc,
   work->callback = JS_DupValue(ctx, argv[2]);
   work->path = strdup(path);
   work->buffer = malloc(data_len);
+  work->owns_buffer = 1;  // We allocated this buffer, must free it
   if (!work->buffer) {
     JS_FreeCString(ctx, path);
     JS_FreeCString(ctx, data);
@@ -1713,6 +1716,279 @@ JSValue js_fs_append_file_async(JSContext* ctx, JSValueConst this_val, int argc,
 
   if (result < 0) {
     JSValue error = create_fs_error(ctx, -result, "open", work->path);
+    JSValue args[1] = {error};
+    JSValue ret = JS_Call(ctx, work->callback, JS_UNDEFINED, 1, args);
+    JS_FreeValue(ctx, ret);
+    JS_FreeValue(ctx, error);
+    fs_async_work_free(work);
+  }
+
+  return JS_UNDEFINED;
+}
+
+// ============================================================================
+// Buffer I/O operations (Task 2.10): fs.read, fs.write
+// ============================================================================
+
+// Completion callback for fs.read()
+static void fs_read_cb(uv_fs_t* req) {
+  fs_async_work_t* work = (fs_async_work_t*)req;
+  JSContext* ctx = work->ctx;
+
+  if (req->result < 0) {
+    // Read error
+    int err = -req->result;
+    JSValue error = create_fs_error(ctx, err, "read", work->path);
+    JSValue args[1] = {error};
+    JSValue ret = JS_Call(ctx, work->callback, JS_UNDEFINED, 1, args);
+    JS_FreeValue(ctx, ret);
+    JS_FreeValue(ctx, error);
+    fs_async_work_free(work);
+    return;
+  }
+
+  // Success: callback(null, bytesRead, buffer)
+  // Data was already read into user's buffer by uv_fs_read
+  // Just return bytes read and the user's buffer (same buffer object)
+  size_t bytes_read = (size_t)req->result;
+
+  JSValue args[3];
+  args[0] = JS_NULL;                              // err = null
+  args[1] = JS_NewInt64(ctx, bytes_read);         // bytesRead
+  args[2] = JS_DupValue(ctx, work->user_buffer);  // Return same buffer object
+
+  JSValue ret = JS_Call(ctx, work->callback, JS_UNDEFINED, 3, args);
+  JS_FreeValue(ctx, ret);
+  JS_FreeValue(ctx, args[1]);
+  JS_FreeValue(ctx, args[2]);
+
+  fs_async_work_free(work);
+}
+
+// fs.read(fd, buffer, offset, length, position, callback) - True async
+JSValue js_fs_read_async(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
+  if (argc < 6) {
+    return JS_ThrowTypeError(ctx, "read requires fd, buffer, offset, length, position, and callback");
+  }
+
+  // Parse fd
+  int32_t fd;
+  if (JS_ToInt32(ctx, &fd, argv[0]) < 0) {
+    return JS_ThrowTypeError(ctx, "fd must be a number");
+  }
+
+  // Parse buffer (supports Buffer/TypedArray/ArrayBuffer)
+  size_t buffer_size;
+  uint8_t* buffer_data = NULL;
+  size_t byte_offset = 0;
+
+  // First try to get as TypedArray (for Buffer objects)
+  JSValue array_buffer = JS_GetTypedArrayBuffer(ctx, argv[1], &byte_offset, &buffer_size, NULL);
+  if (!JS_IsException(array_buffer)) {
+    size_t ab_size;
+    buffer_data = JS_GetArrayBuffer(ctx, &ab_size, array_buffer);
+    JS_FreeValue(ctx, array_buffer);
+    if (buffer_data) {
+      buffer_data += byte_offset;
+    }
+  } else {
+    // Fallback: try to get as ArrayBuffer directly
+    buffer_data = JS_GetArrayBuffer(ctx, &buffer_size, argv[1]);
+  }
+
+  if (!buffer_data) {
+    return JS_ThrowTypeError(ctx, "buffer must be a Buffer, TypedArray, or ArrayBuffer");
+  }
+
+  // Parse offset
+  int64_t offset;
+  if (JS_ToInt64(ctx, &offset, argv[2]) < 0) {
+    return JS_ThrowTypeError(ctx, "offset must be a number");
+  }
+
+  // Parse length
+  int64_t length;
+  if (JS_ToInt64(ctx, &length, argv[3]) < 0) {
+    return JS_ThrowTypeError(ctx, "length must be a number");
+  }
+
+  // Parse position (can be null for current position)
+  int64_t position = -1;  // -1 means current position
+  if (!JS_IsNull(argv[4])) {
+    if (JS_ToInt64(ctx, &position, argv[4]) < 0) {
+      return JS_ThrowTypeError(ctx, "position must be a number or null");
+    }
+  }
+
+  // Parse callback
+  if (!JS_IsFunction(ctx, argv[5])) {
+    return JS_ThrowTypeError(ctx, "callback must be a function");
+  }
+
+  // Validate offset/length
+  if (offset < 0 || length < 0 || offset + length > (int64_t)buffer_size) {
+    return JS_ThrowRangeError(ctx, "Invalid offset/length for buffer");
+  }
+
+  // Allocate work request
+  fs_async_work_t* work = calloc(1, sizeof(fs_async_work_t));
+  if (!work) {
+    return JS_ThrowOutOfMemory(ctx);
+  }
+
+  // Store user's buffer reference (must DupValue to preserve it)
+  work->ctx = ctx;
+  work->callback = JS_DupValue(ctx, argv[5]);
+  work->user_buffer = JS_DupValue(ctx, argv[1]);  // Preserve user's buffer
+  work->path = NULL;                              // read doesn't use path
+  work->buffer = (void*)(buffer_data + offset);   // Point to user's buffer at offset
+  work->buffer_size = length;
+  work->buffer_offset = offset;
+  work->offset = position;
+  work->owns_buffer = 0;  // Buffer points to user's buffer, don't free it
+
+  // Queue async read operation - read directly into user's buffer
+  uv_buf_t iov = uv_buf_init((char*)work->buffer, (unsigned int)length);
+  uv_loop_t* loop = fs_get_uv_loop(ctx);
+  int result = uv_fs_read(loop, &work->req, fd, &iov, 1, position, fs_read_cb);
+
+  if (result < 0) {
+    // Immediate error
+    JSValue error = create_fs_error(ctx, -result, "read", NULL);
+    JSValue args[1] = {error};
+    JSValue ret = JS_Call(ctx, work->callback, JS_UNDEFINED, 1, args);
+    JS_FreeValue(ctx, ret);
+    JS_FreeValue(ctx, error);
+    fs_async_work_free(work);
+  }
+
+  return JS_UNDEFINED;
+}
+
+// Completion callback for fs.write()
+static void fs_write_cb(uv_fs_t* req) {
+  fs_async_work_t* work = (fs_async_work_t*)req;
+  JSContext* ctx = work->ctx;
+
+  if (req->result < 0) {
+    // Write error
+    int err = -req->result;
+    JSValue error = create_fs_error(ctx, err, "write", work->path);
+    JSValue args[1] = {error};
+    JSValue ret = JS_Call(ctx, work->callback, JS_UNDEFINED, 1, args);
+    JS_FreeValue(ctx, ret);
+    JS_FreeValue(ctx, error);
+    fs_async_work_free(work);
+    return;
+  }
+
+  // Success: callback(null, bytesWritten, buffer)
+  // Return user's buffer (same buffer object that was passed in)
+  size_t bytes_written = (size_t)req->result;
+
+  JSValue args[3];
+  args[0] = JS_NULL;                              // err = null
+  args[1] = JS_NewInt64(ctx, bytes_written);      // bytesWritten
+  args[2] = JS_DupValue(ctx, work->user_buffer);  // Return same buffer object
+
+  JSValue ret = JS_Call(ctx, work->callback, JS_UNDEFINED, 3, args);
+  JS_FreeValue(ctx, ret);
+  JS_FreeValue(ctx, args[1]);
+  JS_FreeValue(ctx, args[2]);
+
+  fs_async_work_free(work);
+}
+
+// fs.write(fd, buffer, offset, length, position, callback) - True async
+JSValue js_fs_write_async(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
+  if (argc < 6) {
+    return JS_ThrowTypeError(ctx, "write requires fd, buffer, offset, length, position, and callback");
+  }
+
+  // Parse fd
+  int32_t fd;
+  if (JS_ToInt32(ctx, &fd, argv[0]) < 0) {
+    return JS_ThrowTypeError(ctx, "fd must be a number");
+  }
+
+  // Parse buffer (supports Buffer/TypedArray/ArrayBuffer)
+  size_t buffer_size;
+  uint8_t* buffer_data = NULL;
+  size_t byte_offset = 0;
+
+  // First try to get as TypedArray (for Buffer objects)
+  JSValue array_buffer = JS_GetTypedArrayBuffer(ctx, argv[1], &byte_offset, &buffer_size, NULL);
+  if (!JS_IsException(array_buffer)) {
+    size_t ab_size;
+    buffer_data = JS_GetArrayBuffer(ctx, &ab_size, array_buffer);
+    JS_FreeValue(ctx, array_buffer);
+    if (buffer_data) {
+      buffer_data += byte_offset;
+    }
+  } else {
+    // Fallback: try to get as ArrayBuffer directly
+    buffer_data = JS_GetArrayBuffer(ctx, &buffer_size, argv[1]);
+  }
+
+  if (!buffer_data) {
+    return JS_ThrowTypeError(ctx, "buffer must be a Buffer, TypedArray, or ArrayBuffer");
+  }
+
+  // Parse offset
+  int64_t offset;
+  if (JS_ToInt64(ctx, &offset, argv[2]) < 0) {
+    return JS_ThrowTypeError(ctx, "offset must be a number");
+  }
+
+  // Parse length
+  int64_t length;
+  if (JS_ToInt64(ctx, &length, argv[3]) < 0) {
+    return JS_ThrowTypeError(ctx, "length must be a number");
+  }
+
+  // Parse position (can be null for current position)
+  int64_t position = -1;  // -1 means current position
+  if (!JS_IsNull(argv[4])) {
+    if (JS_ToInt64(ctx, &position, argv[4]) < 0) {
+      return JS_ThrowTypeError(ctx, "position must be a number or null");
+    }
+  }
+
+  // Parse callback
+  if (!JS_IsFunction(ctx, argv[5])) {
+    return JS_ThrowTypeError(ctx, "callback must be a function");
+  }
+
+  // Validate offset/length
+  if (offset < 0 || length < 0 || offset + length > (int64_t)buffer_size) {
+    return JS_ThrowRangeError(ctx, "Invalid offset/length for buffer");
+  }
+
+  // Allocate work request
+  fs_async_work_t* work = calloc(1, sizeof(fs_async_work_t));
+  if (!work) {
+    return JS_ThrowOutOfMemory(ctx);
+  }
+
+  // Store user's buffer reference and write directly from it
+  work->ctx = ctx;
+  work->callback = JS_DupValue(ctx, argv[5]);
+  work->user_buffer = JS_DupValue(ctx, argv[1]);  // Preserve user's buffer
+  work->path = NULL;                              // write doesn't use path
+  work->buffer = (void*)(buffer_data + offset);   // Point to user's buffer at offset
+  work->buffer_size = length;
+  work->buffer_offset = offset;
+  work->offset = position;
+  work->owns_buffer = 0;  // Buffer points to user's buffer, don't free it
+
+  // Queue async write operation - write directly from user's buffer
+  uv_buf_t iov = uv_buf_init((char*)work->buffer, (unsigned int)length);
+  uv_loop_t* loop = fs_get_uv_loop(ctx);
+  int result = uv_fs_write(loop, &work->req, fd, &iov, 1, position, fs_write_cb);
+
+  if (result < 0) {
+    // Immediate error
+    JSValue error = create_fs_error(ctx, -result, "write", NULL);
     JSValue args[1] = {error};
     JSValue ret = JS_Call(ctx, work->callback, JS_UNDEFINED, 1, args);
     JS_FreeValue(ctx, ret);
@@ -1853,6 +2129,7 @@ static void copyfile_fstat_cb(uv_fs_t* req) {
 
   // Allocate buffer for copying (8KB chunks)
   work->buffer = malloc(8192);
+  work->owns_buffer = 1;  // We allocated this buffer, must free it
   if (!work->buffer) {
     // Allocation failed - close both fds
     uv_fs_t close_req;

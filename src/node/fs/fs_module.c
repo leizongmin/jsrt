@@ -30,6 +30,16 @@ extern JSValue js_fs_readdir_async(JSContext* ctx, JSValueConst this_val, int ar
 extern JSValue js_fs_append_file_async(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv);
 extern JSValue js_fs_copy_file_async(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv);
 
+// Phase 2: Buffer I/O async functions
+extern JSValue js_fs_read_async(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv);
+extern JSValue js_fs_write_async(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv);
+extern JSValue js_fs_readv_async(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv);
+extern JSValue js_fs_writev_async(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv);
+
+// Phase 2: Recursive async functions
+extern JSValue js_fs_rm_async(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv);
+extern JSValue js_fs_cp_async(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv);
+
 // Module initialization
 JSValue JSRT_InitNodeFs(JSContext* ctx) {
   // Initialize Promise API (registers FileHandle class)
@@ -129,6 +139,16 @@ JSValue JSRT_InitNodeFs(JSContext* ctx) {
   JS_SetPropertyStr(ctx, fs_module, "appendFile", JS_NewCFunction(ctx, js_fs_append_file_async, "appendFile", 3));
   JS_SetPropertyStr(ctx, fs_module, "copyFile", JS_NewCFunction(ctx, js_fs_copy_file_async, "copyFile", 3));
 
+  // Phase 2: Buffer I/O async operations
+  JS_SetPropertyStr(ctx, fs_module, "read", JS_NewCFunction(ctx, js_fs_read_async, "read", 6));
+  JS_SetPropertyStr(ctx, fs_module, "write", JS_NewCFunction(ctx, js_fs_write_async, "write", 6));
+  JS_SetPropertyStr(ctx, fs_module, "readv", JS_NewCFunction(ctx, js_fs_readv_async, "readv", 4));
+  JS_SetPropertyStr(ctx, fs_module, "writev", JS_NewCFunction(ctx, js_fs_writev_async, "writev", 4));
+
+  // Phase 2: Recursive async operations
+  JS_SetPropertyStr(ctx, fs_module, "rm", JS_NewCFunction(ctx, js_fs_rm_async, "rm", 3));
+  JS_SetPropertyStr(ctx, fs_module, "cp", JS_NewCFunction(ctx, js_fs_cp_async, "cp", 4));
+
   // Constants
   JSValue constants = JS_NewObject(ctx);
   JS_SetPropertyStr(ctx, constants, "F_OK", JS_NewInt32(ctx, F_OK));
@@ -193,6 +213,16 @@ int js_node_fs_init(JSContext* ctx, JSModuleDef* m) {
   // Export deprecated blocking async functions
   JS_SetModuleExport(ctx, m, "appendFile", JS_GetPropertyStr(ctx, fs_module, "appendFile"));
   JS_SetModuleExport(ctx, m, "copyFile", JS_GetPropertyStr(ctx, fs_module, "copyFile"));
+
+  // Export Phase 2: Buffer I/O async operations
+  JS_SetModuleExport(ctx, m, "read", JS_GetPropertyStr(ctx, fs_module, "read"));
+  JS_SetModuleExport(ctx, m, "write", JS_GetPropertyStr(ctx, fs_module, "write"));
+  JS_SetModuleExport(ctx, m, "readv", JS_GetPropertyStr(ctx, fs_module, "readv"));
+  JS_SetModuleExport(ctx, m, "writev", JS_GetPropertyStr(ctx, fs_module, "writev"));
+
+  // Export Phase 2: Recursive async operations
+  JS_SetModuleExport(ctx, m, "rm", JS_GetPropertyStr(ctx, fs_module, "rm"));
+  JS_SetModuleExport(ctx, m, "cp", JS_GetPropertyStr(ctx, fs_module, "cp"));
 
   // Export file descriptor operations
   JS_SetModuleExport(ctx, m, "openSync", JS_GetPropertyStr(ctx, fs_module, "openSync"));

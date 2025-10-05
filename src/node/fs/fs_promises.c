@@ -1441,6 +1441,1137 @@ JSValue js_fs_promises_readlink(JSContext* ctx, JSValueConst this_val, int argc,
 }
 
 // ============================================================================
+// fsPromises recursive and link operations
+// ============================================================================
+
+// Readdir completion callback
+static void fs_promise_complete_readdir(uv_fs_t* req) {
+  fs_promise_work_t* work = (fs_promise_work_t*)req;
+  JSContext* ctx = work->ctx;
+
+  if (req->result < 0) {
+    // Reject with error
+    int err = -req->result;
+    JSValue error = create_fs_error(ctx, err, "readdir", work->path);
+    JSValue ret = JS_Call(ctx, work->reject, JS_UNDEFINED, 1, &error);
+    JS_FreeValue(ctx, error);
+    JS_FreeValue(ctx, ret);
+  } else {
+    // Resolve with array of filenames
+    JSValue files_array = JS_NewArray(ctx);
+    int index = 0;
+    uv_dirent_t dent;
+
+    // Iterate through directory entries
+    while (uv_fs_scandir_next(req, &dent) != UV_EOF) {
+      JS_SetPropertyUint32(ctx, files_array, index++, JS_NewString(ctx, dent.name));
+    }
+
+    JSValue ret = JS_Call(ctx, work->resolve, JS_UNDEFINED, 1, &files_array);
+    JS_FreeValue(ctx, files_array);
+    JS_FreeValue(ctx, ret);
+  }
+
+  fs_promise_work_free(work);
+}
+
+// fs.promises.readdir() - returns Promise<string[]>
+JSValue js_fs_promises_readdir(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
+  if (argc < 1) {
+    return JS_ThrowTypeError(ctx, "readdir requires a path");
+  }
+
+  const char* path = JS_ToCString(ctx, argv[0]);
+  if (!path) {
+    return JS_EXCEPTION;
+  }
+
+  // Create Promise
+  JSValue resolving_funcs[2];
+  JSValue promise = JS_NewPromiseCapability(ctx, resolving_funcs);
+  if (JS_IsException(promise)) {
+    JS_FreeCString(ctx, path);
+    return JS_EXCEPTION;
+  }
+
+  // Allocate work request
+  fs_promise_work_t* work = calloc(1, sizeof(fs_promise_work_t));
+  if (!work) {
+    JS_FreeCString(ctx, path);
+    JS_FreeValue(ctx, resolving_funcs[0]);
+    JS_FreeValue(ctx, resolving_funcs[1]);
+    JS_FreeValue(ctx, promise);
+    return JS_ThrowOutOfMemory(ctx);
+  }
+
+  work->ctx = ctx;
+  work->resolve = resolving_funcs[0];
+  work->reject = resolving_funcs[1];
+  work->path = strdup(path);
+  JS_FreeCString(ctx, path);
+
+  // Queue async scandir operation
+  uv_loop_t* loop = fs_get_uv_loop(ctx);
+  int result = uv_fs_scandir(loop, &work->req, work->path, 0, fs_promise_complete_readdir);
+
+  if (result < 0) {
+    JSValue error = create_fs_error(ctx, -result, "readdir", work->path);
+    JSValue ret = JS_Call(ctx, work->reject, JS_UNDEFINED, 1, &error);
+    JS_FreeValue(ctx, error);
+    JS_FreeValue(ctx, ret);
+    fs_promise_work_free(work);
+  }
+
+  return promise;
+}
+
+// fs.promises.link() - returns Promise<void>
+JSValue js_fs_promises_link(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
+  if (argc < 2) {
+    return JS_ThrowTypeError(ctx, "link requires existingPath and newPath");
+  }
+
+  const char* existingPath = JS_ToCString(ctx, argv[0]);
+  const char* newPath = JS_ToCString(ctx, argv[1]);
+  if (!existingPath || !newPath) {
+    if (existingPath)
+      JS_FreeCString(ctx, existingPath);
+    if (newPath)
+      JS_FreeCString(ctx, newPath);
+    return JS_EXCEPTION;
+  }
+
+  // Create Promise
+  JSValue resolving_funcs[2];
+  JSValue promise = JS_NewPromiseCapability(ctx, resolving_funcs);
+  if (JS_IsException(promise)) {
+    JS_FreeCString(ctx, existingPath);
+    JS_FreeCString(ctx, newPath);
+    return JS_EXCEPTION;
+  }
+
+  // Allocate work request
+  fs_promise_work_t* work = calloc(1, sizeof(fs_promise_work_t));
+  if (!work) {
+    JS_FreeCString(ctx, existingPath);
+    JS_FreeCString(ctx, newPath);
+    JS_FreeValue(ctx, resolving_funcs[0]);
+    JS_FreeValue(ctx, resolving_funcs[1]);
+    JS_FreeValue(ctx, promise);
+    return JS_ThrowOutOfMemory(ctx);
+  }
+
+  work->ctx = ctx;
+  work->resolve = resolving_funcs[0];
+  work->reject = resolving_funcs[1];
+  work->path = strdup(existingPath);
+  work->path2 = strdup(newPath);
+  JS_FreeCString(ctx, existingPath);
+  JS_FreeCString(ctx, newPath);
+
+  // Queue async link operation
+  uv_loop_t* loop = fs_get_uv_loop(ctx);
+  int result = uv_fs_link(loop, &work->req, work->path, work->path2, fs_promise_complete_void);
+
+  if (result < 0) {
+    JSValue error = create_fs_error(ctx, -result, "link", work->path);
+    JSValue ret = JS_Call(ctx, work->reject, JS_UNDEFINED, 1, &error);
+    JS_FreeValue(ctx, error);
+    JS_FreeValue(ctx, ret);
+    fs_promise_work_free(work);
+  }
+
+  return promise;
+}
+
+// fs.promises.symlink() - returns Promise<void>
+JSValue js_fs_promises_symlink(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
+  if (argc < 2) {
+    return JS_ThrowTypeError(ctx, "symlink requires target and path");
+  }
+
+  const char* target = JS_ToCString(ctx, argv[0]);
+  const char* path = JS_ToCString(ctx, argv[1]);
+  if (!target || !path) {
+    if (target)
+      JS_FreeCString(ctx, target);
+    if (path)
+      JS_FreeCString(ctx, path);
+    return JS_EXCEPTION;
+  }
+
+  // Parse type (optional, mainly for Windows)
+  int flags = 0;  // 0 = file symlink, UV_FS_SYMLINK_DIR = directory symlink
+  if (argc >= 3 && JS_IsString(argv[2])) {
+    const char* type = JS_ToCString(ctx, argv[2]);
+    if (type) {
+      if (strcmp(type, "dir") == 0 || strcmp(type, "directory") == 0) {
+        flags = UV_FS_SYMLINK_DIR;
+      }
+      JS_FreeCString(ctx, type);
+    }
+  }
+
+  // Create Promise
+  JSValue resolving_funcs[2];
+  JSValue promise = JS_NewPromiseCapability(ctx, resolving_funcs);
+  if (JS_IsException(promise)) {
+    JS_FreeCString(ctx, target);
+    JS_FreeCString(ctx, path);
+    return JS_EXCEPTION;
+  }
+
+  // Allocate work request
+  fs_promise_work_t* work = calloc(1, sizeof(fs_promise_work_t));
+  if (!work) {
+    JS_FreeCString(ctx, target);
+    JS_FreeCString(ctx, path);
+    JS_FreeValue(ctx, resolving_funcs[0]);
+    JS_FreeValue(ctx, resolving_funcs[1]);
+    JS_FreeValue(ctx, promise);
+    return JS_ThrowOutOfMemory(ctx);
+  }
+
+  work->ctx = ctx;
+  work->resolve = resolving_funcs[0];
+  work->reject = resolving_funcs[1];
+  work->path = strdup(target);  // source
+  work->path2 = strdup(path);   // destination
+  work->flags = flags;
+  JS_FreeCString(ctx, target);
+  JS_FreeCString(ctx, path);
+
+  // Queue async symlink operation
+  uv_loop_t* loop = fs_get_uv_loop(ctx);
+  int result = uv_fs_symlink(loop, &work->req, work->path, work->path2, flags, fs_promise_complete_void);
+
+  if (result < 0) {
+    JSValue error = create_fs_error(ctx, -result, "symlink", work->path2);
+    JSValue ret = JS_Call(ctx, work->reject, JS_UNDEFINED, 1, &error);
+    JS_FreeValue(ctx, error);
+    JS_FreeValue(ctx, ret);
+    fs_promise_work_free(work);
+  }
+
+  return promise;
+}
+
+// fs.promises.realpath() - returns Promise<string>
+JSValue js_fs_promises_realpath(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
+  if (argc < 1) {
+    return JS_ThrowTypeError(ctx, "realpath requires a path");
+  }
+
+  const char* path = JS_ToCString(ctx, argv[0]);
+  if (!path) {
+    return JS_EXCEPTION;
+  }
+
+  // Create Promise
+  JSValue resolving_funcs[2];
+  JSValue promise = JS_NewPromiseCapability(ctx, resolving_funcs);
+  if (JS_IsException(promise)) {
+    JS_FreeCString(ctx, path);
+    return JS_EXCEPTION;
+  }
+
+  // Allocate work request
+  fs_promise_work_t* work = calloc(1, sizeof(fs_promise_work_t));
+  if (!work) {
+    JS_FreeCString(ctx, path);
+    JS_FreeValue(ctx, resolving_funcs[0]);
+    JS_FreeValue(ctx, resolving_funcs[1]);
+    JS_FreeValue(ctx, promise);
+    return JS_ThrowOutOfMemory(ctx);
+  }
+
+  work->ctx = ctx;
+  work->resolve = resolving_funcs[0];
+  work->reject = resolving_funcs[1];
+  work->path = strdup(path);
+  JS_FreeCString(ctx, path);
+
+  // Queue async realpath operation
+  uv_loop_t* loop = fs_get_uv_loop(ctx);
+  int result = uv_fs_realpath(loop, &work->req, work->path, fs_promise_complete_string);
+
+  if (result < 0) {
+    JSValue error = create_fs_error(ctx, -result, "realpath", work->path);
+    JSValue ret = JS_Call(ctx, work->reject, JS_UNDEFINED, 1, &error);
+    JS_FreeValue(ctx, error);
+    JS_FreeValue(ctx, ret);
+    fs_promise_work_free(work);
+  }
+
+  return promise;
+}
+
+// ============================================================================
+// Recursive operations - Promise wrappers around sync implementations
+// ============================================================================
+
+// Helper to run sync operations in Promise context
+// Note: For a truly async implementation, this should use uv_queue_work
+// For now, we run synchronously and resolve/reject the promise immediately
+static JSValue run_sync_as_promise(JSContext* ctx, JSValue (*sync_fn)(JSContext*, JSValueConst, int, JSValueConst*),
+                                   int argc, JSValueConst* argv) {
+  // Create Promise
+  JSValue resolving_funcs[2];
+  JSValue promise = JS_NewPromiseCapability(ctx, resolving_funcs);
+  if (JS_IsException(promise)) {
+    return JS_EXCEPTION;
+  }
+
+  // Call sync function
+  JSValue result = sync_fn(ctx, JS_UNDEFINED, argc, argv);
+
+  if (JS_IsException(result)) {
+    // Reject with error
+    JSValue exception = JS_GetException(ctx);
+    JSValue ret = JS_Call(ctx, resolving_funcs[1], JS_UNDEFINED, 1, &exception);
+    JS_FreeValue(ctx, ret);
+    JS_FreeValue(ctx, exception);
+    JS_FreeValue(ctx, result);
+  } else {
+    // Resolve with result (or undefined for void operations)
+    JSValue ret = JS_Call(ctx, resolving_funcs[0], JS_UNDEFINED, 0, NULL);
+    JS_FreeValue(ctx, ret);
+    JS_FreeValue(ctx, result);
+  }
+
+  JS_FreeValue(ctx, resolving_funcs[0]);
+  JS_FreeValue(ctx, resolving_funcs[1]);
+
+  return promise;
+}
+
+// fs.promises.rm() - returns Promise<void>
+JSValue js_fs_promises_rm(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
+  if (argc < 1) {
+    return JS_ThrowTypeError(ctx, "rm requires a path");
+  }
+
+  // Call rmSync and wrap in Promise
+  return run_sync_as_promise(ctx, js_fs_rm_sync, argc, argv);
+}
+
+// fs.promises.cp() - returns Promise<void>
+JSValue js_fs_promises_cp(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
+  if (argc < 2) {
+    return JS_ThrowTypeError(ctx, "cp requires src and dest");
+  }
+
+  // Call cpSync and wrap in Promise
+  return run_sync_as_promise(ctx, js_fs_cp_sync, argc, argv);
+}
+
+// ============================================================================
+// fsPromises metadata operations
+// ============================================================================
+
+// fs.promises.chmod() - returns Promise<void>
+JSValue js_fs_promises_chmod(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
+  if (argc < 2) {
+    return JS_ThrowTypeError(ctx, "chmod requires path and mode");
+  }
+
+  const char* path = JS_ToCString(ctx, argv[0]);
+  if (!path) {
+    return JS_EXCEPTION;
+  }
+
+  int32_t mode;
+  if (JS_ToInt32(ctx, &mode, argv[1])) {
+    JS_FreeCString(ctx, path);
+    return JS_EXCEPTION;
+  }
+
+  JSValue resolving_funcs[2];
+  JSValue promise = JS_NewPromiseCapability(ctx, resolving_funcs);
+  if (JS_IsException(promise)) {
+    JS_FreeCString(ctx, path);
+    return JS_EXCEPTION;
+  }
+
+  fs_promise_work_t* work = calloc(1, sizeof(fs_promise_work_t));
+  if (!work) {
+    JS_FreeCString(ctx, path);
+    JS_FreeValue(ctx, resolving_funcs[0]);
+    JS_FreeValue(ctx, resolving_funcs[1]);
+    JS_FreeValue(ctx, promise);
+    return JS_ThrowOutOfMemory(ctx);
+  }
+
+  work->ctx = ctx;
+  work->resolve = resolving_funcs[0];
+  work->reject = resolving_funcs[1];
+  work->path = strdup(path);
+  JS_FreeCString(ctx, path);
+
+  uv_loop_t* loop = fs_get_uv_loop(ctx);
+  int result = uv_fs_chmod(loop, &work->req, work->path, mode, fs_promise_complete_void);
+
+  if (result < 0) {
+    JSValue error = create_fs_error(ctx, -result, "chmod", work->path);
+    JSValue ret = JS_Call(ctx, work->reject, JS_UNDEFINED, 1, &error);
+    JS_FreeValue(ctx, error);
+    JS_FreeValue(ctx, ret);
+    fs_promise_work_free(work);
+  }
+
+  return promise;
+}
+
+// fs.promises.lchmod() - returns Promise<void>
+JSValue js_fs_promises_lchmod(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
+  if (argc < 2) {
+    return JS_ThrowTypeError(ctx, "lchmod requires path and mode");
+  }
+
+  // Note: libuv doesn't have uv_fs_lchmod, reject immediately with ENOSYS
+  JSValue resolving_funcs[2];
+  JSValue promise = JS_NewPromiseCapability(ctx, resolving_funcs);
+  if (JS_IsException(promise)) {
+    return JS_EXCEPTION;
+  }
+
+  JSValue error = create_fs_error(ctx, UV_ENOSYS, "lchmod", JS_ToCString(ctx, argv[0]));
+  JSValue ret = JS_Call(ctx, resolving_funcs[1], JS_UNDEFINED, 1, &error);
+  JS_FreeValue(ctx, error);
+  JS_FreeValue(ctx, ret);
+  JS_FreeValue(ctx, resolving_funcs[0]);
+  JS_FreeValue(ctx, resolving_funcs[1]);
+
+  return promise;
+}
+
+// fs.promises.chown() - returns Promise<void>
+JSValue js_fs_promises_chown(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
+  if (argc < 3) {
+    return JS_ThrowTypeError(ctx, "chown requires path, uid, and gid");
+  }
+
+  const char* path = JS_ToCString(ctx, argv[0]);
+  if (!path) {
+    return JS_EXCEPTION;
+  }
+
+  int32_t uid, gid;
+  if (JS_ToInt32(ctx, &uid, argv[1]) || JS_ToInt32(ctx, &gid, argv[2])) {
+    JS_FreeCString(ctx, path);
+    return JS_EXCEPTION;
+  }
+
+  JSValue resolving_funcs[2];
+  JSValue promise = JS_NewPromiseCapability(ctx, resolving_funcs);
+  if (JS_IsException(promise)) {
+    JS_FreeCString(ctx, path);
+    return JS_EXCEPTION;
+  }
+
+  fs_promise_work_t* work = calloc(1, sizeof(fs_promise_work_t));
+  if (!work) {
+    JS_FreeCString(ctx, path);
+    JS_FreeValue(ctx, resolving_funcs[0]);
+    JS_FreeValue(ctx, resolving_funcs[1]);
+    JS_FreeValue(ctx, promise);
+    return JS_ThrowOutOfMemory(ctx);
+  }
+
+  work->ctx = ctx;
+  work->resolve = resolving_funcs[0];
+  work->reject = resolving_funcs[1];
+  work->path = strdup(path);
+  JS_FreeCString(ctx, path);
+
+  uv_loop_t* loop = fs_get_uv_loop(ctx);
+  int result = uv_fs_chown(loop, &work->req, work->path, uid, gid, fs_promise_complete_void);
+
+  if (result < 0) {
+    JSValue error = create_fs_error(ctx, -result, "chown", work->path);
+    JSValue ret = JS_Call(ctx, work->reject, JS_UNDEFINED, 1, &error);
+    JS_FreeValue(ctx, error);
+    JS_FreeValue(ctx, ret);
+    fs_promise_work_free(work);
+  }
+
+  return promise;
+}
+
+// fs.promises.lchown() - returns Promise<void>
+JSValue js_fs_promises_lchown(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
+  if (argc < 3) {
+    return JS_ThrowTypeError(ctx, "lchown requires path, uid, and gid");
+  }
+
+  const char* path = JS_ToCString(ctx, argv[0]);
+  if (!path) {
+    return JS_EXCEPTION;
+  }
+
+  int32_t uid, gid;
+  if (JS_ToInt32(ctx, &uid, argv[1]) || JS_ToInt32(ctx, &gid, argv[2])) {
+    JS_FreeCString(ctx, path);
+    return JS_EXCEPTION;
+  }
+
+  JSValue resolving_funcs[2];
+  JSValue promise = JS_NewPromiseCapability(ctx, resolving_funcs);
+  if (JS_IsException(promise)) {
+    JS_FreeCString(ctx, path);
+    return JS_EXCEPTION;
+  }
+
+  fs_promise_work_t* work = calloc(1, sizeof(fs_promise_work_t));
+  if (!work) {
+    JS_FreeCString(ctx, path);
+    JS_FreeValue(ctx, resolving_funcs[0]);
+    JS_FreeValue(ctx, resolving_funcs[1]);
+    JS_FreeValue(ctx, promise);
+    return JS_ThrowOutOfMemory(ctx);
+  }
+
+  work->ctx = ctx;
+  work->resolve = resolving_funcs[0];
+  work->reject = resolving_funcs[1];
+  work->path = strdup(path);
+  JS_FreeCString(ctx, path);
+
+  uv_loop_t* loop = fs_get_uv_loop(ctx);
+  int result = uv_fs_lchown(loop, &work->req, work->path, uid, gid, fs_promise_complete_void);
+
+  if (result < 0) {
+    JSValue error = create_fs_error(ctx, -result, "lchown", work->path);
+    JSValue ret = JS_Call(ctx, work->reject, JS_UNDEFINED, 1, &error);
+    JS_FreeValue(ctx, error);
+    JS_FreeValue(ctx, ret);
+    fs_promise_work_free(work);
+  }
+
+  return promise;
+}
+
+// fs.promises.utimes() - returns Promise<void>
+JSValue js_fs_promises_utimes(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
+  if (argc < 3) {
+    return JS_ThrowTypeError(ctx, "utimes requires path, atime, and mtime");
+  }
+
+  const char* path = JS_ToCString(ctx, argv[0]);
+  if (!path) {
+    return JS_EXCEPTION;
+  }
+
+  double atime, mtime;
+  if (JS_ToFloat64(ctx, &atime, argv[1]) || JS_ToFloat64(ctx, &mtime, argv[2])) {
+    JS_FreeCString(ctx, path);
+    return JS_EXCEPTION;
+  }
+
+  JSValue resolving_funcs[2];
+  JSValue promise = JS_NewPromiseCapability(ctx, resolving_funcs);
+  if (JS_IsException(promise)) {
+    JS_FreeCString(ctx, path);
+    return JS_EXCEPTION;
+  }
+
+  fs_promise_work_t* work = calloc(1, sizeof(fs_promise_work_t));
+  if (!work) {
+    JS_FreeCString(ctx, path);
+    JS_FreeValue(ctx, resolving_funcs[0]);
+    JS_FreeValue(ctx, resolving_funcs[1]);
+    JS_FreeValue(ctx, promise);
+    return JS_ThrowOutOfMemory(ctx);
+  }
+
+  work->ctx = ctx;
+  work->resolve = resolving_funcs[0];
+  work->reject = resolving_funcs[1];
+  work->path = strdup(path);
+  JS_FreeCString(ctx, path);
+
+  uv_loop_t* loop = fs_get_uv_loop(ctx);
+  int result = uv_fs_utime(loop, &work->req, work->path, atime, mtime, fs_promise_complete_void);
+
+  if (result < 0) {
+    JSValue error = create_fs_error(ctx, -result, "utimes", work->path);
+    JSValue ret = JS_Call(ctx, work->reject, JS_UNDEFINED, 1, &error);
+    JS_FreeValue(ctx, error);
+    JS_FreeValue(ctx, ret);
+    fs_promise_work_free(work);
+  }
+
+  return promise;
+}
+
+// fs.promises.lutimes() - returns Promise<void>
+JSValue js_fs_promises_lutimes(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
+  if (argc < 3) {
+    return JS_ThrowTypeError(ctx, "lutimes requires path, atime, and mtime");
+  }
+
+  const char* path = JS_ToCString(ctx, argv[0]);
+  if (!path) {
+    return JS_EXCEPTION;
+  }
+
+  double atime, mtime;
+  if (JS_ToFloat64(ctx, &atime, argv[1]) || JS_ToFloat64(ctx, &mtime, argv[2])) {
+    JS_FreeCString(ctx, path);
+    return JS_EXCEPTION;
+  }
+
+  JSValue resolving_funcs[2];
+  JSValue promise = JS_NewPromiseCapability(ctx, resolving_funcs);
+  if (JS_IsException(promise)) {
+    JS_FreeCString(ctx, path);
+    return JS_EXCEPTION;
+  }
+
+  fs_promise_work_t* work = calloc(1, sizeof(fs_promise_work_t));
+  if (!work) {
+    JS_FreeCString(ctx, path);
+    JS_FreeValue(ctx, resolving_funcs[0]);
+    JS_FreeValue(ctx, resolving_funcs[1]);
+    JS_FreeValue(ctx, promise);
+    return JS_ThrowOutOfMemory(ctx);
+  }
+
+  work->ctx = ctx;
+  work->resolve = resolving_funcs[0];
+  work->reject = resolving_funcs[1];
+  work->path = strdup(path);
+  JS_FreeCString(ctx, path);
+
+  uv_loop_t* loop = fs_get_uv_loop(ctx);
+  int result = uv_fs_lutime(loop, &work->req, work->path, atime, mtime, fs_promise_complete_void);
+
+  if (result < 0) {
+    JSValue error = create_fs_error(ctx, -result, "lutimes", work->path);
+    JSValue ret = JS_Call(ctx, work->reject, JS_UNDEFINED, 1, &error);
+    JS_FreeValue(ctx, error);
+    JS_FreeValue(ctx, ret);
+    fs_promise_work_free(work);
+  }
+
+  return promise;
+}
+
+// fs.promises.access() - returns Promise<void> or rejects
+JSValue js_fs_promises_access(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
+  if (argc < 1) {
+    return JS_ThrowTypeError(ctx, "access requires a path");
+  }
+
+  const char* path = JS_ToCString(ctx, argv[0]);
+  if (!path) {
+    return JS_EXCEPTION;
+  }
+
+  int32_t mode = 0;  // F_OK
+  if (argc >= 2 && !JS_IsUndefined(argv[1])) {
+    JS_ToInt32(ctx, &mode, argv[1]);
+  }
+
+  JSValue resolving_funcs[2];
+  JSValue promise = JS_NewPromiseCapability(ctx, resolving_funcs);
+  if (JS_IsException(promise)) {
+    JS_FreeCString(ctx, path);
+    return JS_EXCEPTION;
+  }
+
+  fs_promise_work_t* work = calloc(1, sizeof(fs_promise_work_t));
+  if (!work) {
+    JS_FreeCString(ctx, path);
+    JS_FreeValue(ctx, resolving_funcs[0]);
+    JS_FreeValue(ctx, resolving_funcs[1]);
+    JS_FreeValue(ctx, promise);
+    return JS_ThrowOutOfMemory(ctx);
+  }
+
+  work->ctx = ctx;
+  work->resolve = resolving_funcs[0];
+  work->reject = resolving_funcs[1];
+  work->path = strdup(path);
+  JS_FreeCString(ctx, path);
+
+  uv_loop_t* loop = fs_get_uv_loop(ctx);
+  int result = uv_fs_access(loop, &work->req, work->path, mode, fs_promise_complete_void);
+
+  if (result < 0) {
+    JSValue error = create_fs_error(ctx, -result, "access", work->path);
+    JSValue ret = JS_Call(ctx, work->reject, JS_UNDEFINED, 1, &error);
+    JS_FreeValue(ctx, error);
+    JS_FreeValue(ctx, ret);
+    fs_promise_work_free(work);
+  }
+
+  return promise;
+}
+
+// ============================================================================
+// File I/O operations (readFile, writeFile, appendFile)
+// ============================================================================
+
+// Multi-step Promise-based readFile
+typedef struct {
+  fs_promise_work_t base;
+  int fd;
+  uint8_t* buffer;
+  size_t size;
+  size_t bytes_read;
+} readfile_promise_work_t;
+
+static void readfile_promise_close_cb(uv_fs_t* req) {
+  readfile_promise_work_t* work = (readfile_promise_work_t*)req;
+  JSContext* ctx = work->base.ctx;
+
+  // Create ArrayBuffer with the data (handles empty buffer)
+  JSValue buffer = JS_NewArrayBufferCopy(ctx, work->buffer ? work->buffer : (const uint8_t*)"", work->bytes_read);
+  JSValue ret = JS_Call(ctx, work->base.resolve, JS_UNDEFINED, 1, &buffer);
+  JS_FreeValue(ctx, ret);
+  JS_FreeValue(ctx, buffer);
+
+  if (work->buffer) {
+    free(work->buffer);
+  }
+  fs_promise_work_free(&work->base);
+}
+
+static void readfile_promise_read_cb(uv_fs_t* req) {
+  readfile_promise_work_t* work = (readfile_promise_work_t*)req;
+  JSContext* ctx = work->base.ctx;
+  uv_loop_t* loop = fs_get_uv_loop(ctx);
+
+  if (req->result < 0) {
+    int err = -req->result;
+    uv_fs_t close_req;
+    uv_fs_close(loop, &close_req, work->fd, NULL);
+    uv_fs_req_cleanup(&close_req);
+
+    JSValue error = create_fs_error(ctx, err, "read", work->base.path);
+    JSValue ret = JS_Call(ctx, work->base.reject, JS_UNDEFINED, 1, &error);
+    JS_FreeValue(ctx, error);
+    JS_FreeValue(ctx, ret);
+
+    free(work->buffer);
+    fs_promise_work_free(&work->base);
+    return;
+  }
+
+  work->bytes_read = (size_t)req->result;
+
+  // Close file
+  uv_fs_req_cleanup(req);
+  uv_fs_close(loop, req, work->fd, readfile_promise_close_cb);
+}
+
+static void readfile_promise_stat_cb(uv_fs_t* req) {
+  readfile_promise_work_t* work = (readfile_promise_work_t*)req;
+  JSContext* ctx = work->base.ctx;
+  uv_loop_t* loop = fs_get_uv_loop(ctx);
+
+  if (req->result < 0) {
+    int err = -req->result;
+    uv_fs_t close_req;
+    uv_fs_close(loop, &close_req, work->fd, NULL);
+    uv_fs_req_cleanup(&close_req);
+
+    JSValue error = create_fs_error(ctx, err, "fstat", work->base.path);
+    JSValue ret = JS_Call(ctx, work->base.reject, JS_UNDEFINED, 1, &error);
+    JS_FreeValue(ctx, error);
+    JS_FreeValue(ctx, ret);
+
+    fs_promise_work_free(&work->base);
+    return;
+  }
+
+  uv_stat_t* stat = (uv_stat_t*)req->ptr;
+  work->size = stat->st_size;
+
+  // Handle empty file case (malloc(0) is implementation-defined)
+  if (work->size == 0) {
+    work->buffer = NULL;
+    work->bytes_read = 0;
+
+    // Skip read, go directly to close
+    uv_fs_req_cleanup(req);
+    uv_fs_close(loop, req, work->fd, readfile_promise_close_cb);
+    return;
+  }
+
+  work->buffer = malloc(work->size);
+  if (!work->buffer) {
+    uv_fs_t close_req;
+    uv_fs_close(loop, &close_req, work->fd, NULL);
+    uv_fs_req_cleanup(&close_req);
+
+    JSValue error = JS_NewError(ctx);
+    JS_DefinePropertyValueStr(ctx, error, "message", JS_NewString(ctx, "Out of memory"), JS_PROP_C_W_E);
+    JSValue ret = JS_Call(ctx, work->base.reject, JS_UNDEFINED, 1, &error);
+    JS_FreeValue(ctx, error);
+    JS_FreeValue(ctx, ret);
+
+    fs_promise_work_free(&work->base);
+    return;
+  }
+
+  // Read file contents
+  uv_buf_t buf = uv_buf_init((char*)work->buffer, (unsigned int)work->size);
+  uv_fs_req_cleanup(req);
+  uv_fs_read(loop, req, work->fd, &buf, 1, 0, readfile_promise_read_cb);
+}
+
+static void readfile_promise_open_cb(uv_fs_t* req) {
+  readfile_promise_work_t* work = (readfile_promise_work_t*)req;
+  JSContext* ctx = work->base.ctx;
+  uv_loop_t* loop = fs_get_uv_loop(ctx);
+
+  if (req->result < 0) {
+    int err = -req->result;
+    JSValue error = create_fs_error(ctx, err, "open", work->base.path);
+    JSValue ret = JS_Call(ctx, work->base.reject, JS_UNDEFINED, 1, &error);
+    JS_FreeValue(ctx, error);
+    JS_FreeValue(ctx, ret);
+
+    fs_promise_work_free(&work->base);
+    return;
+  }
+
+  work->fd = (int)req->result;
+
+  // Get file size with fstat
+  uv_fs_req_cleanup(req);
+  uv_fs_fstat(loop, req, work->fd, readfile_promise_stat_cb);
+}
+
+// fs.promises.readFile(path) - returns Promise<ArrayBuffer>
+JSValue js_fs_promises_readFile(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
+  if (argc < 1) {
+    return JS_ThrowTypeError(ctx, "readFile requires a path");
+  }
+
+  const char* path = JS_ToCString(ctx, argv[0]);
+  if (!path) {
+    return JS_EXCEPTION;
+  }
+
+  JSValue resolving_funcs[2];
+  JSValue promise = JS_NewPromiseCapability(ctx, resolving_funcs);
+  if (JS_IsException(promise)) {
+    JS_FreeCString(ctx, path);
+    return JS_EXCEPTION;
+  }
+
+  readfile_promise_work_t* work = calloc(1, sizeof(readfile_promise_work_t));
+  if (!work) {
+    JS_FreeCString(ctx, path);
+    JS_FreeValue(ctx, resolving_funcs[0]);
+    JS_FreeValue(ctx, resolving_funcs[1]);
+    JS_FreeValue(ctx, promise);
+    return JS_ThrowOutOfMemory(ctx);
+  }
+
+  work->base.ctx = ctx;
+  work->base.resolve = resolving_funcs[0];
+  work->base.reject = resolving_funcs[1];
+  work->base.path = strdup(path);
+  JS_FreeCString(ctx, path);
+
+  uv_loop_t* loop = fs_get_uv_loop(ctx);
+  int result = uv_fs_open(loop, (uv_fs_t*)&work->base.req, work->base.path, O_RDONLY, 0, readfile_promise_open_cb);
+
+  if (result < 0) {
+    JSValue error = create_fs_error(ctx, -result, "open", work->base.path);
+    JSValue ret = JS_Call(ctx, work->base.reject, JS_UNDEFINED, 1, &error);
+    JS_FreeValue(ctx, error);
+    JS_FreeValue(ctx, ret);
+    fs_promise_work_free(&work->base);
+  }
+
+  return promise;
+}
+
+// Multi-step Promise-based writeFile
+typedef struct {
+  fs_promise_work_t base;
+  int fd;
+  uint8_t* buffer;
+  size_t size;
+  int flags;  // O_WRONLY|O_CREAT|O_TRUNC or O_WRONLY|O_CREAT|O_APPEND
+} writefile_promise_work_t;
+
+static void writefile_promise_close_cb(uv_fs_t* req) {
+  writefile_promise_work_t* work = (writefile_promise_work_t*)req;
+  JSContext* ctx = work->base.ctx;
+
+  // Success - resolve with undefined
+  JSValue undef = JS_UNDEFINED;
+  JSValue ret = JS_Call(ctx, work->base.resolve, JS_UNDEFINED, 1, &undef);
+  JS_FreeValue(ctx, ret);
+
+  free(work->buffer);
+  fs_promise_work_free(&work->base);
+}
+
+static void writefile_promise_write_cb(uv_fs_t* req) {
+  writefile_promise_work_t* work = (writefile_promise_work_t*)req;
+  JSContext* ctx = work->base.ctx;
+  uv_loop_t* loop = fs_get_uv_loop(ctx);
+
+  if (req->result < 0) {
+    int err = -req->result;
+    uv_fs_t close_req;
+    uv_fs_close(loop, &close_req, work->fd, NULL);
+    uv_fs_req_cleanup(&close_req);
+
+    JSValue error = create_fs_error(ctx, err, "write", work->base.path);
+    JSValue ret = JS_Call(ctx, work->base.reject, JS_UNDEFINED, 1, &error);
+    JS_FreeValue(ctx, error);
+    JS_FreeValue(ctx, ret);
+
+    free(work->buffer);
+    fs_promise_work_free(&work->base);
+    return;
+  }
+
+  // Close file
+  uv_fs_req_cleanup(req);
+  uv_fs_close(loop, req, work->fd, writefile_promise_close_cb);
+}
+
+static void writefile_promise_open_cb(uv_fs_t* req) {
+  writefile_promise_work_t* work = (writefile_promise_work_t*)req;
+  JSContext* ctx = work->base.ctx;
+  uv_loop_t* loop = fs_get_uv_loop(ctx);
+
+  if (req->result < 0) {
+    int err = -req->result;
+    JSValue error = create_fs_error(ctx, err, "open", work->base.path);
+    JSValue ret = JS_Call(ctx, work->base.reject, JS_UNDEFINED, 1, &error);
+    JS_FreeValue(ctx, error);
+    JS_FreeValue(ctx, ret);
+
+    free(work->buffer);
+    fs_promise_work_free(&work->base);
+    return;
+  }
+
+  work->fd = (int)req->result;
+
+  // Write data
+  uv_buf_t buf = uv_buf_init((char*)work->buffer, (unsigned int)work->size);
+  uv_fs_req_cleanup(req);
+  uv_fs_write(loop, req, work->fd, &buf, 1, 0, writefile_promise_write_cb);
+}
+
+// fs.promises.writeFile(path, data) - returns Promise<void>
+JSValue js_fs_promises_writeFile(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
+  if (argc < 2) {
+    return JS_ThrowTypeError(ctx, "writeFile requires path and data");
+  }
+
+  const char* path = JS_ToCString(ctx, argv[0]);
+  if (!path) {
+    return JS_EXCEPTION;
+  }
+
+  // Get data to write
+  uint8_t* data = NULL;
+  size_t data_len = 0;
+
+  if (JS_IsString(argv[1])) {
+    const char* str = JS_ToCString(ctx, argv[1]);
+    if (str) {
+      data_len = strlen(str);
+      data = malloc(data_len);
+      if (data) {
+        memcpy(data, str, data_len);
+      }
+      JS_FreeCString(ctx, str);
+    }
+  } else {
+    // Try to get as TypedArray (includes Buffer) or ArrayBuffer
+    size_t byte_offset, byte_length, bytes_per_element;
+    JSValue array_buffer = JS_GetTypedArrayBuffer(ctx, argv[1], &byte_offset, &byte_length, &bytes_per_element);
+    if (!JS_IsException(array_buffer)) {
+      size_t size;
+      uint8_t* buf = JS_GetArrayBuffer(ctx, &size, array_buffer);
+      JS_FreeValue(ctx, array_buffer);
+      if (buf) {
+        data_len = byte_length;
+        data = malloc(data_len);
+        if (data) {
+          memcpy(data, buf + byte_offset, data_len);
+        }
+      }
+    } else {
+      // Clear exception and try direct ArrayBuffer
+      JS_GetException(ctx);
+      size_t size;
+      uint8_t* buf = JS_GetArrayBuffer(ctx, &size, argv[1]);
+      if (buf) {
+        data_len = size;
+        data = malloc(data_len);
+        if (data) {
+          memcpy(data, buf, data_len);
+        }
+      }
+    }
+  }
+
+  if (!data) {
+    JS_FreeCString(ctx, path);
+    return JS_ThrowTypeError(ctx, "data must be a string, Buffer, or ArrayBuffer");
+  }
+
+  JSValue resolving_funcs[2];
+  JSValue promise = JS_NewPromiseCapability(ctx, resolving_funcs);
+  if (JS_IsException(promise)) {
+    JS_FreeCString(ctx, path);
+    free(data);
+    return JS_EXCEPTION;
+  }
+
+  writefile_promise_work_t* work = calloc(1, sizeof(writefile_promise_work_t));
+  if (!work) {
+    JS_FreeCString(ctx, path);
+    free(data);
+    JS_FreeValue(ctx, resolving_funcs[0]);
+    JS_FreeValue(ctx, resolving_funcs[1]);
+    JS_FreeValue(ctx, promise);
+    return JS_ThrowOutOfMemory(ctx);
+  }
+
+  work->base.ctx = ctx;
+  work->base.resolve = resolving_funcs[0];
+  work->base.reject = resolving_funcs[1];
+  work->base.path = strdup(path);
+  work->buffer = data;
+  work->size = data_len;
+  work->flags = O_WRONLY | O_CREAT | O_TRUNC;
+  JS_FreeCString(ctx, path);
+
+  uv_loop_t* loop = fs_get_uv_loop(ctx);
+  int result =
+      uv_fs_open(loop, (uv_fs_t*)&work->base.req, work->base.path, work->flags, 0644, writefile_promise_open_cb);
+
+  if (result < 0) {
+    JSValue error = create_fs_error(ctx, -result, "open", work->base.path);
+    JSValue ret = JS_Call(ctx, work->base.reject, JS_UNDEFINED, 1, &error);
+    JS_FreeValue(ctx, error);
+    JS_FreeValue(ctx, ret);
+    free(work->buffer);
+    fs_promise_work_free(&work->base);
+  }
+
+  return promise;
+}
+
+// fs.promises.appendFile(path, data) - returns Promise<void>
+JSValue js_fs_promises_appendFile(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
+  if (argc < 2) {
+    return JS_ThrowTypeError(ctx, "appendFile requires path and data");
+  }
+
+  const char* path = JS_ToCString(ctx, argv[0]);
+  if (!path) {
+    return JS_EXCEPTION;
+  }
+
+  // Get data to write
+  uint8_t* data = NULL;
+  size_t data_len = 0;
+
+  if (JS_IsString(argv[1])) {
+    const char* str = JS_ToCString(ctx, argv[1]);
+    if (str) {
+      data_len = strlen(str);
+      data = malloc(data_len);
+      if (data) {
+        memcpy(data, str, data_len);
+      }
+      JS_FreeCString(ctx, str);
+    }
+  } else {
+    // Try to get as TypedArray (includes Buffer) or ArrayBuffer
+    size_t byte_offset, byte_length, bytes_per_element;
+    JSValue array_buffer = JS_GetTypedArrayBuffer(ctx, argv[1], &byte_offset, &byte_length, &bytes_per_element);
+    if (!JS_IsException(array_buffer)) {
+      size_t size;
+      uint8_t* buf = JS_GetArrayBuffer(ctx, &size, array_buffer);
+      JS_FreeValue(ctx, array_buffer);
+      if (buf) {
+        data_len = byte_length;
+        data = malloc(data_len);
+        if (data) {
+          memcpy(data, buf + byte_offset, data_len);
+        }
+      }
+    } else {
+      // Clear exception and try direct ArrayBuffer
+      JS_GetException(ctx);
+      size_t size;
+      uint8_t* buf = JS_GetArrayBuffer(ctx, &size, argv[1]);
+      if (buf) {
+        data_len = size;
+        data = malloc(data_len);
+        if (data) {
+          memcpy(data, buf, data_len);
+        }
+      }
+    }
+  }
+
+  if (!data) {
+    JS_FreeCString(ctx, path);
+    return JS_ThrowTypeError(ctx, "data must be a string, Buffer, or ArrayBuffer");
+  }
+
+  JSValue resolving_funcs[2];
+  JSValue promise = JS_NewPromiseCapability(ctx, resolving_funcs);
+  if (JS_IsException(promise)) {
+    JS_FreeCString(ctx, path);
+    free(data);
+    return JS_EXCEPTION;
+  }
+
+  writefile_promise_work_t* work = calloc(1, sizeof(writefile_promise_work_t));
+  if (!work) {
+    JS_FreeCString(ctx, path);
+    free(data);
+    JS_FreeValue(ctx, resolving_funcs[0]);
+    JS_FreeValue(ctx, resolving_funcs[1]);
+    JS_FreeValue(ctx, promise);
+    return JS_ThrowOutOfMemory(ctx);
+  }
+
+  work->base.ctx = ctx;
+  work->base.resolve = resolving_funcs[0];
+  work->base.reject = resolving_funcs[1];
+  work->base.path = strdup(path);
+  work->buffer = data;
+  work->size = data_len;
+  work->flags = O_WRONLY | O_CREAT | O_APPEND;  // Append mode
+  JS_FreeCString(ctx, path);
+
+  uv_loop_t* loop = fs_get_uv_loop(ctx);
+  int result =
+      uv_fs_open(loop, (uv_fs_t*)&work->base.req, work->base.path, work->flags, 0644, writefile_promise_open_cb);
+
+  if (result < 0) {
+    JSValue error = create_fs_error(ctx, -result, "open", work->base.path);
+    JSValue ret = JS_Call(ctx, work->base.reject, JS_UNDEFINED, 1, &error);
+    JS_FreeValue(ctx, error);
+    JS_FreeValue(ctx, ret);
+    free(work->buffer);
+    fs_promise_work_free(&work->base);
+  }
+
+  return promise;
+}
+
+// ============================================================================
 // fsPromises namespace initialization
 // ============================================================================
 
@@ -1450,6 +2581,11 @@ JSValue JSRT_InitNodeFsPromises(JSContext* ctx) {
   // FileHandle-based API
   JS_SetPropertyStr(ctx, promises, "open", JS_NewCFunction(ctx, js_fs_promises_open, "open", 3));
 
+  // High-level file I/O
+  JS_SetPropertyStr(ctx, promises, "readFile", JS_NewCFunction(ctx, js_fs_promises_readFile, "readFile", 1));
+  JS_SetPropertyStr(ctx, promises, "writeFile", JS_NewCFunction(ctx, js_fs_promises_writeFile, "writeFile", 2));
+  JS_SetPropertyStr(ctx, promises, "appendFile", JS_NewCFunction(ctx, js_fs_promises_appendFile, "appendFile", 2));
+
   // Path-based wrappers
   JS_SetPropertyStr(ctx, promises, "stat", JS_NewCFunction(ctx, js_fs_promises_stat, "stat", 1));
   JS_SetPropertyStr(ctx, promises, "lstat", JS_NewCFunction(ctx, js_fs_promises_lstat, "lstat", 1));
@@ -1457,7 +2593,26 @@ JSValue JSRT_InitNodeFsPromises(JSContext* ctx) {
   JS_SetPropertyStr(ctx, promises, "rename", JS_NewCFunction(ctx, js_fs_promises_rename, "rename", 2));
   JS_SetPropertyStr(ctx, promises, "mkdir", JS_NewCFunction(ctx, js_fs_promises_mkdir, "mkdir", 2));
   JS_SetPropertyStr(ctx, promises, "rmdir", JS_NewCFunction(ctx, js_fs_promises_rmdir, "rmdir", 1));
+  JS_SetPropertyStr(ctx, promises, "readdir", JS_NewCFunction(ctx, js_fs_promises_readdir, "readdir", 2));
   JS_SetPropertyStr(ctx, promises, "readlink", JS_NewCFunction(ctx, js_fs_promises_readlink, "readlink", 1));
+
+  // Link operations
+  JS_SetPropertyStr(ctx, promises, "link", JS_NewCFunction(ctx, js_fs_promises_link, "link", 2));
+  JS_SetPropertyStr(ctx, promises, "symlink", JS_NewCFunction(ctx, js_fs_promises_symlink, "symlink", 3));
+  JS_SetPropertyStr(ctx, promises, "realpath", JS_NewCFunction(ctx, js_fs_promises_realpath, "realpath", 2));
+
+  // Recursive operations
+  JS_SetPropertyStr(ctx, promises, "rm", JS_NewCFunction(ctx, js_fs_promises_rm, "rm", 2));
+  JS_SetPropertyStr(ctx, promises, "cp", JS_NewCFunction(ctx, js_fs_promises_cp, "cp", 3));
+
+  // Metadata operations
+  JS_SetPropertyStr(ctx, promises, "chmod", JS_NewCFunction(ctx, js_fs_promises_chmod, "chmod", 2));
+  JS_SetPropertyStr(ctx, promises, "lchmod", JS_NewCFunction(ctx, js_fs_promises_lchmod, "lchmod", 2));
+  JS_SetPropertyStr(ctx, promises, "chown", JS_NewCFunction(ctx, js_fs_promises_chown, "chown", 3));
+  JS_SetPropertyStr(ctx, promises, "lchown", JS_NewCFunction(ctx, js_fs_promises_lchown, "lchown", 3));
+  JS_SetPropertyStr(ctx, promises, "utimes", JS_NewCFunction(ctx, js_fs_promises_utimes, "utimes", 3));
+  JS_SetPropertyStr(ctx, promises, "lutimes", JS_NewCFunction(ctx, js_fs_promises_lutimes, "lutimes", 3));
+  JS_SetPropertyStr(ctx, promises, "access", JS_NewCFunction(ctx, js_fs_promises_access, "access", 2));
 
   return promises;
 }

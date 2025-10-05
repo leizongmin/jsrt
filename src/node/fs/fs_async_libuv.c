@@ -18,6 +18,11 @@ void fs_async_work_free(fs_async_work_t* work) {
     JS_FreeValue(work->ctx, work->callback);
   }
 
+  // Free user buffer reference (for read/write operations)
+  if (!JS_IsUndefined(work->user_buffer)) {
+    JS_FreeValue(work->ctx, work->user_buffer);
+  }
+
   // Free paths
   if (work->path) {
     free(work->path);
@@ -26,8 +31,8 @@ void fs_async_work_free(fs_async_work_t* work) {
     free(work->path2);
   }
 
-  // Free buffer if owned
-  if (work->buffer) {
+  // Free buffer only if owned (not pointing to user's buffer)
+  if (work->buffer && work->owns_buffer) {
     free(work->buffer);
   }
 

@@ -80,3 +80,5 @@ debug_*.mjs
 # WPT directory (downloaded dynamically)
 wpt/
 wpt-master.zip
+
+/.cache/

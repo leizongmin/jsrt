@@ -2946,6 +2946,175 @@ JSValue js_fs_promises_appendFile(JSContext* ctx, JSValueConst this_val, int arg
 }
 
 // ============================================================================
+// Additional Promise APIs (Phase B1)
+// ============================================================================
+
+// fs.promises.mkdtemp() - returns Promise<string>
+JSValue js_fs_promises_mkdtemp(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
+  if (argc < 1) {
+    return JS_ThrowTypeError(ctx, "mkdtemp requires a prefix");
+  }
+
+  const char* prefix = JS_ToCString(ctx, argv[0]);
+  if (!prefix) {
+    return JS_EXCEPTION;
+  }
+
+  JSValue resolving_funcs[2];
+  JSValue promise = JS_NewPromiseCapability(ctx, resolving_funcs);
+  if (JS_IsException(promise)) {
+    JS_FreeCString(ctx, prefix);
+    return JS_EXCEPTION;
+  }
+
+  fs_promise_work_t* work = calloc(1, sizeof(fs_promise_work_t));
+  if (!work) {
+    JS_FreeCString(ctx, prefix);
+    JS_FreeValue(ctx, resolving_funcs[0]);
+    JS_FreeValue(ctx, resolving_funcs[1]);
+    JS_FreeValue(ctx, promise);
+    return JS_ThrowOutOfMemory(ctx);
+  }
+
+  work->ctx = ctx;
+  work->resolve = resolving_funcs[0];
+  work->reject = resolving_funcs[1];
+  work->path = strdup(prefix);
+  JS_FreeCString(ctx, prefix);
+
+  uv_loop_t* loop = fs_get_uv_loop(ctx);
+  int result = uv_fs_mkdtemp(loop, &work->req, work->path, fs_promise_complete_string);
+
+  if (result < 0) {
+    JSValue error = create_fs_error(ctx, -result, "mkdtemp", work->path);
+    JSValue ret = JS_Call(ctx, work->reject, JS_UNDEFINED, 1, &error);
+    JS_FreeValue(ctx, error);
+    JS_FreeValue(ctx, ret);
+    fs_promise_work_free(work);
+  }
+
+  return promise;
+}
+
+// fs.promises.truncate() - returns Promise<void>
+JSValue js_fs_promises_truncate(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
+  if (argc < 1) {
+    return JS_ThrowTypeError(ctx, "truncate requires a path");
+  }
+
+  const char* path = JS_ToCString(ctx, argv[0]);
+  if (!path) {
+    return JS_EXCEPTION;
+  }
+
+  int64_t len = 0;
+  if (argc >= 2 && JS_ToInt64(ctx, &len, argv[1])) {
+    JS_FreeCString(ctx, path);
+    return JS_EXCEPTION;
+  }
+
+  JSValue resolving_funcs[2];
+  JSValue promise = JS_NewPromiseCapability(ctx, resolving_funcs);
+  if (JS_IsException(promise)) {
+    JS_FreeCString(ctx, path);
+    return JS_EXCEPTION;
+  }
+
+  fs_promise_work_t* work = calloc(1, sizeof(fs_promise_work_t));
+  if (!work) {
+    JS_FreeCString(ctx, path);
+    JS_FreeValue(ctx, resolving_funcs[0]);
+    JS_FreeValue(ctx, resolving_funcs[1]);
+    JS_FreeValue(ctx, promise);
+    return JS_ThrowOutOfMemory(ctx);
+  }
+
+  work->ctx = ctx;
+  work->resolve = resolving_funcs[0];
+  work->reject = resolving_funcs[1];
+  work->path = strdup(path);
+  JS_FreeCString(ctx, path);
+
+  uv_loop_t* loop = fs_get_uv_loop(ctx);
+  int result = uv_fs_ftruncate(loop, &work->req, -1, len, fs_promise_complete_void);  // Will use path-based truncate
+
+  if (result < 0) {
+    JSValue error = create_fs_error(ctx, -result, "truncate", work->path);
+    JSValue ret = JS_Call(ctx, work->reject, JS_UNDEFINED, 1, &error);
+    JS_FreeValue(ctx, error);
+    JS_FreeValue(ctx, ret);
+    fs_promise_work_free(work);
+  }
+
+  return promise;
+}
+
+// fs.promises.copyFile() - returns Promise<void>
+JSValue js_fs_promises_copyFile(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
+  if (argc < 2) {
+    return JS_ThrowTypeError(ctx, "copyFile requires source and destination");
+  }
+
+  const char* src = JS_ToCString(ctx, argv[0]);
+  if (!src) {
+    return JS_EXCEPTION;
+  }
+
+  const char* dest = JS_ToCString(ctx, argv[1]);
+  if (!dest) {
+    JS_FreeCString(ctx, src);
+    return JS_EXCEPTION;
+  }
+
+  int flags = 0;
+  if (argc >= 3 && JS_ToInt32(ctx, &flags, argv[2])) {
+    JS_FreeCString(ctx, src);
+    JS_FreeCString(ctx, dest);
+    return JS_EXCEPTION;
+  }
+
+  JSValue resolving_funcs[2];
+  JSValue promise = JS_NewPromiseCapability(ctx, resolving_funcs);
+  if (JS_IsException(promise)) {
+    JS_FreeCString(ctx, src);
+    JS_FreeCString(ctx, dest);
+    return JS_EXCEPTION;
+  }
+
+  fs_promise_work_t* work = calloc(1, sizeof(fs_promise_work_t));
+  if (!work) {
+    JS_FreeCString(ctx, src);
+    JS_FreeCString(ctx, dest);
+    JS_FreeValue(ctx, resolving_funcs[0]);
+    JS_FreeValue(ctx, resolving_funcs[1]);
+    JS_FreeValue(ctx, promise);
+    return JS_ThrowOutOfMemory(ctx);
+  }
+
+  work->ctx = ctx;
+  work->resolve = resolving_funcs[0];
+  work->reject = resolving_funcs[1];
+  work->path = strdup(src);
+  work->path2 = strdup(dest);
+  work->flags = flags;
+  JS_FreeCString(ctx, src);
+  JS_FreeCString(ctx, dest);
+
+  uv_loop_t* loop = fs_get_uv_loop(ctx);
+  int result = uv_fs_copyfile(loop, &work->req, work->path, work->path2, flags, fs_promise_complete_void);
+
+  if (result < 0) {
+    JSValue error = create_fs_error(ctx, -result, "copyfile", work->path);
+    JSValue ret = JS_Call(ctx, work->reject, JS_UNDEFINED, 1, &error);
+    JS_FreeValue(ctx, error);
+    JS_FreeValue(ctx, ret);
+    fs_promise_work_free(work);
+  }
+
+  return promise;
+}
+
+// ============================================================================
 // fsPromises namespace initialization
 // ============================================================================
 
@@ -2987,6 +3156,11 @@ JSValue JSRT_InitNodeFsPromises(JSContext* ctx) {
   JS_SetPropertyStr(ctx, promises, "utimes", JS_NewCFunction(ctx, js_fs_promises_utimes, "utimes", 3));
   JS_SetPropertyStr(ctx, promises, "lutimes", JS_NewCFunction(ctx, js_fs_promises_lutimes, "lutimes", 3));
   JS_SetPropertyStr(ctx, promises, "access", JS_NewCFunction(ctx, js_fs_promises_access, "access", 2));
+
+  // Phase B1: Additional Promise APIs
+  JS_SetPropertyStr(ctx, promises, "mkdtemp", JS_NewCFunction(ctx, js_fs_promises_mkdtemp, "mkdtemp", 1));
+  JS_SetPropertyStr(ctx, promises, "truncate", JS_NewCFunction(ctx, js_fs_promises_truncate, "truncate", 2));
+  JS_SetPropertyStr(ctx, promises, "copyFile", JS_NewCFunction(ctx, js_fs_promises_copyFile, "copyFile", 3));
 
   return promises;
 }

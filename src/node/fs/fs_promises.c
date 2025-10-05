@@ -1,4 +1,5 @@
 #include <fcntl.h>
+#include <string.h>
 #include "fs_async_libuv.h"
 
 // ============================================================================
@@ -282,9 +283,699 @@ static JSValue filehandle_close(JSContext* ctx, JSValueConst this_val, int argc,
   return promise;
 }
 
+// FileHandle.read() completion callback
+static void filehandle_read_cb(uv_fs_t* req) {
+  fs_promise_work_t* work = (fs_promise_work_t*)req;
+  JSContext* ctx = work->ctx;
+
+  if (req->result < 0) {
+    // Reject with error
+    int err = -req->result;
+    JSValue error = create_fs_error(ctx, err, "read", work->path);
+    JSValue ret = JS_Call(ctx, work->reject, JS_UNDEFINED, 1, &error);
+    JS_FreeValue(ctx, error);
+    JS_FreeValue(ctx, ret);
+  } else {
+    // Resolve with { bytesRead, buffer }
+    JSValue result = JS_NewObject(ctx);
+    JS_SetPropertyStr(ctx, result, "bytesRead", JS_NewInt64(ctx, req->result));
+
+    // Create ArrayBuffer from buffer
+    JSValue buffer = JS_NewArrayBufferCopy(ctx, work->buffer, work->buffer_size);
+    JS_SetPropertyStr(ctx, result, "buffer", buffer);
+
+    JSValue ret = JS_Call(ctx, work->resolve, JS_UNDEFINED, 1, &result);
+    JS_FreeValue(ctx, result);
+    JS_FreeValue(ctx, ret);
+  }
+
+  fs_promise_work_free(work);
+}
+
+// FileHandle.read() - returns Promise<{ bytesRead, buffer }>
+static JSValue filehandle_read(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
+  FileHandle* fh = JS_GetOpaque(this_val, filehandle_class_id);
+  if (!fh) {
+    return JS_ThrowTypeError(ctx, "Not a FileHandle");
+  }
+
+  if (fh->closed) {
+    JSValue error = JS_NewError(ctx);
+    JS_SetPropertyStr(ctx, error, "message", JS_NewString(ctx, "File handle is closed"));
+    return JS_Throw(ctx, error);
+  }
+
+  // Parse arguments: read(buffer, offset, length, position)
+  if (argc < 1) {
+    return JS_ThrowTypeError(ctx, "read requires a buffer");
+  }
+
+  size_t buffer_size;
+  uint8_t* buffer_data = JS_GetArrayBuffer(ctx, &buffer_size, argv[0]);
+  if (!buffer_data) {
+    return JS_ThrowTypeError(ctx, "First argument must be an ArrayBuffer");
+  }
+
+  // Parse offset (default: 0)
+  int64_t offset = 0;
+  if (argc >= 2 && !JS_IsUndefined(argv[1])) {
+    JS_ToInt64(ctx, &offset, argv[1]);
+  }
+
+  // Parse length (default: buffer.length - offset)
+  int64_t length = buffer_size - offset;
+  if (argc >= 3 && !JS_IsUndefined(argv[2])) {
+    JS_ToInt64(ctx, &length, argv[2]);
+  }
+
+  // Parse position (default: null = current position)
+  int64_t position = -1;
+  if (argc >= 4 && !JS_IsUndefined(argv[3]) && !JS_IsNull(argv[3])) {
+    JS_ToInt64(ctx, &position, argv[3]);
+  }
+
+  if (offset < 0 || length < 0 || offset + length > (int64_t)buffer_size) {
+    return JS_ThrowRangeError(ctx, "Invalid buffer offset/length");
+  }
+
+  // Create Promise
+  JSValue resolving_funcs[2];
+  JSValue promise = JS_NewPromiseCapability(ctx, resolving_funcs);
+  if (JS_IsException(promise)) {
+    return JS_EXCEPTION;
+  }
+
+  // Allocate work request
+  fs_promise_work_t* work = calloc(1, sizeof(fs_promise_work_t));
+  if (!work) {
+    JS_FreeValue(ctx, resolving_funcs[0]);
+    JS_FreeValue(ctx, resolving_funcs[1]);
+    JS_FreeValue(ctx, promise);
+    return JS_ThrowOutOfMemory(ctx);
+  }
+
+  // Allocate read buffer
+  work->buffer = malloc(length);
+  if (!work->buffer) {
+    free(work);
+    JS_FreeValue(ctx, resolving_funcs[0]);
+    JS_FreeValue(ctx, resolving_funcs[1]);
+    JS_FreeValue(ctx, promise);
+    return JS_ThrowOutOfMemory(ctx);
+  }
+
+  work->ctx = ctx;
+  work->resolve = resolving_funcs[0];
+  work->reject = resolving_funcs[1];
+  work->path = fh->path ? strdup(fh->path) : NULL;
+  work->buffer_size = length;
+  work->offset = position;
+
+  // Queue async read operation
+  uv_buf_t buf = uv_buf_init(work->buffer, length);
+  uv_loop_t* loop = fs_get_uv_loop(ctx);
+  int result = uv_fs_read(loop, &work->req, fh->fd, &buf, 1, position, filehandle_read_cb);
+
+  if (result < 0) {
+    // Immediate error
+    JSValue error = create_fs_error(ctx, -result, "read", work->path);
+    JSValue ret = JS_Call(ctx, work->reject, JS_UNDEFINED, 1, &error);
+    JS_FreeValue(ctx, error);
+    JS_FreeValue(ctx, ret);
+    fs_promise_work_free(work);
+  }
+
+  return promise;
+}
+
+// FileHandle.write() completion callback
+static void filehandle_write_cb(uv_fs_t* req) {
+  fs_promise_work_t* work = (fs_promise_work_t*)req;
+  JSContext* ctx = work->ctx;
+
+  if (req->result < 0) {
+    // Reject with error
+    int err = -req->result;
+    JSValue error = create_fs_error(ctx, err, "write", work->path);
+    JSValue ret = JS_Call(ctx, work->reject, JS_UNDEFINED, 1, &error);
+    JS_FreeValue(ctx, error);
+    JS_FreeValue(ctx, ret);
+  } else {
+    // Resolve with { bytesWritten, buffer }
+    JSValue result = JS_NewObject(ctx);
+    JS_SetPropertyStr(ctx, result, "bytesWritten", JS_NewInt64(ctx, req->result));
+
+    // Original buffer reference
+    JSValue buffer = JS_NewArrayBufferCopy(ctx, work->buffer, work->buffer_size);
+    JS_SetPropertyStr(ctx, result, "buffer", buffer);
+
+    JSValue ret = JS_Call(ctx, work->resolve, JS_UNDEFINED, 1, &result);
+    JS_FreeValue(ctx, result);
+    JS_FreeValue(ctx, ret);
+  }
+
+  fs_promise_work_free(work);
+}
+
+// FileHandle.write() - returns Promise<{ bytesWritten, buffer }>
+static JSValue filehandle_write(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
+  FileHandle* fh = JS_GetOpaque(this_val, filehandle_class_id);
+  if (!fh) {
+    return JS_ThrowTypeError(ctx, "Not a FileHandle");
+  }
+
+  if (fh->closed) {
+    JSValue error = JS_NewError(ctx);
+    JS_SetPropertyStr(ctx, error, "message", JS_NewString(ctx, "File handle is closed"));
+    return JS_Throw(ctx, error);
+  }
+
+  // Parse arguments: write(buffer, offset, length, position)
+  if (argc < 1) {
+    return JS_ThrowTypeError(ctx, "write requires a buffer");
+  }
+
+  size_t buffer_size;
+  uint8_t* buffer_data = JS_GetArrayBuffer(ctx, &buffer_size, argv[0]);
+  if (!buffer_data) {
+    return JS_ThrowTypeError(ctx, "First argument must be an ArrayBuffer");
+  }
+
+  // Parse offset (default: 0)
+  int64_t offset = 0;
+  if (argc >= 2 && !JS_IsUndefined(argv[1])) {
+    JS_ToInt64(ctx, &offset, argv[1]);
+  }
+
+  // Parse length (default: buffer.length - offset)
+  int64_t length = buffer_size - offset;
+  if (argc >= 3 && !JS_IsUndefined(argv[2])) {
+    JS_ToInt64(ctx, &length, argv[2]);
+  }
+
+  // Parse position (default: null = current position)
+  int64_t position = -1;
+  if (argc >= 4 && !JS_IsUndefined(argv[3]) && !JS_IsNull(argv[3])) {
+    JS_ToInt64(ctx, &position, argv[3]);
+  }
+
+  if (offset < 0 || length < 0 || offset + length > (int64_t)buffer_size) {
+    return JS_ThrowRangeError(ctx, "Invalid buffer offset/length");
+  }
+
+  // Create Promise
+  JSValue resolving_funcs[2];
+  JSValue promise = JS_NewPromiseCapability(ctx, resolving_funcs);
+  if (JS_IsException(promise)) {
+    return JS_EXCEPTION;
+  }
+
+  // Allocate work request
+  fs_promise_work_t* work = calloc(1, sizeof(fs_promise_work_t));
+  if (!work) {
+    JS_FreeValue(ctx, resolving_funcs[0]);
+    JS_FreeValue(ctx, resolving_funcs[1]);
+    JS_FreeValue(ctx, promise);
+    return JS_ThrowOutOfMemory(ctx);
+  }
+
+  // Copy write buffer
+  work->buffer = malloc(length);
+  if (!work->buffer) {
+    free(work);
+    JS_FreeValue(ctx, resolving_funcs[0]);
+    JS_FreeValue(ctx, resolving_funcs[1]);
+    JS_FreeValue(ctx, promise);
+    return JS_ThrowOutOfMemory(ctx);
+  }
+  memcpy(work->buffer, buffer_data + offset, length);
+
+  work->ctx = ctx;
+  work->resolve = resolving_funcs[0];
+  work->reject = resolving_funcs[1];
+  work->path = fh->path ? strdup(fh->path) : NULL;
+  work->buffer_size = length;
+  work->offset = position;
+
+  // Queue async write operation
+  uv_buf_t buf = uv_buf_init(work->buffer, length);
+  uv_loop_t* loop = fs_get_uv_loop(ctx);
+  int result = uv_fs_write(loop, &work->req, fh->fd, &buf, 1, position, filehandle_write_cb);
+
+  if (result < 0) {
+    // Immediate error
+    JSValue error = create_fs_error(ctx, -result, "write", work->path);
+    JSValue ret = JS_Call(ctx, work->reject, JS_UNDEFINED, 1, &error);
+    JS_FreeValue(ctx, error);
+    JS_FreeValue(ctx, ret);
+    fs_promise_work_free(work);
+  }
+
+  return promise;
+}
+
+// Create Stats object from uv_stat_t
+static JSValue create_stats_object_from_uv(JSContext* ctx, const uv_stat_t* st) {
+  JSValue stats_obj = JS_NewObject(ctx);
+
+  JS_SetPropertyStr(ctx, stats_obj, "dev", JS_NewInt64(ctx, st->st_dev));
+  JS_SetPropertyStr(ctx, stats_obj, "mode", JS_NewInt32(ctx, st->st_mode));
+  JS_SetPropertyStr(ctx, stats_obj, "nlink", JS_NewInt64(ctx, st->st_nlink));
+  JS_SetPropertyStr(ctx, stats_obj, "uid", JS_NewInt64(ctx, st->st_uid));
+  JS_SetPropertyStr(ctx, stats_obj, "gid", JS_NewInt64(ctx, st->st_gid));
+  JS_SetPropertyStr(ctx, stats_obj, "rdev", JS_NewInt64(ctx, st->st_rdev));
+  JS_SetPropertyStr(ctx, stats_obj, "ino", JS_NewInt64(ctx, st->st_ino));
+  JS_SetPropertyStr(ctx, stats_obj, "size", JS_NewInt64(ctx, st->st_size));
+  JS_SetPropertyStr(ctx, stats_obj, "blksize", JS_NewInt64(ctx, st->st_blksize));
+  JS_SetPropertyStr(ctx, stats_obj, "blocks", JS_NewInt64(ctx, st->st_blocks));
+
+  // Store mode for helper methods
+  JS_SetPropertyStr(ctx, stats_obj, "_mode", JS_NewInt32(ctx, st->st_mode));
+
+  // Add helper methods
+  JSValue is_file_func = JS_NewCFunction(ctx, js_fs_stat_is_file, "isFile", 0);
+  JS_SetPropertyStr(ctx, stats_obj, "isFile", is_file_func);
+
+  JSValue is_directory_func = JS_NewCFunction(ctx, js_fs_stat_is_directory, "isDirectory", 0);
+  JS_SetPropertyStr(ctx, stats_obj, "isDirectory", is_directory_func);
+
+  return stats_obj;
+}
+
+// FileHandle.stat() completion callback
+static void filehandle_stat_cb(uv_fs_t* req) {
+  fs_promise_work_t* work = (fs_promise_work_t*)req;
+  JSContext* ctx = work->ctx;
+
+  if (req->result < 0) {
+    // Reject with error
+    int err = -req->result;
+    JSValue error = create_fs_error(ctx, err, "fstat", work->path);
+    JSValue ret = JS_Call(ctx, work->reject, JS_UNDEFINED, 1, &error);
+    JS_FreeValue(ctx, error);
+    JS_FreeValue(ctx, ret);
+  } else {
+    // Resolve with Stats object
+    uv_stat_t* statbuf = &req->statbuf;
+    JSValue stats = create_stats_object_from_uv(ctx, statbuf);
+    JSValue ret = JS_Call(ctx, work->resolve, JS_UNDEFINED, 1, &stats);
+    JS_FreeValue(ctx, stats);
+    JS_FreeValue(ctx, ret);
+  }
+
+  fs_promise_work_free(work);
+}
+
+// FileHandle.stat() - returns Promise<Stats>
+static JSValue filehandle_stat(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
+  FileHandle* fh = JS_GetOpaque(this_val, filehandle_class_id);
+  if (!fh) {
+    return JS_ThrowTypeError(ctx, "Not a FileHandle");
+  }
+
+  if (fh->closed) {
+    JSValue error = JS_NewError(ctx);
+    JS_SetPropertyStr(ctx, error, "message", JS_NewString(ctx, "File handle is closed"));
+    return JS_Throw(ctx, error);
+  }
+
+  // Create Promise
+  JSValue resolving_funcs[2];
+  JSValue promise = JS_NewPromiseCapability(ctx, resolving_funcs);
+  if (JS_IsException(promise)) {
+    return JS_EXCEPTION;
+  }
+
+  // Allocate work request
+  fs_promise_work_t* work = calloc(1, sizeof(fs_promise_work_t));
+  if (!work) {
+    JS_FreeValue(ctx, resolving_funcs[0]);
+    JS_FreeValue(ctx, resolving_funcs[1]);
+    JS_FreeValue(ctx, promise);
+    return JS_ThrowOutOfMemory(ctx);
+  }
+
+  work->ctx = ctx;
+  work->resolve = resolving_funcs[0];
+  work->reject = resolving_funcs[1];
+  work->path = fh->path ? strdup(fh->path) : NULL;
+
+  // Queue async fstat operation
+  uv_loop_t* loop = fs_get_uv_loop(ctx);
+  int result = uv_fs_fstat(loop, &work->req, fh->fd, filehandle_stat_cb);
+
+  if (result < 0) {
+    // Immediate error
+    JSValue error = create_fs_error(ctx, -result, "fstat", work->path);
+    JSValue ret = JS_Call(ctx, work->reject, JS_UNDEFINED, 1, &error);
+    JS_FreeValue(ctx, error);
+    JS_FreeValue(ctx, ret);
+    fs_promise_work_free(work);
+  }
+
+  return promise;
+}
+
+// FileHandle.chmod() - returns Promise<void>
+static JSValue filehandle_chmod(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
+  FileHandle* fh = JS_GetOpaque(this_val, filehandle_class_id);
+  if (!fh) {
+    return JS_ThrowTypeError(ctx, "Not a FileHandle");
+  }
+
+  if (fh->closed) {
+    JSValue error = JS_NewError(ctx);
+    JS_SetPropertyStr(ctx, error, "message", JS_NewString(ctx, "File handle is closed"));
+    return JS_Throw(ctx, error);
+  }
+
+  if (argc < 1) {
+    return JS_ThrowTypeError(ctx, "chmod requires a mode");
+  }
+
+  int32_t mode;
+  if (JS_ToInt32(ctx, &mode, argv[0])) {
+    return JS_EXCEPTION;
+  }
+
+  // Create Promise
+  JSValue resolving_funcs[2];
+  JSValue promise = JS_NewPromiseCapability(ctx, resolving_funcs);
+  if (JS_IsException(promise)) {
+    return JS_EXCEPTION;
+  }
+
+  // Allocate work request
+  fs_promise_work_t* work = calloc(1, sizeof(fs_promise_work_t));
+  if (!work) {
+    JS_FreeValue(ctx, resolving_funcs[0]);
+    JS_FreeValue(ctx, resolving_funcs[1]);
+    JS_FreeValue(ctx, promise);
+    return JS_ThrowOutOfMemory(ctx);
+  }
+
+  work->ctx = ctx;
+  work->resolve = resolving_funcs[0];
+  work->reject = resolving_funcs[1];
+  work->path = fh->path ? strdup(fh->path) : NULL;
+  work->mode = mode;
+
+  // Queue async fchmod operation
+  uv_loop_t* loop = fs_get_uv_loop(ctx);
+  int result = uv_fs_fchmod(loop, &work->req, fh->fd, mode, fs_promise_complete_void);
+
+  if (result < 0) {
+    // Immediate error
+    JSValue error = create_fs_error(ctx, -result, "fchmod", work->path);
+    JSValue ret = JS_Call(ctx, work->reject, JS_UNDEFINED, 1, &error);
+    JS_FreeValue(ctx, error);
+    JS_FreeValue(ctx, ret);
+    fs_promise_work_free(work);
+  }
+
+  return promise;
+}
+
+// FileHandle.chown() - returns Promise<void>
+static JSValue filehandle_chown(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
+  FileHandle* fh = JS_GetOpaque(this_val, filehandle_class_id);
+  if (!fh) {
+    return JS_ThrowTypeError(ctx, "Not a FileHandle");
+  }
+
+  if (fh->closed) {
+    JSValue error = JS_NewError(ctx);
+    JS_SetPropertyStr(ctx, error, "message", JS_NewString(ctx, "File handle is closed"));
+    return JS_Throw(ctx, error);
+  }
+
+  if (argc < 2) {
+    return JS_ThrowTypeError(ctx, "chown requires uid and gid");
+  }
+
+  int32_t uid, gid;
+  if (JS_ToInt32(ctx, &uid, argv[0]) || JS_ToInt32(ctx, &gid, argv[1])) {
+    return JS_EXCEPTION;
+  }
+
+  // Create Promise
+  JSValue resolving_funcs[2];
+  JSValue promise = JS_NewPromiseCapability(ctx, resolving_funcs);
+  if (JS_IsException(promise)) {
+    return JS_EXCEPTION;
+  }
+
+  // Allocate work request
+  fs_promise_work_t* work = calloc(1, sizeof(fs_promise_work_t));
+  if (!work) {
+    JS_FreeValue(ctx, resolving_funcs[0]);
+    JS_FreeValue(ctx, resolving_funcs[1]);
+    JS_FreeValue(ctx, promise);
+    return JS_ThrowOutOfMemory(ctx);
+  }
+
+  work->ctx = ctx;
+  work->resolve = resolving_funcs[0];
+  work->reject = resolving_funcs[1];
+  work->path = fh->path ? strdup(fh->path) : NULL;
+
+  // Queue async fchown operation
+  uv_loop_t* loop = fs_get_uv_loop(ctx);
+  int result = uv_fs_fchown(loop, &work->req, fh->fd, uid, gid, fs_promise_complete_void);
+
+  if (result < 0) {
+    // Immediate error
+    JSValue error = create_fs_error(ctx, -result, "fchown", work->path);
+    JSValue ret = JS_Call(ctx, work->reject, JS_UNDEFINED, 1, &error);
+    JS_FreeValue(ctx, error);
+    JS_FreeValue(ctx, ret);
+    fs_promise_work_free(work);
+  }
+
+  return promise;
+}
+
+// FileHandle.utimes() - returns Promise<void>
+static JSValue filehandle_utimes(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
+  FileHandle* fh = JS_GetOpaque(this_val, filehandle_class_id);
+  if (!fh) {
+    return JS_ThrowTypeError(ctx, "Not a FileHandle");
+  }
+
+  if (fh->closed) {
+    JSValue error = JS_NewError(ctx);
+    JS_SetPropertyStr(ctx, error, "message", JS_NewString(ctx, "File handle is closed"));
+    return JS_Throw(ctx, error);
+  }
+
+  if (argc < 2) {
+    return JS_ThrowTypeError(ctx, "utimes requires atime and mtime");
+  }
+
+  double atime, mtime;
+  if (JS_ToFloat64(ctx, &atime, argv[0]) || JS_ToFloat64(ctx, &mtime, argv[1])) {
+    return JS_EXCEPTION;
+  }
+
+  // Create Promise
+  JSValue resolving_funcs[2];
+  JSValue promise = JS_NewPromiseCapability(ctx, resolving_funcs);
+  if (JS_IsException(promise)) {
+    return JS_EXCEPTION;
+  }
+
+  // Allocate work request
+  fs_promise_work_t* work = calloc(1, sizeof(fs_promise_work_t));
+  if (!work) {
+    JS_FreeValue(ctx, resolving_funcs[0]);
+    JS_FreeValue(ctx, resolving_funcs[1]);
+    JS_FreeValue(ctx, promise);
+    return JS_ThrowOutOfMemory(ctx);
+  }
+
+  work->ctx = ctx;
+  work->resolve = resolving_funcs[0];
+  work->reject = resolving_funcs[1];
+  work->path = fh->path ? strdup(fh->path) : NULL;
+
+  // Queue async futimes operation
+  uv_loop_t* loop = fs_get_uv_loop(ctx);
+  int result = uv_fs_futime(loop, &work->req, fh->fd, atime, mtime, fs_promise_complete_void);
+
+  if (result < 0) {
+    // Immediate error
+    JSValue error = create_fs_error(ctx, -result, "futimes", work->path);
+    JSValue ret = JS_Call(ctx, work->reject, JS_UNDEFINED, 1, &error);
+    JS_FreeValue(ctx, error);
+    JS_FreeValue(ctx, ret);
+    fs_promise_work_free(work);
+  }
+
+  return promise;
+}
+
+// FileHandle.truncate() - returns Promise<void>
+static JSValue filehandle_truncate(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
+  FileHandle* fh = JS_GetOpaque(this_val, filehandle_class_id);
+  if (!fh) {
+    return JS_ThrowTypeError(ctx, "Not a FileHandle");
+  }
+
+  if (fh->closed) {
+    JSValue error = JS_NewError(ctx);
+    JS_SetPropertyStr(ctx, error, "message", JS_NewString(ctx, "File handle is closed"));
+    return JS_Throw(ctx, error);
+  }
+
+  int64_t len = 0;
+  if (argc >= 1 && !JS_IsUndefined(argv[0])) {
+    JS_ToInt64(ctx, &len, argv[0]);
+  }
+
+  // Create Promise
+  JSValue resolving_funcs[2];
+  JSValue promise = JS_NewPromiseCapability(ctx, resolving_funcs);
+  if (JS_IsException(promise)) {
+    return JS_EXCEPTION;
+  }
+
+  // Allocate work request
+  fs_promise_work_t* work = calloc(1, sizeof(fs_promise_work_t));
+  if (!work) {
+    JS_FreeValue(ctx, resolving_funcs[0]);
+    JS_FreeValue(ctx, resolving_funcs[1]);
+    JS_FreeValue(ctx, promise);
+    return JS_ThrowOutOfMemory(ctx);
+  }
+
+  work->ctx = ctx;
+  work->resolve = resolving_funcs[0];
+  work->reject = resolving_funcs[1];
+  work->path = fh->path ? strdup(fh->path) : NULL;
+
+  // Queue async ftruncate operation
+  uv_loop_t* loop = fs_get_uv_loop(ctx);
+  int result = uv_fs_ftruncate(loop, &work->req, fh->fd, len, fs_promise_complete_void);
+
+  if (result < 0) {
+    // Immediate error
+    JSValue error = create_fs_error(ctx, -result, "ftruncate", work->path);
+    JSValue ret = JS_Call(ctx, work->reject, JS_UNDEFINED, 1, &error);
+    JS_FreeValue(ctx, error);
+    JS_FreeValue(ctx, ret);
+    fs_promise_work_free(work);
+  }
+
+  return promise;
+}
+
+// FileHandle.sync() - returns Promise<void>
+static JSValue filehandle_sync(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
+  FileHandle* fh = JS_GetOpaque(this_val, filehandle_class_id);
+  if (!fh) {
+    return JS_ThrowTypeError(ctx, "Not a FileHandle");
+  }
+
+  if (fh->closed) {
+    JSValue error = JS_NewError(ctx);
+    JS_SetPropertyStr(ctx, error, "message", JS_NewString(ctx, "File handle is closed"));
+    return JS_Throw(ctx, error);
+  }
+
+  // Create Promise
+  JSValue resolving_funcs[2];
+  JSValue promise = JS_NewPromiseCapability(ctx, resolving_funcs);
+  if (JS_IsException(promise)) {
+    return JS_EXCEPTION;
+  }
+
+  // Allocate work request
+  fs_promise_work_t* work = calloc(1, sizeof(fs_promise_work_t));
+  if (!work) {
+    JS_FreeValue(ctx, resolving_funcs[0]);
+    JS_FreeValue(ctx, resolving_funcs[1]);
+    JS_FreeValue(ctx, promise);
+    return JS_ThrowOutOfMemory(ctx);
+  }
+
+  work->ctx = ctx;
+  work->resolve = resolving_funcs[0];
+  work->reject = resolving_funcs[1];
+  work->path = fh->path ? strdup(fh->path) : NULL;
+
+  // Queue async fsync operation
+  uv_loop_t* loop = fs_get_uv_loop(ctx);
+  int result = uv_fs_fsync(loop, &work->req, fh->fd, fs_promise_complete_void);
+
+  if (result < 0) {
+    // Immediate error
+    JSValue error = create_fs_error(ctx, -result, "fsync", work->path);
+    JSValue ret = JS_Call(ctx, work->reject, JS_UNDEFINED, 1, &error);
+    JS_FreeValue(ctx, error);
+    JS_FreeValue(ctx, ret);
+    fs_promise_work_free(work);
+  }
+
+  return promise;
+}
+
+// FileHandle.datasync() - returns Promise<void>
+static JSValue filehandle_datasync(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
+  FileHandle* fh = JS_GetOpaque(this_val, filehandle_class_id);
+  if (!fh) {
+    return JS_ThrowTypeError(ctx, "Not a FileHandle");
+  }
+
+  if (fh->closed) {
+    JSValue error = JS_NewError(ctx);
+    JS_SetPropertyStr(ctx, error, "message", JS_NewString(ctx, "File handle is closed"));
+    return JS_Throw(ctx, error);
+  }
+
+  // Create Promise
+  JSValue resolving_funcs[2];
+  JSValue promise = JS_NewPromiseCapability(ctx, resolving_funcs);
+  if (JS_IsException(promise)) {
+    return JS_EXCEPTION;
+  }
+
+  // Allocate work request
+  fs_promise_work_t* work = calloc(1, sizeof(fs_promise_work_t));
+  if (!work) {
+    JS_FreeValue(ctx, resolving_funcs[0]);
+    JS_FreeValue(ctx, resolving_funcs[1]);
+    JS_FreeValue(ctx, promise);
+    return JS_ThrowOutOfMemory(ctx);
+  }
+
+  work->ctx = ctx;
+  work->resolve = resolving_funcs[0];
+  work->reject = resolving_funcs[1];
+  work->path = fh->path ? strdup(fh->path) : NULL;
+
+  // Queue async fdatasync operation
+  uv_loop_t* loop = fs_get_uv_loop(ctx);
+  int result = uv_fs_fdatasync(loop, &work->req, fh->fd, fs_promise_complete_void);
+
+  if (result < 0) {
+    // Immediate error
+    JSValue error = create_fs_error(ctx, -result, "fdatasync", work->path);
+    JSValue ret = JS_Call(ctx, work->reject, JS_UNDEFINED, 1, &error);
+    JS_FreeValue(ctx, error);
+    JS_FreeValue(ctx, ret);
+    fs_promise_work_free(work);
+  }
+
+  return promise;
+}
+
 // FileHandle method list
 static const JSCFunctionListEntry filehandle_proto_funcs[] = {
-    JS_CFUNC_DEF("close", 0, filehandle_close),
+    JS_CFUNC_DEF("close", 0, filehandle_close),   JS_CFUNC_DEF("read", 4, filehandle_read),
+    JS_CFUNC_DEF("write", 4, filehandle_write),   JS_CFUNC_DEF("stat", 0, filehandle_stat),
+    JS_CFUNC_DEF("chmod", 1, filehandle_chmod),   JS_CFUNC_DEF("chown", 2, filehandle_chown),
+    JS_CFUNC_DEF("utimes", 2, filehandle_utimes), JS_CFUNC_DEF("truncate", 1, filehandle_truncate),
+    JS_CFUNC_DEF("sync", 0, filehandle_sync),     JS_CFUNC_DEF("datasync", 0, filehandle_datasync),
 };
 
 // ============================================================================
@@ -376,14 +1067,397 @@ JSValue js_fs_promises_open(JSContext* ctx, JSValueConst this_val, int argc, JSV
 }
 
 // ============================================================================
+// fsPromises wrapper methods (wrappers around existing async functions)
+// ============================================================================
+
+// fs.promises.stat() - wrapper around existing async stat
+JSValue js_fs_promises_stat(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
+  if (argc < 1) {
+    return JS_ThrowTypeError(ctx, "stat requires a path");
+  }
+
+  const char* path = JS_ToCString(ctx, argv[0]);
+  if (!path) {
+    return JS_EXCEPTION;
+  }
+
+  // Create Promise
+  JSValue resolving_funcs[2];
+  JSValue promise = JS_NewPromiseCapability(ctx, resolving_funcs);
+  if (JS_IsException(promise)) {
+    JS_FreeCString(ctx, path);
+    return JS_EXCEPTION;
+  }
+
+  // Allocate work request
+  fs_promise_work_t* work = calloc(1, sizeof(fs_promise_work_t));
+  if (!work) {
+    JS_FreeCString(ctx, path);
+    JS_FreeValue(ctx, resolving_funcs[0]);
+    JS_FreeValue(ctx, resolving_funcs[1]);
+    JS_FreeValue(ctx, promise);
+    return JS_ThrowOutOfMemory(ctx);
+  }
+
+  work->ctx = ctx;
+  work->resolve = resolving_funcs[0];
+  work->reject = resolving_funcs[1];
+  work->path = strdup(path);
+  JS_FreeCString(ctx, path);
+
+  // Queue async stat operation
+  uv_loop_t* loop = fs_get_uv_loop(ctx);
+  int result = uv_fs_stat(loop, &work->req, work->path, filehandle_stat_cb);
+
+  if (result < 0) {
+    JSValue error = create_fs_error(ctx, -result, "stat", work->path);
+    JSValue ret = JS_Call(ctx, work->reject, JS_UNDEFINED, 1, &error);
+    JS_FreeValue(ctx, error);
+    JS_FreeValue(ctx, ret);
+    fs_promise_work_free(work);
+  }
+
+  return promise;
+}
+
+// fs.promises.lstat() - wrapper around existing async lstat
+JSValue js_fs_promises_lstat(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
+  if (argc < 1) {
+    return JS_ThrowTypeError(ctx, "lstat requires a path");
+  }
+
+  const char* path = JS_ToCString(ctx, argv[0]);
+  if (!path) {
+    return JS_EXCEPTION;
+  }
+
+  // Create Promise
+  JSValue resolving_funcs[2];
+  JSValue promise = JS_NewPromiseCapability(ctx, resolving_funcs);
+  if (JS_IsException(promise)) {
+    JS_FreeCString(ctx, path);
+    return JS_EXCEPTION;
+  }
+
+  // Allocate work request
+  fs_promise_work_t* work = calloc(1, sizeof(fs_promise_work_t));
+  if (!work) {
+    JS_FreeCString(ctx, path);
+    JS_FreeValue(ctx, resolving_funcs[0]);
+    JS_FreeValue(ctx, resolving_funcs[1]);
+    JS_FreeValue(ctx, promise);
+    return JS_ThrowOutOfMemory(ctx);
+  }
+
+  work->ctx = ctx;
+  work->resolve = resolving_funcs[0];
+  work->reject = resolving_funcs[1];
+  work->path = strdup(path);
+  JS_FreeCString(ctx, path);
+
+  // Queue async lstat operation
+  uv_loop_t* loop = fs_get_uv_loop(ctx);
+  int result = uv_fs_lstat(loop, &work->req, work->path, filehandle_stat_cb);
+
+  if (result < 0) {
+    JSValue error = create_fs_error(ctx, -result, "lstat", work->path);
+    JSValue ret = JS_Call(ctx, work->reject, JS_UNDEFINED, 1, &error);
+    JS_FreeValue(ctx, error);
+    JS_FreeValue(ctx, ret);
+    fs_promise_work_free(work);
+  }
+
+  return promise;
+}
+
+// fs.promises.unlink() - wrapper
+JSValue js_fs_promises_unlink(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
+  if (argc < 1) {
+    return JS_ThrowTypeError(ctx, "unlink requires a path");
+  }
+
+  const char* path = JS_ToCString(ctx, argv[0]);
+  if (!path) {
+    return JS_EXCEPTION;
+  }
+
+  // Create Promise
+  JSValue resolving_funcs[2];
+  JSValue promise = JS_NewPromiseCapability(ctx, resolving_funcs);
+  if (JS_IsException(promise)) {
+    JS_FreeCString(ctx, path);
+    return JS_EXCEPTION;
+  }
+
+  // Allocate work request
+  fs_promise_work_t* work = calloc(1, sizeof(fs_promise_work_t));
+  if (!work) {
+    JS_FreeCString(ctx, path);
+    JS_FreeValue(ctx, resolving_funcs[0]);
+    JS_FreeValue(ctx, resolving_funcs[1]);
+    JS_FreeValue(ctx, promise);
+    return JS_ThrowOutOfMemory(ctx);
+  }
+
+  work->ctx = ctx;
+  work->resolve = resolving_funcs[0];
+  work->reject = resolving_funcs[1];
+  work->path = strdup(path);
+  JS_FreeCString(ctx, path);
+
+  // Queue async unlink operation
+  uv_loop_t* loop = fs_get_uv_loop(ctx);
+  int result = uv_fs_unlink(loop, &work->req, work->path, fs_promise_complete_void);
+
+  if (result < 0) {
+    JSValue error = create_fs_error(ctx, -result, "unlink", work->path);
+    JSValue ret = JS_Call(ctx, work->reject, JS_UNDEFINED, 1, &error);
+    JS_FreeValue(ctx, error);
+    JS_FreeValue(ctx, ret);
+    fs_promise_work_free(work);
+  }
+
+  return promise;
+}
+
+// fs.promises.rename() - wrapper
+JSValue js_fs_promises_rename(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
+  if (argc < 2) {
+    return JS_ThrowTypeError(ctx, "rename requires old and new paths");
+  }
+
+  const char* oldPath = JS_ToCString(ctx, argv[0]);
+  const char* newPath = JS_ToCString(ctx, argv[1]);
+  if (!oldPath || !newPath) {
+    if (oldPath)
+      JS_FreeCString(ctx, oldPath);
+    if (newPath)
+      JS_FreeCString(ctx, newPath);
+    return JS_EXCEPTION;
+  }
+
+  // Create Promise
+  JSValue resolving_funcs[2];
+  JSValue promise = JS_NewPromiseCapability(ctx, resolving_funcs);
+  if (JS_IsException(promise)) {
+    JS_FreeCString(ctx, oldPath);
+    JS_FreeCString(ctx, newPath);
+    return JS_EXCEPTION;
+  }
+
+  // Allocate work request
+  fs_promise_work_t* work = calloc(1, sizeof(fs_promise_work_t));
+  if (!work) {
+    JS_FreeCString(ctx, oldPath);
+    JS_FreeCString(ctx, newPath);
+    JS_FreeValue(ctx, resolving_funcs[0]);
+    JS_FreeValue(ctx, resolving_funcs[1]);
+    JS_FreeValue(ctx, promise);
+    return JS_ThrowOutOfMemory(ctx);
+  }
+
+  work->ctx = ctx;
+  work->resolve = resolving_funcs[0];
+  work->reject = resolving_funcs[1];
+  work->path = strdup(oldPath);
+  work->path2 = strdup(newPath);
+  JS_FreeCString(ctx, oldPath);
+  JS_FreeCString(ctx, newPath);
+
+  // Queue async rename operation
+  uv_loop_t* loop = fs_get_uv_loop(ctx);
+  int result = uv_fs_rename(loop, &work->req, work->path, work->path2, fs_promise_complete_void);
+
+  if (result < 0) {
+    JSValue error = create_fs_error(ctx, -result, "rename", work->path);
+    JSValue ret = JS_Call(ctx, work->reject, JS_UNDEFINED, 1, &error);
+    JS_FreeValue(ctx, error);
+    JS_FreeValue(ctx, ret);
+    fs_promise_work_free(work);
+  }
+
+  return promise;
+}
+
+// fs.promises.mkdir() - wrapper
+JSValue js_fs_promises_mkdir(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
+  if (argc < 1) {
+    return JS_ThrowTypeError(ctx, "mkdir requires a path");
+  }
+
+  const char* path = JS_ToCString(ctx, argv[0]);
+  if (!path) {
+    return JS_EXCEPTION;
+  }
+
+  // Parse mode (default: 0777)
+  int32_t mode = 0777;
+  if (argc >= 2 && JS_IsObject(argv[1])) {
+    JSValue mode_val = JS_GetPropertyStr(ctx, argv[1], "mode");
+    if (!JS_IsUndefined(mode_val)) {
+      JS_ToInt32(ctx, &mode, mode_val);
+    }
+    JS_FreeValue(ctx, mode_val);
+  }
+
+  // Create Promise
+  JSValue resolving_funcs[2];
+  JSValue promise = JS_NewPromiseCapability(ctx, resolving_funcs);
+  if (JS_IsException(promise)) {
+    JS_FreeCString(ctx, path);
+    return JS_EXCEPTION;
+  }
+
+  // Allocate work request
+  fs_promise_work_t* work = calloc(1, sizeof(fs_promise_work_t));
+  if (!work) {
+    JS_FreeCString(ctx, path);
+    JS_FreeValue(ctx, resolving_funcs[0]);
+    JS_FreeValue(ctx, resolving_funcs[1]);
+    JS_FreeValue(ctx, promise);
+    return JS_ThrowOutOfMemory(ctx);
+  }
+
+  work->ctx = ctx;
+  work->resolve = resolving_funcs[0];
+  work->reject = resolving_funcs[1];
+  work->path = strdup(path);
+  work->mode = mode;
+  JS_FreeCString(ctx, path);
+
+  // Queue async mkdir operation
+  uv_loop_t* loop = fs_get_uv_loop(ctx);
+  int result = uv_fs_mkdir(loop, &work->req, work->path, mode, fs_promise_complete_void);
+
+  if (result < 0) {
+    JSValue error = create_fs_error(ctx, -result, "mkdir", work->path);
+    JSValue ret = JS_Call(ctx, work->reject, JS_UNDEFINED, 1, &error);
+    JS_FreeValue(ctx, error);
+    JS_FreeValue(ctx, ret);
+    fs_promise_work_free(work);
+  }
+
+  return promise;
+}
+
+// fs.promises.rmdir() - wrapper
+JSValue js_fs_promises_rmdir(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
+  if (argc < 1) {
+    return JS_ThrowTypeError(ctx, "rmdir requires a path");
+  }
+
+  const char* path = JS_ToCString(ctx, argv[0]);
+  if (!path) {
+    return JS_EXCEPTION;
+  }
+
+  // Create Promise
+  JSValue resolving_funcs[2];
+  JSValue promise = JS_NewPromiseCapability(ctx, resolving_funcs);
+  if (JS_IsException(promise)) {
+    JS_FreeCString(ctx, path);
+    return JS_EXCEPTION;
+  }
+
+  // Allocate work request
+  fs_promise_work_t* work = calloc(1, sizeof(fs_promise_work_t));
+  if (!work) {
+    JS_FreeCString(ctx, path);
+    JS_FreeValue(ctx, resolving_funcs[0]);
+    JS_FreeValue(ctx, resolving_funcs[1]);
+    JS_FreeValue(ctx, promise);
+    return JS_ThrowOutOfMemory(ctx);
+  }
+
+  work->ctx = ctx;
+  work->resolve = resolving_funcs[0];
+  work->reject = resolving_funcs[1];
+  work->path = strdup(path);
+  JS_FreeCString(ctx, path);
+
+  // Queue async rmdir operation
+  uv_loop_t* loop = fs_get_uv_loop(ctx);
+  int result = uv_fs_rmdir(loop, &work->req, work->path, fs_promise_complete_void);
+
+  if (result < 0) {
+    JSValue error = create_fs_error(ctx, -result, "rmdir", work->path);
+    JSValue ret = JS_Call(ctx, work->reject, JS_UNDEFINED, 1, &error);
+    JS_FreeValue(ctx, error);
+    JS_FreeValue(ctx, ret);
+    fs_promise_work_free(work);
+  }
+
+  return promise;
+}
+
+// fs.promises.readlink() - wrapper
+JSValue js_fs_promises_readlink(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
+  if (argc < 1) {
+    return JS_ThrowTypeError(ctx, "readlink requires a path");
+  }
+
+  const char* path = JS_ToCString(ctx, argv[0]);
+  if (!path) {
+    return JS_EXCEPTION;
+  }
+
+  // Create Promise
+  JSValue resolving_funcs[2];
+  JSValue promise = JS_NewPromiseCapability(ctx, resolving_funcs);
+  if (JS_IsException(promise)) {
+    JS_FreeCString(ctx, path);
+    return JS_EXCEPTION;
+  }
+
+  // Allocate work request
+  fs_promise_work_t* work = calloc(1, sizeof(fs_promise_work_t));
+  if (!work) {
+    JS_FreeCString(ctx, path);
+    JS_FreeValue(ctx, resolving_funcs[0]);
+    JS_FreeValue(ctx, resolving_funcs[1]);
+    JS_FreeValue(ctx, promise);
+    return JS_ThrowOutOfMemory(ctx);
+  }
+
+  work->ctx = ctx;
+  work->resolve = resolving_funcs[0];
+  work->reject = resolving_funcs[1];
+  work->path = strdup(path);
+  JS_FreeCString(ctx, path);
+
+  // Queue async readlink operation
+  uv_loop_t* loop = fs_get_uv_loop(ctx);
+  int result = uv_fs_readlink(loop, &work->req, work->path, fs_promise_complete_string);
+
+  if (result < 0) {
+    JSValue error = create_fs_error(ctx, -result, "readlink", work->path);
+    JSValue ret = JS_Call(ctx, work->reject, JS_UNDEFINED, 1, &error);
+    JS_FreeValue(ctx, error);
+    JS_FreeValue(ctx, ret);
+    fs_promise_work_free(work);
+  }
+
+  return promise;
+}
+
+// ============================================================================
 // fsPromises namespace initialization
 // ============================================================================
 
 JSValue JSRT_InitNodeFsPromises(JSContext* ctx) {
   JSValue promises = JS_NewObject(ctx);
 
-  // Add fsPromises.open()
+  // FileHandle-based API
   JS_SetPropertyStr(ctx, promises, "open", JS_NewCFunction(ctx, js_fs_promises_open, "open", 3));
+
+  // Path-based wrappers
+  JS_SetPropertyStr(ctx, promises, "stat", JS_NewCFunction(ctx, js_fs_promises_stat, "stat", 1));
+  JS_SetPropertyStr(ctx, promises, "lstat", JS_NewCFunction(ctx, js_fs_promises_lstat, "lstat", 1));
+  JS_SetPropertyStr(ctx, promises, "unlink", JS_NewCFunction(ctx, js_fs_promises_unlink, "unlink", 1));
+  JS_SetPropertyStr(ctx, promises, "rename", JS_NewCFunction(ctx, js_fs_promises_rename, "rename", 2));
+  JS_SetPropertyStr(ctx, promises, "mkdir", JS_NewCFunction(ctx, js_fs_promises_mkdir, "mkdir", 2));
+  JS_SetPropertyStr(ctx, promises, "rmdir", JS_NewCFunction(ctx, js_fs_promises_rmdir, "rmdir", 1));
+  JS_SetPropertyStr(ctx, promises, "readlink", JS_NewCFunction(ctx, js_fs_promises_readlink, "readlink", 1));
 
   return promises;
 }

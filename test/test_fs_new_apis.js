@@ -176,7 +176,11 @@ fs.appendFile(testFile, '!', (err) => {
 
       // Test access (async) - file exists
       fs.access(testFile, (err) => {
-        assert.strictEqual(err, null, 'access should not error for existing file');
+        assert.strictEqual(
+          err,
+          null,
+          'access should not error for existing file'
+        );
 
         // Test access (async) - file doesn't exist
         fs.access('nonexistent.txt', (err) => {

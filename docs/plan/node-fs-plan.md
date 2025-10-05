@@ -1,13 +1,14 @@
 ---
 Created: 2025-10-04T00:00:00Z
-Last Updated: 2025-10-05T23:30:00Z
-Status: 🟢 CRITICAL FIXES COMPLETED
-Overall Progress: 41 sync + 34 async + 24 Promise + 5 FileHandle methods (104/132 = 78.8%)
+Last Updated: 2025-10-06T00:00:00Z
+Status: 🟢 PHASE A1 COMPLETED - HIGH-VALUE APIs
+Overall Progress: 41 sync + 34 async + 27 Promise + 13 FileHandle methods (107/132 = 81.1%)
 Phase 1: ✅ COMPLETED (2025-10-04) - All sync APIs except globSync
 Phase 2: ✅ COMPLETED (2025-10-05) - 34 async callback APIs (85% of core async APIs)
-Phase 3: ✅ MAJOR MILESTONE (2025-10-05) - FileHandle + high-value Promise APIs (24/31 Promise methods)
+Phase 3: ✅ MAJOR MILESTONE (2025-10-05) - FileHandle + high-value Promise APIs
+Phase A1: ✅ COMPLETED (2025-10-06T00:00:00Z) - FileHandle file I/O (readFile, writeFile, appendFile)
 Critical Fixes: ✅ COMPLETED (2025-10-05T23:30:00Z) - Buffer support, lchmod fix
-Latest Work: Buffer support in async writeFile/appendFile, lchmod properly throws error
+Latest Work: FileHandle convenience methods - most-used file I/O operations
 Test Status: 113/113 tests passing (100%), WPT 90.6% (maintained)
 ---
 
@@ -562,6 +563,7 @@ TOTAL REMAINING: ~10-12 weeks
 | 2025-10-05T10:45:00Z | PHASE 3 PARTIAL | 16 Promise APIs, FileHandle class complete |
 | 2025-10-05T21:00:00Z | **PHASE 2 & 3 COMPLETE** | 🎉 **99 APIs (104%), commit f411f59, ALL GOALS EXCEEDED!** |
 | 2025-10-05T23:30:00Z | **CRITICAL FIXES** | ✅ **Buffer support in async writeFile/appendFile, lchmod fix (113/113 tests)** |
+| 2025-10-06T00:00:00Z | **PHASE A1 COMPLETE** | ✅ **FileHandle I/O methods (readFile, writeFile, appendFile) - 107 APIs (81.1%)** |
 
 ### Lessons Learned
 
@@ -602,6 +604,14 @@ TOTAL REMAINING: ~10-12 weeks
 - ✅ **Ownership transfer**: Direct assignment to work->buffer avoids unnecessary copy
 - ✅ **Code review value**: Identified 3 critical issues before they reached production
 - 📝 **Key insight**: Fixing existing issues before adding features prevents compounding problems
+
+**From Phase A1 (FileHandle I/O - 2025-10-06T00:00:00Z):**
+- ✅ **FileHandle lifetime**: Methods don't close fd (FileHandle manages lifetime explicitly)
+- ✅ **Field workaround**: Used work->flags to store fd (fs_promise_work_t lacks fd field)
+- ✅ **Empty file handling**: Correctly resolves with empty buffer (no malloc(0))
+- ✅ **Async chains**: fstat→read pattern reused successfully from fsPromises operations
+- ✅ **High-value first**: Implemented most-used FileHandle methods (readFile, writeFile, appendFile)
+- 📝 **Key insight**: Understanding structure limitations early prevents implementation roadblocks
 
 ---
 

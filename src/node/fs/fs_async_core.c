@@ -38,7 +38,7 @@ static void readfile_read_cb(uv_fs_t* req) {
     JSValue error = create_fs_error(ctx, err, "read", work->path);
     JSValue args[1] = {error};
     JSValue ret = JS_Call(ctx, work->callback, JS_UNDEFINED, 1, args);
-  JS_FreeValue(ctx, ret);
+    JS_FreeValue(ctx, ret);
     JS_FreeValue(ctx, error);
     fs_async_work_free(work);
     return;
@@ -68,7 +68,7 @@ static void readfile_fstat_cb(uv_fs_t* req) {
     JSValue error = create_fs_error(ctx, err, "fstat", work->path);
     JSValue args[1] = {error};
     JSValue ret = JS_Call(ctx, work->callback, JS_UNDEFINED, 1, args);
-  JS_FreeValue(ctx, ret);
+    JS_FreeValue(ctx, ret);
     JS_FreeValue(ctx, error);
     fs_async_work_free(work);
     return;
@@ -92,7 +92,7 @@ static void readfile_fstat_cb(uv_fs_t* req) {
     JS_SetPropertyStr(ctx, error, "message", JS_NewString(ctx, "Failed to allocate buffer"));
     JSValue args[1] = {error};
     JSValue ret = JS_Call(ctx, work->callback, JS_UNDEFINED, 1, args);
-  JS_FreeValue(ctx, ret);
+    JS_FreeValue(ctx, ret);
     JS_FreeValue(ctx, error);
     fs_async_work_free(work);
     return;
@@ -119,7 +119,7 @@ static void readfile_open_cb(uv_fs_t* req) {
     JSValue error = create_fs_error(ctx, err, "open", work->path);
     JSValue args[1] = {error};
     JSValue ret = JS_Call(ctx, work->callback, JS_UNDEFINED, 1, args);
-  JS_FreeValue(ctx, ret);
+    JS_FreeValue(ctx, ret);
     JS_FreeValue(ctx, error);
     fs_async_work_free(work);
     return;
@@ -178,7 +178,7 @@ JSValue js_fs_read_file_async(JSContext* ctx, JSValueConst this_val, int argc, J
     JSValue error = create_fs_error(ctx, -result, "open", work->path);
     JSValue args[1] = {error};
     JSValue ret = JS_Call(ctx, work->callback, JS_UNDEFINED, 1, args);
-  JS_FreeValue(ctx, ret);
+    JS_FreeValue(ctx, ret);
     JS_FreeValue(ctx, error);
     fs_async_work_free(work);
   }
@@ -219,7 +219,7 @@ static void writefile_write_cb(uv_fs_t* req) {
     JSValue error = create_fs_error(ctx, err, "write", work->path);
     JSValue args[1] = {error};
     JSValue ret = JS_Call(ctx, work->callback, JS_UNDEFINED, 1, args);
-  JS_FreeValue(ctx, ret);
+    JS_FreeValue(ctx, ret);
     JS_FreeValue(ctx, error);
     fs_async_work_free(work);
     return;
@@ -242,7 +242,7 @@ static void writefile_open_cb(uv_fs_t* req) {
     JSValue error = create_fs_error(ctx, err, "open", work->path);
     JSValue args[1] = {error};
     JSValue ret = JS_Call(ctx, work->callback, JS_UNDEFINED, 1, args);
-  JS_FreeValue(ctx, ret);
+    JS_FreeValue(ctx, ret);
     JS_FreeValue(ctx, error);
     fs_async_work_free(work);
     return;
@@ -321,7 +321,7 @@ JSValue js_fs_write_file_async(JSContext* ctx, JSValueConst this_val, int argc, 
     JSValue error = create_fs_error(ctx, -result, "open", work->path);
     JSValue args[1] = {error};
     JSValue ret = JS_Call(ctx, work->callback, JS_UNDEFINED, 1, args);
-  JS_FreeValue(ctx, ret);
+    JS_FreeValue(ctx, ret);
     JS_FreeValue(ctx, error);
     fs_async_work_free(work);
   }
@@ -367,7 +367,7 @@ JSValue js_fs_unlink_async(JSContext* ctx, JSValueConst this_val, int argc, JSVa
     JSValue error = create_fs_error(ctx, -result, "unlink", work->path);
     JSValue args[1] = {error};
     JSValue ret = JS_Call(ctx, work->callback, JS_UNDEFINED, 1, args);
-  JS_FreeValue(ctx, ret);
+    JS_FreeValue(ctx, ret);
     JS_FreeValue(ctx, error);
     fs_async_work_free(work);
   }
@@ -422,7 +422,7 @@ JSValue js_fs_mkdir_async(JSContext* ctx, JSValueConst this_val, int argc, JSVal
     JSValue error = create_fs_error(ctx, -result, "mkdir", work->path);
     JSValue args[1] = {error};
     JSValue ret = JS_Call(ctx, work->callback, JS_UNDEFINED, 1, args);
-  JS_FreeValue(ctx, ret);
+    JS_FreeValue(ctx, ret);
     JS_FreeValue(ctx, error);
     fs_async_work_free(work);
   }
@@ -464,7 +464,7 @@ JSValue js_fs_rmdir_async(JSContext* ctx, JSValueConst this_val, int argc, JSVal
     JSValue error = create_fs_error(ctx, -result, "rmdir", work->path);
     JSValue args[1] = {error};
     JSValue ret = JS_Call(ctx, work->callback, JS_UNDEFINED, 1, args);
-  JS_FreeValue(ctx, ret);
+    JS_FreeValue(ctx, ret);
     JS_FreeValue(ctx, error);
     fs_async_work_free(work);
   }
@@ -516,7 +516,7 @@ JSValue js_fs_rename_async(JSContext* ctx, JSValueConst this_val, int argc, JSVa
     JSValue error = create_fs_error(ctx, -result, "rename", work->path);
     JSValue args[1] = {error};
     JSValue ret = JS_Call(ctx, work->callback, JS_UNDEFINED, 1, args);
-  JS_FreeValue(ctx, ret);
+    JS_FreeValue(ctx, ret);
     JS_FreeValue(ctx, error);
     fs_async_work_free(work);
   }
@@ -571,7 +571,7 @@ JSValue js_fs_access_async(JSContext* ctx, JSValueConst this_val, int argc, JSVa
     JSValue error = create_fs_error(ctx, -result, "access", work->path);
     JSValue args[1] = {error};
     JSValue ret = JS_Call(ctx, work->callback, JS_UNDEFINED, 1, args);
-  JS_FreeValue(ctx, ret);
+    JS_FreeValue(ctx, ret);
     JS_FreeValue(ctx, error);
     fs_async_work_free(work);
   }
@@ -617,7 +617,7 @@ JSValue js_fs_stat_async(JSContext* ctx, JSValueConst this_val, int argc, JSValu
     JSValue error = create_fs_error(ctx, -result, "stat", work->path);
     JSValue args[1] = {error};
     JSValue ret = JS_Call(ctx, work->callback, JS_UNDEFINED, 1, args);
-  JS_FreeValue(ctx, ret);
+    JS_FreeValue(ctx, ret);
     JS_FreeValue(ctx, error);
     fs_async_work_free(work);
   }
@@ -659,7 +659,7 @@ JSValue js_fs_lstat_async(JSContext* ctx, JSValueConst this_val, int argc, JSVal
     JSValue error = create_fs_error(ctx, -result, "lstat", work->path);
     JSValue args[1] = {error};
     JSValue ret = JS_Call(ctx, work->callback, JS_UNDEFINED, 1, args);
-  JS_FreeValue(ctx, ret);
+    JS_FreeValue(ctx, ret);
     JS_FreeValue(ctx, error);
     fs_async_work_free(work);
   }
@@ -698,7 +698,7 @@ JSValue js_fs_fstat_async(JSContext* ctx, JSValueConst this_val, int argc, JSVal
     JSValue error = create_fs_error(ctx, -result, "fstat", NULL);
     JSValue args[1] = {error};
     JSValue ret = JS_Call(ctx, work->callback, JS_UNDEFINED, 1, args);
-  JS_FreeValue(ctx, ret);
+    JS_FreeValue(ctx, ret);
     JS_FreeValue(ctx, error);
     fs_async_work_free(work);
   }
@@ -750,7 +750,7 @@ JSValue js_fs_chmod_async(JSContext* ctx, JSValueConst this_val, int argc, JSVal
     JSValue error = create_fs_error(ctx, -result, "chmod", work->path);
     JSValue args[1] = {error};
     JSValue ret = JS_Call(ctx, work->callback, JS_UNDEFINED, 1, args);
-  JS_FreeValue(ctx, ret);
+    JS_FreeValue(ctx, ret);
     JS_FreeValue(ctx, error);
     fs_async_work_free(work);
   }
@@ -794,7 +794,7 @@ JSValue js_fs_fchmod_async(JSContext* ctx, JSValueConst this_val, int argc, JSVa
     JSValue error = create_fs_error(ctx, -result, "fchmod", NULL);
     JSValue args[1] = {error};
     JSValue ret = JS_Call(ctx, work->callback, JS_UNDEFINED, 1, args);
-  JS_FreeValue(ctx, ret);
+    JS_FreeValue(ctx, ret);
     JS_FreeValue(ctx, error);
     fs_async_work_free(work);
   }
@@ -847,7 +847,7 @@ JSValue js_fs_lchmod_async(JSContext* ctx, JSValueConst this_val, int argc, JSVa
     JSValue error = create_fs_error(ctx, -result, "lchmod", work->path);
     JSValue args[1] = {error};
     JSValue ret = JS_Call(ctx, work->callback, JS_UNDEFINED, 1, args);
-  JS_FreeValue(ctx, ret);
+    JS_FreeValue(ctx, ret);
     JS_FreeValue(ctx, error);
     fs_async_work_free(work);
   }
@@ -907,7 +907,7 @@ JSValue js_fs_chown_async(JSContext* ctx, JSValueConst this_val, int argc, JSVal
     JSValue error = create_fs_error(ctx, -result, "chown", work->path);
     JSValue args[1] = {error};
     JSValue ret = JS_Call(ctx, work->callback, JS_UNDEFINED, 1, args);
-  JS_FreeValue(ctx, ret);
+    JS_FreeValue(ctx, ret);
     JS_FreeValue(ctx, error);
     fs_async_work_free(work);
   }
@@ -956,7 +956,7 @@ JSValue js_fs_fchown_async(JSContext* ctx, JSValueConst this_val, int argc, JSVa
     JSValue error = create_fs_error(ctx, -result, "fchown", NULL);
     JSValue args[1] = {error};
     JSValue ret = JS_Call(ctx, work->callback, JS_UNDEFINED, 1, args);
-  JS_FreeValue(ctx, ret);
+    JS_FreeValue(ctx, ret);
     JS_FreeValue(ctx, error);
     fs_async_work_free(work);
   }
@@ -1012,7 +1012,7 @@ JSValue js_fs_lchown_async(JSContext* ctx, JSValueConst this_val, int argc, JSVa
     JSValue error = create_fs_error(ctx, -result, "lchown", work->path);
     JSValue args[1] = {error};
     JSValue ret = JS_Call(ctx, work->callback, JS_UNDEFINED, 1, args);
-  JS_FreeValue(ctx, ret);
+    JS_FreeValue(ctx, ret);
     JS_FreeValue(ctx, error);
     fs_async_work_free(work);
   }
@@ -1069,7 +1069,7 @@ JSValue js_fs_utimes_async(JSContext* ctx, JSValueConst this_val, int argc, JSVa
     JSValue error = create_fs_error(ctx, -result, "utimes", work->path);
     JSValue args[1] = {error};
     JSValue ret = JS_Call(ctx, work->callback, JS_UNDEFINED, 1, args);
-  JS_FreeValue(ctx, ret);
+    JS_FreeValue(ctx, ret);
     JS_FreeValue(ctx, error);
     fs_async_work_free(work);
   }
@@ -1116,7 +1116,7 @@ JSValue js_fs_futimes_async(JSContext* ctx, JSValueConst this_val, int argc, JSV
     JSValue error = create_fs_error(ctx, -result, "futimes", NULL);
     JSValue args[1] = {error};
     JSValue ret = JS_Call(ctx, work->callback, JS_UNDEFINED, 1, args);
-  JS_FreeValue(ctx, ret);
+    JS_FreeValue(ctx, ret);
     JS_FreeValue(ctx, error);
     fs_async_work_free(work);
   }
@@ -1168,7 +1168,7 @@ JSValue js_fs_lutimes_async(JSContext* ctx, JSValueConst this_val, int argc, JSV
     JSValue error = create_fs_error(ctx, -result, "lutimes", work->path);
     JSValue args[1] = {error};
     JSValue ret = JS_Call(ctx, work->callback, JS_UNDEFINED, 1, args);
-  JS_FreeValue(ctx, ret);
+    JS_FreeValue(ctx, ret);
     JS_FreeValue(ctx, error);
     fs_async_work_free(work);
   }
@@ -1224,7 +1224,7 @@ JSValue js_fs_link_async(JSContext* ctx, JSValueConst this_val, int argc, JSValu
     JSValue error = create_fs_error(ctx, -result, "link", work->path);
     JSValue args[1] = {error};
     JSValue ret = JS_Call(ctx, work->callback, JS_UNDEFINED, 1, args);
-  JS_FreeValue(ctx, ret);
+    JS_FreeValue(ctx, ret);
     JS_FreeValue(ctx, error);
     fs_async_work_free(work);
   }
@@ -1295,7 +1295,7 @@ JSValue js_fs_symlink_async(JSContext* ctx, JSValueConst this_val, int argc, JSV
     JSValue error = create_fs_error(ctx, -result, "symlink", work->path2);
     JSValue args[1] = {error};
     JSValue ret = JS_Call(ctx, work->callback, JS_UNDEFINED, 1, args);
-  JS_FreeValue(ctx, ret);
+    JS_FreeValue(ctx, ret);
     JS_FreeValue(ctx, error);
     fs_async_work_free(work);
   }
@@ -1343,7 +1343,7 @@ JSValue js_fs_readlink_async(JSContext* ctx, JSValueConst this_val, int argc, JS
     JSValue error = create_fs_error(ctx, -result, "readlink", work->path);
     JSValue args[1] = {error};
     JSValue ret = JS_Call(ctx, work->callback, JS_UNDEFINED, 1, args);
-  JS_FreeValue(ctx, ret);
+    JS_FreeValue(ctx, ret);
     JS_FreeValue(ctx, error);
     fs_async_work_free(work);
   }
@@ -1391,7 +1391,7 @@ JSValue js_fs_realpath_async(JSContext* ctx, JSValueConst this_val, int argc, JS
     JSValue error = create_fs_error(ctx, -result, "realpath", work->path);
     JSValue args[1] = {error};
     JSValue ret = JS_Call(ctx, work->callback, JS_UNDEFINED, 1, args);
-  JS_FreeValue(ctx, ret);
+    JS_FreeValue(ctx, ret);
     JS_FreeValue(ctx, error);
     fs_async_work_free(work);
   }
@@ -1475,7 +1475,7 @@ JSValue js_fs_open_async(JSContext* ctx, JSValueConst this_val, int argc, JSValu
     JSValue error = create_fs_error(ctx, -result, "open", work->path);
     JSValue args[1] = {error};
     JSValue ret = JS_Call(ctx, work->callback, JS_UNDEFINED, 1, args);
-  JS_FreeValue(ctx, ret);
+    JS_FreeValue(ctx, ret);
     JS_FreeValue(ctx, error);
     fs_async_work_free(work);
   }
@@ -1514,7 +1514,7 @@ JSValue js_fs_close_async(JSContext* ctx, JSValueConst this_val, int argc, JSVal
     JSValue error = create_fs_error(ctx, -result, "close", NULL);
     JSValue args[1] = {error};
     JSValue ret = JS_Call(ctx, work->callback, JS_UNDEFINED, 1, args);
-  JS_FreeValue(ctx, ret);
+    JS_FreeValue(ctx, ret);
     JS_FreeValue(ctx, error);
     fs_async_work_free(work);
   }
@@ -1566,7 +1566,427 @@ JSValue js_fs_readdir_async(JSContext* ctx, JSValueConst this_val, int argc, JSV
     JSValue error = create_fs_error(ctx, -result, "readdir", work->path);
     JSValue args[1] = {error};
     JSValue ret = JS_Call(ctx, work->callback, JS_UNDEFINED, 1, args);
+    JS_FreeValue(ctx, ret);
+    JS_FreeValue(ctx, error);
+    fs_async_work_free(work);
+  }
+
+  return JS_UNDEFINED;
+}
+
+// ============================================================================
+// appendFile: Multi-step async operation (open → write → close) (Task 2.15)
+// ============================================================================
+
+// Step 3: Close after append
+static void appendfile_close_cb(uv_fs_t* req) {
+  fs_async_work_t* work = (fs_async_work_t*)req;
+  JSContext* ctx = work->ctx;
+
+  // Append completed successfully, report success
+  JSValue args[1] = {JS_NULL};
+  JSValue ret = JS_Call(ctx, work->callback, JS_UNDEFINED, 1, args);
   JS_FreeValue(ctx, ret);
+
+  fs_async_work_free(work);
+}
+
+// Step 2: Write data to file
+static void appendfile_write_cb(uv_fs_t* req) {
+  fs_async_work_t* work = (fs_async_work_t*)req;
+  JSContext* ctx = work->ctx;
+  uv_loop_t* loop = fs_get_uv_loop(ctx);
+
+  if (req->result < 0) {
+    // Write error - close fd and report
+    int err = -req->result;
+    uv_fs_t close_req;
+    uv_fs_close(loop, &close_req, work->flags, NULL);
+    uv_fs_req_cleanup(&close_req);
+
+    JSValue error = create_fs_error(ctx, err, "write", work->path);
+    JSValue args[1] = {error};
+    JSValue ret = JS_Call(ctx, work->callback, JS_UNDEFINED, 1, args);
+    JS_FreeValue(ctx, ret);
+    JS_FreeValue(ctx, error);
+    fs_async_work_free(work);
+    return;
+  }
+
+  // Step 3: Close file
+  uv_fs_req_cleanup(req);
+  uv_fs_close(loop, req, work->flags, appendfile_close_cb);
+}
+
+// Step 1: Open file for appending
+static void appendfile_open_cb(uv_fs_t* req) {
+  fs_async_work_t* work = (fs_async_work_t*)req;
+  JSContext* ctx = work->ctx;
+  uv_loop_t* loop = fs_get_uv_loop(ctx);
+
+  if (req->result < 0) {
+    // Open error
+    int err = -req->result;
+    JSValue error = create_fs_error(ctx, err, "open", work->path);
+    JSValue args[1] = {error};
+    JSValue ret = JS_Call(ctx, work->callback, JS_UNDEFINED, 1, args);
+    JS_FreeValue(ctx, ret);
+    JS_FreeValue(ctx, error);
+    fs_async_work_free(work);
+    return;
+  }
+
+  // Store fd
+  work->flags = (int)req->result;
+
+  // Step 2: Write data (append at end)
+  uv_buf_t iov = uv_buf_init(work->buffer, (unsigned int)work->buffer_size);
+  uv_fs_req_cleanup(req);
+  uv_fs_write(loop, req, work->flags, &iov, 1, -1, appendfile_write_cb);  // -1 = append at end
+}
+
+// fs.appendFile(path, data, callback) - True async with libuv
+JSValue js_fs_append_file_async(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
+  if (argc < 3) {
+    return JS_ThrowTypeError(ctx, "appendFile requires path, data, and callback");
+  }
+
+  const char* path = JS_ToCString(ctx, argv[0]);
+  if (!path) {
+    return JS_EXCEPTION;
+  }
+
+  if (!JS_IsFunction(ctx, argv[2])) {
+    JS_FreeCString(ctx, path);
+    return JS_ThrowTypeError(ctx, "callback must be a function");
+  }
+
+  // Get data to append
+  const char* data = NULL;
+  size_t data_len = 0;
+
+  if (JS_IsString(argv[1])) {
+    data = JS_ToCString(ctx, argv[1]);
+    if (data) {
+      data_len = strlen(data);
+    }
+  } else {
+    // TODO: Handle Buffer objects properly
+    JS_FreeCString(ctx, path);
+    return JS_ThrowTypeError(ctx, "data must be a string or Buffer");
+  }
+
+  if (!data) {
+    JS_FreeCString(ctx, path);
+    return JS_ThrowTypeError(ctx, "invalid data");
+  }
+
+  // Allocate work request
+  fs_async_work_t* work = calloc(1, sizeof(fs_async_work_t));
+  if (!work) {
+    JS_FreeCString(ctx, path);
+    JS_FreeCString(ctx, data);
+    return JS_ThrowOutOfMemory(ctx);
+  }
+
+  // Initialize work request
+  work->ctx = ctx;
+  work->callback = JS_DupValue(ctx, argv[2]);
+  work->path = strdup(path);
+  work->buffer = malloc(data_len);
+  if (!work->buffer) {
+    JS_FreeCString(ctx, path);
+    JS_FreeCString(ctx, data);
+    free(work);
+    return JS_ThrowOutOfMemory(ctx);
+  }
+  memcpy(work->buffer, data, data_len);
+  work->buffer_size = data_len;
+  work->flags = 0;
+
+  JS_FreeCString(ctx, path);
+  JS_FreeCString(ctx, data);
+
+  // Start async operation: Step 1 - open file for appending
+  uv_loop_t* loop = fs_get_uv_loop(ctx);
+  int result = uv_fs_open(loop, &work->req, work->path, O_WRONLY | O_CREAT | O_APPEND, 0644, appendfile_open_cb);
+
+  if (result < 0) {
+    JSValue error = create_fs_error(ctx, -result, "open", work->path);
+    JSValue args[1] = {error};
+    JSValue ret = JS_Call(ctx, work->callback, JS_UNDEFINED, 1, args);
+    JS_FreeValue(ctx, ret);
+    JS_FreeValue(ctx, error);
+    fs_async_work_free(work);
+  }
+
+  return JS_UNDEFINED;
+}
+
+// ============================================================================
+// copyFile: Multi-step async operation (open src → open dest → fstat → read → write → close both) (Task 2.15)
+// ============================================================================
+
+// Forward declarations for copyFile callbacks
+static void copyfile_read_cb(uv_fs_t* req);
+
+// Completion callback - closes both fds
+static void copyfile_cleanup_cb(uv_fs_t* req) {
+  fs_async_work_t* work = (fs_async_work_t*)req;
+  JSContext* ctx = work->ctx;
+
+  // Copy completed successfully
+  JSValue args[1] = {JS_NULL};
+  JSValue ret = JS_Call(ctx, work->callback, JS_UNDEFINED, 1, args);
+  JS_FreeValue(ctx, ret);
+
+  fs_async_work_free(work);
+}
+
+// Step 6: Close destination fd
+static void copyfile_close_dest_cb(uv_fs_t* req) {
+  fs_async_work_t* work = (fs_async_work_t*)req;
+  uv_loop_t* loop = fs_get_uv_loop(work->ctx);
+
+  // Now close source fd (stored in mode field)
+  uv_fs_req_cleanup(req);
+  uv_fs_close(loop, req, work->mode, copyfile_cleanup_cb);
+}
+
+// Step 5: After write, close dest fd
+static void copyfile_write_cb(uv_fs_t* req) {
+  fs_async_work_t* work = (fs_async_work_t*)req;
+  JSContext* ctx = work->ctx;
+  uv_loop_t* loop = fs_get_uv_loop(ctx);
+
+  if (req->result < 0) {
+    // Write error - close both fds
+    int err = -req->result;
+    uv_fs_t close_req;
+    uv_fs_close(loop, &close_req, work->flags, NULL);  // dest fd
+    uv_fs_req_cleanup(&close_req);
+    uv_fs_close(loop, &close_req, work->mode, NULL);  // src fd
+    uv_fs_req_cleanup(&close_req);
+
+    JSValue error = create_fs_error(ctx, err, "write", work->path2);
+    JSValue args[1] = {error};
+    JSValue ret = JS_Call(ctx, work->callback, JS_UNDEFINED, 1, args);
+    JS_FreeValue(ctx, ret);
+    JS_FreeValue(ctx, error);
+    fs_async_work_free(work);
+    return;
+  }
+
+  // Read next chunk from source (continue loop)
+  uv_buf_t iov = uv_buf_init(work->buffer, 8192);  // 8KB chunks
+  uv_fs_req_cleanup(req);
+  uv_fs_read(loop, req, work->mode, &iov, 1, work->offset, copyfile_read_cb);
+}
+
+// Step 4: Read chunk from source
+static void copyfile_read_cb(uv_fs_t* req) {
+  fs_async_work_t* work = (fs_async_work_t*)req;
+  JSContext* ctx = work->ctx;
+  uv_loop_t* loop = fs_get_uv_loop(ctx);
+
+  if (req->result < 0) {
+    // Read error - close both fds
+    int err = -req->result;
+    uv_fs_t close_req;
+    uv_fs_close(loop, &close_req, work->flags, NULL);  // dest fd
+    uv_fs_req_cleanup(&close_req);
+    uv_fs_close(loop, &close_req, work->mode, NULL);  // src fd
+    uv_fs_req_cleanup(&close_req);
+
+    JSValue error = create_fs_error(ctx, err, "read", work->path);
+    JSValue args[1] = {error};
+    JSValue ret = JS_Call(ctx, work->callback, JS_UNDEFINED, 1, args);
+    JS_FreeValue(ctx, ret);
+    JS_FreeValue(ctx, error);
+    fs_async_work_free(work);
+    return;
+  }
+
+  if (req->result == 0) {
+    // EOF - all data copied, close destination fd
+    uv_fs_req_cleanup(req);
+    uv_fs_close(loop, req, work->flags, copyfile_close_dest_cb);
+    return;
+  }
+
+  // Write the chunk to destination
+  size_t bytes_read = (size_t)req->result;
+  work->offset += bytes_read;  // Track position
+  uv_buf_t iov = uv_buf_init(work->buffer, (unsigned int)bytes_read);
+  uv_fs_req_cleanup(req);
+  uv_fs_write(loop, req, work->flags, &iov, 1, -1, copyfile_write_cb);  // -1 = append
+}
+
+// Step 3: After fstat, start reading
+static void copyfile_fstat_cb(uv_fs_t* req) {
+  fs_async_work_t* work = (fs_async_work_t*)req;
+  JSContext* ctx = work->ctx;
+  uv_loop_t* loop = fs_get_uv_loop(ctx);
+
+  if (req->result < 0) {
+    // Stat error - close both fds
+    int err = -req->result;
+    uv_fs_t close_req;
+    uv_fs_close(loop, &close_req, work->flags, NULL);  // dest fd
+    uv_fs_req_cleanup(&close_req);
+    uv_fs_close(loop, &close_req, work->mode, NULL);  // src fd
+    uv_fs_req_cleanup(&close_req);
+
+    JSValue error = create_fs_error(ctx, err, "fstat", work->path);
+    JSValue args[1] = {error};
+    JSValue ret = JS_Call(ctx, work->callback, JS_UNDEFINED, 1, args);
+    JS_FreeValue(ctx, ret);
+    JS_FreeValue(ctx, error);
+    fs_async_work_free(work);
+    return;
+  }
+
+  // Get file size
+  uv_stat_t* statbuf = uv_fs_get_statbuf(req);
+  work->buffer_size = (size_t)statbuf->st_size;
+  work->offset = 0;  // Start at beginning
+
+  // Allocate buffer for copying (8KB chunks)
+  work->buffer = malloc(8192);
+  if (!work->buffer) {
+    // Allocation failed - close both fds
+    uv_fs_t close_req;
+    uv_fs_close(loop, &close_req, work->flags, NULL);
+    uv_fs_req_cleanup(&close_req);
+    uv_fs_close(loop, &close_req, work->mode, NULL);
+    uv_fs_req_cleanup(&close_req);
+
+    JSValue error = JS_NewError(ctx);
+    JS_SetPropertyStr(ctx, error, "message", JS_NewString(ctx, "Failed to allocate buffer"));
+    JSValue args[1] = {error};
+    JSValue ret = JS_Call(ctx, work->callback, JS_UNDEFINED, 1, args);
+    JS_FreeValue(ctx, ret);
+    JS_FreeValue(ctx, error);
+    fs_async_work_free(work);
+    return;
+  }
+
+  // Start reading from source file
+  uv_buf_t iov = uv_buf_init(work->buffer, 8192);
+  uv_fs_req_cleanup(req);
+  uv_fs_read(loop, req, work->mode, &iov, 1, 0, copyfile_read_cb);  // Read from offset 0
+}
+
+// Step 2: Open destination file
+static void copyfile_open_dest_cb(uv_fs_t* req) {
+  fs_async_work_t* work = (fs_async_work_t*)req;
+  JSContext* ctx = work->ctx;
+  uv_loop_t* loop = fs_get_uv_loop(ctx);
+
+  if (req->result < 0) {
+    // Dest open error - close source fd
+    int err = -req->result;
+    uv_fs_t close_req;
+    uv_fs_close(loop, &close_req, work->mode, NULL);  // mode holds src fd
+    uv_fs_req_cleanup(&close_req);
+
+    JSValue error = create_fs_error(ctx, err, "open", work->path2);
+    JSValue args[1] = {error};
+    JSValue ret = JS_Call(ctx, work->callback, JS_UNDEFINED, 1, args);
+    JS_FreeValue(ctx, ret);
+    JS_FreeValue(ctx, error);
+    fs_async_work_free(work);
+    return;
+  }
+
+  // Store dest fd in flags field
+  work->flags = (int)req->result;
+
+  // Step 3: Get source file size
+  uv_fs_req_cleanup(req);
+  uv_fs_fstat(loop, req, work->mode, copyfile_fstat_cb);  // mode holds src fd
+}
+
+// Step 1: Open source file
+static void copyfile_open_src_cb(uv_fs_t* req) {
+  fs_async_work_t* work = (fs_async_work_t*)req;
+  JSContext* ctx = work->ctx;
+  uv_loop_t* loop = fs_get_uv_loop(ctx);
+
+  if (req->result < 0) {
+    // Source open error
+    int err = -req->result;
+    JSValue error = create_fs_error(ctx, err, "open", work->path);
+    JSValue args[1] = {error};
+    JSValue ret = JS_Call(ctx, work->callback, JS_UNDEFINED, 1, args);
+    JS_FreeValue(ctx, ret);
+    JS_FreeValue(ctx, error);
+    fs_async_work_free(work);
+    return;
+  }
+
+  // Store source fd in mode field (reuse)
+  work->mode = (int)req->result;
+
+  // Step 2: Open destination file
+  uv_fs_req_cleanup(req);
+  uv_fs_open(loop, req, work->path2, O_WRONLY | O_CREAT | O_TRUNC, 0644, copyfile_open_dest_cb);
+}
+
+// fs.copyFile(src, dest, callback) - True async with libuv
+JSValue js_fs_copy_file_async(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
+  if (argc < 3) {
+    return JS_ThrowTypeError(ctx, "copyFile requires src, dest, and callback");
+  }
+
+  const char* src = JS_ToCString(ctx, argv[0]);
+  if (!src) {
+    return JS_EXCEPTION;
+  }
+
+  const char* dest = JS_ToCString(ctx, argv[1]);
+  if (!dest) {
+    JS_FreeCString(ctx, src);
+    return JS_EXCEPTION;
+  }
+
+  if (!JS_IsFunction(ctx, argv[2])) {
+    JS_FreeCString(ctx, src);
+    JS_FreeCString(ctx, dest);
+    return JS_ThrowTypeError(ctx, "callback must be a function");
+  }
+
+  // Allocate work request
+  fs_async_work_t* work = calloc(1, sizeof(fs_async_work_t));
+  if (!work) {
+    JS_FreeCString(ctx, src);
+    JS_FreeCString(ctx, dest);
+    return JS_ThrowOutOfMemory(ctx);
+  }
+
+  // Initialize work request
+  work->ctx = ctx;
+  work->callback = JS_DupValue(ctx, argv[2]);
+  work->path = strdup(src);    // source path
+  work->path2 = strdup(dest);  // destination path
+  work->buffer = NULL;         // Will be allocated after fstat
+  work->buffer_size = 0;
+  work->flags = 0;  // Will hold dest fd
+  work->mode = 0;   // Will hold src fd
+  work->offset = 0;
+
+  JS_FreeCString(ctx, src);
+  JS_FreeCString(ctx, dest);
+
+  // Start async operation: Step 1 - open source file
+  uv_loop_t* loop = fs_get_uv_loop(ctx);
+  int result = uv_fs_open(loop, &work->req, work->path, O_RDONLY, 0, copyfile_open_src_cb);
+
+  if (result < 0) {
+    JSValue error = create_fs_error(ctx, -result, "open", work->path);
+    JSValue args[1] = {error};
+    JSValue ret = JS_Call(ctx, work->callback, JS_UNDEFINED, 1, args);
+    JS_FreeValue(ctx, ret);
     JS_FreeValue(ctx, error);
     fs_async_work_free(work);
   }

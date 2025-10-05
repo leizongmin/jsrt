@@ -2,7 +2,7 @@
 Created: 2025-10-04T00:00:00Z
 Last Updated: 2025-10-05T10:45:00Z
 Status: 🔵 IN_PROGRESS
-Overall Progress: 42 sync + 25 async + 16 Promise APIs (83/95 = 87%)
+Overall Progress: 42 sync + 27 async + 16 Promise APIs (85/95 = 89%)
 Phase 1: ✅ COMPLETED (2025-10-04)
 Phase 2: 🔄 PARTIAL (2025-10-05) - 25/33 async APIs with libuv
 Phase 3: ✅ COMPLETED (2025-10-05) - FileHandle + core Promise APIs (16 methods)
@@ -112,17 +112,14 @@ Phase 3: ✅ COMPLETED (2025-10-05) - FileHandle + core Promise APIs (16 methods
 - Lines added: 1,647 lines
 - Total fs module: ~4,100 lines (was ~2,457 lines, +67% growth)
 
-**Implemented Async APIs (25 libuv-based methods):**
-- ✅ **File I/O**: readFile, writeFile, unlink
+**Implemented Async APIs (27 libuv-based methods):**
+- ✅ **File I/O**: readFile, writeFile, appendFile, copyFile, unlink
 - ✅ **Directory**: mkdir, rmdir, readdir
 - ✅ **Metadata**: stat, lstat, fstat, access, rename
 - ✅ **Permissions**: chmod, fchmod, lchmod, chown, fchown, lchown
 - ✅ **Times**: utimes, futimes, lutimes
 - ✅ **Links**: link, symlink, readlink, realpath
 - ✅ **File Descriptors**: open, close
-
-**Old Blocking Async (deprecated, 2 methods):**
-- ⚠️ appendFile, copyFile (still use fopen, need refactor)
 
 **Implemented Constants (4):**
 - ✅ F_OK, R_OK, W_OK, X_OK
@@ -307,16 +304,18 @@ Phase 3: ✅ COMPLETED (2025-10-05) - FileHandle + core Promise APIs (16 methods
 | 2.12 | Implement async rm (recursive delete) | [P] | ⏳ PENDING | 2.5 | MED | MEDIUM |
 | 2.13 | Implement async cp (recursive copy) | [P] | ⏳ PENDING | 2.5 | MED | MEDIUM |
 | 2.14 | Implement async open/close | [P] | ✅ COMPLETED | 2.5 | MED | MEDIUM |
-| 2.15 | Implement async read/write/readv/writev | [P] | ⏳ PENDING | 2.5 | MED | MEDIUM |
+| 2.15 | Refactor appendFile/copyFile to libuv | [P] | ✅ COMPLETED | 2.5 | HIGH | COMPLEX |
+| 2.15b | Implement async read/write/readv/writev | [P] | ⏳ PENDING | 2.5 | MED | MEDIUM |
 | 2.16 | Implement async link operations | [P] | ✅ COMPLETED | 2.5 | LOW | MEDIUM |
 | 2.17 | Implement async opendir | [S] | ⏳ PENDING | 2.11 | MED | MEDIUM |
 | 2.18 | Add comprehensive error handling & cleanup | [S] | ⏳ PENDING | 2.17 | HIGH | MEDIUM |
 
-**Progress Summary (2025-10-05):**
+**Progress Summary (2025-10-05 - Latest):**
 - ✅ Critical path complete (2.1-2.5)
-- ✅ 18/25 async APIs implemented with libuv
-- ⏳ Remaining: appendFile/copyFile refactor, rm/cp/read/write/opendir (8 APIs)
-- Infrastructure: fs_async_libuv.c/h, fs_async_core.c (~1,800 lines)
+- ✅ Essential I/O refactored (2.15): appendFile, copyFile now use libuv
+- ✅ 27/33 async APIs implemented with libuv (82%)
+- ⏳ Remaining: rm/cp/read/write/readv/writev/opendir (6 APIs) - lower priority
+- Infrastructure: fs_async_libuv.c/h, fs_async_core.c (~2,000 lines)
 
 ### Phase 3: Promise API & FileHandle (22 tasks) - ✅ CORE COMPLETED
 

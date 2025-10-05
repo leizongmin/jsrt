@@ -27,10 +27,8 @@ extern JSValue js_fs_realpath_async(JSContext* ctx, JSValueConst this_val, int a
 extern JSValue js_fs_open_async(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv);
 extern JSValue js_fs_close_async(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv);
 extern JSValue js_fs_readdir_async(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv);
-
-// OLD blocking async functions (defined in fs_async.c) - deprecated
-extern JSValue js_fs_append_file(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv);
-extern JSValue js_fs_copy_file(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv);
+extern JSValue js_fs_append_file_async(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv);
+extern JSValue js_fs_copy_file_async(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv);
 
 // Module initialization
 JSValue JSRT_InitNodeFs(JSContext* ctx) {
@@ -128,10 +126,8 @@ JSValue JSRT_InitNodeFs(JSContext* ctx) {
   JS_SetPropertyStr(ctx, fs_module, "open", JS_NewCFunction(ctx, js_fs_open_async, "open", 4));
   JS_SetPropertyStr(ctx, fs_module, "close", JS_NewCFunction(ctx, js_fs_close_async, "close", 2));
   JS_SetPropertyStr(ctx, fs_module, "readdir", JS_NewCFunction(ctx, js_fs_readdir_async, "readdir", 3));
-
-  // OLD blocking async (deprecated - keep for compatibility)
-  JS_SetPropertyStr(ctx, fs_module, "appendFile", JS_NewCFunction(ctx, js_fs_append_file, "appendFile", 3));
-  JS_SetPropertyStr(ctx, fs_module, "copyFile", JS_NewCFunction(ctx, js_fs_copy_file, "copyFile", 3));
+  JS_SetPropertyStr(ctx, fs_module, "appendFile", JS_NewCFunction(ctx, js_fs_append_file_async, "appendFile", 3));
+  JS_SetPropertyStr(ctx, fs_module, "copyFile", JS_NewCFunction(ctx, js_fs_copy_file_async, "copyFile", 3));
 
   // Constants
   JSValue constants = JS_NewObject(ctx);

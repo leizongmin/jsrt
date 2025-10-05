@@ -22,7 +22,10 @@ function testAssert(condition, message) {
   try {
     console.log('=== Testing fsPromises namespace ===');
     testAssert(fsPromises !== undefined, 'fs.promises namespace exists');
-    testAssert(fs.promises !== undefined, 'fs.promises accessible via fs module');
+    testAssert(
+      fs.promises !== undefined,
+      'fs.promises accessible via fs module'
+    );
     testAssert(typeof fsPromises.open === 'function', 'fsPromises.open exists');
 
     console.log('\n=== Testing FileHandle.open/close ===');
@@ -31,7 +34,10 @@ function testAssert(condition, message) {
 
     // Test basic open/close
     let fh = await fsPromises.open(testFile, 'r');
-    testAssert(fh !== null && fh !== undefined, 'fsPromises.open returns FileHandle');
+    testAssert(
+      fh !== null && fh !== undefined,
+      'fsPromises.open returns FileHandle'
+    );
     testAssert(typeof fh.close === 'function', 'FileHandle has close method');
 
     await fh.close();
@@ -46,7 +52,10 @@ function testAssert(condition, message) {
       await fsPromises.open('nonexistent_xyz.txt', 'r');
       testAssert(false, 'Opening non-existent file should reject');
     } catch (err) {
-      testAssert(err.code === 'ENOENT', 'Opening non-existent file rejects with ENOENT');
+      testAssert(
+        err.code === 'ENOENT',
+        'Opening non-existent file rejects with ENOENT'
+      );
     }
 
     console.log('\n=== Testing FileHandle.read() ===');
@@ -61,10 +70,20 @@ function testAssert(condition, message) {
 
     console.log('\n=== Testing FileHandle.write() ===');
     fh = await fsPromises.open(testFile, 'w');
-    const writeBuffer = new TextEncoder().encode('Written by FileHandle').buffer;
-    const writeResult = await fh.write(writeBuffer, 0, writeBuffer.byteLength, 0);
+    const writeBuffer = new TextEncoder().encode(
+      'Written by FileHandle'
+    ).buffer;
+    const writeResult = await fh.write(
+      writeBuffer,
+      0,
+      writeBuffer.byteLength,
+      0
+    );
     testAssert(writeResult.bytesWritten > 0, 'FileHandle.write() writes data');
-    testAssert(writeResult.bytesWritten === writeBuffer.byteLength, 'FileHandle.write() writes all data');
+    testAssert(
+      writeResult.bytesWritten === writeBuffer.byteLength,
+      'FileHandle.write() writes all data'
+    );
     await fh.close();
 
     // Verify written content
@@ -90,7 +109,10 @@ function testAssert(condition, message) {
     fh = await fsPromises.open(testFile, 'r+');
     await fh.truncate(5);
     const truncStats = await fh.stat();
-    testAssert(truncStats.size === 5, 'FileHandle.truncate() changes file size');
+    testAssert(
+      truncStats.size === 5,
+      'FileHandle.truncate() changes file size'
+    );
     await fh.close();
 
     console.log('\n=== Testing FileHandle.sync() ===');
@@ -114,13 +136,22 @@ function testAssert(condition, message) {
     testAssert(promiseStats.isFile(), 'fsPromises.stat() returns valid stats');
 
     // Test fsPromises.lstat()
-    testAssert(typeof fsPromises.lstat === 'function', 'fsPromises.lstat exists');
+    testAssert(
+      typeof fsPromises.lstat === 'function',
+      'fsPromises.lstat exists'
+    );
     const lstatStats = await fsPromises.lstat(testFile);
     testAssert(lstatStats !== null, 'fsPromises.lstat() returns stats');
 
     // Test fsPromises.mkdir/rmdir()
-    testAssert(typeof fsPromises.mkdir === 'function', 'fsPromises.mkdir exists');
-    testAssert(typeof fsPromises.rmdir === 'function', 'fsPromises.rmdir exists');
+    testAssert(
+      typeof fsPromises.mkdir === 'function',
+      'fsPromises.mkdir exists'
+    );
+    testAssert(
+      typeof fsPromises.rmdir === 'function',
+      'fsPromises.rmdir exists'
+    );
     const testDir = 'target/tmp/test_promises_dir';
     await fsPromises.mkdir(testDir);
     testAssert(fs.existsSync(testDir), 'fsPromises.mkdir() creates directory');
@@ -128,31 +159,46 @@ function testAssert(condition, message) {
     testAssert(!fs.existsSync(testDir), 'fsPromises.rmdir() removes directory');
 
     // Test fsPromises.unlink()
-    testAssert(typeof fsPromises.unlink === 'function', 'fsPromises.unlink exists');
+    testAssert(
+      typeof fsPromises.unlink === 'function',
+      'fsPromises.unlink exists'
+    );
     const unlinkTest = 'target/tmp/test_promises_unlink.txt';
     fs.writeFileSync(unlinkTest, 'test');
     await fsPromises.unlink(unlinkTest);
     testAssert(!fs.existsSync(unlinkTest), 'fsPromises.unlink() removes file');
 
     // Test fsPromises.rename()
-    testAssert(typeof fsPromises.rename === 'function', 'fsPromises.rename exists');
+    testAssert(
+      typeof fsPromises.rename === 'function',
+      'fsPromises.rename exists'
+    );
     const renameFrom = 'target/tmp/test_promises_rename_from.txt';
     const renameTo = 'target/tmp/test_promises_rename_to.txt';
     fs.writeFileSync(renameFrom, 'rename test');
     await fsPromises.rename(renameFrom, renameTo);
-    testAssert(!fs.existsSync(renameFrom), 'fsPromises.rename() removes old file');
+    testAssert(
+      !fs.existsSync(renameFrom),
+      'fsPromises.rename() removes old file'
+    );
     testAssert(fs.existsSync(renameTo), 'fsPromises.rename() creates new file');
     fs.unlinkSync(renameTo);
 
     // Test fsPromises.readlink()
-    testAssert(typeof fsPromises.readlink === 'function', 'fsPromises.readlink exists');
+    testAssert(
+      typeof fsPromises.readlink === 'function',
+      'fsPromises.readlink exists'
+    );
     const linkTarget = 'target/tmp/test_promises_link_target.txt';
     const linkPath = 'target/tmp/test_promises_link.txt';
     fs.writeFileSync(linkTarget, 'link test');
     try {
       fs.symlinkSync(linkTarget, linkPath);
       const linkedPath = await fsPromises.readlink(linkPath);
-      testAssert(linkedPath === linkTarget, 'fsPromises.readlink() reads symlink');
+      testAssert(
+        linkedPath === linkTarget,
+        'fsPromises.readlink() reads symlink'
+      );
       fs.unlinkSync(linkPath);
     } catch (err) {
       // Symlinks may not be available on all platforms

@@ -86,11 +86,13 @@ JSValue js_fs_lstat_sync(JSContext* ctx, JSValueConst this_val, int argc, JSValu
 //   - fchownSync/lchownSync: Unix only (Windows: ownership not available)
 //   - futimesSync: Cross-platform (Unix: futimes, Windows: _futime with 1s precision)
 //   - lutimesSync: Unix only (requires utimensat with AT_SYMLINK_NOFOLLOW)
+//   - lchmodSync: Not available on most systems (returns ERR_METHOD_NOT_IMPLEMENTED)
 JSValue js_fs_fchmod_sync(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv);
 JSValue js_fs_fchown_sync(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv);
 JSValue js_fs_lchown_sync(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv);
 JSValue js_fs_futimes_sync(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv);
 JSValue js_fs_lutimes_sync(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv);
+JSValue js_fs_lchmod_sync(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv);
 
 // Phase 1: Recursive operations
 JSValue js_fs_rm_sync(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv);

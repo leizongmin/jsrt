@@ -192,3 +192,34 @@ JSValue js_fs_lutimes_sync(JSContext* ctx, JSValueConst this_val, int argc, JSVa
 
   return JS_UNDEFINED;
 }
+
+// fs.lchmodSync(path, mode) - NOT IMPLEMENTED
+// lchmod is not available on Linux and many other systems
+// This function exists for API compatibility but will throw an error
+JSValue js_fs_lchmod_sync(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
+  if (argc < 2) {
+    return JS_ThrowTypeError(ctx, "path and mode are required");
+  }
+
+  const char* path = JS_ToCString(ctx, argv[0]);
+  if (!path) {
+    return JS_EXCEPTION;
+  }
+
+  int32_t mode_val;
+  if (JS_ToInt32(ctx, &mode_val, argv[1]) < 0) {
+    JS_FreeCString(ctx, path);
+    return JS_EXCEPTION;
+  }
+
+  // lchmod is not available on most systems (including Linux)
+  // It's only available on some BSDs and macOS
+  JSValue error = JS_NewError(ctx);
+  JS_SetPropertyStr(ctx, error, "message", JS_NewString(ctx, "lchmod is not implemented on this platform"));
+  JS_SetPropertyStr(ctx, error, "code", JS_NewString(ctx, "ERR_METHOD_NOT_IMPLEMENTED"));
+  JS_SetPropertyStr(ctx, error, "syscall", JS_NewString(ctx, "lchmod"));
+  JS_SetPropertyStr(ctx, error, "path", JS_NewString(ctx, path));
+
+  JS_FreeCString(ctx, path);
+  return JS_Throw(ctx, error);
+}

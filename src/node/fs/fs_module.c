@@ -95,6 +95,7 @@ JSValue JSRT_InitNodeFs(JSContext* ctx) {
   JS_SetPropertyStr(ctx, fs_module, "fchmodSync", JS_NewCFunction(ctx, js_fs_fchmod_sync, "fchmodSync", 2));
   JS_SetPropertyStr(ctx, fs_module, "fchownSync", JS_NewCFunction(ctx, js_fs_fchown_sync, "fchownSync", 3));
   JS_SetPropertyStr(ctx, fs_module, "lchownSync", JS_NewCFunction(ctx, js_fs_lchown_sync, "lchownSync", 3));
+  JS_SetPropertyStr(ctx, fs_module, "lchmodSync", JS_NewCFunction(ctx, js_fs_lchmod_sync, "lchmodSync", 2));
   JS_SetPropertyStr(ctx, fs_module, "futimesSync", JS_NewCFunction(ctx, js_fs_futimes_sync, "futimesSync", 3));
   JS_SetPropertyStr(ctx, fs_module, "lutimesSync", JS_NewCFunction(ctx, js_fs_lutimes_sync, "lutimesSync", 3));
 
@@ -273,6 +274,7 @@ int js_node_fs_init(JSContext* ctx, JSModuleDef* m) {
   JS_SetModuleExport(ctx, m, "fchmodSync", JS_GetPropertyStr(ctx, fs_module, "fchmodSync"));
   JS_SetModuleExport(ctx, m, "fchownSync", JS_GetPropertyStr(ctx, fs_module, "fchownSync"));
   JS_SetModuleExport(ctx, m, "lchownSync", JS_GetPropertyStr(ctx, fs_module, "lchownSync"));
+  JS_SetModuleExport(ctx, m, "lchmodSync", JS_GetPropertyStr(ctx, fs_module, "lchmodSync"));
   JS_SetModuleExport(ctx, m, "futimesSync", JS_GetPropertyStr(ctx, fs_module, "futimesSync"));
   JS_SetModuleExport(ctx, m, "lutimesSync", JS_GetPropertyStr(ctx, fs_module, "lutimesSync"));
 

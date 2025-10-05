@@ -57,7 +57,8 @@ void fs_async_generic_complete(uv_fs_t* req) {
   }
 
   // Call JS callback
-  JS_Call(ctx, work->callback, JS_UNDEFINED, 2, args);
+  JSValue ret = JS_Call(ctx, work->callback, JS_UNDEFINED, 2, args);
+  JS_FreeValue(ctx, ret);
 
   // Cleanup
   JS_FreeValue(ctx, args[0]);
@@ -122,7 +123,8 @@ void fs_async_complete_void(uv_fs_t* req) {
     args[1] = JS_UNDEFINED;
   }
 
-  JS_Call(ctx, work->callback, JS_UNDEFINED, 2, args);
+  JSValue ret = JS_Call(ctx, work->callback, JS_UNDEFINED, 2, args);
+  JS_FreeValue(ctx, ret);
 
   JS_FreeValue(ctx, args[0]);
   fs_async_work_free(work);
@@ -144,7 +146,8 @@ void fs_async_complete_fd(uv_fs_t* req) {
     args[1] = JS_NewInt32(ctx, (int)req->result);  // fd
   }
 
-  JS_Call(ctx, work->callback, JS_UNDEFINED, 2, args);
+  JSValue ret = JS_Call(ctx, work->callback, JS_UNDEFINED, 2, args);
+  JS_FreeValue(ctx, ret);
 
   JS_FreeValue(ctx, args[0]);
   JS_FreeValue(ctx, args[1]);
@@ -172,7 +175,8 @@ void fs_async_complete_data(uv_fs_t* req) {
     }
   }
 
-  JS_Call(ctx, work->callback, JS_UNDEFINED, 2, args);
+  JSValue ret = JS_Call(ctx, work->callback, JS_UNDEFINED, 2, args);
+  JS_FreeValue(ctx, ret);
 
   JS_FreeValue(ctx, args[0]);
   JS_FreeValue(ctx, args[1]);
@@ -223,7 +227,8 @@ void fs_async_complete_stat(uv_fs_t* req) {
     args[1] = stats_obj;
   }
 
-  JS_Call(ctx, work->callback, JS_UNDEFINED, 2, args);
+  JSValue ret = JS_Call(ctx, work->callback, JS_UNDEFINED, 2, args);
+  JS_FreeValue(ctx, ret);
 
   JS_FreeValue(ctx, args[0]);
   JS_FreeValue(ctx, args[1]);
@@ -248,7 +253,8 @@ void fs_async_complete_string(uv_fs_t* req) {
     args[1] = JS_NewString(ctx, result_str ? result_str : "");
   }
 
-  JS_Call(ctx, work->callback, JS_UNDEFINED, 2, args);
+  JSValue ret = JS_Call(ctx, work->callback, JS_UNDEFINED, 2, args);
+  JS_FreeValue(ctx, ret);
 
   JS_FreeValue(ctx, args[0]);
   JS_FreeValue(ctx, args[1]);
@@ -282,7 +288,8 @@ void fs_async_complete_readdir(uv_fs_t* req) {
     args[1] = files_array;
   }
 
-  JS_Call(ctx, work->callback, JS_UNDEFINED, 2, args);
+  JSValue ret = JS_Call(ctx, work->callback, JS_UNDEFINED, 2, args);
+  JS_FreeValue(ctx, ret);
 
   JS_FreeValue(ctx, args[0]);
   JS_FreeValue(ctx, args[1]);

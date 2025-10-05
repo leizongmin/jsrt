@@ -60,7 +60,8 @@ JSValue js_fs_append_file(JSContext* ctx, JSValueConst this_val, int argc, JSVal
     JSValue error = JS_NewError(ctx);
     JS_SetPropertyStr(ctx, error, "message", JS_NewString(ctx, "data must be a string or Buffer"));
     JSValue callback_args[] = {error};
-    JS_Call(ctx, argv[2], JS_UNDEFINED, 1, callback_args);
+    JSValue ret = JS_Call(ctx, argv[2], JS_UNDEFINED, 1, callback_args);
+    JS_FreeValue(ctx, ret);
     JS_FreeValue(ctx, error);
     return JS_UNDEFINED;
   }
@@ -70,7 +71,8 @@ JSValue js_fs_append_file(JSContext* ctx, JSValueConst this_val, int argc, JSVal
   if (!file) {
     JSValue error = create_fs_error(ctx, errno, "open", path);
     JSValue callback_args[] = {error};
-    JS_Call(ctx, argv[2], JS_UNDEFINED, 1, callback_args);
+    JSValue ret = JS_Call(ctx, argv[2], JS_UNDEFINED, 1, callback_args);
+    JS_FreeValue(ctx, ret);
     JS_FreeValue(ctx, error);
     JS_FreeCString(ctx, data);
     JS_FreeCString(ctx, path);
@@ -83,12 +85,14 @@ JSValue js_fs_append_file(JSContext* ctx, JSValueConst this_val, int argc, JSVal
   if (written != data_len) {
     JSValue error = create_fs_error(ctx, errno, "write", path);
     JSValue callback_args[] = {error};
-    JS_Call(ctx, argv[2], JS_UNDEFINED, 1, callback_args);
+    JSValue ret = JS_Call(ctx, argv[2], JS_UNDEFINED, 1, callback_args);
+    JS_FreeValue(ctx, ret);
     JS_FreeValue(ctx, error);
   } else {
     // Success - call callback with null error
     JSValue callback_args[] = {JS_NULL};
-    JS_Call(ctx, argv[2], JS_UNDEFINED, 1, callback_args);
+    JSValue ret = JS_Call(ctx, argv[2], JS_UNDEFINED, 1, callback_args);
+    JS_FreeValue(ctx, ret);
   }
 
   JS_FreeCString(ctx, data);
@@ -124,7 +128,8 @@ JSValue js_fs_copy_file(JSContext* ctx, JSValueConst this_val, int argc, JSValue
   if (!src_file) {
     JSValue error = create_fs_error(ctx, errno, "open", src);
     JSValue callback_args[] = {error};
-    JS_Call(ctx, argv[2], JS_UNDEFINED, 1, callback_args);
+    JSValue ret = JS_Call(ctx, argv[2], JS_UNDEFINED, 1, callback_args);
+    JS_FreeValue(ctx, ret);
     JS_FreeValue(ctx, error);
     JS_FreeCString(ctx, src);
     JS_FreeCString(ctx, dest);
@@ -137,7 +142,8 @@ JSValue js_fs_copy_file(JSContext* ctx, JSValueConst this_val, int argc, JSValue
     fclose(src_file);
     JSValue error = create_fs_error(ctx, errno, "open", dest);
     JSValue callback_args[] = {error};
-    JS_Call(ctx, argv[2], JS_UNDEFINED, 1, callback_args);
+    JSValue ret = JS_Call(ctx, argv[2], JS_UNDEFINED, 1, callback_args);
+    JS_FreeValue(ctx, ret);
     JS_FreeValue(ctx, error);
     JS_FreeCString(ctx, src);
     JS_FreeCString(ctx, dest);
@@ -171,10 +177,12 @@ JSValue js_fs_copy_file(JSContext* ctx, JSValueConst this_val, int argc, JSValue
   // Call callback
   if (copy_success) {
     JSValue callback_args[] = {JS_NULL};
-    JS_Call(ctx, argv[2], JS_UNDEFINED, 1, callback_args);
+    JSValue ret = JS_Call(ctx, argv[2], JS_UNDEFINED, 1, callback_args);
+    JS_FreeValue(ctx, ret);
   } else {
     JSValue callback_args[] = {error};
-    JS_Call(ctx, argv[2], JS_UNDEFINED, 1, callback_args);
+    JSValue ret = JS_Call(ctx, argv[2], JS_UNDEFINED, 1, callback_args);
+    JS_FreeValue(ctx, ret);
     JS_FreeValue(ctx, error);
   }
 
@@ -209,12 +217,14 @@ JSValue js_fs_rename(JSContext* ctx, JSValueConst this_val, int argc, JSValueCon
   if (rename(old_path, new_path) != 0) {
     JSValue error = create_fs_error(ctx, errno, "rename", old_path);
     JSValue callback_args[] = {error};
-    JS_Call(ctx, argv[2], JS_UNDEFINED, 1, callback_args);
+    JSValue ret = JS_Call(ctx, argv[2], JS_UNDEFINED, 1, callback_args);
+    JS_FreeValue(ctx, ret);
     JS_FreeValue(ctx, error);
   } else {
     // Success - call callback with null error
     JSValue callback_args[] = {JS_NULL};
-    JS_Call(ctx, argv[2], JS_UNDEFINED, 1, callback_args);
+    JSValue ret = JS_Call(ctx, argv[2], JS_UNDEFINED, 1, callback_args);
+    JS_FreeValue(ctx, ret);
   }
 
   JS_FreeCString(ctx, old_path);
@@ -460,7 +470,8 @@ JSValue js_fs_write_file(JSContext* ctx, JSValueConst this_val, int argc, JSValu
     JSValue error = JS_NewError(ctx);
     JS_SetPropertyStr(ctx, error, "message", JS_NewString(ctx, "data must be a string or Buffer"));
     JSValue callback_args[] = {error};
-    JS_Call(ctx, argv[2], JS_UNDEFINED, 1, callback_args);
+    JSValue ret = JS_Call(ctx, argv[2], JS_UNDEFINED, 1, callback_args);
+    JS_FreeValue(ctx, ret);
     JS_FreeValue(ctx, error);
     return JS_UNDEFINED;
   }
@@ -470,7 +481,8 @@ JSValue js_fs_write_file(JSContext* ctx, JSValueConst this_val, int argc, JSValu
   if (!file) {
     JSValue error = create_fs_error(ctx, errno, "open", path);
     JSValue callback_args[] = {error};
-    JS_Call(ctx, argv[2], JS_UNDEFINED, 1, callback_args);
+    JSValue ret = JS_Call(ctx, argv[2], JS_UNDEFINED, 1, callback_args);
+    JS_FreeValue(ctx, ret);
     JS_FreeValue(ctx, error);
     JS_FreeCString(ctx, data);
     JS_FreeCString(ctx, path);
@@ -483,12 +495,14 @@ JSValue js_fs_write_file(JSContext* ctx, JSValueConst this_val, int argc, JSValu
   if (written != data_len) {
     JSValue error = create_fs_error(ctx, errno, "write", path);
     JSValue callback_args[] = {error};
-    JS_Call(ctx, argv[2], JS_UNDEFINED, 1, callback_args);
+    JSValue ret = JS_Call(ctx, argv[2], JS_UNDEFINED, 1, callback_args);
+    JS_FreeValue(ctx, ret);
     JS_FreeValue(ctx, error);
   } else {
     // Success - call callback with null error
     JSValue callback_args[] = {JS_NULL};
-    JS_Call(ctx, argv[2], JS_UNDEFINED, 1, callback_args);
+    JSValue ret = JS_Call(ctx, argv[2], JS_UNDEFINED, 1, callback_args);
+    JS_FreeValue(ctx, ret);
   }
 
   JS_FreeCString(ctx, data);

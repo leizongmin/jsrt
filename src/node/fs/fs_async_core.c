@@ -18,7 +18,8 @@ static void readfile_close_cb(uv_fs_t* req) {
   args[1] = create_buffer_from_data(ctx, (uint8_t*)work->buffer, work->buffer_size);
 
   // Call JS callback
-  JS_Call(ctx, work->callback, JS_UNDEFINED, 2, args);
+  JSValue ret = JS_Call(ctx, work->callback, JS_UNDEFINED, 2, args);
+  JS_FreeValue(ctx, ret);
 
   // Cleanup
   JS_FreeValue(ctx, args[1]);
@@ -36,7 +37,8 @@ static void readfile_read_cb(uv_fs_t* req) {
     int err = -req->result;
     JSValue error = create_fs_error(ctx, err, "read", work->path);
     JSValue args[1] = {error};
-    JS_Call(ctx, work->callback, JS_UNDEFINED, 1, args);
+    JSValue ret = JS_Call(ctx, work->callback, JS_UNDEFINED, 1, args);
+  JS_FreeValue(ctx, ret);
     JS_FreeValue(ctx, error);
     fs_async_work_free(work);
     return;
@@ -65,7 +67,8 @@ static void readfile_fstat_cb(uv_fs_t* req) {
 
     JSValue error = create_fs_error(ctx, err, "fstat", work->path);
     JSValue args[1] = {error};
-    JS_Call(ctx, work->callback, JS_UNDEFINED, 1, args);
+    JSValue ret = JS_Call(ctx, work->callback, JS_UNDEFINED, 1, args);
+  JS_FreeValue(ctx, ret);
     JS_FreeValue(ctx, error);
     fs_async_work_free(work);
     return;
@@ -88,7 +91,8 @@ static void readfile_fstat_cb(uv_fs_t* req) {
     JSValue error = JS_NewError(ctx);
     JS_SetPropertyStr(ctx, error, "message", JS_NewString(ctx, "Failed to allocate buffer"));
     JSValue args[1] = {error};
-    JS_Call(ctx, work->callback, JS_UNDEFINED, 1, args);
+    JSValue ret = JS_Call(ctx, work->callback, JS_UNDEFINED, 1, args);
+  JS_FreeValue(ctx, ret);
     JS_FreeValue(ctx, error);
     fs_async_work_free(work);
     return;
@@ -114,7 +118,8 @@ static void readfile_open_cb(uv_fs_t* req) {
     int err = -req->result;
     JSValue error = create_fs_error(ctx, err, "open", work->path);
     JSValue args[1] = {error};
-    JS_Call(ctx, work->callback, JS_UNDEFINED, 1, args);
+    JSValue ret = JS_Call(ctx, work->callback, JS_UNDEFINED, 1, args);
+  JS_FreeValue(ctx, ret);
     JS_FreeValue(ctx, error);
     fs_async_work_free(work);
     return;
@@ -172,7 +177,8 @@ JSValue js_fs_read_file_async(JSContext* ctx, JSValueConst this_val, int argc, J
     // Immediate error (e.g., invalid arguments)
     JSValue error = create_fs_error(ctx, -result, "open", work->path);
     JSValue args[1] = {error};
-    JS_Call(ctx, work->callback, JS_UNDEFINED, 1, args);
+    JSValue ret = JS_Call(ctx, work->callback, JS_UNDEFINED, 1, args);
+  JS_FreeValue(ctx, ret);
     JS_FreeValue(ctx, error);
     fs_async_work_free(work);
   }
@@ -191,7 +197,8 @@ static void writefile_close_cb(uv_fs_t* req) {
 
   // Write completed successfully, report success
   JSValue args[1] = {JS_NULL};
-  JS_Call(ctx, work->callback, JS_UNDEFINED, 1, args);
+  JSValue ret = JS_Call(ctx, work->callback, JS_UNDEFINED, 1, args);
+  JS_FreeValue(ctx, ret);
 
   fs_async_work_free(work);
 }
@@ -211,7 +218,8 @@ static void writefile_write_cb(uv_fs_t* req) {
 
     JSValue error = create_fs_error(ctx, err, "write", work->path);
     JSValue args[1] = {error};
-    JS_Call(ctx, work->callback, JS_UNDEFINED, 1, args);
+    JSValue ret = JS_Call(ctx, work->callback, JS_UNDEFINED, 1, args);
+  JS_FreeValue(ctx, ret);
     JS_FreeValue(ctx, error);
     fs_async_work_free(work);
     return;
@@ -233,7 +241,8 @@ static void writefile_open_cb(uv_fs_t* req) {
     int err = -req->result;
     JSValue error = create_fs_error(ctx, err, "open", work->path);
     JSValue args[1] = {error};
-    JS_Call(ctx, work->callback, JS_UNDEFINED, 1, args);
+    JSValue ret = JS_Call(ctx, work->callback, JS_UNDEFINED, 1, args);
+  JS_FreeValue(ctx, ret);
     JS_FreeValue(ctx, error);
     fs_async_work_free(work);
     return;
@@ -311,7 +320,8 @@ JSValue js_fs_write_file_async(JSContext* ctx, JSValueConst this_val, int argc, 
   if (result < 0) {
     JSValue error = create_fs_error(ctx, -result, "open", work->path);
     JSValue args[1] = {error};
-    JS_Call(ctx, work->callback, JS_UNDEFINED, 1, args);
+    JSValue ret = JS_Call(ctx, work->callback, JS_UNDEFINED, 1, args);
+  JS_FreeValue(ctx, ret);
     JS_FreeValue(ctx, error);
     fs_async_work_free(work);
   }
@@ -356,7 +366,8 @@ JSValue js_fs_unlink_async(JSContext* ctx, JSValueConst this_val, int argc, JSVa
   if (result < 0) {
     JSValue error = create_fs_error(ctx, -result, "unlink", work->path);
     JSValue args[1] = {error};
-    JS_Call(ctx, work->callback, JS_UNDEFINED, 1, args);
+    JSValue ret = JS_Call(ctx, work->callback, JS_UNDEFINED, 1, args);
+  JS_FreeValue(ctx, ret);
     JS_FreeValue(ctx, error);
     fs_async_work_free(work);
   }
@@ -410,7 +421,8 @@ JSValue js_fs_mkdir_async(JSContext* ctx, JSValueConst this_val, int argc, JSVal
   if (result < 0) {
     JSValue error = create_fs_error(ctx, -result, "mkdir", work->path);
     JSValue args[1] = {error};
-    JS_Call(ctx, work->callback, JS_UNDEFINED, 1, args);
+    JSValue ret = JS_Call(ctx, work->callback, JS_UNDEFINED, 1, args);
+  JS_FreeValue(ctx, ret);
     JS_FreeValue(ctx, error);
     fs_async_work_free(work);
   }
@@ -451,7 +463,8 @@ JSValue js_fs_rmdir_async(JSContext* ctx, JSValueConst this_val, int argc, JSVal
   if (result < 0) {
     JSValue error = create_fs_error(ctx, -result, "rmdir", work->path);
     JSValue args[1] = {error};
-    JS_Call(ctx, work->callback, JS_UNDEFINED, 1, args);
+    JSValue ret = JS_Call(ctx, work->callback, JS_UNDEFINED, 1, args);
+  JS_FreeValue(ctx, ret);
     JS_FreeValue(ctx, error);
     fs_async_work_free(work);
   }
@@ -502,7 +515,8 @@ JSValue js_fs_rename_async(JSContext* ctx, JSValueConst this_val, int argc, JSVa
   if (result < 0) {
     JSValue error = create_fs_error(ctx, -result, "rename", work->path);
     JSValue args[1] = {error};
-    JS_Call(ctx, work->callback, JS_UNDEFINED, 1, args);
+    JSValue ret = JS_Call(ctx, work->callback, JS_UNDEFINED, 1, args);
+  JS_FreeValue(ctx, ret);
     JS_FreeValue(ctx, error);
     fs_async_work_free(work);
   }
@@ -556,7 +570,8 @@ JSValue js_fs_access_async(JSContext* ctx, JSValueConst this_val, int argc, JSVa
   if (result < 0) {
     JSValue error = create_fs_error(ctx, -result, "access", work->path);
     JSValue args[1] = {error};
-    JS_Call(ctx, work->callback, JS_UNDEFINED, 1, args);
+    JSValue ret = JS_Call(ctx, work->callback, JS_UNDEFINED, 1, args);
+  JS_FreeValue(ctx, ret);
     JS_FreeValue(ctx, error);
     fs_async_work_free(work);
   }
@@ -601,7 +616,8 @@ JSValue js_fs_stat_async(JSContext* ctx, JSValueConst this_val, int argc, JSValu
   if (result < 0) {
     JSValue error = create_fs_error(ctx, -result, "stat", work->path);
     JSValue args[1] = {error};
-    JS_Call(ctx, work->callback, JS_UNDEFINED, 1, args);
+    JSValue ret = JS_Call(ctx, work->callback, JS_UNDEFINED, 1, args);
+  JS_FreeValue(ctx, ret);
     JS_FreeValue(ctx, error);
     fs_async_work_free(work);
   }
@@ -642,7 +658,8 @@ JSValue js_fs_lstat_async(JSContext* ctx, JSValueConst this_val, int argc, JSVal
   if (result < 0) {
     JSValue error = create_fs_error(ctx, -result, "lstat", work->path);
     JSValue args[1] = {error};
-    JS_Call(ctx, work->callback, JS_UNDEFINED, 1, args);
+    JSValue ret = JS_Call(ctx, work->callback, JS_UNDEFINED, 1, args);
+  JS_FreeValue(ctx, ret);
     JS_FreeValue(ctx, error);
     fs_async_work_free(work);
   }
@@ -680,7 +697,8 @@ JSValue js_fs_fstat_async(JSContext* ctx, JSValueConst this_val, int argc, JSVal
   if (result < 0) {
     JSValue error = create_fs_error(ctx, -result, "fstat", NULL);
     JSValue args[1] = {error};
-    JS_Call(ctx, work->callback, JS_UNDEFINED, 1, args);
+    JSValue ret = JS_Call(ctx, work->callback, JS_UNDEFINED, 1, args);
+  JS_FreeValue(ctx, ret);
     JS_FreeValue(ctx, error);
     fs_async_work_free(work);
   }
@@ -731,7 +749,8 @@ JSValue js_fs_chmod_async(JSContext* ctx, JSValueConst this_val, int argc, JSVal
   if (result < 0) {
     JSValue error = create_fs_error(ctx, -result, "chmod", work->path);
     JSValue args[1] = {error};
-    JS_Call(ctx, work->callback, JS_UNDEFINED, 1, args);
+    JSValue ret = JS_Call(ctx, work->callback, JS_UNDEFINED, 1, args);
+  JS_FreeValue(ctx, ret);
     JS_FreeValue(ctx, error);
     fs_async_work_free(work);
   }
@@ -774,7 +793,8 @@ JSValue js_fs_fchmod_async(JSContext* ctx, JSValueConst this_val, int argc, JSVa
   if (result < 0) {
     JSValue error = create_fs_error(ctx, -result, "fchmod", NULL);
     JSValue args[1] = {error};
-    JS_Call(ctx, work->callback, JS_UNDEFINED, 1, args);
+    JSValue ret = JS_Call(ctx, work->callback, JS_UNDEFINED, 1, args);
+  JS_FreeValue(ctx, ret);
     JS_FreeValue(ctx, error);
     fs_async_work_free(work);
   }
@@ -826,7 +846,8 @@ JSValue js_fs_lchmod_async(JSContext* ctx, JSValueConst this_val, int argc, JSVa
   if (result < 0) {
     JSValue error = create_fs_error(ctx, -result, "lchmod", work->path);
     JSValue args[1] = {error};
-    JS_Call(ctx, work->callback, JS_UNDEFINED, 1, args);
+    JSValue ret = JS_Call(ctx, work->callback, JS_UNDEFINED, 1, args);
+  JS_FreeValue(ctx, ret);
     JS_FreeValue(ctx, error);
     fs_async_work_free(work);
   }
@@ -885,7 +906,8 @@ JSValue js_fs_chown_async(JSContext* ctx, JSValueConst this_val, int argc, JSVal
   if (result < 0) {
     JSValue error = create_fs_error(ctx, -result, "chown", work->path);
     JSValue args[1] = {error};
-    JS_Call(ctx, work->callback, JS_UNDEFINED, 1, args);
+    JSValue ret = JS_Call(ctx, work->callback, JS_UNDEFINED, 1, args);
+  JS_FreeValue(ctx, ret);
     JS_FreeValue(ctx, error);
     fs_async_work_free(work);
   }
@@ -933,7 +955,8 @@ JSValue js_fs_fchown_async(JSContext* ctx, JSValueConst this_val, int argc, JSVa
   if (result < 0) {
     JSValue error = create_fs_error(ctx, -result, "fchown", NULL);
     JSValue args[1] = {error};
-    JS_Call(ctx, work->callback, JS_UNDEFINED, 1, args);
+    JSValue ret = JS_Call(ctx, work->callback, JS_UNDEFINED, 1, args);
+  JS_FreeValue(ctx, ret);
     JS_FreeValue(ctx, error);
     fs_async_work_free(work);
   }
@@ -988,7 +1011,8 @@ JSValue js_fs_lchown_async(JSContext* ctx, JSValueConst this_val, int argc, JSVa
   if (result < 0) {
     JSValue error = create_fs_error(ctx, -result, "lchown", work->path);
     JSValue args[1] = {error};
-    JS_Call(ctx, work->callback, JS_UNDEFINED, 1, args);
+    JSValue ret = JS_Call(ctx, work->callback, JS_UNDEFINED, 1, args);
+  JS_FreeValue(ctx, ret);
     JS_FreeValue(ctx, error);
     fs_async_work_free(work);
   }
@@ -1044,7 +1068,8 @@ JSValue js_fs_utimes_async(JSContext* ctx, JSValueConst this_val, int argc, JSVa
   if (result < 0) {
     JSValue error = create_fs_error(ctx, -result, "utimes", work->path);
     JSValue args[1] = {error};
-    JS_Call(ctx, work->callback, JS_UNDEFINED, 1, args);
+    JSValue ret = JS_Call(ctx, work->callback, JS_UNDEFINED, 1, args);
+  JS_FreeValue(ctx, ret);
     JS_FreeValue(ctx, error);
     fs_async_work_free(work);
   }
@@ -1090,7 +1115,8 @@ JSValue js_fs_futimes_async(JSContext* ctx, JSValueConst this_val, int argc, JSV
   if (result < 0) {
     JSValue error = create_fs_error(ctx, -result, "futimes", NULL);
     JSValue args[1] = {error};
-    JS_Call(ctx, work->callback, JS_UNDEFINED, 1, args);
+    JSValue ret = JS_Call(ctx, work->callback, JS_UNDEFINED, 1, args);
+  JS_FreeValue(ctx, ret);
     JS_FreeValue(ctx, error);
     fs_async_work_free(work);
   }
@@ -1141,7 +1167,8 @@ JSValue js_fs_lutimes_async(JSContext* ctx, JSValueConst this_val, int argc, JSV
   if (result < 0) {
     JSValue error = create_fs_error(ctx, -result, "lutimes", work->path);
     JSValue args[1] = {error};
-    JS_Call(ctx, work->callback, JS_UNDEFINED, 1, args);
+    JSValue ret = JS_Call(ctx, work->callback, JS_UNDEFINED, 1, args);
+  JS_FreeValue(ctx, ret);
     JS_FreeValue(ctx, error);
     fs_async_work_free(work);
   }
@@ -1196,7 +1223,8 @@ JSValue js_fs_link_async(JSContext* ctx, JSValueConst this_val, int argc, JSValu
   if (result < 0) {
     JSValue error = create_fs_error(ctx, -result, "link", work->path);
     JSValue args[1] = {error};
-    JS_Call(ctx, work->callback, JS_UNDEFINED, 1, args);
+    JSValue ret = JS_Call(ctx, work->callback, JS_UNDEFINED, 1, args);
+  JS_FreeValue(ctx, ret);
     JS_FreeValue(ctx, error);
     fs_async_work_free(work);
   }
@@ -1266,7 +1294,8 @@ JSValue js_fs_symlink_async(JSContext* ctx, JSValueConst this_val, int argc, JSV
   if (result < 0) {
     JSValue error = create_fs_error(ctx, -result, "symlink", work->path2);
     JSValue args[1] = {error};
-    JS_Call(ctx, work->callback, JS_UNDEFINED, 1, args);
+    JSValue ret = JS_Call(ctx, work->callback, JS_UNDEFINED, 1, args);
+  JS_FreeValue(ctx, ret);
     JS_FreeValue(ctx, error);
     fs_async_work_free(work);
   }
@@ -1313,7 +1342,8 @@ JSValue js_fs_readlink_async(JSContext* ctx, JSValueConst this_val, int argc, JS
   if (result < 0) {
     JSValue error = create_fs_error(ctx, -result, "readlink", work->path);
     JSValue args[1] = {error};
-    JS_Call(ctx, work->callback, JS_UNDEFINED, 1, args);
+    JSValue ret = JS_Call(ctx, work->callback, JS_UNDEFINED, 1, args);
+  JS_FreeValue(ctx, ret);
     JS_FreeValue(ctx, error);
     fs_async_work_free(work);
   }
@@ -1360,7 +1390,8 @@ JSValue js_fs_realpath_async(JSContext* ctx, JSValueConst this_val, int argc, JS
   if (result < 0) {
     JSValue error = create_fs_error(ctx, -result, "realpath", work->path);
     JSValue args[1] = {error};
-    JS_Call(ctx, work->callback, JS_UNDEFINED, 1, args);
+    JSValue ret = JS_Call(ctx, work->callback, JS_UNDEFINED, 1, args);
+  JS_FreeValue(ctx, ret);
     JS_FreeValue(ctx, error);
     fs_async_work_free(work);
   }
@@ -1443,7 +1474,8 @@ JSValue js_fs_open_async(JSContext* ctx, JSValueConst this_val, int argc, JSValu
   if (result < 0) {
     JSValue error = create_fs_error(ctx, -result, "open", work->path);
     JSValue args[1] = {error};
-    JS_Call(ctx, work->callback, JS_UNDEFINED, 1, args);
+    JSValue ret = JS_Call(ctx, work->callback, JS_UNDEFINED, 1, args);
+  JS_FreeValue(ctx, ret);
     JS_FreeValue(ctx, error);
     fs_async_work_free(work);
   }
@@ -1481,7 +1513,8 @@ JSValue js_fs_close_async(JSContext* ctx, JSValueConst this_val, int argc, JSVal
   if (result < 0) {
     JSValue error = create_fs_error(ctx, -result, "close", NULL);
     JSValue args[1] = {error};
-    JS_Call(ctx, work->callback, JS_UNDEFINED, 1, args);
+    JSValue ret = JS_Call(ctx, work->callback, JS_UNDEFINED, 1, args);
+  JS_FreeValue(ctx, ret);
     JS_FreeValue(ctx, error);
     fs_async_work_free(work);
   }
@@ -1532,7 +1565,8 @@ JSValue js_fs_readdir_async(JSContext* ctx, JSValueConst this_val, int argc, JSV
   if (result < 0) {
     JSValue error = create_fs_error(ctx, -result, "readdir", work->path);
     JSValue args[1] = {error};
-    JS_Call(ctx, work->callback, JS_UNDEFINED, 1, args);
+    JSValue ret = JS_Call(ctx, work->callback, JS_UNDEFINED, 1, args);
+  JS_FreeValue(ctx, ret);
     JS_FreeValue(ctx, error);
     fs_async_work_free(work);
   }

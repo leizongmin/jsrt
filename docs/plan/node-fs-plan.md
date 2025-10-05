@@ -1,11 +1,11 @@
 ---
 Created: 2025-10-04T00:00:00Z
-Last Updated: 2025-10-05T21:10:00Z
-Status: 🟢 PHASE 2 & 3 COMPLETED
-Overall Progress: 42 sync + 33 async + 24 Promise APIs (99/95 = 104% - exceeded goal!)
-Phase 1: ✅ COMPLETED (2025-10-04)
-Phase 2: ✅ COMPLETED (2025-10-05) - 33/33 async APIs with libuv (100%)
-Phase 3: ✅ MAJOR MILESTONE (2025-10-05) - FileHandle + high-value Promise APIs (24 methods)
+Last Updated: 2025-10-05T22:00:00Z
+Status: 🟡 PHASE 2 & 3 SUBSTANTIAL PROGRESS
+Overall Progress: 41 sync + 34 async + 24 Promise + 5 FileHandle methods (104/132 = 78.8%)
+Phase 1: ✅ COMPLETED (2025-10-04) - All sync APIs except globSync
+Phase 2: ✅ COMPLETED (2025-10-05) - 34 async callback APIs (85% of core async APIs)
+Phase 3: ✅ MAJOR MILESTONE (2025-10-05) - FileHandle + high-value Promise APIs (24/31 Promise methods)
 Latest Commit: f411f59 - feat(fs): complete Phase 2 async APIs and add Promise file I/O
 ---
 
@@ -176,13 +176,19 @@ Latest Commit: f411f59 - feat(fs): complete Phase 2 async APIs and add Promise f
 
 ## 📊 Current Implementation Status (UPDATED 2025-10-05)
 
-**API Coverage Breakdown:**
-- **Total Node.js fs APIs**: ~95 methods + 7 classes + constants
-- **Sync APIs**: 42/42 (100%) ✅
-- **Async Callback APIs**: 33/40 (83%) ✅ - All critical APIs done
-- **Promise APIs**: 24/40 (60%) ✅ - High-value APIs complete
-- **Classes**: 3/7 (43%) - Stats, Dir, FileHandle
-- **Overall**: 99/95 methods (104% - exceeded 95% goal!) ✅
+**API Coverage Breakdown (Corrected):**
+- **Total Node.js fs APIs**: 132 core methods (excluding streams/watchers/special classes)
+  - Sync: 42 methods
+  - Async callback: ~40 methods (56 total including classes/special methods)
+  - Promise (fs.promises): 31 methods
+  - FileHandle methods: 19 methods
+- **jsrt Implementation Status**:
+  - **Sync APIs**: 41/42 (97.6%) ✅ - Missing: globSync (Node 22+)
+  - **Async Callback APIs**: 34/40 (85%) ✅ - All critical APIs done
+  - **Promise APIs**: 24/31 (77.4%) ✅ - High-value APIs complete
+  - **FileHandle methods**: 5/19 (26.3%) - Basic methods implemented
+  - **Classes**: 2/3 core (Dir, Stats) - FileHandle partial
+- **Overall**: 104/132 methods (78.8% complete)
 
 **Coverage by Category:**
 | Category | Total | Implemented | Remaining | % Complete |
@@ -200,30 +206,42 @@ Latest Commit: f411f59 - feat(fs): complete Phase 2 async APIs and add Promise f
 
 **What's Missing (Priority Order):**
 
-1. **Low Priority - Remaining Async Callbacks (7 APIs):**
-   - ⏳ truncate, ftruncate (can use sync wrappers like rm/cp)
+1. **Missing Sync APIs (1/42):**
+   - ⏳ globSync (Node.js 22+ feature - low priority)
+
+2. **Missing Async Callback APIs (6/40):**
+   - ⏳ truncate, ftruncate (can use sync wrappers)
    - ⏳ fsync, fdatasync (low-level sync operations)
    - ⏳ mkdtemp (temporary directory creation)
    - ⏳ statfs (filesystem statistics)
-   - ⏳ opendir (Dir iterator async - advanced feature)
 
-2. **Medium Priority - Remaining Promise APIs (16 methods):**
-   - ✅ fs.promises infrastructure complete
-   - ✅ FileHandle class with 10 methods
-   - ✅ High-value APIs complete (readFile, writeFile, appendFile)
-   - ⏳ FileHandle convenience methods (readFile, writeFile, appendFile - 3 methods)
-   - ⏳ fsPromises utility methods (copyFile, truncate, mkdtemp, etc. - 13 methods)
+3. **Missing Promise APIs (7/31):**
+   - ⏳ glob (Node.js 22+ feature)
+   - ⏳ lchmod (platform-specific)
+   - ⏳ mkdtemp (temporary directory)
+   - ⏳ opendir (Dir iterator)
+   - ⏳ truncate (file truncation)
+   - ⏳ watch (file watching)
+   - ⏳ copyFile (file copying - already have in async callbacks)
 
-3. **Medium Priority - Classes (5 missing):**
-   - Dir (directory iterator)
-   - FileHandle (Promise API)
+4. **Missing FileHandle Methods (14/19):**
+   - ⏳ appendFile (convenience wrapper)
+   - ⏳ chmod (permission change)
+   - ⏳ createReadStream, createWriteStream (streaming)
+   - ⏳ datasync (low-level sync)
+   - ⏳ getAsyncId (advanced)
+   - ⏳ readFile, writeFile (convenience wrappers)
+   - ⏳ readLines (advanced)
+   - ⏳ readableWebStream (web streams)
+   - ⏳ readv, writev (vectored I/O)
+   - ⏳ sync (low-level sync)
+   - ⏳ utimes (timestamp update)
+
+5. **Low Priority - Special Classes:**
    - Dirent (enhanced directory entries)
-   - ReadStream, WriteStream
-   - FSWatcher
-
-5. **Low Priority - Advanced Features:**
-   - File watchers (watch, watchFile, unwatchFile)
-   - Newer Node.js APIs (globSync, statfsSync)
+   - ReadStream, WriteStream (streaming)
+   - FSWatcher (file watching)
+   - File system watchers (watch, watchFile, unwatchFile)
 
 ---
 
@@ -1437,7 +1455,7 @@ fs.unlinkSync(testFile);
 
 ## Conclusion
 
-**🎉 MAJOR MILESTONE ACHIEVED: 104% Complete (99/95 APIs) - EXCEEDED GOAL! 🎉**
+**✅ SUBSTANTIAL PROGRESS ACHIEVED: 78.8% Complete (104/132 APIs)**
 
 This plan reflects **THREE highly successful phases**:
 
@@ -1456,8 +1474,8 @@ This plan reflects **THREE highly successful phases**:
 - ✅ Memory leak-free (ASAN verified)
 - ✅ WPT baseline maintained (90.6%)
 
-**Phase 2 (Async Complete - 2025-10-05):**
-- ✅ ALL 33 async callback APIs with libuv (100% non-blocking I/O)
+**Phase 2 (Async APIs - 2025-10-05):**
+- ✅ 34 async callback APIs with libuv (85% of core async APIs)
 - ✅ Vectored I/O (readv/writev) with proper buffer handling
 - ✅ Recursive operations (rm/cp) with async wrappers
 - ✅ Buffer-based I/O (read/write) with TypedArray support
@@ -1465,9 +1483,9 @@ This plan reflects **THREE highly successful phases**:
 - ✅ All tests passing, ASAN clean
 
 **Phase 3 (Promise APIs - 2025-10-05):**
-- ✅ 24 Promise APIs (60% coverage, all high-value APIs)
+- ✅ 24/31 Promise APIs (77.4% coverage, all high-value APIs)
 - ✅ fsPromises.{readFile,writeFile,appendFile} - **MOST USED APIS** ⭐
-- ✅ FileHandle class with 10 methods
+- ✅ FileHandle class with 5 core methods (read, write, stat, chown, truncate)
 - ✅ Cross-platform safe (malloc(0) fix for empty files)
 - ✅ TypedArray/Buffer support with byte_offset handling
 - ✅ Multi-step async operations (open→fstat→read→close)
@@ -1475,11 +1493,11 @@ This plan reflects **THREE highly successful phases**:
 - ✅ 113/113 tests passing (100%), ASAN clean
 
 **Key Milestones:**
-1. ~~**Phase 1 (2 weeks):** Complete remaining sync APIs → 53% coverage~~ ✅ **COMPLETED 2025-10-04**
-2. ~~**Phase 2 (3 weeks):** libuv async infrastructure → 87% coverage~~ ✅ **COMPLETED 2025-10-05**
-3. ~~**Phase 3 (3 weeks):** Promise API + FileHandle → 95% coverage~~ ✅ **EXCEEDED 2025-10-05 (104%)**
-4. **Phase 4 (optional):** Advanced classes (Streams, FSWatcher) - Lower priority
-5. **Phase 5 (optional):** Production hardening - Already production-ready!
+1. ~~**Phase 1:** Complete remaining sync APIs → 97.6% sync coverage~~ ✅ **COMPLETED 2025-10-04**
+2. ~~**Phase 2:** libuv async infrastructure → 85% async coverage~~ ✅ **COMPLETED 2025-10-05**
+3. ~~**Phase 3:** Promise API + FileHandle → 77.4% Promise coverage~~ ✅ **MAJOR PROGRESS 2025-10-05**
+4. **Phase 4 (remaining):** Complete FileHandle methods → 14 methods to add
+5. **Phase 5 (optional):** Advanced classes (Streams, FSWatcher) - Lower priority
 
 **Critical Success Factors (ACHIEVED):**
 1. ✅ **Leverage existing code:** Reused proven error handling, memory patterns
@@ -1489,25 +1507,30 @@ This plan reflects **THREE highly successful phases**:
 5. ✅ **Cross-platform:** Fixed malloc(0) portability, ASAN clean
 6. ✅ **Rapid development:** Completed 3 phases in 2 days (Oct 4-5)
 
-**Final Status: PRODUCTION READY! 🚀**
+**Status: High-Value APIs Complete, Production-Ready for Common Use Cases! ✅**
 
-**Total Implementation Time: 2 days** (12+ weeks ahead of original 14-week estimate!)
+**Total Implementation Time: 2 days**
 
 **Summary:**
-- **99 APIs implemented** (104% of 95 API goal)
+- **104 APIs implemented** out of 132 core APIs (78.8% complete)
+  - Sync: 41/42 (97.6%)
+  - Async callbacks: 34/40 (85%)
+  - Promise: 24/31 (77.4%)
+  - FileHandle: 5/19 (26.3%)
 - **113/113 tests passing** (100%)
 - **10,625 lines of code** (+2,555 lines this session)
 - **Zero memory leaks** (ASAN verified)
 - **WPT baseline maintained** (90.6%)
 - **Latest commit:** f411f59 - feat(fs): complete Phase 2 async APIs and add Promise file I/O
 
-**Ready for production use!** ✅
+**Remaining work**: 28 APIs (21% - mostly FileHandle convenience methods and low-priority features)
 
 ---
 
-*Document Version: 4.0*
+*Document Version: 5.0*
 *Created: 2025-10-04*
-*Last Updated: 2025-10-05T21:10:00Z (Phase 2 & 3 Complete)*
-*Current Status: 🎉 PRODUCTION READY - 104% Complete (99/95 APIs)*
-*Completion Date: 2025-10-05 (12+ weeks ahead of schedule!)*
+*Last Updated: 2025-10-05T22:00:00Z (API count corrected)*
+*Current Status: ✅ 78.8% Complete (104/132 APIs) - High-value APIs done*
 *Latest Commit: f411f59 - feat(fs): complete Phase 2 async APIs and add Promise file I/O*
+
+**Note**: Previous version incorrectly claimed "104% complete" due to underestimating total Node.js fs API count (95 vs actual 132 core methods).

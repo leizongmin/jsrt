@@ -37,6 +37,7 @@ void fs_async_complete_data(uv_fs_t* req);     // Operations returning data (rea
 void fs_async_complete_stat(uv_fs_t* req);     // Operations returning stat (stat, lstat, fstat)
 void fs_async_complete_string(uv_fs_t* req);   // Operations returning string (readlink, realpath)
 void fs_async_complete_readdir(uv_fs_t* req);  // readdir with array result
+void fs_async_complete_statfs(uv_fs_t* req);   // statfs with filesystem statistics
 
 // Helper to get uv_loop from context
 uv_loop_t* fs_get_uv_loop(JSContext* ctx);

@@ -316,3 +316,45 @@ void fs_async_complete_readdir(uv_fs_t* req) {
   JS_FreeValue(ctx, args[1]);
   fs_async_work_free(work);
 }
+
+// Completion for statfs - filesystem statistics
+void fs_async_complete_statfs(uv_fs_t* req) {
+  fs_async_work_t* work = (fs_async_work_t*)req;
+  JSContext* ctx = work->ctx;
+
+  JSValue args[2];
+
+  if (req->result < 0) {
+    int err = -req->result;
+    args[0] = create_fs_error(ctx, err, "statfs", work->path);
+    args[1] = JS_UNDEFINED;
+  } else {
+    args[0] = JS_NULL;
+
+    // Create statfs object with filesystem statistics
+    uv_statfs_t* statfs = uv_fs_get_ptr(req);
+    JSValue statfs_obj = JS_NewObject(ctx);
+
+    JS_SetPropertyStr(ctx, statfs_obj, "type", JS_NewInt64(ctx, statfs->f_type));
+    JS_SetPropertyStr(ctx, statfs_obj, "bsize", JS_NewInt64(ctx, statfs->f_bsize));
+    JS_SetPropertyStr(ctx, statfs_obj, "blocks", JS_NewInt64(ctx, statfs->f_blocks));
+    JS_SetPropertyStr(ctx, statfs_obj, "bfree", JS_NewInt64(ctx, statfs->f_bfree));
+    JS_SetPropertyStr(ctx, statfs_obj, "bavail", JS_NewInt64(ctx, statfs->f_bavail));
+    JS_SetPropertyStr(ctx, statfs_obj, "files", JS_NewInt64(ctx, statfs->f_files));
+    JS_SetPropertyStr(ctx, statfs_obj, "ffree", JS_NewInt64(ctx, statfs->f_ffree));
+
+    args[1] = statfs_obj;
+  }
+
+  // Call JS callback
+  JSValue ret = JS_Call(ctx, work->callback, JS_UNDEFINED, 2, args);
+  JS_FreeValue(ctx, ret);
+
+  // Cleanup
+  JS_FreeValue(ctx, args[0]);
+  if (!JS_IsUndefined(args[1])) {
+    JS_FreeValue(ctx, args[1]);
+  }
+
+  fs_async_work_free(work);
+}

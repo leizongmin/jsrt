@@ -2288,3 +2288,305 @@ JSValue js_fs_copy_file_async(JSContext* ctx, JSValueConst this_val, int argc, J
 
   return JS_UNDEFINED;
 }
+
+// ============================================================================
+// truncate/ftruncate: Truncate file to specified length
+// ============================================================================
+
+JSValue js_fs_truncate_async(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
+  if (argc < 2) {
+    return JS_ThrowTypeError(ctx, "truncate requires at least path and callback");
+  }
+
+  const char* path = JS_ToCString(ctx, argv[0]);
+  if (!path) {
+    return JS_EXCEPTION;
+  }
+
+  // Parse length (optional, defaults to 0)
+  int64_t length = 0;
+  if (argc >= 3 && !JS_IsUndefined(argv[1]) && !JS_IsFunction(ctx, argv[1])) {
+    if (JS_ToInt64(ctx, &length, argv[1])) {
+      JS_FreeCString(ctx, path);
+      return JS_EXCEPTION;
+    }
+  }
+
+  // Get callback
+  JSValue callback = (argc >= 3 && !JS_IsFunction(ctx, argv[1])) ? argv[2] : argv[1];
+  if (!JS_IsFunction(ctx, callback)) {
+    JS_FreeCString(ctx, path);
+    return JS_ThrowTypeError(ctx, "callback must be a function");
+  }
+
+  // Allocate work request
+  fs_async_work_t* work = fs_async_work_new(ctx);
+  if (!work) {
+    JS_FreeCString(ctx, path);
+    return JS_ThrowOutOfMemory(ctx);
+  }
+
+  work->callback = JS_DupValue(ctx, callback);
+  work->path = strdup(path);
+  JS_FreeCString(ctx, path);
+
+  // Use ftruncate with open-truncate-close pattern
+  uv_loop_t* loop = fs_get_uv_loop(ctx);
+  int result = uv_fs_open(loop, &work->req, work->path, O_WRONLY, 0, NULL);
+
+  if (result < 0) {
+    JSValue error = create_fs_error(ctx, -result, "truncate", work->path);
+    JSValue args[1] = {error};
+    JSValue ret = JS_Call(ctx, work->callback, JS_UNDEFINED, 1, args);
+    JS_FreeValue(ctx, ret);
+    JS_FreeValue(ctx, error);
+    fs_async_work_free(work);
+    return JS_UNDEFINED;
+  }
+
+  int fd = (int)result;
+  uv_fs_req_cleanup(&work->req);
+
+  // Now truncate
+  result = uv_fs_ftruncate(loop, &work->req, fd, length, fs_async_complete_void);
+
+  // Close fd after truncate
+  uv_fs_t close_req;
+  uv_fs_close(loop, &close_req, fd, NULL);
+  uv_fs_req_cleanup(&close_req);
+
+  if (result < 0) {
+    JSValue error = create_fs_error(ctx, -result, "truncate", work->path);
+    JSValue args[1] = {error};
+    JSValue ret = JS_Call(ctx, work->callback, JS_UNDEFINED, 1, args);
+    JS_FreeValue(ctx, ret);
+    JS_FreeValue(ctx, error);
+    fs_async_work_free(work);
+  }
+
+  return JS_UNDEFINED;
+}
+
+JSValue js_fs_ftruncate_async(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
+  if (argc < 2) {
+    return JS_ThrowTypeError(ctx, "ftruncate requires at least fd and callback");
+  }
+
+  int32_t fd;
+  if (JS_ToInt32(ctx, &fd, argv[0])) {
+    return JS_EXCEPTION;
+  }
+
+  // Parse length (optional, defaults to 0)
+  int64_t length = 0;
+  if (argc >= 3 && !JS_IsUndefined(argv[1]) && !JS_IsFunction(ctx, argv[1])) {
+    if (JS_ToInt64(ctx, &length, argv[1])) {
+      return JS_EXCEPTION;
+    }
+  }
+
+  // Get callback
+  JSValue callback = (argc >= 3 && !JS_IsFunction(ctx, argv[1])) ? argv[2] : argv[1];
+  if (!JS_IsFunction(ctx, callback)) {
+    return JS_ThrowTypeError(ctx, "callback must be a function");
+  }
+
+  // Allocate work request
+  fs_async_work_t* work = fs_async_work_new(ctx);
+  if (!work) {
+    return JS_ThrowOutOfMemory(ctx);
+  }
+
+  work->callback = JS_DupValue(ctx, callback);
+
+  // Queue async ftruncate operation
+  uv_loop_t* loop = fs_get_uv_loop(ctx);
+  int result = uv_fs_ftruncate(loop, &work->req, fd, length, fs_async_complete_void);
+
+  if (result < 0) {
+    JSValue error = create_fs_error(ctx, -result, "ftruncate", NULL);
+    JSValue args[1] = {error};
+    JSValue ret = JS_Call(ctx, work->callback, JS_UNDEFINED, 1, args);
+    JS_FreeValue(ctx, ret);
+    JS_FreeValue(ctx, error);
+    fs_async_work_free(work);
+  }
+
+  return JS_UNDEFINED;
+}
+
+// ============================================================================
+// fsync/fdatasync: Synchronize file data to disk
+// ============================================================================
+
+JSValue js_fs_fsync_async(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
+  if (argc < 2) {
+    return JS_ThrowTypeError(ctx, "fsync requires fd and callback");
+  }
+
+  int32_t fd;
+  if (JS_ToInt32(ctx, &fd, argv[0])) {
+    return JS_EXCEPTION;
+  }
+
+  JSValue callback = argv[1];
+  if (!JS_IsFunction(ctx, callback)) {
+    return JS_ThrowTypeError(ctx, "callback must be a function");
+  }
+
+  // Allocate work request
+  fs_async_work_t* work = fs_async_work_new(ctx);
+  if (!work) {
+    return JS_ThrowOutOfMemory(ctx);
+  }
+
+  work->callback = JS_DupValue(ctx, callback);
+
+  // Queue async fsync operation
+  uv_loop_t* loop = fs_get_uv_loop(ctx);
+  int result = uv_fs_fsync(loop, &work->req, fd, fs_async_complete_void);
+
+  if (result < 0) {
+    JSValue error = create_fs_error(ctx, -result, "fsync", NULL);
+    JSValue args[1] = {error};
+    JSValue ret = JS_Call(ctx, work->callback, JS_UNDEFINED, 1, args);
+    JS_FreeValue(ctx, ret);
+    JS_FreeValue(ctx, error);
+    fs_async_work_free(work);
+  }
+
+  return JS_UNDEFINED;
+}
+
+JSValue js_fs_fdatasync_async(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
+  if (argc < 2) {
+    return JS_ThrowTypeError(ctx, "fdatasync requires fd and callback");
+  }
+
+  int32_t fd;
+  if (JS_ToInt32(ctx, &fd, argv[0])) {
+    return JS_EXCEPTION;
+  }
+
+  JSValue callback = argv[1];
+  if (!JS_IsFunction(ctx, callback)) {
+    return JS_ThrowTypeError(ctx, "callback must be a function");
+  }
+
+  // Allocate work request
+  fs_async_work_t* work = fs_async_work_new(ctx);
+  if (!work) {
+    return JS_ThrowOutOfMemory(ctx);
+  }
+
+  work->callback = JS_DupValue(ctx, callback);
+
+  // Queue async fdatasync operation
+  uv_loop_t* loop = fs_get_uv_loop(ctx);
+  int result = uv_fs_fdatasync(loop, &work->req, fd, fs_async_complete_void);
+
+  if (result < 0) {
+    JSValue error = create_fs_error(ctx, -result, "fdatasync", NULL);
+    JSValue args[1] = {error};
+    JSValue ret = JS_Call(ctx, work->callback, JS_UNDEFINED, 1, args);
+    JS_FreeValue(ctx, ret);
+    JS_FreeValue(ctx, error);
+    fs_async_work_free(work);
+  }
+
+  return JS_UNDEFINED;
+}
+
+// ============================================================================
+// mkdtemp: Create temporary directory
+// ============================================================================
+
+JSValue js_fs_mkdtemp_async(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
+  if (argc < 2) {
+    return JS_ThrowTypeError(ctx, "mkdtemp requires prefix and callback");
+  }
+
+  const char* prefix = JS_ToCString(ctx, argv[0]);
+  if (!prefix) {
+    return JS_EXCEPTION;
+  }
+
+  JSValue callback = argv[1];
+  if (!JS_IsFunction(ctx, callback)) {
+    JS_FreeCString(ctx, prefix);
+    return JS_ThrowTypeError(ctx, "callback must be a function");
+  }
+
+  // Allocate work request
+  fs_async_work_t* work = fs_async_work_new(ctx);
+  if (!work) {
+    JS_FreeCString(ctx, prefix);
+    return JS_ThrowOutOfMemory(ctx);
+  }
+
+  work->callback = JS_DupValue(ctx, callback);
+  work->path = strdup(prefix);
+  JS_FreeCString(ctx, prefix);
+
+  // Queue async mkdtemp operation
+  uv_loop_t* loop = fs_get_uv_loop(ctx);
+  int result = uv_fs_mkdtemp(loop, &work->req, work->path, fs_async_complete_string);
+
+  if (result < 0) {
+    JSValue error = create_fs_error(ctx, -result, "mkdtemp", work->path);
+    JSValue args[1] = {error};
+    JSValue ret = JS_Call(ctx, work->callback, JS_UNDEFINED, 1, args);
+    JS_FreeValue(ctx, ret);
+    JS_FreeValue(ctx, error);
+    fs_async_work_free(work);
+  }
+
+  return JS_UNDEFINED;
+}
+
+// ============================================================================
+// statfs: Get filesystem statistics
+// ============================================================================
+
+JSValue js_fs_statfs_async(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
+  if (argc < 2) {
+    return JS_ThrowTypeError(ctx, "statfs requires path and callback");
+  }
+
+  const char* path = JS_ToCString(ctx, argv[0]);
+  if (!path) {
+    return JS_EXCEPTION;
+  }
+
+  JSValue callback = argv[1];
+  if (!JS_IsFunction(ctx, callback)) {
+    JS_FreeCString(ctx, path);
+    return JS_ThrowTypeError(ctx, "callback must be a function");
+  }
+
+  // Allocate work request
+  fs_async_work_t* work = fs_async_work_new(ctx);
+  if (!work) {
+    JS_FreeCString(ctx, path);
+    return JS_ThrowOutOfMemory(ctx);
+  }
+
+  work->callback = JS_DupValue(ctx, callback);
+  work->path = strdup(path);
+  JS_FreeCString(ctx, path);
+
+  // Queue async statfs operation
+  uv_loop_t* loop = fs_get_uv_loop(ctx);
+  int result = uv_fs_statfs(loop, &work->req, work->path, fs_async_complete_statfs);
+
+  if (result < 0) {
+    JSValue error = create_fs_error(ctx, -result, "statfs", work->path);
+    JSValue args[1] = {error};
+    JSValue ret = JS_Call(ctx, work->callback, JS_UNDEFINED, 1, args);
+    JS_FreeValue(ctx, ret);
+    JS_FreeValue(ctx, error);
+    fs_async_work_free(work);
+  }
+
+  return JS_UNDEFINED;
+}

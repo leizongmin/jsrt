@@ -114,6 +114,14 @@ JSValue js_fs_writev_async(JSContext* ctx, JSValueConst this_val, int argc, JSVa
 JSValue js_fs_rm_async(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv);
 JSValue js_fs_cp_async(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv);
 
+// Phase 2.1: Additional async APIs
+JSValue js_fs_truncate_async(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv);
+JSValue js_fs_ftruncate_async(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv);
+JSValue js_fs_fsync_async(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv);
+JSValue js_fs_fdatasync_async(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv);
+JSValue js_fs_mkdtemp_async(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv);
+JSValue js_fs_statfs_async(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv);
+
 // Phase 3: Promise API
 JSValue JSRT_InitNodeFsPromises(JSContext* ctx);
 void fs_promises_init(JSContext* ctx);

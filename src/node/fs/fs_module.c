@@ -149,6 +149,14 @@ JSValue JSRT_InitNodeFs(JSContext* ctx) {
   JS_SetPropertyStr(ctx, fs_module, "rm", JS_NewCFunction(ctx, js_fs_rm_async, "rm", 3));
   JS_SetPropertyStr(ctx, fs_module, "cp", JS_NewCFunction(ctx, js_fs_cp_async, "cp", 4));
 
+  // Phase 2.1: Additional async operations
+  JS_SetPropertyStr(ctx, fs_module, "truncate", JS_NewCFunction(ctx, js_fs_truncate_async, "truncate", 3));
+  JS_SetPropertyStr(ctx, fs_module, "ftruncate", JS_NewCFunction(ctx, js_fs_ftruncate_async, "ftruncate", 3));
+  JS_SetPropertyStr(ctx, fs_module, "fsync", JS_NewCFunction(ctx, js_fs_fsync_async, "fsync", 2));
+  JS_SetPropertyStr(ctx, fs_module, "fdatasync", JS_NewCFunction(ctx, js_fs_fdatasync_async, "fdatasync", 2));
+  JS_SetPropertyStr(ctx, fs_module, "mkdtemp", JS_NewCFunction(ctx, js_fs_mkdtemp_async, "mkdtemp", 2));
+  JS_SetPropertyStr(ctx, fs_module, "statfs", JS_NewCFunction(ctx, js_fs_statfs_async, "statfs", 2));
+
   // Constants
   JSValue constants = JS_NewObject(ctx);
   JS_SetPropertyStr(ctx, constants, "F_OK", JS_NewInt32(ctx, F_OK));
@@ -223,6 +231,14 @@ int js_node_fs_init(JSContext* ctx, JSModuleDef* m) {
   // Export Phase 2: Recursive async operations
   JS_SetModuleExport(ctx, m, "rm", JS_GetPropertyStr(ctx, fs_module, "rm"));
   JS_SetModuleExport(ctx, m, "cp", JS_GetPropertyStr(ctx, fs_module, "cp"));
+
+  // Export Phase 2.1: Additional async operations
+  JS_SetModuleExport(ctx, m, "truncate", JS_GetPropertyStr(ctx, fs_module, "truncate"));
+  JS_SetModuleExport(ctx, m, "ftruncate", JS_GetPropertyStr(ctx, fs_module, "ftruncate"));
+  JS_SetModuleExport(ctx, m, "fsync", JS_GetPropertyStr(ctx, fs_module, "fsync"));
+  JS_SetModuleExport(ctx, m, "fdatasync", JS_GetPropertyStr(ctx, fs_module, "fdatasync"));
+  JS_SetModuleExport(ctx, m, "mkdtemp", JS_GetPropertyStr(ctx, fs_module, "mkdtemp"));
+  JS_SetModuleExport(ctx, m, "statfs", JS_GetPropertyStr(ctx, fs_module, "statfs"));
 
   // Export file descriptor operations
   JS_SetModuleExport(ctx, m, "openSync", JS_GetPropertyStr(ctx, fs_module, "openSync"));

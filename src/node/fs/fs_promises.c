@@ -969,13 +969,387 @@ static JSValue filehandle_datasync(JSContext* ctx, JSValueConst this_val, int ar
   return promise;
 }
 
+// ============================================================================
+// FileHandle convenience methods (readFile, writeFile, appendFile)
+// ============================================================================
+
+// FileHandle.readFile() completion callback
+static void filehandle_readfile_read_cb(uv_fs_t* req) {
+  fs_promise_work_t* work = (fs_promise_work_t*)req;
+  JSContext* ctx = work->ctx;
+
+  if (req->result < 0) {
+    // Read error, reject (but don't close fd - FileHandle manages that)
+    int err = -req->result;
+    JSValue error = create_fs_error(ctx, err, "read", work->path);
+    JSValue ret = JS_Call(ctx, work->reject, JS_UNDEFINED, 1, &error);
+    JS_FreeValue(ctx, error);
+    JS_FreeValue(ctx, ret);
+    fs_promise_work_free(work);
+    return;
+  }
+
+  // Read complete, resolve with buffer (don't close fd)
+  JSValue buffer = JS_NewArrayBufferCopy(ctx, work->buffer, work->buffer_size);
+  JSValue ret = JS_Call(ctx, work->resolve, JS_UNDEFINED, 1, &buffer);
+  JS_FreeValue(ctx, buffer);
+  JS_FreeValue(ctx, ret);
+
+  fs_promise_work_free(work);
+}
+
+static void filehandle_readfile_fstat_cb(uv_fs_t* req) {
+  fs_promise_work_t* work = (fs_promise_work_t*)req;
+  JSContext* ctx = work->ctx;
+  uv_loop_t* loop = fs_get_uv_loop(ctx);
+
+  if (req->result < 0) {
+    // Stat error, reject (but don't close fd - FileHandle manages that)
+    int err = -req->result;
+    JSValue error = create_fs_error(ctx, err, "fstat", work->path);
+    JSValue ret = JS_Call(ctx, work->reject, JS_UNDEFINED, 1, &error);
+    JS_FreeValue(ctx, error);
+    JS_FreeValue(ctx, ret);
+    fs_promise_work_free(work);
+    return;
+  }
+
+  uv_stat_t* statbuf = (uv_stat_t*)req->ptr;
+  size_t file_size = statbuf->st_size;
+
+  // Handle empty file
+  if (file_size == 0) {
+    work->buffer = NULL;
+    work->buffer_size = 0;
+    // Resolve with empty buffer
+    JSValue buffer = JS_NewArrayBufferCopy(ctx, NULL, 0);
+    JSValue ret = JS_Call(ctx, work->resolve, JS_UNDEFINED, 1, &buffer);
+    JS_FreeValue(ctx, buffer);
+    JS_FreeValue(ctx, ret);
+    fs_promise_work_free(work);
+    return;
+  }
+
+  // Allocate buffer
+  work->buffer = malloc(file_size);
+  if (!work->buffer) {
+    JSValue error = create_fs_error(ctx, ENOMEM, "malloc", work->path);
+    JSValue ret = JS_Call(ctx, work->reject, JS_UNDEFINED, 1, &error);
+    JS_FreeValue(ctx, error);
+    JS_FreeValue(ctx, ret);
+    fs_promise_work_free(work);
+    return;
+  }
+
+  work->buffer_size = file_size;
+  uv_buf_t iov = uv_buf_init(work->buffer, (unsigned int)file_size);
+  uv_fs_req_cleanup(req);
+  uv_fs_read(loop, req, work->flags, &iov, 1, 0, filehandle_readfile_read_cb);
+}
+
+// FileHandle.readFile() - returns Promise<Buffer>
+static JSValue filehandle_readFile(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
+  FileHandle* fh = JS_GetOpaque(this_val, filehandle_class_id);
+  if (!fh) {
+    return JS_ThrowTypeError(ctx, "Not a FileHandle");
+  }
+
+  if (fh->closed) {
+    JSValue error = JS_NewError(ctx);
+    JS_SetPropertyStr(ctx, error, "message", JS_NewString(ctx, "File handle is closed"));
+    return JS_Throw(ctx, error);
+  }
+
+  // Create Promise
+  JSValue resolving_funcs[2];
+  JSValue promise = JS_NewPromiseCapability(ctx, resolving_funcs);
+  if (JS_IsException(promise)) {
+    return JS_EXCEPTION;
+  }
+
+  // Allocate work request
+  fs_promise_work_t* work = calloc(1, sizeof(fs_promise_work_t));
+  if (!work) {
+    JS_FreeValue(ctx, resolving_funcs[0]);
+    JS_FreeValue(ctx, resolving_funcs[1]);
+    JS_FreeValue(ctx, promise);
+    return JS_ThrowOutOfMemory(ctx);
+  }
+
+  work->ctx = ctx;
+  work->resolve = resolving_funcs[0];
+  work->reject = resolving_funcs[1];
+  work->path = fh->path ? strdup(fh->path) : NULL;
+  work->flags = fh->fd;  // Store fd in flags field
+
+  // Start with fstat to get file size
+  uv_loop_t* loop = fs_get_uv_loop(ctx);
+  int result = uv_fs_fstat(loop, &work->req, fh->fd, filehandle_readfile_fstat_cb);
+
+  if (result < 0) {
+    JSValue error = create_fs_error(ctx, -result, "fstat", work->path);
+    JSValue ret = JS_Call(ctx, work->reject, JS_UNDEFINED, 1, &error);
+    JS_FreeValue(ctx, error);
+    JS_FreeValue(ctx, ret);
+    fs_promise_work_free(work);
+  }
+
+  return promise;
+}
+
+// FileHandle.writeFile/appendFile() completion callback
+static void filehandle_writefile_write_cb(uv_fs_t* req) {
+  fs_promise_work_t* work = (fs_promise_work_t*)req;
+  JSContext* ctx = work->ctx;
+
+  if (req->result < 0) {
+    // Write error, reject (but don't close fd - FileHandle manages that)
+    int err = -req->result;
+    JSValue error = create_fs_error(ctx, err, "write", work->path);
+    JSValue ret = JS_Call(ctx, work->reject, JS_UNDEFINED, 1, &error);
+    JS_FreeValue(ctx, error);
+    JS_FreeValue(ctx, ret);
+    fs_promise_work_free(work);
+    return;
+  }
+
+  // Write complete, resolve with undefined (don't close fd)
+  JSValue undef = JS_UNDEFINED;
+  JSValue ret = JS_Call(ctx, work->resolve, JS_UNDEFINED, 1, &undef);
+  JS_FreeValue(ctx, ret);
+
+  fs_promise_work_free(work);
+}
+
+// FileHandle.writeFile() - returns Promise<void>
+static JSValue filehandle_writeFile(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
+  FileHandle* fh = JS_GetOpaque(this_val, filehandle_class_id);
+  if (!fh) {
+    return JS_ThrowTypeError(ctx, "Not a FileHandle");
+  }
+
+  if (fh->closed) {
+    JSValue error = JS_NewError(ctx);
+    JS_SetPropertyStr(ctx, error, "message", JS_NewString(ctx, "File handle is closed"));
+    return JS_Throw(ctx, error);
+  }
+
+  if (argc < 1) {
+    return JS_ThrowTypeError(ctx, "writeFile requires data");
+  }
+
+  // Get data to write
+  uint8_t* data = NULL;
+  size_t data_len = 0;
+
+  if (JS_IsString(argv[0])) {
+    const char* str = JS_ToCString(ctx, argv[0]);
+    if (str) {
+      data_len = strlen(str);
+      data = malloc(data_len);
+      if (data) {
+        memcpy(data, str, data_len);
+      }
+      JS_FreeCString(ctx, str);
+    }
+  } else {
+    // Try TypedArray/Buffer/ArrayBuffer
+    size_t byte_offset, byte_length, bytes_per_element;
+    JSValue array_buffer = JS_GetTypedArrayBuffer(ctx, argv[0], &byte_offset, &byte_length, &bytes_per_element);
+    if (!JS_IsException(array_buffer)) {
+      size_t size;
+      uint8_t* buf = JS_GetArrayBuffer(ctx, &size, array_buffer);
+      JS_FreeValue(ctx, array_buffer);
+      if (buf) {
+        data_len = byte_length;
+        data = malloc(data_len);
+        if (data) {
+          memcpy(data, buf + byte_offset, data_len);
+        }
+      }
+    } else {
+      JS_GetException(ctx);
+      size_t size;
+      uint8_t* buf = JS_GetArrayBuffer(ctx, &size, argv[0]);
+      if (buf) {
+        data_len = size;
+        data = malloc(data_len);
+        if (data) {
+          memcpy(data, buf, data_len);
+        }
+      }
+    }
+  }
+
+  if (!data && data_len > 0) {
+    return JS_ThrowTypeError(ctx, "data must be a string, Buffer, or ArrayBuffer");
+  }
+
+  // Create Promise
+  JSValue resolving_funcs[2];
+  JSValue promise = JS_NewPromiseCapability(ctx, resolving_funcs);
+  if (JS_IsException(promise)) {
+    free(data);
+    return JS_EXCEPTION;
+  }
+
+  // Allocate work request
+  fs_promise_work_t* work = calloc(1, sizeof(fs_promise_work_t));
+  if (!work) {
+    free(data);
+    JS_FreeValue(ctx, resolving_funcs[0]);
+    JS_FreeValue(ctx, resolving_funcs[1]);
+    JS_FreeValue(ctx, promise);
+    return JS_ThrowOutOfMemory(ctx);
+  }
+
+  work->ctx = ctx;
+  work->resolve = resolving_funcs[0];
+  work->reject = resolving_funcs[1];
+  work->path = fh->path ? strdup(fh->path) : NULL;
+  work->flags = fh->fd;  // Store fd in flags field
+  work->buffer = data;
+  work->buffer_size = data_len;
+
+  // Truncate file first, then write
+  uv_loop_t* loop = fs_get_uv_loop(ctx);
+
+  // Write data at position 0
+  uv_buf_t iov = uv_buf_init((char*)work->buffer, (unsigned int)work->buffer_size);
+  int result = uv_fs_write(loop, &work->req, fh->fd, &iov, 1, 0, filehandle_writefile_write_cb);
+
+  if (result < 0) {
+    JSValue error = create_fs_error(ctx, -result, "write", work->path);
+    JSValue ret = JS_Call(ctx, work->reject, JS_UNDEFINED, 1, &error);
+    JS_FreeValue(ctx, error);
+    JS_FreeValue(ctx, ret);
+    fs_promise_work_free(work);
+  }
+
+  return promise;
+}
+
+// FileHandle.appendFile() - returns Promise<void>
+static JSValue filehandle_appendFile(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
+  FileHandle* fh = JS_GetOpaque(this_val, filehandle_class_id);
+  if (!fh) {
+    return JS_ThrowTypeError(ctx, "Not a FileHandle");
+  }
+
+  if (fh->closed) {
+    JSValue error = JS_NewError(ctx);
+    JS_SetPropertyStr(ctx, error, "message", JS_NewString(ctx, "File handle is closed"));
+    return JS_Throw(ctx, error);
+  }
+
+  if (argc < 1) {
+    return JS_ThrowTypeError(ctx, "appendFile requires data");
+  }
+
+  // Get data to append
+  uint8_t* data = NULL;
+  size_t data_len = 0;
+
+  if (JS_IsString(argv[0])) {
+    const char* str = JS_ToCString(ctx, argv[0]);
+    if (str) {
+      data_len = strlen(str);
+      data = malloc(data_len);
+      if (data) {
+        memcpy(data, str, data_len);
+      }
+      JS_FreeCString(ctx, str);
+    }
+  } else {
+    // Try TypedArray/Buffer/ArrayBuffer
+    size_t byte_offset, byte_length, bytes_per_element;
+    JSValue array_buffer = JS_GetTypedArrayBuffer(ctx, argv[0], &byte_offset, &byte_length, &bytes_per_element);
+    if (!JS_IsException(array_buffer)) {
+      size_t size;
+      uint8_t* buf = JS_GetArrayBuffer(ctx, &size, array_buffer);
+      JS_FreeValue(ctx, array_buffer);
+      if (buf) {
+        data_len = byte_length;
+        data = malloc(data_len);
+        if (data) {
+          memcpy(data, buf + byte_offset, data_len);
+        }
+      }
+    } else {
+      JS_GetException(ctx);
+      size_t size;
+      uint8_t* buf = JS_GetArrayBuffer(ctx, &size, argv[0]);
+      if (buf) {
+        data_len = size;
+        data = malloc(data_len);
+        if (data) {
+          memcpy(data, buf, data_len);
+        }
+      }
+    }
+  }
+
+  if (!data && data_len > 0) {
+    return JS_ThrowTypeError(ctx, "data must be a string, Buffer, or ArrayBuffer");
+  }
+
+  // Create Promise
+  JSValue resolving_funcs[2];
+  JSValue promise = JS_NewPromiseCapability(ctx, resolving_funcs);
+  if (JS_IsException(promise)) {
+    free(data);
+    return JS_EXCEPTION;
+  }
+
+  // Allocate work request
+  fs_promise_work_t* work = calloc(1, sizeof(fs_promise_work_t));
+  if (!work) {
+    free(data);
+    JS_FreeValue(ctx, resolving_funcs[0]);
+    JS_FreeValue(ctx, resolving_funcs[1]);
+    JS_FreeValue(ctx, promise);
+    return JS_ThrowOutOfMemory(ctx);
+  }
+
+  work->ctx = ctx;
+  work->resolve = resolving_funcs[0];
+  work->reject = resolving_funcs[1];
+  work->path = fh->path ? strdup(fh->path) : NULL;
+  work->flags = fh->fd;  // Store fd in flags field
+  work->buffer = data;
+  work->buffer_size = data_len;
+
+  // Append at end of file (position -1)
+  uv_loop_t* loop = fs_get_uv_loop(ctx);
+  uv_buf_t iov = uv_buf_init((char*)work->buffer, (unsigned int)work->buffer_size);
+  int result = uv_fs_write(loop, &work->req, fh->fd, &iov, 1, -1, filehandle_writefile_write_cb);
+
+  if (result < 0) {
+    JSValue error = create_fs_error(ctx, -result, "write", work->path);
+    JSValue ret = JS_Call(ctx, work->reject, JS_UNDEFINED, 1, &error);
+    JS_FreeValue(ctx, error);
+    JS_FreeValue(ctx, ret);
+    fs_promise_work_free(work);
+  }
+
+  return promise;
+}
+
 // FileHandle method list
 static const JSCFunctionListEntry filehandle_proto_funcs[] = {
-    JS_CFUNC_DEF("close", 0, filehandle_close),   JS_CFUNC_DEF("read", 4, filehandle_read),
-    JS_CFUNC_DEF("write", 4, filehandle_write),   JS_CFUNC_DEF("stat", 0, filehandle_stat),
-    JS_CFUNC_DEF("chmod", 1, filehandle_chmod),   JS_CFUNC_DEF("chown", 2, filehandle_chown),
-    JS_CFUNC_DEF("utimes", 2, filehandle_utimes), JS_CFUNC_DEF("truncate", 1, filehandle_truncate),
-    JS_CFUNC_DEF("sync", 0, filehandle_sync),     JS_CFUNC_DEF("datasync", 0, filehandle_datasync),
+    JS_CFUNC_DEF("close", 0, filehandle_close),
+    JS_CFUNC_DEF("read", 4, filehandle_read),
+    JS_CFUNC_DEF("write", 4, filehandle_write),
+    JS_CFUNC_DEF("stat", 0, filehandle_stat),
+    JS_CFUNC_DEF("chmod", 1, filehandle_chmod),
+    JS_CFUNC_DEF("chown", 2, filehandle_chown),
+    JS_CFUNC_DEF("utimes", 2, filehandle_utimes),
+    JS_CFUNC_DEF("truncate", 1, filehandle_truncate),
+    JS_CFUNC_DEF("sync", 0, filehandle_sync),
+    JS_CFUNC_DEF("datasync", 0, filehandle_datasync),
+    JS_CFUNC_DEF("readFile", 0, filehandle_readFile),
+    JS_CFUNC_DEF("writeFile", 1, filehandle_writeFile),
+    JS_CFUNC_DEF("appendFile", 1, filehandle_appendFile),
 };
 
 // ============================================================================

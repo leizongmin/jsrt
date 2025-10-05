@@ -21,6 +21,9 @@ typedef struct {
   int owns_buffer;       // 1 if buffer is owned and should be freed, 0 if it points to user's buffer
 } fs_async_work_t;
 
+// Work request initialization - allocates and properly initializes JSValue fields
+fs_async_work_t* fs_async_work_new(JSContext* ctx);
+
 // Work request cleanup - frees all allocated resources
 void fs_async_work_free(fs_async_work_t* work);
 

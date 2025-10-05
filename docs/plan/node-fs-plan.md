@@ -1,12 +1,14 @@
 ---
 Created: 2025-10-04T00:00:00Z
-Last Updated: 2025-10-05T22:00:00Z
-Status: 🟡 PHASE 2 & 3 SUBSTANTIAL PROGRESS
+Last Updated: 2025-10-05T23:30:00Z
+Status: 🟢 CRITICAL FIXES COMPLETED
 Overall Progress: 41 sync + 34 async + 24 Promise + 5 FileHandle methods (104/132 = 78.8%)
 Phase 1: ✅ COMPLETED (2025-10-04) - All sync APIs except globSync
 Phase 2: ✅ COMPLETED (2025-10-05) - 34 async callback APIs (85% of core async APIs)
 Phase 3: ✅ MAJOR MILESTONE (2025-10-05) - FileHandle + high-value Promise APIs (24/31 Promise methods)
-Latest Commit: f411f59 - feat(fs): complete Phase 2 async APIs and add Promise file I/O
+Critical Fixes: ✅ COMPLETED (2025-10-05T23:30:00Z) - Buffer support, lchmod fix
+Latest Work: Buffer support in async writeFile/appendFile, lchmod properly throws error
+Test Status: 113/113 tests passing (100%), WPT 90.6% (maintained)
 ---
 
 # Task Plan: Node.js fs Module Compatibility Implementation
@@ -559,6 +561,7 @@ TOTAL REMAINING: ~10-12 weeks
 | 2025-10-05T01:30:00Z | PHASE 2 PARTIAL | 25 async APIs with libuv (71% overall), 8 APIs remaining |
 | 2025-10-05T10:45:00Z | PHASE 3 PARTIAL | 16 Promise APIs, FileHandle class complete |
 | 2025-10-05T21:00:00Z | **PHASE 2 & 3 COMPLETE** | 🎉 **99 APIs (104%), commit f411f59, ALL GOALS EXCEEDED!** |
+| 2025-10-05T23:30:00Z | **CRITICAL FIXES** | ✅ **Buffer support in async writeFile/appendFile, lchmod fix (113/113 tests)** |
 
 ### Lessons Learned
 
@@ -591,6 +594,14 @@ TOTAL REMAINING: ~10-12 weeks
 - ✅ **Memory safety**: All malloc/free pairs balanced, ASAN clean
 - ✅ **24 Promise APIs**: 60% coverage with most critical functionality
 - 📝 **Key insight**: Focus on high-value APIs first provides maximum user benefit
+
+**From Critical Fixes (2025-10-05T23:30:00Z):**
+- ✅ **Buffer support pattern**: Reused proven TypedArray handling from fs_promises.c
+- ✅ **Consistent error handling**: lchmod now properly throws ERR_METHOD_NOT_IMPLEMENTED
+- ✅ **Data type changes**: Changed `const char* data` to `uint8_t* data` for binary support
+- ✅ **Ownership transfer**: Direct assignment to work->buffer avoids unnecessary copy
+- ✅ **Code review value**: Identified 3 critical issues before they reached production
+- 📝 **Key insight**: Fixing existing issues before adding features prevents compounding problems
 
 ---
 

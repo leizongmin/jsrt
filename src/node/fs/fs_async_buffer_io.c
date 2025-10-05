@@ -127,7 +127,7 @@ JSValue js_fs_readv_async(JSContext* ctx, JSValueConst this_val, int argc, JSVal
   }
 
   // Allocate work request
-  fs_async_work_t* work = calloc(1, sizeof(fs_async_work_t));
+  fs_async_work_t* work = fs_async_work_new(ctx);
   if (!work) {
     free(bufs);
     return JS_ThrowOutOfMemory(ctx);
@@ -142,7 +142,6 @@ JSValue js_fs_readv_async(JSContext* ctx, JSValueConst this_val, int argc, JSVal
   }
   *buffers_ref = JS_DupValue(ctx, argv[1]);
 
-  work->ctx = ctx;
   work->callback = JS_DupValue(ctx, callback);
   work->path = NULL;
   work->buffer = (void*)buffers_ref;  // Store JSValue* for cleanup
@@ -296,7 +295,7 @@ JSValue js_fs_writev_async(JSContext* ctx, JSValueConst this_val, int argc, JSVa
   }
 
   // Allocate work request
-  fs_async_work_t* work = calloc(1, sizeof(fs_async_work_t));
+  fs_async_work_t* work = fs_async_work_new(ctx);
   if (!work) {
     free(bufs);
     return JS_ThrowOutOfMemory(ctx);
@@ -311,7 +310,6 @@ JSValue js_fs_writev_async(JSContext* ctx, JSValueConst this_val, int argc, JSVa
   }
   *buffers_ref = JS_DupValue(ctx, argv[1]);
 
-  work->ctx = ctx;
   work->callback = JS_DupValue(ctx, callback);
   work->path = NULL;
   work->buffer = (void*)buffers_ref;

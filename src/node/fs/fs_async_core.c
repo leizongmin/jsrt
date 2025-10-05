@@ -151,14 +151,13 @@ JSValue js_fs_read_file_async(JSContext* ctx, JSValueConst this_val, int argc, J
   }
 
   // Allocate work request
-  fs_async_work_t* work = calloc(1, sizeof(fs_async_work_t));
+  fs_async_work_t* work = fs_async_work_new(ctx);
   if (!work) {
     JS_FreeCString(ctx, path);
     return JS_ThrowOutOfMemory(ctx);
   }
 
   // Initialize work request
-  work->ctx = ctx;
   work->callback = JS_DupValue(ctx, argv[1]);
   work->path = strdup(path);
   work->path2 = NULL;
@@ -275,45 +274,71 @@ JSValue js_fs_write_file_async(JSContext* ctx, JSValueConst this_val, int argc, 
   }
 
   // Get data to write
-  const char* data = NULL;
+  uint8_t* data = NULL;
   size_t data_len = 0;
 
   if (JS_IsString(argv[1])) {
-    data = JS_ToCString(ctx, argv[1]);
-    if (data) {
-      data_len = strlen(data);
+    const char* str = JS_ToCString(ctx, argv[1]);
+    if (str) {
+      data_len = strlen(str);
+      data = malloc(data_len);
+      if (data) {
+        memcpy(data, str, data_len);
+      }
+      JS_FreeCString(ctx, str);
     }
   } else {
-    // TODO: Handle Buffer objects
-    JS_FreeCString(ctx, path);
-    return JS_ThrowTypeError(ctx, "data must be a string or Buffer");
+    // Try to get as TypedArray (includes Buffer) or ArrayBuffer
+    size_t byte_offset, byte_length, bytes_per_element;
+    JSValue array_buffer = JS_GetTypedArrayBuffer(ctx, argv[1], &byte_offset, &byte_length, &bytes_per_element);
+    if (!JS_IsException(array_buffer)) {
+      size_t size;
+      uint8_t* buf = JS_GetArrayBuffer(ctx, &size, array_buffer);
+      JS_FreeValue(ctx, array_buffer);
+      if (buf) {
+        data_len = byte_length;
+        data = malloc(data_len);
+        if (data) {
+          memcpy(data, buf + byte_offset, data_len);
+        }
+      }
+    } else {
+      // Clear exception and try direct ArrayBuffer
+      JS_GetException(ctx);
+      size_t size;
+      uint8_t* buf = JS_GetArrayBuffer(ctx, &size, argv[1]);
+      if (buf) {
+        data_len = size;
+        data = malloc(data_len);
+        if (data) {
+          memcpy(data, buf, data_len);
+        }
+      }
+    }
   }
 
   if (!data) {
     JS_FreeCString(ctx, path);
-    return JS_ThrowTypeError(ctx, "invalid data");
+    return JS_ThrowTypeError(ctx, "data must be a string, Buffer, or ArrayBuffer");
   }
 
   // Allocate work request
-  fs_async_work_t* work = calloc(1, sizeof(fs_async_work_t));
+  fs_async_work_t* work = fs_async_work_new(ctx);
   if (!work) {
     JS_FreeCString(ctx, path);
-    JS_FreeCString(ctx, data);
+    free(data);
     return JS_ThrowOutOfMemory(ctx);
   }
 
   // Initialize work request
-  work->ctx = ctx;
   work->callback = JS_DupValue(ctx, argv[2]);
   work->path = strdup(path);
-  work->buffer = malloc(data_len);
-  memcpy(work->buffer, data, data_len);
+  work->buffer = data;  // Transfer ownership
   work->buffer_size = data_len;
   work->owns_buffer = 1;  // We allocated this buffer, must free it
   work->flags = 0;
 
   JS_FreeCString(ctx, path);
-  JS_FreeCString(ctx, data);
 
   // Start async operation: Step 1 - open file
   uv_loop_t* loop = fs_get_uv_loop(ctx);
@@ -351,13 +376,12 @@ JSValue js_fs_unlink_async(JSContext* ctx, JSValueConst this_val, int argc, JSVa
     return JS_ThrowTypeError(ctx, "callback must be a function");
   }
 
-  fs_async_work_t* work = calloc(1, sizeof(fs_async_work_t));
+  fs_async_work_t* work = fs_async_work_new(ctx);
   if (!work) {
     JS_FreeCString(ctx, path);
     return JS_ThrowOutOfMemory(ctx);
   }
 
-  work->ctx = ctx;
   work->callback = JS_DupValue(ctx, argv[1]);
   work->path = strdup(path);
   JS_FreeCString(ctx, path);
@@ -406,13 +430,12 @@ JSValue js_fs_mkdir_async(JSContext* ctx, JSValueConst this_val, int argc, JSVal
     return JS_ThrowTypeError(ctx, "callback must be a function");
   }
 
-  fs_async_work_t* work = calloc(1, sizeof(fs_async_work_t));
+  fs_async_work_t* work = fs_async_work_new(ctx);
   if (!work) {
     JS_FreeCString(ctx, path);
     return JS_ThrowOutOfMemory(ctx);
   }
 
-  work->ctx = ctx;
   work->callback = JS_DupValue(ctx, callback);
   work->path = strdup(path);
   JS_FreeCString(ctx, path);
@@ -448,13 +471,12 @@ JSValue js_fs_rmdir_async(JSContext* ctx, JSValueConst this_val, int argc, JSVal
     return JS_ThrowTypeError(ctx, "callback must be a function");
   }
 
-  fs_async_work_t* work = calloc(1, sizeof(fs_async_work_t));
+  fs_async_work_t* work = fs_async_work_new(ctx);
   if (!work) {
     JS_FreeCString(ctx, path);
     return JS_ThrowOutOfMemory(ctx);
   }
 
-  work->ctx = ctx;
   work->callback = JS_DupValue(ctx, argv[1]);
   work->path = strdup(path);
   JS_FreeCString(ctx, path);
@@ -497,14 +519,13 @@ JSValue js_fs_rename_async(JSContext* ctx, JSValueConst this_val, int argc, JSVa
     return JS_ThrowTypeError(ctx, "callback must be a function");
   }
 
-  fs_async_work_t* work = calloc(1, sizeof(fs_async_work_t));
+  fs_async_work_t* work = fs_async_work_new(ctx);
   if (!work) {
     JS_FreeCString(ctx, old_path);
     JS_FreeCString(ctx, new_path);
     return JS_ThrowOutOfMemory(ctx);
   }
 
-  work->ctx = ctx;
   work->callback = JS_DupValue(ctx, argv[2]);
   work->path = strdup(old_path);
   work->path2 = strdup(new_path);
@@ -554,13 +575,12 @@ JSValue js_fs_access_async(JSContext* ctx, JSValueConst this_val, int argc, JSVa
     return JS_ThrowTypeError(ctx, "callback must be a function");
   }
 
-  fs_async_work_t* work = calloc(1, sizeof(fs_async_work_t));
+  fs_async_work_t* work = fs_async_work_new(ctx);
   if (!work) {
     JS_FreeCString(ctx, path);
     return JS_ThrowOutOfMemory(ctx);
   }
 
-  work->ctx = ctx;
   work->callback = JS_DupValue(ctx, callback);
   work->path = strdup(path);
   work->mode = mode;
@@ -601,13 +621,12 @@ JSValue js_fs_stat_async(JSContext* ctx, JSValueConst this_val, int argc, JSValu
     return JS_ThrowTypeError(ctx, "callback must be a function");
   }
 
-  fs_async_work_t* work = calloc(1, sizeof(fs_async_work_t));
+  fs_async_work_t* work = fs_async_work_new(ctx);
   if (!work) {
     JS_FreeCString(ctx, path);
     return JS_ThrowOutOfMemory(ctx);
   }
 
-  work->ctx = ctx;
   work->callback = JS_DupValue(ctx, argv[1]);
   work->path = strdup(path);
   JS_FreeCString(ctx, path);
@@ -643,13 +662,12 @@ JSValue js_fs_lstat_async(JSContext* ctx, JSValueConst this_val, int argc, JSVal
     return JS_ThrowTypeError(ctx, "callback must be a function");
   }
 
-  fs_async_work_t* work = calloc(1, sizeof(fs_async_work_t));
+  fs_async_work_t* work = fs_async_work_new(ctx);
   if (!work) {
     JS_FreeCString(ctx, path);
     return JS_ThrowOutOfMemory(ctx);
   }
 
-  work->ctx = ctx;
   work->callback = JS_DupValue(ctx, argv[1]);
   work->path = strdup(path);
   JS_FreeCString(ctx, path);
@@ -684,12 +702,11 @@ JSValue js_fs_fstat_async(JSContext* ctx, JSValueConst this_val, int argc, JSVal
     return JS_ThrowTypeError(ctx, "callback must be a function");
   }
 
-  fs_async_work_t* work = calloc(1, sizeof(fs_async_work_t));
+  fs_async_work_t* work = fs_async_work_new(ctx);
   if (!work) {
     return JS_ThrowOutOfMemory(ctx);
   }
 
-  work->ctx = ctx;
   work->callback = JS_DupValue(ctx, argv[1]);
   work->path = NULL;  // fstat doesn't use path
 
@@ -734,13 +751,12 @@ JSValue js_fs_chmod_async(JSContext* ctx, JSValueConst this_val, int argc, JSVal
     return JS_ThrowTypeError(ctx, "callback must be a function");
   }
 
-  fs_async_work_t* work = calloc(1, sizeof(fs_async_work_t));
+  fs_async_work_t* work = fs_async_work_new(ctx);
   if (!work) {
     JS_FreeCString(ctx, path);
     return JS_ThrowOutOfMemory(ctx);
   }
 
-  work->ctx = ctx;
   work->callback = JS_DupValue(ctx, argv[2]);
   work->path = strdup(path);
   JS_FreeCString(ctx, path);
@@ -780,12 +796,11 @@ JSValue js_fs_fchmod_async(JSContext* ctx, JSValueConst this_val, int argc, JSVa
     return JS_ThrowTypeError(ctx, "callback must be a function");
   }
 
-  fs_async_work_t* work = calloc(1, sizeof(fs_async_work_t));
+  fs_async_work_t* work = fs_async_work_new(ctx);
   if (!work) {
     return JS_ThrowOutOfMemory(ctx);
   }
 
-  work->ctx = ctx;
   work->callback = JS_DupValue(ctx, argv[2]);
   work->path = NULL;
 
@@ -829,30 +844,29 @@ JSValue js_fs_lchmod_async(JSContext* ctx, JSValueConst this_val, int argc, JSVa
     return JS_ThrowTypeError(ctx, "callback must be a function");
   }
 
-  fs_async_work_t* work = calloc(1, sizeof(fs_async_work_t));
+  fs_async_work_t* work = fs_async_work_new(ctx);
   if (!work) {
     JS_FreeCString(ctx, path);
     return JS_ThrowOutOfMemory(ctx);
   }
 
-  work->ctx = ctx;
   work->callback = JS_DupValue(ctx, argv[2]);
   work->path = strdup(path);
   JS_FreeCString(ctx, path);
 
-  uv_loop_t* loop = fs_get_uv_loop(ctx);
-  // Note: libuv doesn't have lchmod, so we use chmod (symlink following behavior)
-  // This is a known limitation
-  int result = uv_fs_chmod(loop, &work->req, work->path, mode, fs_async_complete_void);
+  // Note: lchmod is not supported by libuv and many platforms don't support it
+  // We throw an error instead of silently using chmod (which follows symlinks)
+  JSValue error = JS_NewError(ctx);
+  JS_DefinePropertyValueStr(ctx, error, "message", JS_NewString(ctx, "lchmod is not implemented"),
+                            JS_PROP_WRITABLE | JS_PROP_CONFIGURABLE);
+  JS_DefinePropertyValueStr(ctx, error, "code", JS_NewString(ctx, "ERR_METHOD_NOT_IMPLEMENTED"),
+                            JS_PROP_WRITABLE | JS_PROP_CONFIGURABLE);
 
-  if (result < 0) {
-    JSValue error = create_fs_error(ctx, -result, "lchmod", work->path);
-    JSValue args[1] = {error};
-    JSValue ret = JS_Call(ctx, work->callback, JS_UNDEFINED, 1, args);
-    JS_FreeValue(ctx, ret);
-    JS_FreeValue(ctx, error);
-    fs_async_work_free(work);
-  }
+  JSValue args[1] = {error};
+  JSValue ret = JS_Call(ctx, work->callback, JS_UNDEFINED, 1, args);
+  JS_FreeValue(ctx, ret);
+  JS_FreeValue(ctx, error);
+  fs_async_work_free(work);
 
   return JS_UNDEFINED;
 #endif
@@ -891,13 +905,12 @@ JSValue js_fs_chown_async(JSContext* ctx, JSValueConst this_val, int argc, JSVal
     return JS_ThrowTypeError(ctx, "callback must be a function");
   }
 
-  fs_async_work_t* work = calloc(1, sizeof(fs_async_work_t));
+  fs_async_work_t* work = fs_async_work_new(ctx);
   if (!work) {
     JS_FreeCString(ctx, path);
     return JS_ThrowOutOfMemory(ctx);
   }
 
-  work->ctx = ctx;
   work->callback = JS_DupValue(ctx, argv[3]);
   work->path = strdup(path);
   JS_FreeCString(ctx, path);
@@ -942,12 +955,11 @@ JSValue js_fs_fchown_async(JSContext* ctx, JSValueConst this_val, int argc, JSVa
     return JS_ThrowTypeError(ctx, "callback must be a function");
   }
 
-  fs_async_work_t* work = calloc(1, sizeof(fs_async_work_t));
+  fs_async_work_t* work = fs_async_work_new(ctx);
   if (!work) {
     return JS_ThrowOutOfMemory(ctx);
   }
 
-  work->ctx = ctx;
   work->callback = JS_DupValue(ctx, argv[3]);
   work->path = NULL;
 
@@ -996,13 +1008,12 @@ JSValue js_fs_lchown_async(JSContext* ctx, JSValueConst this_val, int argc, JSVa
     return JS_ThrowTypeError(ctx, "callback must be a function");
   }
 
-  fs_async_work_t* work = calloc(1, sizeof(fs_async_work_t));
+  fs_async_work_t* work = fs_async_work_new(ctx);
   if (!work) {
     JS_FreeCString(ctx, path);
     return JS_ThrowOutOfMemory(ctx);
   }
 
-  work->ctx = ctx;
   work->callback = JS_DupValue(ctx, argv[3]);
   work->path = strdup(path);
   JS_FreeCString(ctx, path);
@@ -1053,13 +1064,12 @@ JSValue js_fs_utimes_async(JSContext* ctx, JSValueConst this_val, int argc, JSVa
     return JS_ThrowTypeError(ctx, "callback must be a function");
   }
 
-  fs_async_work_t* work = calloc(1, sizeof(fs_async_work_t));
+  fs_async_work_t* work = fs_async_work_new(ctx);
   if (!work) {
     JS_FreeCString(ctx, path);
     return JS_ThrowOutOfMemory(ctx);
   }
 
-  work->ctx = ctx;
   work->callback = JS_DupValue(ctx, argv[3]);
   work->path = strdup(path);
   JS_FreeCString(ctx, path);
@@ -1102,12 +1112,11 @@ JSValue js_fs_futimes_async(JSContext* ctx, JSValueConst this_val, int argc, JSV
     return JS_ThrowTypeError(ctx, "callback must be a function");
   }
 
-  fs_async_work_t* work = calloc(1, sizeof(fs_async_work_t));
+  fs_async_work_t* work = fs_async_work_new(ctx);
   if (!work) {
     return JS_ThrowOutOfMemory(ctx);
   }
 
-  work->ctx = ctx;
   work->callback = JS_DupValue(ctx, argv[3]);
   work->path = NULL;
 
@@ -1152,13 +1161,12 @@ JSValue js_fs_lutimes_async(JSContext* ctx, JSValueConst this_val, int argc, JSV
     return JS_ThrowTypeError(ctx, "callback must be a function");
   }
 
-  fs_async_work_t* work = calloc(1, sizeof(fs_async_work_t));
+  fs_async_work_t* work = fs_async_work_new(ctx);
   if (!work) {
     JS_FreeCString(ctx, path);
     return JS_ThrowOutOfMemory(ctx);
   }
 
-  work->ctx = ctx;
   work->callback = JS_DupValue(ctx, argv[3]);
   work->path = strdup(path);
   JS_FreeCString(ctx, path);
@@ -1205,14 +1213,13 @@ JSValue js_fs_link_async(JSContext* ctx, JSValueConst this_val, int argc, JSValu
     return JS_ThrowTypeError(ctx, "callback must be a function");
   }
 
-  fs_async_work_t* work = calloc(1, sizeof(fs_async_work_t));
+  fs_async_work_t* work = fs_async_work_new(ctx);
   if (!work) {
     JS_FreeCString(ctx, existing_path);
     JS_FreeCString(ctx, new_path);
     return JS_ThrowOutOfMemory(ctx);
   }
 
-  work->ctx = ctx;
   work->callback = JS_DupValue(ctx, argv[2]);
   work->path = strdup(existing_path);
   work->path2 = strdup(new_path);
@@ -1276,14 +1283,13 @@ JSValue js_fs_symlink_async(JSContext* ctx, JSValueConst this_val, int argc, JSV
     return JS_ThrowTypeError(ctx, "callback must be a function");
   }
 
-  fs_async_work_t* work = calloc(1, sizeof(fs_async_work_t));
+  fs_async_work_t* work = fs_async_work_new(ctx);
   if (!work) {
     JS_FreeCString(ctx, target);
     JS_FreeCString(ctx, path);
     return JS_ThrowOutOfMemory(ctx);
   }
 
-  work->ctx = ctx;
   work->callback = JS_DupValue(ctx, callback);
   work->path = strdup(target);
   work->path2 = strdup(path);
@@ -1327,13 +1333,12 @@ JSValue js_fs_readlink_async(JSContext* ctx, JSValueConst this_val, int argc, JS
     return JS_ThrowTypeError(ctx, "callback must be a function");
   }
 
-  fs_async_work_t* work = calloc(1, sizeof(fs_async_work_t));
+  fs_async_work_t* work = fs_async_work_new(ctx);
   if (!work) {
     JS_FreeCString(ctx, path);
     return JS_ThrowOutOfMemory(ctx);
   }
 
-  work->ctx = ctx;
   work->callback = JS_DupValue(ctx, callback);
   work->path = strdup(path);
   JS_FreeCString(ctx, path);
@@ -1375,13 +1380,12 @@ JSValue js_fs_realpath_async(JSContext* ctx, JSValueConst this_val, int argc, JS
     return JS_ThrowTypeError(ctx, "callback must be a function");
   }
 
-  fs_async_work_t* work = calloc(1, sizeof(fs_async_work_t));
+  fs_async_work_t* work = fs_async_work_new(ctx);
   if (!work) {
     JS_FreeCString(ctx, path);
     return JS_ThrowOutOfMemory(ctx);
   }
 
-  work->ctx = ctx;
   work->callback = JS_DupValue(ctx, callback);
   work->path = strdup(path);
   JS_FreeCString(ctx, path);
@@ -1459,13 +1463,12 @@ JSValue js_fs_open_async(JSContext* ctx, JSValueConst this_val, int argc, JSValu
     return JS_ThrowTypeError(ctx, "callback must be a function");
   }
 
-  fs_async_work_t* work = calloc(1, sizeof(fs_async_work_t));
+  fs_async_work_t* work = fs_async_work_new(ctx);
   if (!work) {
     JS_FreeCString(ctx, path);
     return JS_ThrowOutOfMemory(ctx);
   }
 
-  work->ctx = ctx;
   work->callback = JS_DupValue(ctx, callback);
   work->path = strdup(path);
   JS_FreeCString(ctx, path);
@@ -1500,12 +1503,11 @@ JSValue js_fs_close_async(JSContext* ctx, JSValueConst this_val, int argc, JSVal
     return JS_ThrowTypeError(ctx, "callback must be a function");
   }
 
-  fs_async_work_t* work = calloc(1, sizeof(fs_async_work_t));
+  fs_async_work_t* work = fs_async_work_new(ctx);
   if (!work) {
     return JS_ThrowOutOfMemory(ctx);
   }
 
-  work->ctx = ctx;
   work->callback = JS_DupValue(ctx, argv[1]);
   work->path = NULL;
 
@@ -1550,13 +1552,12 @@ JSValue js_fs_readdir_async(JSContext* ctx, JSValueConst this_val, int argc, JSV
     return JS_ThrowTypeError(ctx, "callback must be a function");
   }
 
-  fs_async_work_t* work = calloc(1, sizeof(fs_async_work_t));
+  fs_async_work_t* work = fs_async_work_new(ctx);
   if (!work) {
     JS_FreeCString(ctx, path);
     return JS_ThrowOutOfMemory(ctx);
   }
 
-  work->ctx = ctx;
   work->callback = JS_DupValue(ctx, callback);
   work->path = strdup(path);
   JS_FreeCString(ctx, path);
@@ -1664,51 +1665,71 @@ JSValue js_fs_append_file_async(JSContext* ctx, JSValueConst this_val, int argc,
   }
 
   // Get data to append
-  const char* data = NULL;
+  uint8_t* data = NULL;
   size_t data_len = 0;
 
   if (JS_IsString(argv[1])) {
-    data = JS_ToCString(ctx, argv[1]);
-    if (data) {
-      data_len = strlen(data);
+    const char* str = JS_ToCString(ctx, argv[1]);
+    if (str) {
+      data_len = strlen(str);
+      data = malloc(data_len);
+      if (data) {
+        memcpy(data, str, data_len);
+      }
+      JS_FreeCString(ctx, str);
     }
   } else {
-    // TODO: Handle Buffer objects properly
-    JS_FreeCString(ctx, path);
-    return JS_ThrowTypeError(ctx, "data must be a string or Buffer");
+    // Try to get as TypedArray (includes Buffer) or ArrayBuffer
+    size_t byte_offset, byte_length, bytes_per_element;
+    JSValue array_buffer = JS_GetTypedArrayBuffer(ctx, argv[1], &byte_offset, &byte_length, &bytes_per_element);
+    if (!JS_IsException(array_buffer)) {
+      size_t size;
+      uint8_t* buf = JS_GetArrayBuffer(ctx, &size, array_buffer);
+      JS_FreeValue(ctx, array_buffer);
+      if (buf) {
+        data_len = byte_length;
+        data = malloc(data_len);
+        if (data) {
+          memcpy(data, buf + byte_offset, data_len);
+        }
+      }
+    } else {
+      // Clear exception and try direct ArrayBuffer
+      JS_GetException(ctx);
+      size_t size;
+      uint8_t* buf = JS_GetArrayBuffer(ctx, &size, argv[1]);
+      if (buf) {
+        data_len = size;
+        data = malloc(data_len);
+        if (data) {
+          memcpy(data, buf, data_len);
+        }
+      }
+    }
   }
 
   if (!data) {
     JS_FreeCString(ctx, path);
-    return JS_ThrowTypeError(ctx, "invalid data");
+    return JS_ThrowTypeError(ctx, "data must be a string, Buffer, or ArrayBuffer");
   }
 
   // Allocate work request
-  fs_async_work_t* work = calloc(1, sizeof(fs_async_work_t));
+  fs_async_work_t* work = fs_async_work_new(ctx);
   if (!work) {
     JS_FreeCString(ctx, path);
-    JS_FreeCString(ctx, data);
+    free(data);
     return JS_ThrowOutOfMemory(ctx);
   }
 
   // Initialize work request
-  work->ctx = ctx;
   work->callback = JS_DupValue(ctx, argv[2]);
   work->path = strdup(path);
-  work->buffer = malloc(data_len);
-  work->owns_buffer = 1;  // We allocated this buffer, must free it
-  if (!work->buffer) {
-    JS_FreeCString(ctx, path);
-    JS_FreeCString(ctx, data);
-    free(work);
-    return JS_ThrowOutOfMemory(ctx);
-  }
-  memcpy(work->buffer, data, data_len);
+  work->buffer = data;  // Transfer ownership
   work->buffer_size = data_len;
+  work->owns_buffer = 1;  // We allocated this buffer, must free it
   work->flags = 0;
 
   JS_FreeCString(ctx, path);
-  JS_FreeCString(ctx, data);
 
   // Start async operation: Step 1 - open file for appending
   uv_loop_t* loop = fs_get_uv_loop(ctx);
@@ -1831,13 +1852,12 @@ JSValue js_fs_read_async(JSContext* ctx, JSValueConst this_val, int argc, JSValu
   }
 
   // Allocate work request
-  fs_async_work_t* work = calloc(1, sizeof(fs_async_work_t));
+  fs_async_work_t* work = fs_async_work_new(ctx);
   if (!work) {
     return JS_ThrowOutOfMemory(ctx);
   }
 
   // Store user's buffer reference (must DupValue to preserve it)
-  work->ctx = ctx;
   work->callback = JS_DupValue(ctx, argv[5]);
   work->user_buffer = JS_DupValue(ctx, argv[1]);  // Preserve user's buffer
   work->path = NULL;                              // read doesn't use path
@@ -1965,13 +1985,12 @@ JSValue js_fs_write_async(JSContext* ctx, JSValueConst this_val, int argc, JSVal
   }
 
   // Allocate work request
-  fs_async_work_t* work = calloc(1, sizeof(fs_async_work_t));
+  fs_async_work_t* work = fs_async_work_new(ctx);
   if (!work) {
     return JS_ThrowOutOfMemory(ctx);
   }
 
   // Store user's buffer reference and write directly from it
-  work->ctx = ctx;
   work->callback = JS_DupValue(ctx, argv[5]);
   work->user_buffer = JS_DupValue(ctx, argv[1]);  // Preserve user's buffer
   work->path = NULL;                              // write doesn't use path
@@ -2234,7 +2253,7 @@ JSValue js_fs_copy_file_async(JSContext* ctx, JSValueConst this_val, int argc, J
   }
 
   // Allocate work request
-  fs_async_work_t* work = calloc(1, sizeof(fs_async_work_t));
+  fs_async_work_t* work = fs_async_work_new(ctx);
   if (!work) {
     JS_FreeCString(ctx, src);
     JS_FreeCString(ctx, dest);
@@ -2242,7 +2261,6 @@ JSValue js_fs_copy_file_async(JSContext* ctx, JSValueConst this_val, int argc, J
   }
 
   // Initialize work request
-  work->ctx = ctx;
   work->callback = JS_DupValue(ctx, argv[2]);
   work->path = strdup(src);    // source path
   work->path2 = strdup(dest);  // destination path

@@ -8,6 +8,22 @@ uv_loop_t* fs_get_uv_loop(JSContext* ctx) {
   return jsrt_rt->uv_loop;
 }
 
+// Allocate and initialize async work structure with proper JSValue initialization
+fs_async_work_t* fs_async_work_new(JSContext* ctx) {
+  fs_async_work_t* work = calloc(1, sizeof(fs_async_work_t));
+  if (!work) {
+    return NULL;
+  }
+
+  // Initialize JSValue fields to JS_UNDEFINED (critical for proper cleanup)
+  // calloc() initializes to 0, which is NOT the same as JS_UNDEFINED
+  work->ctx = ctx;
+  work->callback = JS_UNDEFINED;
+  work->user_buffer = JS_UNDEFINED;
+
+  return work;
+}
+
 // Free async work request and all owned resources
 void fs_async_work_free(fs_async_work_t* work) {
   if (!work)

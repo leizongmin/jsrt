@@ -1335,6 +1335,322 @@ static JSValue filehandle_appendFile(JSContext* ctx, JSValueConst this_val, int 
   return promise;
 }
 
+// Completion for readv operation - returns { bytesRead, buffers }
+static void fs_promise_complete_readv(uv_fs_t* req) {
+  fs_promise_work_t* work = (fs_promise_work_t*)req;
+  JSContext* ctx = work->ctx;
+
+  if (req->result < 0) {
+    // Reject with error
+    int err = -req->result;
+    JSValue error = create_fs_error(ctx, err, "readv", work->path);
+    JSValue ret = JS_Call(ctx, work->reject, JS_UNDEFINED, 1, &error);
+    JS_FreeValue(ctx, error);
+    JS_FreeValue(ctx, ret);
+  } else {
+    // Create result object { bytesRead, buffers }
+    JSValue result = JS_NewObject(ctx);
+    JS_SetPropertyStr(ctx, result, "bytesRead", JS_NewInt64(ctx, req->result));
+
+    // Retrieve the buffers array we stored
+    JSValue buffers = *(JSValue*)work->buffer;
+    JS_SetPropertyStr(ctx, result, "buffers", JS_DupValue(ctx, buffers));
+
+    // Resolve with result
+    JSValue ret = JS_Call(ctx, work->resolve, JS_UNDEFINED, 1, &result);
+    JS_FreeValue(ctx, result);
+    JS_FreeValue(ctx, ret);
+  }
+
+  fs_promise_work_free(work);
+}
+
+// Completion for writev operation - returns { bytesWritten, buffers }
+static void fs_promise_complete_writev(uv_fs_t* req) {
+  fs_promise_work_t* work = (fs_promise_work_t*)req;
+  JSContext* ctx = work->ctx;
+
+  if (req->result < 0) {
+    // Reject with error
+    int err = -req->result;
+    JSValue error = create_fs_error(ctx, err, "writev", work->path);
+    JSValue ret = JS_Call(ctx, work->reject, JS_UNDEFINED, 1, &error);
+    JS_FreeValue(ctx, error);
+    JS_FreeValue(ctx, ret);
+  } else {
+    // Create result object { bytesWritten, buffers }
+    JSValue result = JS_NewObject(ctx);
+    JS_SetPropertyStr(ctx, result, "bytesWritten", JS_NewInt64(ctx, req->result));
+
+    // Retrieve the buffers array we stored
+    JSValue buffers = *(JSValue*)work->buffer;
+    JS_SetPropertyStr(ctx, result, "buffers", JS_DupValue(ctx, buffers));
+
+    // Resolve with result
+    JSValue ret = JS_Call(ctx, work->resolve, JS_UNDEFINED, 1, &result);
+    JS_FreeValue(ctx, result);
+    JS_FreeValue(ctx, ret);
+  }
+
+  fs_promise_work_free(work);
+}
+
+// FileHandle.readv() - vectored read, returns Promise<{ bytesRead, buffers }>
+static JSValue filehandle_readv(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
+  FileHandle* fh = JS_GetOpaque(this_val, filehandle_class_id);
+  if (!fh) {
+    return JS_ThrowTypeError(ctx, "Not a FileHandle");
+  }
+
+  if (fh->closed) {
+    JSValue error = JS_NewError(ctx);
+    JS_SetPropertyStr(ctx, error, "message", JS_NewString(ctx, "File handle is closed"));
+    return JS_Throw(ctx, error);
+  }
+
+  if (argc < 1 || !JS_IsArray(ctx, argv[0])) {
+    return JS_ThrowTypeError(ctx, "readv requires an array of buffers");
+  }
+
+  // Get array length
+  JSValue length_val = JS_GetPropertyStr(ctx, argv[0], "length");
+  int32_t buffer_count;
+  if (JS_ToInt32(ctx, &buffer_count, length_val)) {
+    JS_FreeValue(ctx, length_val);
+    return JS_EXCEPTION;
+  }
+  JS_FreeValue(ctx, length_val);
+
+  if (buffer_count <= 0 || buffer_count > 1024) {
+    return JS_ThrowRangeError(ctx, "Invalid buffer count");
+  }
+
+  // Create Promise
+  JSValue resolving_funcs[2];
+  JSValue promise = JS_NewPromiseCapability(ctx, resolving_funcs);
+  if (JS_IsException(promise)) {
+    return JS_EXCEPTION;
+  }
+
+  // Allocate work request
+  fs_promise_work_t* work = calloc(1, sizeof(fs_promise_work_t));
+  if (!work) {
+    JS_FreeValue(ctx, resolving_funcs[0]);
+    JS_FreeValue(ctx, resolving_funcs[1]);
+    JS_FreeValue(ctx, promise);
+    return JS_ThrowOutOfMemory(ctx);
+  }
+
+  work->ctx = ctx;
+  work->resolve = resolving_funcs[0];
+  work->reject = resolving_funcs[1];
+  work->path = fh->path ? strdup(fh->path) : NULL;
+
+  // Store buffers array as JSValue for callback
+  work->buffer = malloc(sizeof(JSValue));
+  if (!work->buffer) {
+    fs_promise_work_free(work);
+    JS_FreeValue(ctx, promise);
+    return JS_ThrowOutOfMemory(ctx);
+  }
+  *(JSValue*)work->buffer = JS_DupValue(ctx, argv[0]);
+  work->buffer_size = buffer_count;
+
+  // Parse optional position (defaults to current position -1)
+  int64_t position = -1;
+  if (argc >= 2 && !JS_IsUndefined(argv[1]) && !JS_IsNull(argv[1])) {
+    if (JS_ToInt64(ctx, &position, argv[1])) {
+      fs_promise_work_free(work);
+      JS_FreeValue(ctx, promise);
+      return JS_EXCEPTION;
+    }
+  }
+
+  // Prepare uv_buf_t array
+  uv_buf_t* bufs = malloc(sizeof(uv_buf_t) * buffer_count);
+  if (!bufs) {
+    fs_promise_work_free(work);
+    JS_FreeValue(ctx, promise);
+    return JS_ThrowOutOfMemory(ctx);
+  }
+
+  // Extract buffers
+  for (int i = 0; i < buffer_count; i++) {
+    JSValue buf_val = JS_GetPropertyUint32(ctx, argv[0], i);
+    size_t byte_offset, byte_length, bytes_per_element;
+    JSValue array_buffer = JS_GetTypedArrayBuffer(ctx, buf_val, &byte_offset, &byte_length, &bytes_per_element);
+
+    if (JS_IsException(array_buffer)) {
+      JS_FreeValue(ctx, buf_val);
+      free(bufs);
+      fs_promise_work_free(work);
+      JS_FreeValue(ctx, promise);
+      return JS_ThrowTypeError(ctx, "All elements must be TypedArrays");
+    }
+
+    size_t ab_size;
+    uint8_t* buffer = JS_GetArrayBuffer(ctx, &ab_size, array_buffer);
+    JS_FreeValue(ctx, array_buffer);
+    JS_FreeValue(ctx, buf_val);
+
+    if (!buffer) {
+      free(bufs);
+      fs_promise_work_free(work);
+      JS_FreeValue(ctx, promise);
+      return JS_ThrowTypeError(ctx, "Invalid buffer");
+    }
+
+    bufs[i] = uv_buf_init((char*)(buffer + byte_offset), byte_length);
+  }
+
+  // Queue async readv operation
+  uv_loop_t* loop = fs_get_uv_loop(ctx);
+  int result = uv_fs_read(loop, &work->req, fh->fd, bufs, buffer_count, position, fs_promise_complete_readv);
+
+  free(bufs);
+
+  if (result < 0) {
+    JSValue error = create_fs_error(ctx, -result, "readv", work->path);
+    JSValue ret = JS_Call(ctx, work->reject, JS_UNDEFINED, 1, &error);
+    JS_FreeValue(ctx, error);
+    JS_FreeValue(ctx, ret);
+    fs_promise_work_free(work);
+  }
+
+  return promise;
+}
+
+// FileHandle.writev() - vectored write, returns Promise<{ bytesWritten, buffers }>
+static JSValue filehandle_writev(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
+  FileHandle* fh = JS_GetOpaque(this_val, filehandle_class_id);
+  if (!fh) {
+    return JS_ThrowTypeError(ctx, "Not a FileHandle");
+  }
+
+  if (fh->closed) {
+    JSValue error = JS_NewError(ctx);
+    JS_SetPropertyStr(ctx, error, "message", JS_NewString(ctx, "File handle is closed"));
+    return JS_Throw(ctx, error);
+  }
+
+  if (argc < 1 || !JS_IsArray(ctx, argv[0])) {
+    return JS_ThrowTypeError(ctx, "writev requires an array of buffers");
+  }
+
+  // Get array length
+  JSValue length_val = JS_GetPropertyStr(ctx, argv[0], "length");
+  int32_t buffer_count;
+  if (JS_ToInt32(ctx, &buffer_count, length_val)) {
+    JS_FreeValue(ctx, length_val);
+    return JS_EXCEPTION;
+  }
+  JS_FreeValue(ctx, length_val);
+
+  if (buffer_count <= 0 || buffer_count > 1024) {
+    return JS_ThrowRangeError(ctx, "Invalid buffer count");
+  }
+
+  // Create Promise
+  JSValue resolving_funcs[2];
+  JSValue promise = JS_NewPromiseCapability(ctx, resolving_funcs);
+  if (JS_IsException(promise)) {
+    return JS_EXCEPTION;
+  }
+
+  // Allocate work request
+  fs_promise_work_t* work = calloc(1, sizeof(fs_promise_work_t));
+  if (!work) {
+    JS_FreeValue(ctx, resolving_funcs[0]);
+    JS_FreeValue(ctx, resolving_funcs[1]);
+    JS_FreeValue(ctx, promise);
+    return JS_ThrowOutOfMemory(ctx);
+  }
+
+  work->ctx = ctx;
+  work->resolve = resolving_funcs[0];
+  work->reject = resolving_funcs[1];
+  work->path = fh->path ? strdup(fh->path) : NULL;
+
+  // Store buffers array as JSValue for callback
+  work->buffer = malloc(sizeof(JSValue));
+  if (!work->buffer) {
+    fs_promise_work_free(work);
+    JS_FreeValue(ctx, promise);
+    return JS_ThrowOutOfMemory(ctx);
+  }
+  *(JSValue*)work->buffer = JS_DupValue(ctx, argv[0]);
+  work->buffer_size = buffer_count;
+
+  // Parse optional position (defaults to current position -1)
+  int64_t position = -1;
+  if (argc >= 2 && !JS_IsUndefined(argv[1]) && !JS_IsNull(argv[1])) {
+    if (JS_ToInt64(ctx, &position, argv[1])) {
+      fs_promise_work_free(work);
+      JS_FreeValue(ctx, promise);
+      return JS_EXCEPTION;
+    }
+  }
+
+  // Prepare uv_buf_t array
+  uv_buf_t* bufs = malloc(sizeof(uv_buf_t) * buffer_count);
+  if (!bufs) {
+    fs_promise_work_free(work);
+    JS_FreeValue(ctx, promise);
+    return JS_ThrowOutOfMemory(ctx);
+  }
+
+  // Extract buffers
+  for (int i = 0; i < buffer_count; i++) {
+    JSValue buf_val = JS_GetPropertyUint32(ctx, argv[0], i);
+    size_t byte_offset, byte_length, bytes_per_element;
+    JSValue array_buffer = JS_GetTypedArrayBuffer(ctx, buf_val, &byte_offset, &byte_length, &bytes_per_element);
+
+    if (JS_IsException(array_buffer)) {
+      JS_FreeValue(ctx, buf_val);
+      free(bufs);
+      fs_promise_work_free(work);
+      JS_FreeValue(ctx, promise);
+      return JS_ThrowTypeError(ctx, "All elements must be TypedArrays");
+    }
+
+    size_t ab_size;
+    uint8_t* buffer = JS_GetArrayBuffer(ctx, &ab_size, array_buffer);
+    JS_FreeValue(ctx, array_buffer);
+    JS_FreeValue(ctx, buf_val);
+
+    if (!buffer) {
+      free(bufs);
+      fs_promise_work_free(work);
+      JS_FreeValue(ctx, promise);
+      return JS_ThrowTypeError(ctx, "Invalid buffer");
+    }
+
+    bufs[i] = uv_buf_init((char*)(buffer + byte_offset), byte_length);
+  }
+
+  // Queue async writev operation
+  uv_loop_t* loop = fs_get_uv_loop(ctx);
+  int result = uv_fs_write(loop, &work->req, fh->fd, bufs, buffer_count, position, fs_promise_complete_writev);
+
+  free(bufs);
+
+  if (result < 0) {
+    JSValue error = create_fs_error(ctx, -result, "writev", work->path);
+    JSValue ret = JS_Call(ctx, work->reject, JS_UNDEFINED, 1, &error);
+    JS_FreeValue(ctx, error);
+    JS_FreeValue(ctx, ret);
+    fs_promise_work_free(work);
+  }
+
+  return promise;
+}
+
+// FileHandle[Symbol.asyncDispose]() - async disposal, returns Promise<void>
+static JSValue filehandle_async_dispose(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
+  // Symbol.asyncDispose should call close() and return the promise
+  return filehandle_close(ctx, this_val, argc, argv);
+}
+
 // FileHandle method list
 static const JSCFunctionListEntry filehandle_proto_funcs[] = {
     JS_CFUNC_DEF("close", 0, filehandle_close),
@@ -1350,6 +1666,8 @@ static const JSCFunctionListEntry filehandle_proto_funcs[] = {
     JS_CFUNC_DEF("readFile", 0, filehandle_readFile),
     JS_CFUNC_DEF("writeFile", 1, filehandle_writeFile),
     JS_CFUNC_DEF("appendFile", 1, filehandle_appendFile),
+    JS_CFUNC_DEF("readv", 1, filehandle_readv),
+    JS_CFUNC_DEF("writev", 1, filehandle_writev),
 };
 
 // ============================================================================
@@ -3178,5 +3496,19 @@ void fs_promises_init(JSContext* ctx) {
   JSValue proto = JS_NewObject(ctx);
   JS_SetPropertyFunctionList(ctx, proto, filehandle_proto_funcs,
                              sizeof(filehandle_proto_funcs) / sizeof(filehandle_proto_funcs[0]));
+
+  // Add Symbol.asyncDispose method
+  JSValue global = JS_GetGlobalObject(ctx);
+  JSValue symbol_obj = JS_GetPropertyStr(ctx, global, "Symbol");
+  JSValue async_dispose_symbol = JS_GetPropertyStr(ctx, symbol_obj, "asyncDispose");
+  JS_FreeValue(ctx, symbol_obj);
+  JS_FreeValue(ctx, global);
+
+  if (!JS_IsUndefined(async_dispose_symbol)) {
+    JSValue dispose_method = JS_NewCFunction(ctx, filehandle_async_dispose, "[Symbol.asyncDispose]", 0);
+    JS_SetProperty(ctx, proto, JS_ValueToAtom(ctx, async_dispose_symbol), dispose_method);
+  }
+  JS_FreeValue(ctx, async_dispose_symbol);
+
   JS_SetClassProto(ctx, filehandle_class_id, proto);
 }

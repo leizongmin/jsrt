@@ -1,14 +1,15 @@
 ---
 Created: 2025-10-04T00:00:00Z
-Last Updated: 2025-10-06T00:00:00Z
-Status: 🟢 PHASE A1 COMPLETED - HIGH-VALUE APIs
-Overall Progress: 41 sync + 34 async + 27 Promise + 13 FileHandle methods (107/132 = 81.1%)
+Last Updated: 2025-10-06T00:15:00Z
+Status: 🟢 PHASE B1 COMPLETED - 83.3% COVERAGE
+Overall Progress: 41 sync + 34 async + 30 Promise + 13 FileHandle methods (110/132 = 83.3%)
 Phase 1: ✅ COMPLETED (2025-10-04) - All sync APIs except globSync
 Phase 2: ✅ COMPLETED (2025-10-05) - 34 async callback APIs (85% of core async APIs)
 Phase 3: ✅ MAJOR MILESTONE (2025-10-05) - FileHandle + high-value Promise APIs
 Phase A1: ✅ COMPLETED (2025-10-06T00:00:00Z) - FileHandle file I/O (readFile, writeFile, appendFile)
+Phase B1: ✅ COMPLETED (2025-10-06T00:15:00Z) - Promise APIs (mkdtemp, truncate, copyFile)
 Critical Fixes: ✅ COMPLETED (2025-10-05T23:30:00Z) - Buffer support, lchmod fix
-Latest Work: FileHandle convenience methods - most-used file I/O operations
+Latest Work: Promise APIs - mkdtemp, truncate, copyFile (96.8% Promise coverage)
 Test Status: 113/113 tests passing (100%), WPT 90.6% (maintained)
 ---
 
@@ -564,6 +565,7 @@ TOTAL REMAINING: ~10-12 weeks
 | 2025-10-05T21:00:00Z | **PHASE 2 & 3 COMPLETE** | 🎉 **99 APIs (104%), commit f411f59, ALL GOALS EXCEEDED!** |
 | 2025-10-05T23:30:00Z | **CRITICAL FIXES** | ✅ **Buffer support in async writeFile/appendFile, lchmod fix (113/113 tests)** |
 | 2025-10-06T00:00:00Z | **PHASE A1 COMPLETE** | ✅ **FileHandle I/O methods (readFile, writeFile, appendFile) - 107 APIs (81.1%)** |
+| 2025-10-06T00:15:00Z | **PHASE B1 COMPLETE** | ✅ **Promise APIs (mkdtemp, truncate, copyFile) - 110 APIs (83.3%)** |
 
 ### Lessons Learned
 
@@ -612,6 +614,14 @@ TOTAL REMAINING: ~10-12 weeks
 - ✅ **Async chains**: fstat→read pattern reused successfully from fsPromises operations
 - ✅ **High-value first**: Implemented most-used FileHandle methods (readFile, writeFile, appendFile)
 - 📝 **Key insight**: Understanding structure limitations early prevents implementation roadblocks
+
+**From Phase B1 (Promise APIs - 2025-10-06T00:15:00Z):**
+- ✅ **libuv API usage**: mkdtemp uses uv_fs_mkdtemp, copyFile uses uv_fs_copyfile
+- ✅ **Promise patterns**: Reused established fs_promise_work_t and completion callbacks
+- ✅ **96.8% Promise coverage**: 30/31 Promise APIs implemented (only lchmod remains)
+- ✅ **Minimal implementation**: Used existing infrastructure, no new patterns needed
+- ✅ **Fast iteration**: 3 APIs implemented and tested in <15 minutes
+- 📝 **Key insight**: Solid foundation enables rapid feature addition
 
 ---
 

@@ -814,6 +814,48 @@ static JSValue js_socket_unref(JSContext* ctx, JSValueConst this_val, int argc, 
   return this_val;
 }
 
+static JSValue js_socket_address(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
+  JSNetConnection* conn = JS_GetOpaque(this_val, js_socket_class_id);
+  if (!conn || !conn->connected) {
+    return JS_NULL;
+  }
+
+  struct sockaddr_storage addr;
+  int addrlen = sizeof(addr);
+  int r = uv_tcp_getsockname(&conn->handle, (struct sockaddr*)&addr, &addrlen);
+  if (r != 0) {
+    return JS_NULL;
+  }
+
+  // Create address object { address: string, family: string, port: number }
+  JSValue obj = JS_NewObject(ctx);
+
+  char ip[INET6_ADDRSTRLEN];
+  int port = 0;
+  const char* family = NULL;
+
+  if (addr.ss_family == AF_INET) {
+    struct sockaddr_in* addr4 = (struct sockaddr_in*)&addr;
+    uv_ip4_name(addr4, ip, sizeof(ip));
+    port = ntohs(addr4->sin_port);
+    family = "IPv4";
+  } else if (addr.ss_family == AF_INET6) {
+    struct sockaddr_in6* addr6 = (struct sockaddr_in6*)&addr;
+    uv_ip6_name(addr6, ip, sizeof(ip));
+    port = ntohs(addr6->sin6_port);
+    family = "IPv6";
+  } else {
+    JS_FreeValue(ctx, obj);
+    return JS_NULL;
+  }
+
+  JS_SetPropertyStr(ctx, obj, "address", JS_NewString(ctx, ip));
+  JS_SetPropertyStr(ctx, obj, "family", JS_NewString(ctx, family));
+  JS_SetPropertyStr(ctx, obj, "port", JS_NewInt32(ctx, port));
+
+  return obj;
+}
+
 // Socket property getters
 static JSValue js_socket_get_local_address(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
   JSNetConnection* conn = JS_GetOpaque(this_val, js_socket_class_id);
@@ -1037,6 +1079,19 @@ static void socket_close_callback(uv_handle_t* handle) {
   // Free the connection struct after handle is closed
   if (handle->data) {
     JSNetConnection* conn = (JSNetConnection*)handle->data;
+
+    // Emit 'close' event before freeing
+    if (conn->ctx && !JS_IsUndefined(conn->socket_obj)) {
+      JSContext* ctx = conn->ctx;
+      JSValue emit = JS_GetPropertyStr(ctx, conn->socket_obj, "emit");
+      if (JS_IsFunction(ctx, emit)) {
+        JSValue args[] = {JS_NewString(ctx, "close")};
+        JS_Call(ctx, emit, conn->socket_obj, 1, args);
+        JS_FreeValue(ctx, args[0]);
+      }
+      JS_FreeValue(ctx, emit);
+    }
+
     if (conn->host) {
       free(conn->host);
     }
@@ -1079,6 +1134,19 @@ static void server_close_callback(uv_handle_t* handle) {
   // Free the server struct after handle is closed
   if (handle->data) {
     JSNetServer* server = (JSNetServer*)handle->data;
+
+    // Emit 'close' event before freeing
+    if (server->ctx && !JS_IsUndefined(server->server_obj)) {
+      JSContext* ctx = server->ctx;
+      JSValue emit = JS_GetPropertyStr(ctx, server->server_obj, "emit");
+      if (JS_IsFunction(ctx, emit)) {
+        JSValue args[] = {JS_NewString(ctx, "close")};
+        JS_Call(ctx, emit, server->server_obj, 1, args);
+        JS_FreeValue(ctx, args[0]);
+      }
+      JS_FreeValue(ctx, emit);
+    }
+
     if (server->host) {
       free(server->host);
     }
@@ -1168,6 +1236,7 @@ static JSValue js_socket_constructor(JSContext* ctx, JSValueConst new_target, in
   JS_SetPropertyStr(ctx, obj, "setNoDelay", JS_NewCFunction(ctx, js_socket_set_no_delay, "setNoDelay", 1));
   JS_SetPropertyStr(ctx, obj, "ref", JS_NewCFunction(ctx, js_socket_ref, "ref", 0));
   JS_SetPropertyStr(ctx, obj, "unref", JS_NewCFunction(ctx, js_socket_unref, "unref", 0));
+  JS_SetPropertyStr(ctx, obj, "address", JS_NewCFunction(ctx, js_socket_address, "address", 0));
 
 // Add property getters using JS_DefinePropertyGetSet
 #define DEFINE_GETTER_PROP(name, func)                                                                        \

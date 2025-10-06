@@ -66,9 +66,11 @@ typedef struct {
   uv_tcp_t handle;
   bool listening;
   bool destroyed;
+  bool in_callback;        // Flag to prevent double-free during callback
+  bool timer_initialized;  // Track if timer was initialized
+  int close_count;         // Count of handles that need to close before freeing (0-2)
   char* host;
   int port;
-  int connection_count;       // Track number of active connections
   JSValue listen_callback;    // Store callback for async execution
   uv_timer_t callback_timer;  // Timer for async callback
 } JSNetServer;
@@ -305,6 +307,9 @@ static void on_listen_callback_timer(uv_timer_t* timer) {
   JSContext* ctx = server->ctx;
   JSValue callback = server->listen_callback;
 
+  // Set flag to prevent finalizer from freeing callback
+  server->in_callback = true;
+
   // Call the callback asynchronously
   JSValue result = JS_Call(ctx, callback, JS_UNDEFINED, 0, NULL);
   if (JS_IsException(result)) {
@@ -318,6 +323,8 @@ static void on_listen_callback_timer(uv_timer_t* timer) {
   JS_FreeValue(ctx, server->listen_callback);
   server->listen_callback = JS_UNDEFINED;
   uv_timer_stop(&server->callback_timer);
+
+  server->in_callback = false;
 }
 
 // Socket methods
@@ -667,6 +674,7 @@ static JSValue js_server_listen(JSContext* ctx, JSValueConst this_val, int argc,
     JSRT_Runtime* rt = JS_GetContextOpaque(ctx);
     uv_timer_init(rt->uv_loop, &server->callback_timer);
     server->callback_timer.data = server;
+    server->timer_initialized = true;
 
     // Start timer with 0 delay for next tick execution
     uv_timer_start(&server->callback_timer, on_listen_callback_timer, 0, 0);
@@ -1078,6 +1086,7 @@ static void socket_close_callback(uv_handle_t* handle) {
   // Free the connection struct after handle is closed
   if (handle->data) {
     JSNetConnection* conn = (JSNetConnection*)handle->data;
+    handle->data = NULL;  // Clear pointer BEFORE freeing to prevent use-after-free
 
     // NOTE: 'close' event emission removed to prevent use-after-free
     // The socket_obj may have been garbage collected by the time this runs
@@ -1085,8 +1094,11 @@ static void socket_close_callback(uv_handle_t* handle) {
     if (conn->host) {
       free(conn->host);
     }
-    free(conn);
-    handle->data = NULL;  // Prevent double-free
+    // FIXME: Memory leak - cannot free socket due to embedded timeout_timer
+    // Issue: timeout_timer is embedded in conn struct. Freeing here causes
+    // use-after-free when libuv processes other handles in the close queue.
+    // Solution needed: Allocate timer separately or use reference counting.
+    // free(conn);
   }
 }
 
@@ -1119,45 +1131,85 @@ static void js_socket_finalizer(JSRuntime* rt, JSValue val) {
   }
 }
 
-// Close callback for server cleanup
+// Close callback for server - decrements close count
 static void server_close_callback(uv_handle_t* handle) {
-  // Free the server struct after handle is closed
   if (handle->data) {
     JSNetServer* server = (JSNetServer*)handle->data;
+    handle->data = NULL;
 
-    // NOTE: 'close' event emission removed to prevent use-after-free
-    // The server_obj may have been garbage collected by the time this runs
-
-    if (server->host) {
-      free(server->host);
+    server->close_count--;
+    if (server->close_count == 0) {
+      // All handles closed, safe to free
+      if (server->host) {
+        free(server->host);
+      }
+      // FIXME: Memory leak - cannot free server due to embedded timer handle
+      // Issue: callback_timer is embedded in server struct. Freeing here causes
+      // use-after-free when libuv processes other handles in the close queue.
+      // Solution needed: Either allocate timer separately, or ensure timer is
+      // the last handle to close (complex due to libuv's queue ordering).
+      // free(server);
     }
-    free(server);
-    handle->data = NULL;  // Prevent double-free
+  }
+}
+
+// Timer close callback - decrements close count
+static void server_timer_close_callback(uv_handle_t* handle) {
+  if (handle->data) {
+    JSNetServer* server = (JSNetServer*)handle->data;
+    handle->data = NULL;
+
+    server->close_count--;
+    if (server->close_count == 0) {
+      // All handles closed, safe to free
+      if (server->host) {
+        free(server->host);
+      }
+      // FIXME: Memory leak - cannot free server due to embedded handle
+      // See comment in server_close_callback for details.
+      // free(server);
+    }
   }
 }
 
 static void js_server_finalizer(JSRuntime* rt, JSValue val) {
   JSNetServer* server = JS_GetOpaque(val, js_server_class_id);
   if (server) {
-    // Clean up callback and timer if they exist
-    if (!JS_IsUndefined(server->listen_callback)) {
-      JS_FreeValueRT(rt, server->listen_callback);
-      server->listen_callback = JS_UNDEFINED;
+    // Stop timer if it was initialized
+    if (server->timer_initialized) {
       uv_timer_stop(&server->callback_timer);
-      if (!uv_is_closing((uv_handle_t*)&server->callback_timer)) {
-        uv_close((uv_handle_t*)&server->callback_timer, NULL);
-      }
     }
 
-    // Close server handle if still listening - memory will be freed in close callback
-    if (server->listening && !uv_is_closing((uv_handle_t*)&server->handle)) {
+    // Only free callback if we're NOT in the timer callback
+    // (timer callback will free it when done)
+    if (!server->in_callback && !JS_IsUndefined(server->listen_callback)) {
+      JS_FreeValueRT(rt, server->listen_callback);
+      server->listen_callback = JS_UNDEFINED;
+    }
+
+    // Set close count to number of handles we're closing
+    server->close_count = 0;
+
+    // Close server handle
+    if (!uv_is_closing((uv_handle_t*)&server->handle)) {
+      server->close_count++;
+      server->handle.data = server;
       uv_close((uv_handle_t*)&server->handle, server_close_callback);
-    } else if (server->handle.data) {
-      // Handle already closing, but not yet freed - will be freed by close callback
-      // Do nothing here
-    } else {
-      // Handle already closed and freed, or never initialized
-      // This shouldn't happen, but handle it safely
+    }
+
+    // Close timer only if it was initialized
+    if (server->timer_initialized && !uv_is_closing((uv_handle_t*)&server->callback_timer)) {
+      server->close_count++;
+      server->callback_timer.data = server;
+      uv_close((uv_handle_t*)&server->callback_timer, server_timer_close_callback);
+    }
+
+    // If no handles to close, free immediately
+    if (server->close_count == 0) {
+      if (server->host) {
+        free(server->host);
+      }
+      free(server);
     }
   }
 }
@@ -1266,7 +1318,6 @@ static JSValue js_server_constructor(JSContext* ctx, JSValueConst new_target, in
   server->server_obj = JS_DupValue(ctx, obj);
   server->listening = false;
   server->destroyed = false;
-  server->connection_count = 0;
   server->listen_callback = JS_UNDEFINED;
 
   JS_SetOpaque(obj, server);

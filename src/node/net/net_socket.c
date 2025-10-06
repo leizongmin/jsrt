@@ -177,23 +177,28 @@ JSValue js_socket_set_timeout(JSContext* ctx, JSValueConst this_val, int argc, J
 
   if (timeout == 0) {
     // Disable timeout
-    if (conn->timeout_enabled) {
-      uv_timer_stop(&conn->timeout_timer);
+    if (conn->timeout_enabled && conn->timeout_timer_initialized) {
+      uv_timer_stop(conn->timeout_timer);
       conn->timeout_enabled = false;
     }
   } else {
     conn->timeout_ms = timeout;
     conn->timeout_enabled = true;
 
-    // Initialize timer if not already initialized
-    if (!uv_is_active((uv_handle_t*)&conn->timeout_timer)) {
+    // Allocate and initialize timer if not already initialized
+    if (!conn->timeout_timer_initialized) {
       JSRT_Runtime* rt = JS_GetContextOpaque(ctx);
-      uv_timer_init(rt->uv_loop, &conn->timeout_timer);
-      conn->timeout_timer.data = conn;
+      conn->timeout_timer = (uv_timer_t*)malloc(sizeof(uv_timer_t));
+      if (!conn->timeout_timer) {
+        return JS_ThrowOutOfMemory(ctx);
+      }
+      uv_timer_init(rt->uv_loop, conn->timeout_timer);
+      conn->timeout_timer->data = conn;
+      conn->timeout_timer_initialized = true;
     }
 
     // Start/restart the timeout timer
-    uv_timer_start(&conn->timeout_timer, on_socket_timeout, timeout, 0);
+    uv_timer_start(conn->timeout_timer, on_socket_timeout, timeout, 0);
   }
 
   return this_val;
@@ -336,9 +341,13 @@ JSValue js_socket_constructor(JSContext* ctx, JSValueConst new_target, int argc,
   conn->paused = false;
   conn->in_callback = false;
   conn->timeout_enabled = false;
+  conn->timeout_timer_initialized = false;
+  conn->timeout_timer = NULL;
+  conn->close_count = 0;
   conn->timeout_ms = 0;
   conn->bytes_read = 0;
   conn->bytes_written = 0;
+  conn->had_error = false;
 
   // Initialize libuv handle - CRITICAL for memory safety
   JSRT_Runtime* rt = JS_GetContextOpaque(ctx);

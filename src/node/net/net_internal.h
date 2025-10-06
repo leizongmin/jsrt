@@ -19,7 +19,7 @@ typedef struct {
   uv_tcp_t handle;
   uv_connect_t connect_req;
   uv_shutdown_t shutdown_req;
-  uv_timer_t timeout_timer;
+  uv_timer_t* timeout_timer;  // Allocated pointer instead of embedded handle
   char* host;
   int port;
   bool connected;
@@ -28,9 +28,12 @@ typedef struct {
   bool paused;
   bool in_callback;  // Prevent finalization during callback execution
   bool timeout_enabled;
+  bool timeout_timer_initialized;  // Track if timer was allocated and initialized
+  int close_count;                 // Number of handles that need to close before freeing
   unsigned int timeout_ms;
   size_t bytes_read;
   size_t bytes_written;
+  bool had_error;  // Track error state for close event
 } JSNetConnection;
 
 // Server state
@@ -42,11 +45,10 @@ typedef struct {
   bool destroyed;
   bool in_callback;        // Flag to prevent double-free during callback
   bool timer_initialized;  // Track if timer was initialized
-  int close_count;         // Count of handles that need to close before freeing (0-2)
   char* host;
   int port;
-  JSValue listen_callback;    // Store callback for async execution
-  uv_timer_t callback_timer;  // Timer for async callback
+  JSValue listen_callback;     // Store callback for async execution
+  uv_timer_t* callback_timer;  // Allocated pointer instead of embedded handle
 } JSNetServer;
 
 // Helper function to add EventEmitter methods to an object
@@ -60,6 +62,10 @@ void on_connect(uv_connect_t* req, int status);
 void on_socket_timeout(uv_timer_t* timer);
 void on_listen_callback_timer(uv_timer_t* timer);
 void on_socket_write_complete(uv_write_t* req, int status);
+
+// Timer cleanup helpers (from net_finalizers.c)
+void socket_timeout_timer_close_callback(uv_handle_t* handle);
+void server_callback_timer_close_callback(uv_handle_t* handle);
 
 // Socket methods (from net_socket.c)
 JSValue js_socket_connect(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv);

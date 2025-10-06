@@ -59,6 +59,7 @@ void on_socket_read(uv_stream_t* stream, ssize_t nread, const uv_buf_t* buf) {
       JS_FreeValue(ctx, emit);
     } else {
       // Emit error event for actual errors
+      conn->had_error = true;
       JSValue emit = JS_GetPropertyStr(ctx, conn->socket_obj, "emit");
       if (JS_IsFunction(ctx, emit)) {
         JSValue error = JS_NewError(ctx);
@@ -73,8 +74,17 @@ void on_socket_read(uv_stream_t* stream, ssize_t nread, const uv_buf_t* buf) {
       JS_FreeValue(ctx, emit);
     }
 
-    // Close the connection
-    uv_close((uv_handle_t*)stream, NULL);
+    // NOTE: 'close' event emission deferred - requires more complex lifecycle management
+    // to avoid use-after-free with libuv's internal queue handling
+
+    // Close the connection - only if not already closing
+    if (!uv_is_closing((uv_handle_t*)stream)) {
+      if (conn->close_count == 0) {
+        conn->close_count = 1;  // Only set if not already set by finalizer
+      }
+      conn->handle.data = conn;
+      uv_close((uv_handle_t*)stream, socket_close_callback);
+    }
     conn->connected = false;
   } else if (nread > 0) {
     // Increment bytes read counter
@@ -199,6 +209,7 @@ void on_connect(uv_connect_t* req, int status) {
     JS_FreeValue(ctx, emit);
   } else {
     conn->connecting = false;
+    conn->had_error = true;
 
     // Emit 'error' event
     JSValue emit = JS_GetPropertyStr(ctx, conn->socket_obj, "emit");
@@ -268,7 +279,9 @@ void on_listen_callback_timer(uv_timer_t* timer) {
   // Clean up callback and timer
   JS_FreeValue(ctx, server->listen_callback);
   server->listen_callback = JS_UNDEFINED;
-  uv_timer_stop(&server->callback_timer);
+  if (server->timer_initialized && server->callback_timer) {
+    uv_timer_stop(server->callback_timer);
+  }
 
   server->in_callback = false;
 }

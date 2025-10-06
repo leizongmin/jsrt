@@ -68,14 +68,20 @@ JSValue js_server_listen(JSContext* ctx, JSValueConst this_val, int argc, JSValu
     // Store callback for async execution
     server->listen_callback = JS_DupValue(ctx, argv[2]);
 
-    // Initialize timer for next tick callback execution
+    // Allocate and initialize timer for next tick callback execution
     JSRT_Runtime* rt = JS_GetContextOpaque(ctx);
-    uv_timer_init(rt->uv_loop, &server->callback_timer);
-    server->callback_timer.data = server;
+    server->callback_timer = (uv_timer_t*)malloc(sizeof(uv_timer_t));
+    if (!server->callback_timer) {
+      JS_FreeValue(ctx, server->listen_callback);
+      server->listen_callback = JS_UNDEFINED;
+      return JS_ThrowOutOfMemory(ctx);
+    }
+    uv_timer_init(rt->uv_loop, server->callback_timer);
+    server->callback_timer->data = server;
     server->timer_initialized = true;
 
     // Start timer with 0 delay for next tick execution
-    uv_timer_start(&server->callback_timer, on_listen_callback_timer, 0, 0);
+    uv_timer_start(server->callback_timer, on_listen_callback_timer, 0, 0);
   } else {
     server->listen_callback = JS_UNDEFINED;
   }
@@ -210,6 +216,8 @@ JSValue js_server_constructor(JSContext* ctx, JSValueConst new_target, int argc,
   server->listening = false;
   server->destroyed = false;
   server->listen_callback = JS_UNDEFINED;
+  server->timer_initialized = false;
+  server->callback_timer = NULL;
 
   JS_SetOpaque(obj, server);
 

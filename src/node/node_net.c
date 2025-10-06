@@ -51,6 +51,7 @@ typedef struct {
   bool destroyed;
   bool connecting;
   bool paused;
+  bool in_callback;  // Prevent finalization during callback execution
   size_t bytes_read;
   size_t bytes_written;
 } JSNetConnection;
@@ -78,14 +79,18 @@ static void on_listen_callback_timer(uv_timer_t* timer);
 // Data read callback
 static void on_socket_read(uv_stream_t* stream, ssize_t nread, const uv_buf_t* buf) {
   JSNetConnection* conn = (JSNetConnection*)stream->data;
-  if (!conn || !conn->ctx) {
+  if (!conn || !conn->ctx || conn->destroyed) {
     goto cleanup;
   }
+
+  // Mark that we're in a callback to prevent finalization
+  conn->in_callback = true;
 
   JSContext* ctx = conn->ctx;
 
   // Check if socket object is still valid (not freed by GC)
   if (JS_IsUndefined(conn->socket_obj) || JS_IsNull(conn->socket_obj)) {
+    conn->in_callback = false;
     goto cleanup;
   }
 
@@ -125,6 +130,11 @@ static void on_socket_read(uv_stream_t* stream, ssize_t nread, const uv_buf_t* b
       JS_FreeValue(ctx, args[1]);
     }
     JS_FreeValue(ctx, emit);
+  }
+
+  // Clear callback flag
+  if (conn) {
+    conn->in_callback = false;
   }
 
 cleanup:
@@ -189,14 +199,18 @@ static void on_connection(uv_stream_t* server, int status) {
 
 static void on_connect(uv_connect_t* req, int status) {
   JSNetConnection* conn = (JSNetConnection*)req->data;
-  if (!conn || !conn->ctx) {
+  if (!conn || !conn->ctx || conn->destroyed) {
     return;
   }
+
+  // Mark that we're in a callback to prevent finalization
+  conn->in_callback = true;
 
   JSContext* ctx = conn->ctx;
 
   // Check if socket object is still valid (not freed by GC)
   if (JS_IsUndefined(conn->socket_obj) || JS_IsNull(conn->socket_obj)) {
+    conn->in_callback = false;
     return;
   }
 
@@ -229,6 +243,9 @@ static void on_connect(uv_connect_t* req, int status) {
     }
     JS_FreeValue(ctx, emit);
   }
+
+  // Clear callback flag
+  conn->in_callback = false;
 }
 
 // Async callback timer for listen() callback
@@ -294,6 +311,8 @@ static JSValue js_socket_connect(JSContext* ctx, JSValueConst this_val, int argc
   conn->connecting = true;
 
   // Resolve address and connect
+  // NOTE: uv_ip4_addr expects a numeric IPv4 address, not a hostname
+  // TODO: Implement proper hostname resolution with uv_getaddrinfo for full Node.js compatibility
   struct sockaddr_in addr;
   uv_ip4_addr(conn->host, conn->port, &addr);
 
@@ -301,6 +320,7 @@ static JSValue js_socket_connect(JSContext* ctx, JSValueConst this_val, int argc
 
   if (result < 0) {
     conn->connecting = false;
+    uv_close((uv_handle_t*)&conn->handle, NULL);
     return JS_ThrowInternalError(ctx, "Failed to connect: %s", uv_strerror(result));
   }
 
@@ -437,11 +457,13 @@ static JSValue js_server_listen(JSContext* ctx, JSValueConst this_val, int argc,
 
   int result = uv_tcp_bind(&server->handle, (const struct sockaddr*)&addr, 0);
   if (result < 0) {
+    uv_close((uv_handle_t*)&server->handle, NULL);
     return JS_ThrowInternalError(ctx, "Bind failed: %s", uv_strerror(result));
   }
 
   result = uv_listen((uv_stream_t*)&server->handle, 128, on_connection);
   if (result < 0) {
+    uv_close((uv_handle_t*)&server->handle, NULL);
     return JS_ThrowInternalError(ctx, "Listen failed: %s", uv_strerror(result));
   }
 
@@ -711,9 +733,15 @@ static JSValue js_socket_get_buffer_size(JSContext* ctx, JSValueConst this_val, 
 
 // Close callback for socket cleanup
 static void socket_close_callback(uv_handle_t* handle) {
-  // Do not free memory here to avoid race conditions with uv_walk
-  // Memory will be freed during runtime cleanup
-  (void)handle;
+  // Free the connection struct after handle is closed
+  if (handle->data) {
+    JSNetConnection* conn = (JSNetConnection*)handle->data;
+    if (conn->host) {
+      free(conn->host);
+    }
+    free(conn);
+    handle->data = NULL;  // Prevent double-free
+  }
 }
 
 // Class finalizers
@@ -723,35 +751,55 @@ static void js_socket_finalizer(JSRuntime* rt, JSValue val) {
     // Mark socket object as invalid to prevent use-after-free in callbacks
     conn->socket_obj = JS_UNDEFINED;
 
-    // Only close if not already closing - memory will be freed during runtime cleanup
+    // Only close if not already closing - memory will be freed in close callback
     if (!uv_is_closing((uv_handle_t*)&conn->handle)) {
       uv_close((uv_handle_t*)&conn->handle, socket_close_callback);
+    } else if (conn->handle.data) {
+      // Handle already closing, but not yet freed - will be freed by close callback
+      // Do nothing here
+    } else {
+      // Handle already closed and freed, or never initialized
+      // This shouldn't happen, but handle it safely
     }
-    // Do not free memory here - it will be freed during runtime cleanup
   }
 }
 
 // Close callback for server cleanup
 static void server_close_callback(uv_handle_t* handle) {
-  // Do not free memory here to avoid race conditions with uv_walk
-  // Memory will be freed during runtime cleanup
-  (void)handle;
+  // Free the server struct after handle is closed
+  if (handle->data) {
+    JSNetServer* server = (JSNetServer*)handle->data;
+    if (server->host) {
+      free(server->host);
+    }
+    free(server);
+    handle->data = NULL;  // Prevent double-free
+  }
 }
 
 static void js_server_finalizer(JSRuntime* rt, JSValue val) {
   JSNetServer* server = JS_GetOpaque(val, js_server_class_id);
   if (server) {
-    // Clean up callback if it exists
+    // Clean up callback and timer if they exist
     if (!JS_IsUndefined(server->listen_callback)) {
       JS_FreeValueRT(rt, server->listen_callback);
+      server->listen_callback = JS_UNDEFINED;
       uv_timer_stop(&server->callback_timer);
+      if (!uv_is_closing((uv_handle_t*)&server->callback_timer)) {
+        uv_close((uv_handle_t*)&server->callback_timer, NULL);
+      }
     }
 
+    // Close server handle if still listening - memory will be freed in close callback
     if (server->listening && !uv_is_closing((uv_handle_t*)&server->handle)) {
-      // Use proper close callback - memory will be freed during runtime cleanup
       uv_close((uv_handle_t*)&server->handle, server_close_callback);
+    } else if (server->handle.data) {
+      // Handle already closing, but not yet freed - will be freed by close callback
+      // Do nothing here
+    } else {
+      // Handle already closed and freed, or never initialized
+      // This shouldn't happen, but handle it safely
     }
-    // Do not free memory here - it will be freed during runtime cleanup
   }
 }
 
@@ -785,6 +833,7 @@ static JSValue js_socket_constructor(JSContext* ctx, JSValueConst new_target, in
   conn->destroyed = false;
   conn->connecting = false;
   conn->paused = false;
+  conn->in_callback = false;
   conn->bytes_read = 0;
   conn->bytes_written = 0;
 

@@ -341,6 +341,7 @@ JSValue js_socket_constructor(JSContext* ctx, JSValueConst new_target, int argc,
     return JS_ThrowOutOfMemory(ctx);
   }
 
+  conn->type_tag = NET_TYPE_SOCKET;  // Set type tag for cleanup callback
   conn->ctx = ctx;
   conn->socket_obj = JS_DupValue(ctx, obj);
   conn->connected = false;

@@ -218,6 +218,7 @@ JSValue js_server_constructor(JSContext* ctx, JSValueConst new_target, int argc,
     return JS_ThrowOutOfMemory(ctx);
   }
 
+  server->type_tag = NET_TYPE_SERVER;  // Set type tag for cleanup callback
   server->ctx = ctx;
   server->server_obj = JS_DupValue(ctx, obj);
   server->listening = false;

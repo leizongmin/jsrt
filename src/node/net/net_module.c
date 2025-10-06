@@ -1,5 +1,5 @@
-#include "net_internal.h"
 #include <uv.h>
+#include "net_internal.h"
 
 // Class IDs for networking classes (exported, not static)
 JSClassID js_server_class_id;

@@ -11,8 +11,13 @@
 extern JSClassID js_server_class_id;
 extern JSClassID js_socket_class_id;
 
+// Type tags for cleanup callback to distinguish structs
+#define NET_TYPE_SOCKET 0x534F434B  // 'SOCK' in hex
+#define NET_TYPE_SERVER 0x53525652  // 'SRVR' in hex
+
 // Connection state
 typedef struct {
+  uint32_t type_tag;  // Must be first field for cleanup callback
   JSContext* ctx;
   JSValue server_obj;
   JSValue socket_obj;
@@ -38,6 +43,7 @@ typedef struct {
 
 // Server state
 typedef struct {
+  uint32_t type_tag;  // Must be first field for cleanup callback
   JSContext* ctx;
   JSValue server_obj;
   uv_tcp_t handle;

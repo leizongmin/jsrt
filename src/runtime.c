@@ -43,26 +43,38 @@ static void JSRT_RuntimeCloseWalkCallback(uv_handle_t* handle, void* arg) {
   }
 }
 
+// Type tags from net module (must match net_internal.h)
+#define NET_TYPE_SOCKET 0x534F434B  // 'SOCK' in hex
+#define NET_TYPE_SERVER 0x53525652  // 'SRVR' in hex
+
 // Cleanup walk callback to free net module memory after handles are closed
 static void JSRT_RuntimeCleanupWalkCallback(uv_handle_t* handle, void* arg) {
   if (handle->data && handle->type == UV_TCP) {
-    // This is a JSNetConnection or JSNetServer with embedded uv_tcp_t handle
-    // We can't tell which type it is without more info, but both have a 'host' field
-    // that needs to be freed. We'll use a simple heuristic:
-    // - JSNetConnection has uv_tcp_t as 4th field (after ctx, server_obj, socket_obj)
-    // - JSNetServer has uv_tcp_t as 3rd field (after ctx, server_obj)
-    // Both have 'host' field as a char* that comes later in the struct
+    // Check the type tag to determine if this is a socket or server
+    uint32_t* type_tag_ptr = (uint32_t*)handle->data;
+    uint32_t type_tag = *type_tag_ptr;
 
-    void* data = handle->data;
-    handle->data = NULL;  // Prevent double-free
+    if (type_tag == NET_TYPE_SOCKET) {
+      // This is a JSNetConnection
+      // Offset calculated with offsetof(): 456 bytes
+      size_t host_offset = 456;
+      char** host_ptr = (char**)((char*)handle->data + host_offset);
+      if (*host_ptr) {
+        free(*host_ptr);
+      }
+    } else if (type_tag == NET_TYPE_SERVER) {
+      // This is a JSNetServer
+      // Offset calculated with offsetof(): 272 bytes
+      size_t host_offset = 272;
+      char** host_ptr = (char**)((char*)handle->data + host_offset);
+      if (*host_ptr) {
+        free(*host_ptr);
+      }
+    }
 
-    // Calculate offset to host field:
-    // JSNetConnection: ctx + server_obj + socket_obj + handle + connect_req + shutdown_req + timeout_timer + host
-    // JSNetServer: ctx + server_obj + handle + flags... + host
-    // Since we can't reliably distinguish, we'll just free the data pointer
-    // The host string will leak, but that's better than crashing
-    // TODO: Add a type tag to distinguish JSNetConnection from JSNetServer
-    free(data);
+    // Free the main struct
+    handle->data = NULL;
+    free(type_tag_ptr);
   }
 }
 

@@ -68,6 +68,7 @@ typedef struct {
   bool destroyed;
   char* host;
   int port;
+  int connection_count;       // Track number of active connections
   JSValue listen_callback;    // Store callback for async execution
   uv_timer_t callback_timer;  // Timer for async callback
 } JSNetServer;
@@ -192,6 +193,9 @@ static void on_connection(uv_stream_t* server, int status) {
 
   if (uv_accept(server, (uv_stream_t*)&conn->handle) == 0) {
     conn->connected = true;
+
+    // Increment connection count
+    server_data->connection_count++;
 
     // Start reading from the socket to enable data events
     uv_read_start((uv_stream_t*)&conn->handle, on_socket_alloc, on_socket_read);
@@ -692,6 +696,124 @@ static JSValue js_server_close(JSContext* ctx, JSValueConst this_val, int argc, 
   return JS_UNDEFINED;
 }
 
+static JSValue js_server_address(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
+  JSNetServer* server = JS_GetOpaque(this_val, js_server_class_id);
+  if (!server || !server->listening) {
+    return JS_NULL;
+  }
+
+  struct sockaddr_storage addr;
+  int addrlen = sizeof(addr);
+  int r = uv_tcp_getsockname(&server->handle, (struct sockaddr*)&addr, &addrlen);
+  if (r != 0) {
+    return JS_NULL;
+  }
+
+  // Create address object { address: string, family: string, port: number }
+  JSValue obj = JS_NewObject(ctx);
+
+  char ip[INET6_ADDRSTRLEN];
+  int port = 0;
+  const char* family = NULL;
+
+  if (addr.ss_family == AF_INET) {
+    struct sockaddr_in* addr4 = (struct sockaddr_in*)&addr;
+    uv_ip4_name(addr4, ip, sizeof(ip));
+    port = ntohs(addr4->sin_port);
+    family = "IPv4";
+  } else if (addr.ss_family == AF_INET6) {
+    struct sockaddr_in6* addr6 = (struct sockaddr_in6*)&addr;
+    uv_ip6_name(addr6, ip, sizeof(ip));
+    port = ntohs(addr6->sin6_port);
+    family = "IPv6";
+  } else {
+    JS_FreeValue(ctx, obj);
+    return JS_NULL;
+  }
+
+  JS_SetPropertyStr(ctx, obj, "address", JS_NewString(ctx, ip));
+  JS_SetPropertyStr(ctx, obj, "family", JS_NewString(ctx, family));
+  JS_SetPropertyStr(ctx, obj, "port", JS_NewInt32(ctx, port));
+
+  return obj;
+}
+
+static JSValue js_server_get_connections(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
+  JSNetServer* server = JS_GetOpaque(this_val, js_server_class_id);
+  if (!server) {
+    return JS_UNDEFINED;
+  }
+
+  if (argc < 1 || !JS_IsFunction(ctx, argv[0])) {
+    return JS_ThrowTypeError(ctx, "getConnections requires a callback function");
+  }
+
+  // Call callback with (err, count)
+  JSValue callback = argv[0];
+  JSValue args[2];
+  args[0] = JS_NULL;  // No error
+  args[1] = JS_NewInt32(ctx, server->connection_count);
+
+  JSValue result = JS_Call(ctx, callback, this_val, 2, args);
+  JS_FreeValue(ctx, args[0]);
+  JS_FreeValue(ctx, args[1]);
+  JS_FreeValue(ctx, result);
+
+  return JS_UNDEFINED;
+}
+
+static JSValue js_server_ref(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
+  JSNetServer* server = JS_GetOpaque(this_val, js_server_class_id);
+  if (!server || server->destroyed) {
+    return this_val;
+  }
+
+  if (server->listening) {
+    uv_ref((uv_handle_t*)&server->handle);
+  }
+
+  return this_val;
+}
+
+static JSValue js_server_unref(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
+  JSNetServer* server = JS_GetOpaque(this_val, js_server_class_id);
+  if (!server || server->destroyed) {
+    return this_val;
+  }
+
+  if (server->listening) {
+    uv_unref((uv_handle_t*)&server->handle);
+  }
+
+  return this_val;
+}
+
+static JSValue js_socket_ref(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
+  JSNetConnection* conn = JS_GetOpaque(this_val, js_socket_class_id);
+  if (!conn || conn->destroyed) {
+    return this_val;
+  }
+
+  if (conn->connected) {
+    uv_ref((uv_handle_t*)&conn->handle);
+  }
+
+  return this_val;
+}
+
+static JSValue js_socket_unref(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
+  JSNetConnection* conn = JS_GetOpaque(this_val, js_socket_class_id);
+  if (!conn || conn->destroyed) {
+    return this_val;
+  }
+
+  if (conn->connected) {
+    uv_unref((uv_handle_t*)&conn->handle);
+  }
+
+  return this_val;
+}
+
 // Socket property getters
 static JSValue js_socket_get_local_address(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
   JSNetConnection* conn = JS_GetOpaque(this_val, js_socket_class_id);
@@ -1044,6 +1166,8 @@ static JSValue js_socket_constructor(JSContext* ctx, JSValueConst new_target, in
   JS_SetPropertyStr(ctx, obj, "setTimeout", JS_NewCFunction(ctx, js_socket_set_timeout, "setTimeout", 1));
   JS_SetPropertyStr(ctx, obj, "setKeepAlive", JS_NewCFunction(ctx, js_socket_set_keep_alive, "setKeepAlive", 2));
   JS_SetPropertyStr(ctx, obj, "setNoDelay", JS_NewCFunction(ctx, js_socket_set_no_delay, "setNoDelay", 1));
+  JS_SetPropertyStr(ctx, obj, "ref", JS_NewCFunction(ctx, js_socket_ref, "ref", 0));
+  JS_SetPropertyStr(ctx, obj, "unref", JS_NewCFunction(ctx, js_socket_unref, "unref", 0));
 
 // Add property getters using JS_DefinePropertyGetSet
 #define DEFINE_GETTER_PROP(name, func)                                                                        \
@@ -1092,6 +1216,7 @@ static JSValue js_server_constructor(JSContext* ctx, JSValueConst new_target, in
   server->server_obj = JS_DupValue(ctx, obj);
   server->listening = false;
   server->destroyed = false;
+  server->connection_count = 0;
   server->listen_callback = JS_UNDEFINED;
 
   JS_SetOpaque(obj, server);
@@ -1099,6 +1224,10 @@ static JSValue js_server_constructor(JSContext* ctx, JSValueConst new_target, in
   // Add server methods
   JS_SetPropertyStr(ctx, obj, "listen", JS_NewCFunction(ctx, js_server_listen, "listen", 3));
   JS_SetPropertyStr(ctx, obj, "close", JS_NewCFunction(ctx, js_server_close, "close", 0));
+  JS_SetPropertyStr(ctx, obj, "address", JS_NewCFunction(ctx, js_server_address, "address", 0));
+  JS_SetPropertyStr(ctx, obj, "getConnections", JS_NewCFunction(ctx, js_server_get_connections, "getConnections", 1));
+  JS_SetPropertyStr(ctx, obj, "ref", JS_NewCFunction(ctx, js_server_ref, "ref", 0));
+  JS_SetPropertyStr(ctx, obj, "unref", JS_NewCFunction(ctx, js_server_unref, "unref", 0));
 
   // Add EventEmitter functionality
   add_event_emitter_methods(ctx, obj);

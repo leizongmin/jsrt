@@ -41,11 +41,36 @@ static void print_assertion_error(JSContext* ctx, const char* message, JSValueCo
   }
 }
 
-// Helper function to throw AssertionError
-static JSValue throw_assertion_error(JSContext* ctx, const char* message) {
+// Enhanced function to create AssertionError with all Node.js properties
+static JSValue create_assertion_error(JSContext* ctx, const char* message, JSValueConst actual, JSValueConst expected,
+                                      const char* operator, int generated_message) {
   JSValue error = JS_NewError(ctx);
   JS_SetPropertyStr(ctx, error, "name", JS_NewString(ctx, "AssertionError"));
   JS_SetPropertyStr(ctx, error, "message", JS_NewString(ctx, message));
+  JS_SetPropertyStr(ctx, error, "code", JS_NewString(ctx, "ERR_ASSERTION"));
+
+  // Add actual and expected values if provided
+  if (!JS_IsUndefined(actual)) {
+    JS_SetPropertyStr(ctx, error, "actual", JS_DupValue(ctx, actual));
+  }
+  if (!JS_IsUndefined(expected)) {
+    JS_SetPropertyStr(ctx, error, "expected", JS_DupValue(ctx, expected));
+  }
+
+  // Add operator string
+  if (operator) {
+    JS_SetPropertyStr(ctx, error, "operator", JS_NewString(ctx, operator));
+  }
+
+  // Add generatedMessage flag
+  JS_SetPropertyStr(ctx, error, "generatedMessage", JS_NewBool(ctx, generated_message));
+
+  return error;
+}
+
+// Helper function to throw AssertionError (legacy - uses enhanced version)
+static JSValue throw_assertion_error(JSContext* ctx, const char* message) {
+  JSValue error = create_assertion_error(ctx, message, JS_UNDEFINED, JS_UNDEFINED, NULL, 1);
   return JS_Throw(ctx, error);
 }
 
@@ -58,18 +83,20 @@ static JSValue jsrt_assert(JSContext* ctx, JSValueConst this_val, int argc, JSVa
   int32_t value = JS_ToBool(ctx, argv[0]);
   if (value <= 0) {
     const char* message = "Assertion failed";
+    int generated = 1;
     if (argc > 1 && JS_IsString(argv[1])) {
       message = JS_ToCString(ctx, argv[1]);
+      generated = 0;
     }
 
     print_assertion_error(ctx, message, argv[0], JS_UNDEFINED);
-    JSValue error = throw_assertion_error(ctx, message);
+    JSValue error = create_assertion_error(ctx, message, argv[0], JS_TRUE, "==", generated);
 
     if (argc > 1 && JS_IsString(argv[1])) {
       JS_FreeCString(ctx, message);
     }
 
-    return error;
+    return JS_Throw(ctx, error);
   }
 
   return JS_UNDEFINED;
@@ -101,18 +128,20 @@ static JSValue jsrt_assert_equal(JSContext* ctx, JSValueConst this_val, int argc
   equal = (equal == 1);
   if (!equal) {
     const char* message = "Expected values to be equal (==)";
+    int generated = 1;
     if (argc > 2 && JS_IsString(argv[2])) {
       message = JS_ToCString(ctx, argv[2]);
+      generated = 0;
     }
 
     print_assertion_error(ctx, message, argv[0], argv[1]);
-    JSValue error = throw_assertion_error(ctx, message);
+    JSValue error = create_assertion_error(ctx, message, argv[0], argv[1], "==", generated);
 
     if (argc > 2 && JS_IsString(argv[2])) {
       JS_FreeCString(ctx, message);
     }
 
-    return error;
+    return JS_Throw(ctx, error);
   }
 
   return JS_UNDEFINED;
@@ -144,18 +173,20 @@ static JSValue jsrt_assert_notEqual(JSContext* ctx, JSValueConst this_val, int a
   equal = (equal == 1);
   if (equal) {
     const char* message = "Expected values to be not equal (!=)";
+    int generated = 1;
     if (argc > 2 && JS_IsString(argv[2])) {
       message = JS_ToCString(ctx, argv[2]);
+      generated = 0;
     }
 
     print_assertion_error(ctx, message, argv[0], argv[1]);
-    JSValue error = throw_assertion_error(ctx, message);
+    JSValue error = create_assertion_error(ctx, message, argv[0], argv[1], "!=", generated);
 
     if (argc > 2 && JS_IsString(argv[2])) {
       JS_FreeCString(ctx, message);
     }
 
-    return error;
+    return JS_Throw(ctx, error);
   }
 
   return JS_UNDEFINED;
@@ -170,18 +201,20 @@ static JSValue jsrt_assert_strictEqual(JSContext* ctx, JSValueConst this_val, in
   int equal = JS_StrictEq(ctx, argv[0], argv[1]);
   if (equal != 1) {
     const char* message = "Expected values to be strictly equal (===)";
+    int generated = 1;
     if (argc > 2 && JS_IsString(argv[2])) {
       message = JS_ToCString(ctx, argv[2]);
+      generated = 0;
     }
 
     print_assertion_error(ctx, message, argv[0], argv[1]);
-    JSValue error = throw_assertion_error(ctx, message);
+    JSValue error = create_assertion_error(ctx, message, argv[0], argv[1], "===", generated);
 
     if (argc > 2 && JS_IsString(argv[2])) {
       JS_FreeCString(ctx, message);
     }
 
-    return error;
+    return JS_Throw(ctx, error);
   }
 
   return JS_UNDEFINED;
@@ -196,18 +229,20 @@ static JSValue jsrt_assert_notStrictEqual(JSContext* ctx, JSValueConst this_val,
   int equal = JS_StrictEq(ctx, argv[0], argv[1]);
   if (equal == 1) {
     const char* message = "Expected values to be not strictly equal (!==)";
+    int generated = 1;
     if (argc > 2 && JS_IsString(argv[2])) {
       message = JS_ToCString(ctx, argv[2]);
+      generated = 0;
     }
 
     print_assertion_error(ctx, message, argv[0], argv[1]);
-    JSValue error = throw_assertion_error(ctx, message);
+    JSValue error = create_assertion_error(ctx, message, argv[0], argv[1], "!==", generated);
 
     if (argc > 2 && JS_IsString(argv[2])) {
       JS_FreeCString(ctx, message);
     }
 
-    return error;
+    return JS_Throw(ctx, error);
   }
 
   return JS_UNDEFINED;
@@ -254,18 +289,20 @@ static JSValue jsrt_assert_deepEqual(JSContext* ctx, JSValueConst this_val, int 
 
   if (!deep_equal(ctx, argv[0], argv[1])) {
     const char* message = "Expected values to be deeply equal";
+    int generated = 1;
     if (argc > 2 && JS_IsString(argv[2])) {
       message = JS_ToCString(ctx, argv[2]);
+      generated = 0;
     }
 
     print_assertion_error(ctx, message, argv[0], argv[1]);
-    JSValue error = throw_assertion_error(ctx, message);
+    JSValue error = create_assertion_error(ctx, message, argv[0], argv[1], "deepEqual", generated);
 
     if (argc > 2 && JS_IsString(argv[2])) {
       JS_FreeCString(ctx, message);
     }
 
-    return error;
+    return JS_Throw(ctx, error);
   }
 
   return JS_UNDEFINED;
@@ -279,18 +316,20 @@ static JSValue jsrt_assert_notDeepEqual(JSContext* ctx, JSValueConst this_val, i
 
   if (deep_equal(ctx, argv[0], argv[1])) {
     const char* message = "Expected values to be not deeply equal";
+    int generated = 1;
     if (argc > 2 && JS_IsString(argv[2])) {
       message = JS_ToCString(ctx, argv[2]);
+      generated = 0;
     }
 
     print_assertion_error(ctx, message, argv[0], argv[1]);
-    JSValue error = throw_assertion_error(ctx, message);
+    JSValue error = create_assertion_error(ctx, message, argv[0], argv[1], "notDeepEqual", generated);
 
     if (argc > 2 && JS_IsString(argv[2])) {
       JS_FreeCString(ctx, message);
     }
 
-    return error;
+    return JS_Throw(ctx, error);
   }
 
   return JS_UNDEFINED;
@@ -360,6 +399,156 @@ static JSValue jsrt_assert_doesNotThrow(JSContext* ctx, JSValueConst this_val, i
   return JS_UNDEFINED;
 }
 
+// assert.fail([message])
+static JSValue jsrt_assert_fail(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
+  const char* message = "Failed";
+  int needs_free = 0;
+
+  if (argc > 0 && JS_IsString(argv[0])) {
+    message = JS_ToCString(ctx, argv[0]);
+    needs_free = 1;
+  }
+
+  JSValue error = create_assertion_error(ctx, message, JS_UNDEFINED, JS_UNDEFINED, "fail", 0);
+
+  if (needs_free) {
+    JS_FreeCString(ctx, message);
+  }
+
+  return JS_Throw(ctx, error);
+}
+
+// assert.ifError(value)
+static JSValue jsrt_assert_ifError(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
+  if (argc < 1) {
+    return JS_UNDEFINED;
+  }
+
+  JSValue value = argv[0];
+  int is_falsy = !JS_ToBool(ctx, value);
+
+  if (is_falsy) {
+    return JS_UNDEFINED;
+  }
+
+  // Value is truthy - throw it or create error from it
+  if (JS_IsError(ctx, value)) {
+    // It's already an error, throw it
+    return JS_Throw(ctx, JS_DupValue(ctx, value));
+  } else {
+    // Not an error, create AssertionError with the value
+    const char* val_str = JS_ToCString(ctx, value);
+    char message[256];
+    snprintf(message, sizeof(message), "ifError got unwanted exception: %s", val_str ? val_str : "unknown");
+    if (val_str) {
+      JS_FreeCString(ctx, val_str);
+    }
+
+    JSValue error = create_assertion_error(ctx, message, value, JS_UNDEFINED, "ifError", 1);
+    return JS_Throw(ctx, error);
+  }
+}
+
+// assert.match(string, regexp[, message])
+static JSValue jsrt_assert_match(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
+  if (argc < 2) {
+    return throw_assertion_error(ctx, "assert.match requires at least 2 arguments");
+  }
+
+  if (!JS_IsString(argv[0])) {
+    return throw_assertion_error(ctx, "assert.match expects a string as first argument");
+  }
+
+  // Check if second argument is a RegExp by checking if it has a test method
+  JSValue test_method = JS_GetPropertyStr(ctx, argv[1], "test");
+  int is_regexp = JS_IsFunction(ctx, test_method);
+  JS_FreeValue(ctx, test_method);
+
+  if (!is_regexp) {
+    return throw_assertion_error(ctx, "assert.match expects a RegExp as second argument");
+  }
+
+  // Call regexp.test(string)
+  JSValue test_args[1] = {argv[0]};
+  JSValue test_result = JS_Invoke(ctx, argv[1], JS_NewAtom(ctx, "test"), 1, test_args);
+
+  if (JS_IsException(test_result)) {
+    return test_result;
+  }
+
+  int matches = JS_ToBool(ctx, test_result);
+  JS_FreeValue(ctx, test_result);
+
+  if (!matches) {
+    const char* message = "The input did not match the regular expression";
+    int generated = 1;
+    if (argc > 2 && JS_IsString(argv[2])) {
+      message = JS_ToCString(ctx, argv[2]);
+      generated = 0;
+    }
+
+    JSValue error = create_assertion_error(ctx, message, argv[0], argv[1], "match", generated);
+
+    if (argc > 2 && JS_IsString(argv[2])) {
+      JS_FreeCString(ctx, message);
+    }
+
+    return JS_Throw(ctx, error);
+  }
+
+  return JS_UNDEFINED;
+}
+
+// assert.doesNotMatch(string, regexp[, message])
+static JSValue jsrt_assert_doesNotMatch(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
+  if (argc < 2) {
+    return throw_assertion_error(ctx, "assert.doesNotMatch requires at least 2 arguments");
+  }
+
+  if (!JS_IsString(argv[0])) {
+    return throw_assertion_error(ctx, "assert.doesNotMatch expects a string as first argument");
+  }
+
+  // Check if second argument is a RegExp
+  JSValue test_method = JS_GetPropertyStr(ctx, argv[1], "test");
+  int is_regexp = JS_IsFunction(ctx, test_method);
+  JS_FreeValue(ctx, test_method);
+
+  if (!is_regexp) {
+    return throw_assertion_error(ctx, "assert.doesNotMatch expects a RegExp as second argument");
+  }
+
+  // Call regexp.test(string)
+  JSValue test_args[1] = {argv[0]};
+  JSValue test_result = JS_Invoke(ctx, argv[1], JS_NewAtom(ctx, "test"), 1, test_args);
+
+  if (JS_IsException(test_result)) {
+    return test_result;
+  }
+
+  int matches = JS_ToBool(ctx, test_result);
+  JS_FreeValue(ctx, test_result);
+
+  if (matches) {
+    const char* message = "The input was expected to not match the regular expression";
+    int generated = 1;
+    if (argc > 2 && JS_IsString(argv[2])) {
+      message = JS_ToCString(ctx, argv[2]);
+      generated = 0;
+    }
+
+    JSValue error = create_assertion_error(ctx, message, argv[0], argv[1], "doesNotMatch", generated);
+
+    if (argc > 2 && JS_IsString(argv[2])) {
+      JS_FreeCString(ctx, message);
+    }
+
+    return JS_Throw(ctx, error);
+  }
+
+  return JS_UNDEFINED;
+}
+
 // Create assert module for jsrt:assert
 JSValue JSRT_CreateAssertModule(JSContext* ctx) {
   // Create assert function that is also callable
@@ -378,6 +567,33 @@ JSValue JSRT_CreateAssertModule(JSContext* ctx) {
   JS_SetPropertyStr(ctx, assert_func, "throws", JS_NewCFunction(ctx, jsrt_assert_throws, "throws", 3));
   JS_SetPropertyStr(ctx, assert_func, "doesNotThrow",
                     JS_NewCFunction(ctx, jsrt_assert_doesNotThrow, "doesNotThrow", 3));
+  JS_SetPropertyStr(ctx, assert_func, "fail", JS_NewCFunction(ctx, jsrt_assert_fail, "fail", 1));
+  JS_SetPropertyStr(ctx, assert_func, "ifError", JS_NewCFunction(ctx, jsrt_assert_ifError, "ifError", 1));
+  JS_SetPropertyStr(ctx, assert_func, "match", JS_NewCFunction(ctx, jsrt_assert_match, "match", 3));
+  JS_SetPropertyStr(ctx, assert_func, "doesNotMatch",
+                    JS_NewCFunction(ctx, jsrt_assert_doesNotMatch, "doesNotMatch", 3));
+
+  // Create assert.strict namespace
+  JSValue strict_obj = JS_NewObject(ctx);
+
+  // In strict mode, equal() maps to strictEqual(), deepEqual() maps to deepStrictEqual()
+  JS_SetPropertyStr(ctx, strict_obj, "ok", JS_GetPropertyStr(ctx, assert_func, "ok"));
+  JS_SetPropertyStr(ctx, strict_obj, "equal", JS_GetPropertyStr(ctx, assert_func, "strictEqual"));
+  JS_SetPropertyStr(ctx, strict_obj, "notEqual", JS_GetPropertyStr(ctx, assert_func, "notStrictEqual"));
+  JS_SetPropertyStr(ctx, strict_obj, "strictEqual", JS_GetPropertyStr(ctx, assert_func, "strictEqual"));
+  JS_SetPropertyStr(ctx, strict_obj, "notStrictEqual", JS_GetPropertyStr(ctx, assert_func, "notStrictEqual"));
+  JS_SetPropertyStr(ctx, strict_obj, "deepEqual",
+                    JS_GetPropertyStr(ctx, assert_func, "deepEqual"));  // Will be deepStrictEqual in Phase 4
+  JS_SetPropertyStr(ctx, strict_obj, "notDeepEqual",
+                    JS_GetPropertyStr(ctx, assert_func, "notDeepEqual"));  // Will be notDeepStrictEqual in Phase 4
+  JS_SetPropertyStr(ctx, strict_obj, "throws", JS_GetPropertyStr(ctx, assert_func, "throws"));
+  JS_SetPropertyStr(ctx, strict_obj, "doesNotThrow", JS_GetPropertyStr(ctx, assert_func, "doesNotThrow"));
+  JS_SetPropertyStr(ctx, strict_obj, "fail", JS_GetPropertyStr(ctx, assert_func, "fail"));
+  JS_SetPropertyStr(ctx, strict_obj, "ifError", JS_GetPropertyStr(ctx, assert_func, "ifError"));
+  JS_SetPropertyStr(ctx, strict_obj, "match", JS_GetPropertyStr(ctx, assert_func, "match"));
+  JS_SetPropertyStr(ctx, strict_obj, "doesNotMatch", JS_GetPropertyStr(ctx, assert_func, "doesNotMatch"));
+
+  JS_SetPropertyStr(ctx, assert_func, "strict", strict_obj);
 
   return assert_func;
 }

@@ -95,12 +95,19 @@ JSValue js_server_close(JSContext* ctx, JSValueConst this_val, int argc, JSValue
     return JS_UNDEFINED;
   }
 
-  if (server->listening) {
-    uv_close((uv_handle_t*)&server->handle, NULL);
-    server->listening = false;
-  }
-
+  // Don't manually close the handle here - let the finalizer handle cleanup
+  // This avoids double-close issues and use-after-free bugs
   server->destroyed = true;
+  server->listening = false;
+
+  // Emit 'close' event immediately (user-initiated close)
+  JSValue emit = JS_GetPropertyStr(ctx, server->server_obj, "emit");
+  if (JS_IsFunction(ctx, emit)) {
+    JSValue args[] = {JS_NewString(ctx, "close")};
+    JS_Call(ctx, emit, server->server_obj, 1, args);
+    JS_FreeValue(ctx, args[0]);
+  }
+  JS_FreeValue(ctx, emit);
 
   return JS_UNDEFINED;
 }

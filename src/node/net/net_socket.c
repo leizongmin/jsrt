@@ -120,12 +120,20 @@ JSValue js_socket_destroy(JSContext* ctx, JSValueConst this_val, int argc, JSVal
     return JS_UNDEFINED;
   }
 
-  if (conn->connected) {
-    uv_close((uv_handle_t*)&conn->handle, NULL);
-  }
-
+  // Don't manually close the handle here - let the finalizer handle cleanup
+  // This avoids double-close issues and use-after-free bugs
   conn->destroyed = true;
   conn->connected = false;
+
+  // Emit 'close' event immediately (user-initiated destroy)
+  JSValue emit = JS_GetPropertyStr(ctx, conn->socket_obj, "emit");
+  if (JS_IsFunction(ctx, emit)) {
+    JSValue args[] = {JS_NewString(ctx, "close"), JS_NewBool(ctx, conn->had_error)};
+    JS_Call(ctx, emit, conn->socket_obj, 2, args);
+    JS_FreeValue(ctx, args[0]);
+    JS_FreeValue(ctx, args[1]);
+  }
+  JS_FreeValue(ctx, emit);
 
   return JS_UNDEFINED;
 }

@@ -45,6 +45,7 @@ typedef struct {
   bool destroyed;
   bool in_callback;        // Flag to prevent double-free during callback
   bool timer_initialized;  // Track if timer was initialized
+  int close_count;         // Number of handles that need to close before freeing
   char* host;
   int port;
   JSValue listen_callback;     // Store callback for async execution

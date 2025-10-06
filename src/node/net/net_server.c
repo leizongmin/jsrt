@@ -36,11 +36,30 @@ JSValue js_server_listen(JSContext* ctx, JSValueConst this_val, int argc, JSValu
   uv_tcp_init(rt->uv_loop, &server->handle);
   server->handle.data = server;
 
-  // Bind and listen
-  struct sockaddr_in addr;
-  uv_ip4_addr(server->host, server->port, &addr);
+  // Bind and listen - support both IPv4 and IPv6
+  struct sockaddr_storage addr_storage;
+  struct sockaddr* addr = (struct sockaddr*)&addr_storage;
+  int result;
 
-  int result = uv_tcp_bind(&server->handle, (const struct sockaddr*)&addr, 0);
+  // Try IPv4 first
+  struct sockaddr_in addr4;
+  if (uv_ip4_addr(server->host, server->port, &addr4) == 0) {
+    // IPv4 address
+    memcpy(&addr_storage, &addr4, sizeof(addr4));
+  } else {
+    // Try IPv6
+    struct sockaddr_in6 addr6;
+    if (uv_ip6_addr(server->host, server->port, &addr6) == 0) {
+      // IPv6 address
+      memcpy(&addr_storage, &addr6, sizeof(addr6));
+    } else {
+      // Neither IPv4 nor IPv6
+      uv_close((uv_handle_t*)&server->handle, NULL);
+      return JS_ThrowInternalError(ctx, "Invalid IP address: %s", server->host);
+    }
+  }
+
+  result = uv_tcp_bind(&server->handle, addr, 0);
   if (result < 0) {
     uv_close((uv_handle_t*)&server->handle, NULL);
     return JS_ThrowInternalError(ctx, "Bind failed: %s", uv_strerror(result));

@@ -38,12 +38,32 @@ JSValue js_socket_connect(JSContext* ctx, JSValueConst this_val, int argc, JSVal
   conn->connecting = true;
 
   // Resolve address and connect
-  // NOTE: uv_ip4_addr expects a numeric IPv4 address, not a hostname
+  // Try IPv4 first, then IPv6 if that fails
   // TODO: Implement proper hostname resolution with uv_getaddrinfo for full Node.js compatibility
-  struct sockaddr_in addr;
-  uv_ip4_addr(conn->host, conn->port, &addr);
+  struct sockaddr_storage addr_storage;
+  struct sockaddr* addr = (struct sockaddr*)&addr_storage;
+  int result;
 
-  int result = uv_tcp_connect(&conn->connect_req, &conn->handle, (const struct sockaddr*)&addr, on_connect);
+  // Try IPv4 first
+  struct sockaddr_in addr4;
+  if (uv_ip4_addr(conn->host, conn->port, &addr4) == 0) {
+    // IPv4 address
+    memcpy(&addr_storage, &addr4, sizeof(addr4));
+    result = uv_tcp_connect(&conn->connect_req, &conn->handle, addr, on_connect);
+  } else {
+    // Try IPv6
+    struct sockaddr_in6 addr6;
+    if (uv_ip6_addr(conn->host, conn->port, &addr6) == 0) {
+      // IPv6 address
+      memcpy(&addr_storage, &addr6, sizeof(addr6));
+      result = uv_tcp_connect(&conn->connect_req, &conn->handle, addr, on_connect);
+    } else {
+      // Neither IPv4 nor IPv6 - invalid address
+      conn->connecting = false;
+      uv_close((uv_handle_t*)&conn->handle, NULL);
+      return JS_ThrowInternalError(ctx, "Invalid IP address: %s", conn->host);
+    }
+  }
 
   if (result < 0) {
     conn->connecting = false;

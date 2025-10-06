@@ -87,6 +87,69 @@ JSValue js_net_connect(JSContext* ctx, JSValueConst this_val, int argc, JSValueC
   return socket;
 }
 
+// IP utility functions
+JSValue js_net_is_ip(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
+  if (argc < 1) {
+    return JS_NewInt32(ctx, 0);
+  }
+
+  const char* input = JS_ToCString(ctx, argv[0]);
+  if (!input) {
+    return JS_NewInt32(ctx, 0);
+  }
+
+  // Try IPv4
+  struct sockaddr_in addr4;
+  if (uv_ip4_addr(input, 0, &addr4) == 0) {
+    JS_FreeCString(ctx, input);
+    return JS_NewInt32(ctx, 4);
+  }
+
+  // Try IPv6
+  struct sockaddr_in6 addr6;
+  if (uv_ip6_addr(input, 0, &addr6) == 0) {
+    JS_FreeCString(ctx, input);
+    return JS_NewInt32(ctx, 6);
+  }
+
+  JS_FreeCString(ctx, input);
+  return JS_NewInt32(ctx, 0);
+}
+
+JSValue js_net_is_ipv4(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
+  if (argc < 1) {
+    return JS_FALSE;
+  }
+
+  const char* input = JS_ToCString(ctx, argv[0]);
+  if (!input) {
+    return JS_FALSE;
+  }
+
+  struct sockaddr_in addr;
+  bool is_ipv4 = (uv_ip4_addr(input, 0, &addr) == 0);
+  JS_FreeCString(ctx, input);
+
+  return JS_NewBool(ctx, is_ipv4);
+}
+
+JSValue js_net_is_ipv6(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
+  if (argc < 1) {
+    return JS_FALSE;
+  }
+
+  const char* input = JS_ToCString(ctx, argv[0]);
+  if (!input) {
+    return JS_FALSE;
+  }
+
+  struct sockaddr_in6 addr;
+  bool is_ipv6 = (uv_ip6_addr(input, 0, &addr) == 0);
+  JS_FreeCString(ctx, input);
+
+  return JS_NewBool(ctx, is_ipv6);
+}
+
 // Module initialization
 JSValue JSRT_InitNodeNet(JSContext* ctx) {
   JSValue net_module = JS_NewObject(ctx);
@@ -106,6 +169,11 @@ JSValue JSRT_InitNodeNet(JSContext* ctx) {
   // Module functions
   JS_SetPropertyStr(ctx, net_module, "createServer", JS_NewCFunction(ctx, js_net_create_server, "createServer", 1));
   JS_SetPropertyStr(ctx, net_module, "connect", JS_NewCFunction(ctx, js_net_connect, "connect", 2));
+
+  // IP utility functions
+  JS_SetPropertyStr(ctx, net_module, "isIP", JS_NewCFunction(ctx, js_net_is_ip, "isIP", 1));
+  JS_SetPropertyStr(ctx, net_module, "isIPv4", JS_NewCFunction(ctx, js_net_is_ipv4, "isIPv4", 1));
+  JS_SetPropertyStr(ctx, net_module, "isIPv6", JS_NewCFunction(ctx, js_net_is_ipv6, "isIPv6", 1));
 
   // Export constructors
   JS_SetPropertyStr(ctx, net_module, "Socket", socket_ctor);

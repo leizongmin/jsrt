@@ -95,8 +95,17 @@ static void on_socket_read(uv_stream_t* stream, ssize_t nread, const uv_buf_t* b
   }
 
   if (nread < 0) {
-    if (nread != UV_EOF) {
-      // Emit error event
+    if (nread == UV_EOF) {
+      // Emit 'end' event when connection closes gracefully
+      JSValue emit = JS_GetPropertyStr(ctx, conn->socket_obj, "emit");
+      if (JS_IsFunction(ctx, emit)) {
+        JSValue args[] = {JS_NewString(ctx, "end")};
+        JS_Call(ctx, emit, conn->socket_obj, 1, args);
+        JS_FreeValue(ctx, args[0]);
+      }
+      JS_FreeValue(ctx, emit);
+    } else {
+      // Emit error event for actual errors
       JSValue emit = JS_GetPropertyStr(ctx, conn->socket_obj, "emit");
       if (JS_IsFunction(ctx, emit)) {
         JSValue error = JS_NewError(ctx);
@@ -226,6 +235,15 @@ static void on_connect(uv_connect_t* req, int status) {
       JS_FreeValue(ctx, args[0]);
     }
     JS_FreeValue(ctx, emit);
+
+    // Emit 'ready' event (socket is ready for writing)
+    emit = JS_GetPropertyStr(ctx, conn->socket_obj, "emit");
+    if (JS_IsFunction(ctx, emit)) {
+      JSValue args[] = {JS_NewString(ctx, "ready")};
+      JS_Call(ctx, emit, conn->socket_obj, 1, args);
+      JS_FreeValue(ctx, args[0]);
+    }
+    JS_FreeValue(ctx, emit);
   } else {
     conn->connecting = false;
 
@@ -337,6 +355,21 @@ static void on_socket_write_complete(uv_write_t* req, int status) {
     free(req->data);  // Free the buffer data
   }
   free(req);
+
+  // Emit 'drain' event if write queue is now empty
+  if (conn && conn->ctx && !conn->destroyed) {
+    size_t queue_size = uv_stream_get_write_queue_size((uv_stream_t*)&conn->handle);
+    if (queue_size == 0 && !JS_IsUndefined(conn->socket_obj)) {
+      JSContext* ctx = conn->ctx;
+      JSValue emit = JS_GetPropertyStr(ctx, conn->socket_obj, "emit");
+      if (JS_IsFunction(ctx, emit)) {
+        JSValue args[] = {JS_NewString(ctx, "drain")};
+        JS_Call(ctx, emit, conn->socket_obj, 1, args);
+        JS_FreeValue(ctx, args[0]);
+      }
+      JS_FreeValue(ctx, emit);
+    }
+  }
 }
 
 static JSValue js_socket_write(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
@@ -413,6 +446,36 @@ static JSValue js_socket_destroy(JSContext* ctx, JSValueConst this_val, int argc
   conn->connected = false;
 
   return JS_UNDEFINED;
+}
+
+static JSValue js_socket_pause(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
+  JSNetConnection* conn = JS_GetOpaque(this_val, js_socket_class_id);
+  if (!conn || conn->destroyed) {
+    return this_val;
+  }
+
+  if (!conn->paused && conn->connected) {
+    // Stop reading from the socket
+    uv_read_stop((uv_stream_t*)&conn->handle);
+    conn->paused = true;
+  }
+
+  return this_val;
+}
+
+static JSValue js_socket_resume(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
+  JSNetConnection* conn = JS_GetOpaque(this_val, js_socket_class_id);
+  if (!conn || conn->destroyed) {
+    return this_val;
+  }
+
+  if (conn->paused && conn->connected) {
+    // Resume reading from the socket
+    uv_read_start((uv_stream_t*)&conn->handle, on_socket_alloc, on_socket_read);
+    conn->paused = false;
+  }
+
+  return this_val;
 }
 
 // Server methods
@@ -849,6 +912,8 @@ static JSValue js_socket_constructor(JSContext* ctx, JSValueConst new_target, in
   JS_SetPropertyStr(ctx, obj, "write", JS_NewCFunction(ctx, js_socket_write, "write", 1));
   JS_SetPropertyStr(ctx, obj, "end", JS_NewCFunction(ctx, js_socket_end, "end", 0));
   JS_SetPropertyStr(ctx, obj, "destroy", JS_NewCFunction(ctx, js_socket_destroy, "destroy", 0));
+  JS_SetPropertyStr(ctx, obj, "pause", JS_NewCFunction(ctx, js_socket_pause, "pause", 0));
+  JS_SetPropertyStr(ctx, obj, "resume", JS_NewCFunction(ctx, js_socket_resume, "resume", 0));
 
 // Add property getters using JS_DefinePropertyGetSet
 #define DEFINE_GETTER_PROP(name, func)                                                                        \

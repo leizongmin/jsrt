@@ -404,6 +404,16 @@ JSValue js_socket_constructor(JSContext* ctx, JSValueConst new_target, int argc,
   conn->bytes_written = 0;
   conn->had_error = false;
 
+  // Parse constructor options if provided
+  if (argc > 0 && JS_IsObject(argv[0])) {
+    // allowHalfOpen option
+    JSValue allow_half_open = JS_GetPropertyStr(ctx, argv[0], "allowHalfOpen");
+    if (JS_IsBool(allow_half_open)) {
+      conn->allow_half_open = JS_ToBool(ctx, allow_half_open);
+    }
+    JS_FreeValue(ctx, allow_half_open);
+  }
+
   // Initialize libuv handle - CRITICAL for memory safety
   JSRT_Runtime* rt = JS_GetContextOpaque(ctx);
   uv_tcp_init(rt->uv_loop, &conn->handle);

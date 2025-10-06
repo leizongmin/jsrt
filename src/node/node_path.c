@@ -594,6 +594,326 @@ static JSValue js_path_relative(JSContext* ctx, JSValueConst this_val, int argc,
   return JS_NewString(ctx, result);
 }
 
+// node:path.parse implementation
+static JSValue js_path_parse(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
+  if (argc < 1) {
+    return node_throw_error(ctx, NODE_ERR_MISSING_ARGS, "path.parse requires a path argument");
+  }
+
+  NODE_ARG_REQUIRE_STRING(ctx, argv[0], "path");
+
+  const char* path = JS_ToCString(ctx, argv[0]);
+  if (!path)
+    return JS_EXCEPTION;
+
+  size_t len = strlen(path);
+
+  // Create result object
+  JSValue result = JS_NewObject(ctx);
+  if (JS_IsException(result)) {
+    JS_FreeCString(ctx, path);
+    return JS_EXCEPTION;
+  }
+
+  // Extract root component (platform-specific)
+  char root[256] = "";
+  int root_end = 0;
+
+#ifdef _WIN32
+  // Windows: Check for drive letter (C:\) or UNC path (\\server\share)
+  if (len >= 2 && ((path[0] >= 'A' && path[0] <= 'Z') || (path[0] >= 'a' && path[0] <= 'z')) && path[1] == ':') {
+    // Drive letter path
+    root[0] = path[0];
+    root[1] = ':';
+    if (len > 2 && IS_PATH_SEPARATOR(path[2])) {
+      root[2] = '\\';
+      root[3] = '\0';
+      root_end = 3;
+    } else {
+      root[2] = '\0';
+      root_end = 2;
+    }
+  } else if (len >= 2 && IS_PATH_SEPARATOR(path[0]) && IS_PATH_SEPARATOR(path[1])) {
+    // UNC path: \\server\share
+    strcpy(root, "\\\\");
+    root_end = 2;
+  } else if (len >= 1 && IS_PATH_SEPARATOR(path[0])) {
+    // Just a leading separator
+    strcpy(root, "\\");
+    root_end = 1;
+  }
+#else
+  // Unix: Check for leading /
+  if (len >= 1 && path[0] == '/') {
+    strcpy(root, "/");
+    root_end = 1;
+  }
+#endif
+
+  // Get dirname
+  char dir[4096] = "";
+  if (len > 0) {
+    // Special case: if path is just "/" or just root, dir should equal root
+    if (strcmp(path, "/") == 0 || strcmp(root, path) == 0) {
+      strcpy(dir, path);
+    } else {
+      // Skip trailing separators first (same as basename logic)
+      size_t effective_len = len;
+      while (effective_len > 0 && IS_PATH_SEPARATOR(path[effective_len - 1])) {
+        effective_len--;
+      }
+
+      // Find last separator before the basename
+      int last_sep = -1;
+      for (int i = effective_len - 1; i >= 0; i--) {
+        if (IS_PATH_SEPARATOR(path[i])) {
+          last_sep = i;
+          break;
+        }
+      }
+
+      if (last_sep > 0) {
+        // Copy everything up to (but not including) the last separator
+        size_t dir_len = last_sep;
+        if (dir_len >= sizeof(dir))
+          dir_len = sizeof(dir) - 1;
+        memcpy(dir, path, dir_len);
+        dir[dir_len] = '\0';
+      } else if (last_sep == 0) {
+        // Root directory
+        strcpy(dir, PATH_SEPARATOR_STR);
+      }
+    }
+  }
+
+  // Get basename
+  char base[4096] = "";
+  if (len > 0) {
+    // Skip trailing separators
+    size_t effective_len = len;
+    while (effective_len > 0 && IS_PATH_SEPARATOR(path[effective_len - 1])) {
+      effective_len--;
+    }
+
+    // Find last separator
+    int start = 0;
+    for (int i = effective_len - 1; i >= 0; i--) {
+      if (IS_PATH_SEPARATOR(path[i])) {
+        start = i + 1;
+        break;
+      }
+    }
+
+    // Extract basename
+    size_t basename_len = effective_len - start;
+    if (basename_len >= sizeof(base))
+      basename_len = sizeof(base) - 1;
+    memcpy(base, path + start, basename_len);
+    base[basename_len] = '\0';
+  }
+
+  // Get extension (from basename)
+  char ext[256] = "";
+  char name[4096] = "";
+  if (strlen(base) > 0) {
+    // Find last dot in basename
+    int last_dot = -1;
+    size_t base_len = strlen(base);
+
+    for (int i = base_len - 1; i >= 0; i--) {
+      if (base[i] == '.') {
+        last_dot = i;
+        break;
+      }
+    }
+
+    // Extension is only valid if:
+    // 1. There's a dot
+    // 2. The dot is not the first character (hidden files on Unix)
+    // 3. The dot is not the last character
+    if (last_dot > 0 && last_dot < (int)base_len - 1) {
+      strcpy(ext, base + last_dot);
+      // Name is base without extension
+      size_t name_len = last_dot;
+      if (name_len >= sizeof(name))
+        name_len = sizeof(name) - 1;
+      memcpy(name, base, name_len);
+      name[name_len] = '\0';
+    } else {
+      // No extension, name is same as base
+      strcpy(name, base);
+    }
+  }
+
+  // Set properties on result object
+  JS_SetPropertyStr(ctx, result, "root", JS_NewString(ctx, root));
+  JS_SetPropertyStr(ctx, result, "dir", JS_NewString(ctx, dir));
+  JS_SetPropertyStr(ctx, result, "base", JS_NewString(ctx, base));
+  JS_SetPropertyStr(ctx, result, "ext", JS_NewString(ctx, ext));
+  JS_SetPropertyStr(ctx, result, "name", JS_NewString(ctx, name));
+
+  JS_FreeCString(ctx, path);
+  return result;
+}
+
+// node:path.format implementation
+static JSValue js_path_format(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
+  if (argc < 1) {
+    return node_throw_error(ctx, NODE_ERR_MISSING_ARGS, "path.format requires a pathObject argument");
+  }
+
+  if (!JS_IsObject(argv[0])) {
+    return node_throw_error(ctx, NODE_ERR_INVALID_ARG_TYPE, "pathObject must be an object");
+  }
+
+  JSValue pathObj = argv[0];
+  char result[4096] = "";
+
+  // Extract properties from object
+  JSValue dir_val = JS_GetPropertyStr(ctx, pathObj, "dir");
+  JSValue root_val = JS_GetPropertyStr(ctx, pathObj, "root");
+  JSValue base_val = JS_GetPropertyStr(ctx, pathObj, "base");
+  JSValue name_val = JS_GetPropertyStr(ctx, pathObj, "name");
+  JSValue ext_val = JS_GetPropertyStr(ctx, pathObj, "ext");
+
+  const char* dir = NULL;
+  const char* root = NULL;
+  const char* base = NULL;
+  const char* name = NULL;
+  const char* ext = NULL;
+
+  // Convert to C strings (NULL if undefined/null)
+  if (JS_IsString(dir_val))
+    dir = JS_ToCString(ctx, dir_val);
+  if (JS_IsString(root_val))
+    root = JS_ToCString(ctx, root_val);
+  if (JS_IsString(base_val))
+    base = JS_ToCString(ctx, base_val);
+  if (JS_IsString(name_val))
+    name = JS_ToCString(ctx, name_val);
+  if (JS_IsString(ext_val))
+    ext = JS_ToCString(ctx, ext_val);
+
+  // Apply Node.js priority rules:
+  // 1. pathObject.dir + pathObject.base takes precedence
+  // 2. If no dir, use pathObject.root
+  // 3. If no base, construct from name + ext
+
+  if (dir && *dir) {
+    // Use dir as the base
+    strcpy(result, dir);
+  } else if (root && *root) {
+    // Use root as the base
+    strcpy(result, root);
+  }
+
+  // Determine the filename part
+  char filename[4096] = "";
+  if (base && *base) {
+    // Use base directly
+    strcpy(filename, base);
+  } else if (name || ext) {
+    // Construct from name + ext
+    if (name && *name) {
+      strcpy(filename, name);
+    }
+    if (ext && *ext) {
+      strcat(filename, ext);
+    }
+  }
+
+  // Combine dir/root with filename
+  if (strlen(filename) > 0) {
+    if (strlen(result) > 0) {
+      // Add separator if needed
+      size_t result_len = strlen(result);
+      if (!IS_PATH_SEPARATOR(result[result_len - 1])) {
+        strcat(result, PATH_SEPARATOR_STR);
+      }
+    }
+    strcat(result, filename);
+  }
+
+  // Handle empty result (return '.')
+  if (result[0] == '\0') {
+    strcpy(result, ".");
+  }
+
+  // Free all C strings
+  if (dir)
+    JS_FreeCString(ctx, dir);
+  if (root)
+    JS_FreeCString(ctx, root);
+  if (base)
+    JS_FreeCString(ctx, base);
+  if (name)
+    JS_FreeCString(ctx, name);
+  if (ext)
+    JS_FreeCString(ctx, ext);
+
+  // Free JSValues
+  JS_FreeValue(ctx, dir_val);
+  JS_FreeValue(ctx, root_val);
+  JS_FreeValue(ctx, base_val);
+  JS_FreeValue(ctx, name_val);
+  JS_FreeValue(ctx, ext_val);
+
+  return JS_NewString(ctx, result);
+}
+
+// node:path.toNamespacedPath implementation
+static JSValue js_path_to_namespaced(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
+  if (argc < 1) {
+    return node_throw_error(ctx, NODE_ERR_MISSING_ARGS, "path.toNamespacedPath requires a path argument");
+  }
+
+  NODE_ARG_REQUIRE_STRING(ctx, argv[0], "path");
+
+  const char* path = JS_ToCString(ctx, argv[0]);
+  if (!path)
+    return JS_EXCEPTION;
+
+#ifdef _WIN32
+  size_t len = strlen(path);
+
+  // Check if already namespaced
+  if (len >= 4 && path[0] == '\\' && path[1] == '\\' && path[2] == '?' && path[3] == '\\') {
+    // Already namespaced, return as-is
+    JSValue result = JS_NewString(ctx, path);
+    JS_FreeCString(ctx, path);
+    return result;
+  }
+
+  // Only namespace absolute paths
+  if (!is_absolute_path(path)) {
+    // Return relative paths unchanged
+    JSValue result = JS_NewString(ctx, path);
+    JS_FreeCString(ctx, path);
+    return result;
+  }
+
+  char result[4096] = "";
+
+  // Handle UNC paths: \\server\share -> \\?\UNC\server\share
+  if (len >= 2 && path[0] == '\\' && path[1] == '\\') {
+    strcpy(result, "\\\\?\\UNC\\");
+    strcat(result, path + 2);  // Skip the initial \\
+  } else {
+    // Handle regular absolute paths: C:\path -> \\?\C:\path
+    strcpy(result, "\\\\?\\");
+    strcat(result, path);
+  }
+
+  JS_FreeCString(ctx, path);
+  return JS_NewString(ctx, result);
+#else
+  // Unix: return path unchanged (no-op)
+  JSValue result = JS_NewString(ctx, path);
+  JS_FreeCString(ctx, path);
+  return result;
+#endif
+}
+
 // Initialize node:path module for CommonJS
 JSValue JSRT_InitNodePath(JSContext* ctx) {
   JSValue path_obj = JS_NewObject(ctx);
@@ -607,6 +927,10 @@ JSValue JSRT_InitNodePath(JSContext* ctx) {
   JS_SetPropertyStr(ctx, path_obj, "basename", JS_NewCFunction(ctx, js_path_basename, "basename", 2));
   JS_SetPropertyStr(ctx, path_obj, "extname", JS_NewCFunction(ctx, js_path_extname, "extname", 1));
   JS_SetPropertyStr(ctx, path_obj, "relative", JS_NewCFunction(ctx, js_path_relative, "relative", 2));
+  JS_SetPropertyStr(ctx, path_obj, "parse", JS_NewCFunction(ctx, js_path_parse, "parse", 1));
+  JS_SetPropertyStr(ctx, path_obj, "format", JS_NewCFunction(ctx, js_path_format, "format", 1));
+  JS_SetPropertyStr(ctx, path_obj, "toNamespacedPath",
+                    JS_NewCFunction(ctx, js_path_to_namespaced, "toNamespacedPath", 1));
 
   // Add properties
   JS_SetPropertyStr(ctx, path_obj, "sep", JS_NewString(ctx, PATH_SEPARATOR_STR));
@@ -658,6 +982,21 @@ JSValue JSRT_InitNodePath(JSContext* ctx) {
   JS_SetPropertyStr(ctx, posix, "relative", JS_DupValue(ctx, relative_val));
   JS_SetPropertyStr(ctx, win32, "relative", JS_DupValue(ctx, relative_val));
   JS_FreeValue(ctx, relative_val);
+
+  JSValue parse_val = JS_GetPropertyStr(ctx, path_obj, "parse");
+  JS_SetPropertyStr(ctx, posix, "parse", JS_DupValue(ctx, parse_val));
+  JS_SetPropertyStr(ctx, win32, "parse", JS_DupValue(ctx, parse_val));
+  JS_FreeValue(ctx, parse_val);
+
+  JSValue format_val = JS_GetPropertyStr(ctx, path_obj, "format");
+  JS_SetPropertyStr(ctx, posix, "format", JS_DupValue(ctx, format_val));
+  JS_SetPropertyStr(ctx, win32, "format", JS_DupValue(ctx, format_val));
+  JS_FreeValue(ctx, format_val);
+
+  JSValue toNamespacedPath_val = JS_GetPropertyStr(ctx, path_obj, "toNamespacedPath");
+  JS_SetPropertyStr(ctx, posix, "toNamespacedPath", JS_DupValue(ctx, toNamespacedPath_val));
+  JS_SetPropertyStr(ctx, win32, "toNamespacedPath", JS_DupValue(ctx, toNamespacedPath_val));
+  JS_FreeValue(ctx, toNamespacedPath_val);
 
   // Add platform-specific properties
   JS_SetPropertyStr(ctx, posix, "sep", JS_NewString(ctx, "/"));
@@ -719,6 +1058,18 @@ int js_node_path_init(JSContext* ctx, JSModuleDef* m) {
   JSValue delimiter = JS_GetPropertyStr(ctx, path_module, "delimiter");
   JS_SetModuleExport(ctx, m, "delimiter", JS_DupValue(ctx, delimiter));
   JS_FreeValue(ctx, delimiter);
+
+  JSValue parse = JS_GetPropertyStr(ctx, path_module, "parse");
+  JS_SetModuleExport(ctx, m, "parse", JS_DupValue(ctx, parse));
+  JS_FreeValue(ctx, parse);
+
+  JSValue format = JS_GetPropertyStr(ctx, path_module, "format");
+  JS_SetModuleExport(ctx, m, "format", JS_DupValue(ctx, format));
+  JS_FreeValue(ctx, format);
+
+  JSValue toNamespacedPath = JS_GetPropertyStr(ctx, path_module, "toNamespacedPath");
+  JS_SetModuleExport(ctx, m, "toNamespacedPath", JS_DupValue(ctx, toNamespacedPath));
+  JS_FreeValue(ctx, toNamespacedPath);
 
   JS_FreeValue(ctx, path_module);
   return 0;

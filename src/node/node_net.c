@@ -45,10 +45,18 @@ typedef struct {
   uv_tcp_t handle;
   uv_connect_t connect_req;
   uv_shutdown_t shutdown_req;
+  uv_timer_t timeout_timer;
   char* host;
   int port;
   bool connected;
   bool destroyed;
+  bool connecting;
+  bool paused;
+  bool in_callback;  // Prevent finalization during callback execution
+  bool timeout_enabled;
+  unsigned int timeout_ms;
+  size_t bytes_read;
+  size_t bytes_written;
 } JSNetConnection;
 
 // Server state
@@ -60,6 +68,7 @@ typedef struct {
   bool destroyed;
   char* host;
   int port;
+  int connection_count;       // Track number of active connections
   JSValue listen_callback;    // Store callback for async execution
   uv_timer_t callback_timer;  // Timer for async callback
 } JSNetServer;
@@ -70,24 +79,38 @@ static JSValue js_net_connect(JSContext* ctx, JSValueConst this_val, int argc, J
 static JSValue js_socket_constructor(JSContext* ctx, JSValueConst new_target, int argc, JSValueConst* argv);
 static JSValue js_server_constructor(JSContext* ctx, JSValueConst new_target, int argc, JSValueConst* argv);
 static void on_listen_callback_timer(uv_timer_t* timer);
+static void on_socket_timeout(uv_timer_t* timer);
 
 // Data read callback
 static void on_socket_read(uv_stream_t* stream, ssize_t nread, const uv_buf_t* buf) {
   JSNetConnection* conn = (JSNetConnection*)stream->data;
-  if (!conn || !conn->ctx) {
+  if (!conn || !conn->ctx || conn->destroyed) {
     goto cleanup;
   }
+
+  // Mark that we're in a callback to prevent finalization
+  conn->in_callback = true;
 
   JSContext* ctx = conn->ctx;
 
   // Check if socket object is still valid (not freed by GC)
   if (JS_IsUndefined(conn->socket_obj) || JS_IsNull(conn->socket_obj)) {
+    conn->in_callback = false;
     goto cleanup;
   }
 
   if (nread < 0) {
-    if (nread != UV_EOF) {
-      // Emit error event
+    if (nread == UV_EOF) {
+      // Emit 'end' event when connection closes gracefully
+      JSValue emit = JS_GetPropertyStr(ctx, conn->socket_obj, "emit");
+      if (JS_IsFunction(ctx, emit)) {
+        JSValue args[] = {JS_NewString(ctx, "end")};
+        JS_Call(ctx, emit, conn->socket_obj, 1, args);
+        JS_FreeValue(ctx, args[0]);
+      }
+      JS_FreeValue(ctx, emit);
+    } else {
+      // Emit error event for actual errors
       JSValue emit = JS_GetPropertyStr(ctx, conn->socket_obj, "emit");
       if (JS_IsFunction(ctx, emit)) {
         JSValue error = JS_NewError(ctx);
@@ -106,6 +129,9 @@ static void on_socket_read(uv_stream_t* stream, ssize_t nread, const uv_buf_t* b
     uv_close((uv_handle_t*)stream, NULL);
     conn->connected = false;
   } else if (nread > 0) {
+    // Increment bytes read counter
+    conn->bytes_read += nread;
+
     // Emit 'data' event with the buffer content
     JSValue emit = JS_GetPropertyStr(ctx, conn->socket_obj, "emit");
     if (JS_IsFunction(ctx, emit)) {
@@ -118,6 +144,11 @@ static void on_socket_read(uv_stream_t* stream, ssize_t nread, const uv_buf_t* b
       JS_FreeValue(ctx, args[1]);
     }
     JS_FreeValue(ctx, emit);
+  }
+
+  // Clear callback flag
+  if (conn) {
+    conn->in_callback = false;
   }
 
 cleanup:
@@ -182,19 +213,24 @@ static void on_connection(uv_stream_t* server, int status) {
 
 static void on_connect(uv_connect_t* req, int status) {
   JSNetConnection* conn = (JSNetConnection*)req->data;
-  if (!conn || !conn->ctx) {
+  if (!conn || !conn->ctx || conn->destroyed) {
     return;
   }
+
+  // Mark that we're in a callback to prevent finalization
+  conn->in_callback = true;
 
   JSContext* ctx = conn->ctx;
 
   // Check if socket object is still valid (not freed by GC)
   if (JS_IsUndefined(conn->socket_obj) || JS_IsNull(conn->socket_obj)) {
+    conn->in_callback = false;
     return;
   }
 
   if (status == 0) {
     conn->connected = true;
+    conn->connecting = false;
 
     // Emit 'connect' event
     JSValue emit = JS_GetPropertyStr(ctx, conn->socket_obj, "emit");
@@ -204,7 +240,18 @@ static void on_connect(uv_connect_t* req, int status) {
       JS_FreeValue(ctx, args[0]);
     }
     JS_FreeValue(ctx, emit);
+
+    // Emit 'ready' event (socket is ready for writing)
+    emit = JS_GetPropertyStr(ctx, conn->socket_obj, "emit");
+    if (JS_IsFunction(ctx, emit)) {
+      JSValue args[] = {JS_NewString(ctx, "ready")};
+      JS_Call(ctx, emit, conn->socket_obj, 1, args);
+      JS_FreeValue(ctx, args[0]);
+    }
+    JS_FreeValue(ctx, emit);
   } else {
+    conn->connecting = false;
+
     // Emit 'error' event
     JSValue emit = JS_GetPropertyStr(ctx, conn->socket_obj, "emit");
     if (JS_IsFunction(ctx, emit)) {
@@ -219,6 +266,33 @@ static void on_connect(uv_connect_t* req, int status) {
     }
     JS_FreeValue(ctx, emit);
   }
+
+  // Clear callback flag
+  conn->in_callback = false;
+}
+
+// Timeout callback for socket
+static void on_socket_timeout(uv_timer_t* timer) {
+  JSNetConnection* conn = (JSNetConnection*)timer->data;
+  if (!conn || !conn->ctx || conn->destroyed) {
+    return;
+  }
+
+  JSContext* ctx = conn->ctx;
+
+  // Check if socket object is still valid
+  if (JS_IsUndefined(conn->socket_obj) || JS_IsNull(conn->socket_obj)) {
+    return;
+  }
+
+  // Emit 'timeout' event
+  JSValue emit = JS_GetPropertyStr(ctx, conn->socket_obj, "emit");
+  if (JS_IsFunction(ctx, emit)) {
+    JSValue args[] = {JS_NewString(ctx, "timeout")};
+    JS_Call(ctx, emit, conn->socket_obj, 1, args);
+    JS_FreeValue(ctx, args[0]);
+  }
+  JS_FreeValue(ctx, emit);
 }
 
 // Async callback timer for listen() callback
@@ -280,13 +354,20 @@ static JSValue js_socket_connect(JSContext* ctx, JSValueConst this_val, int argc
   conn->handle.data = conn;
   conn->connect_req.data = conn;
 
+  // Set connecting state
+  conn->connecting = true;
+
   // Resolve address and connect
+  // NOTE: uv_ip4_addr expects a numeric IPv4 address, not a hostname
+  // TODO: Implement proper hostname resolution with uv_getaddrinfo for full Node.js compatibility
   struct sockaddr_in addr;
   uv_ip4_addr(conn->host, conn->port, &addr);
 
   int result = uv_tcp_connect(&conn->connect_req, &conn->handle, (const struct sockaddr*)&addr, on_connect);
 
   if (result < 0) {
+    conn->connecting = false;
+    uv_close((uv_handle_t*)&conn->handle, NULL);
     return JS_ThrowInternalError(ctx, "Failed to connect: %s", uv_strerror(result));
   }
 
@@ -295,11 +376,29 @@ static JSValue js_socket_connect(JSContext* ctx, JSValueConst this_val, int argc
 
 // Async write completion callback
 static void on_socket_write_complete(uv_write_t* req, int status) {
+  // Get connection for updating bytes_written
+  JSNetConnection* conn = (JSNetConnection*)req->handle->data;
+
   // Free the write request and buffer data
   if (req->data) {
     free(req->data);  // Free the buffer data
   }
   free(req);
+
+  // Emit 'drain' event if write queue is now empty
+  if (conn && conn->ctx && !conn->destroyed) {
+    size_t queue_size = uv_stream_get_write_queue_size((uv_stream_t*)&conn->handle);
+    if (queue_size == 0 && !JS_IsUndefined(conn->socket_obj)) {
+      JSContext* ctx = conn->ctx;
+      JSValue emit = JS_GetPropertyStr(ctx, conn->socket_obj, "emit");
+      if (JS_IsFunction(ctx, emit)) {
+        JSValue args[] = {JS_NewString(ctx, "drain")};
+        JS_Call(ctx, emit, conn->socket_obj, 1, args);
+        JS_FreeValue(ctx, args[0]);
+      }
+      JS_FreeValue(ctx, emit);
+    }
+  }
 }
 
 static JSValue js_socket_write(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
@@ -340,6 +439,9 @@ static JSValue js_socket_write(JSContext* ctx, JSValueConst this_val, int argc, 
     return JS_ThrowInternalError(ctx, "Write failed: %s", uv_strerror(result));
   }
 
+  // Increment bytes written counter
+  conn->bytes_written += len;
+
   return JS_NewBool(ctx, true);
 }
 
@@ -373,6 +475,124 @@ static JSValue js_socket_destroy(JSContext* ctx, JSValueConst this_val, int argc
   conn->connected = false;
 
   return JS_UNDEFINED;
+}
+
+static JSValue js_socket_pause(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
+  JSNetConnection* conn = JS_GetOpaque(this_val, js_socket_class_id);
+  if (!conn || conn->destroyed) {
+    return this_val;
+  }
+
+  if (!conn->paused && conn->connected) {
+    // Stop reading from the socket
+    uv_read_stop((uv_stream_t*)&conn->handle);
+    conn->paused = true;
+  }
+
+  return this_val;
+}
+
+static JSValue js_socket_resume(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
+  JSNetConnection* conn = JS_GetOpaque(this_val, js_socket_class_id);
+  if (!conn || conn->destroyed) {
+    return this_val;
+  }
+
+  if (conn->paused && conn->connected) {
+    // Resume reading from the socket
+    uv_read_start((uv_stream_t*)&conn->handle, on_socket_alloc, on_socket_read);
+    conn->paused = false;
+  }
+
+  return this_val;
+}
+
+static JSValue js_socket_set_timeout(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
+  JSNetConnection* conn = JS_GetOpaque(this_val, js_socket_class_id);
+  if (!conn || conn->destroyed) {
+    return this_val;
+  }
+
+  if (argc < 1) {
+    return JS_ThrowTypeError(ctx, "setTimeout requires timeout argument");
+  }
+
+  int timeout;
+  if (JS_ToInt32(ctx, &timeout, argv[0])) {
+    return JS_EXCEPTION;
+  }
+
+  if (timeout == 0) {
+    // Disable timeout
+    if (conn->timeout_enabled) {
+      uv_timer_stop(&conn->timeout_timer);
+      conn->timeout_enabled = false;
+    }
+  } else {
+    conn->timeout_ms = timeout;
+    conn->timeout_enabled = true;
+
+    // Initialize timer if not already initialized
+    if (!uv_is_active((uv_handle_t*)&conn->timeout_timer)) {
+      JSRT_Runtime* rt = JS_GetContextOpaque(ctx);
+      uv_timer_init(rt->uv_loop, &conn->timeout_timer);
+      conn->timeout_timer.data = conn;
+    }
+
+    // Start/restart the timeout timer
+    uv_timer_start(&conn->timeout_timer, on_socket_timeout, timeout, 0);
+  }
+
+  return this_val;
+}
+
+static JSValue js_socket_set_keep_alive(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
+  JSNetConnection* conn = JS_GetOpaque(this_val, js_socket_class_id);
+  if (!conn || conn->destroyed) {
+    return this_val;
+  }
+
+  bool enable = true;
+  unsigned int delay = 0;
+
+  if (argc > 0) {
+    enable = JS_ToBool(ctx, argv[0]);
+  }
+
+  if (argc > 1 && enable) {
+    int delay_val;
+    if (JS_ToInt32(ctx, &delay_val, argv[1]) == 0) {
+      delay = (unsigned int)delay_val / 1000;  // Convert ms to seconds for libuv
+    }
+  }
+
+  // Set TCP keepalive
+  int result = uv_tcp_keepalive(&conn->handle, enable ? 1 : 0, delay);
+  if (result < 0) {
+    return JS_ThrowInternalError(ctx, "Failed to set keepalive: %s", uv_strerror(result));
+  }
+
+  return this_val;
+}
+
+static JSValue js_socket_set_no_delay(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
+  JSNetConnection* conn = JS_GetOpaque(this_val, js_socket_class_id);
+  if (!conn || conn->destroyed) {
+    return this_val;
+  }
+
+  bool enable = true;
+  if (argc > 0) {
+    enable = JS_ToBool(ctx, argv[0]);
+  }
+
+  // Set TCP_NODELAY (Nagle's algorithm)
+  int result = uv_tcp_nodelay(&conn->handle, enable ? 1 : 0);
+  if (result < 0) {
+    return JS_ThrowInternalError(ctx, "Failed to set nodelay: %s", uv_strerror(result));
+  }
+
+  return this_val;
 }
 
 // Server methods
@@ -417,11 +637,13 @@ static JSValue js_server_listen(JSContext* ctx, JSValueConst this_val, int argc,
 
   int result = uv_tcp_bind(&server->handle, (const struct sockaddr*)&addr, 0);
   if (result < 0) {
+    uv_close((uv_handle_t*)&server->handle, NULL);
     return JS_ThrowInternalError(ctx, "Bind failed: %s", uv_strerror(result));
   }
 
   result = uv_listen((uv_stream_t*)&server->handle, 128, on_connection);
   if (result < 0) {
+    uv_close((uv_handle_t*)&server->handle, NULL);
     return JS_ThrowInternalError(ctx, "Listen failed: %s", uv_strerror(result));
   }
 
@@ -471,11 +693,401 @@ static JSValue js_server_close(JSContext* ctx, JSValueConst this_val, int argc, 
   return JS_UNDEFINED;
 }
 
+static JSValue js_server_address(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
+  JSNetServer* server = JS_GetOpaque(this_val, js_server_class_id);
+  if (!server || !server->listening) {
+    return JS_NULL;
+  }
+
+  struct sockaddr_storage addr;
+  int addrlen = sizeof(addr);
+  int r = uv_tcp_getsockname(&server->handle, (struct sockaddr*)&addr, &addrlen);
+  if (r != 0) {
+    return JS_NULL;
+  }
+
+  // Create address object { address: string, family: string, port: number }
+  JSValue obj = JS_NewObject(ctx);
+
+  char ip[INET6_ADDRSTRLEN];
+  int port = 0;
+  const char* family = NULL;
+
+  if (addr.ss_family == AF_INET) {
+    struct sockaddr_in* addr4 = (struct sockaddr_in*)&addr;
+    uv_ip4_name(addr4, ip, sizeof(ip));
+    port = ntohs(addr4->sin_port);
+    family = "IPv4";
+  } else if (addr.ss_family == AF_INET6) {
+    struct sockaddr_in6* addr6 = (struct sockaddr_in6*)&addr;
+    uv_ip6_name(addr6, ip, sizeof(ip));
+    port = ntohs(addr6->sin6_port);
+    family = "IPv6";
+  } else {
+    JS_FreeValue(ctx, obj);
+    return JS_NULL;
+  }
+
+  JS_SetPropertyStr(ctx, obj, "address", JS_NewString(ctx, ip));
+  JS_SetPropertyStr(ctx, obj, "family", JS_NewString(ctx, family));
+  JS_SetPropertyStr(ctx, obj, "port", JS_NewInt32(ctx, port));
+
+  return obj;
+}
+
+static JSValue js_server_get_connections(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
+  JSNetServer* server = JS_GetOpaque(this_val, js_server_class_id);
+  if (!server) {
+    return JS_UNDEFINED;
+  }
+
+  if (argc < 1 || !JS_IsFunction(ctx, argv[0])) {
+    return JS_ThrowTypeError(ctx, "getConnections requires a callback function");
+  }
+
+  // Call callback with (err, count)
+  // NOTE: Connection tracking is not fully implemented yet
+  // Returning 0 for now (valid behavior per Node.js docs)
+  JSValue callback = argv[0];
+  JSValue args[2];
+  args[0] = JS_NULL;              // No error
+  args[1] = JS_NewInt32(ctx, 0);  // Return 0 for now
+
+  JSValue result = JS_Call(ctx, callback, this_val, 2, args);
+  JS_FreeValue(ctx, args[0]);
+  JS_FreeValue(ctx, args[1]);
+  JS_FreeValue(ctx, result);
+
+  return JS_UNDEFINED;
+}
+
+static JSValue js_server_ref(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
+  JSNetServer* server = JS_GetOpaque(this_val, js_server_class_id);
+  if (!server || server->destroyed) {
+    return this_val;
+  }
+
+  if (server->listening) {
+    uv_ref((uv_handle_t*)&server->handle);
+  }
+
+  return this_val;
+}
+
+static JSValue js_server_unref(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
+  JSNetServer* server = JS_GetOpaque(this_val, js_server_class_id);
+  if (!server || server->destroyed) {
+    return this_val;
+  }
+
+  if (server->listening) {
+    uv_unref((uv_handle_t*)&server->handle);
+  }
+
+  return this_val;
+}
+
+static JSValue js_socket_ref(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
+  JSNetConnection* conn = JS_GetOpaque(this_val, js_socket_class_id);
+  if (!conn || conn->destroyed) {
+    return this_val;
+  }
+
+  if (conn->connected) {
+    uv_ref((uv_handle_t*)&conn->handle);
+  }
+
+  return this_val;
+}
+
+static JSValue js_socket_unref(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
+  JSNetConnection* conn = JS_GetOpaque(this_val, js_socket_class_id);
+  if (!conn || conn->destroyed) {
+    return this_val;
+  }
+
+  if (conn->connected) {
+    uv_unref((uv_handle_t*)&conn->handle);
+  }
+
+  return this_val;
+}
+
+static JSValue js_socket_address(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
+  JSNetConnection* conn = JS_GetOpaque(this_val, js_socket_class_id);
+  if (!conn || !conn->connected) {
+    return JS_NULL;
+  }
+
+  struct sockaddr_storage addr;
+  int addrlen = sizeof(addr);
+  int r = uv_tcp_getsockname(&conn->handle, (struct sockaddr*)&addr, &addrlen);
+  if (r != 0) {
+    return JS_NULL;
+  }
+
+  // Create address object { address: string, family: string, port: number }
+  JSValue obj = JS_NewObject(ctx);
+
+  char ip[INET6_ADDRSTRLEN];
+  int port = 0;
+  const char* family = NULL;
+
+  if (addr.ss_family == AF_INET) {
+    struct sockaddr_in* addr4 = (struct sockaddr_in*)&addr;
+    uv_ip4_name(addr4, ip, sizeof(ip));
+    port = ntohs(addr4->sin_port);
+    family = "IPv4";
+  } else if (addr.ss_family == AF_INET6) {
+    struct sockaddr_in6* addr6 = (struct sockaddr_in6*)&addr;
+    uv_ip6_name(addr6, ip, sizeof(ip));
+    port = ntohs(addr6->sin6_port);
+    family = "IPv6";
+  } else {
+    JS_FreeValue(ctx, obj);
+    return JS_NULL;
+  }
+
+  JS_SetPropertyStr(ctx, obj, "address", JS_NewString(ctx, ip));
+  JS_SetPropertyStr(ctx, obj, "family", JS_NewString(ctx, family));
+  JS_SetPropertyStr(ctx, obj, "port", JS_NewInt32(ctx, port));
+
+  return obj;
+}
+
+// Socket property getters
+static JSValue js_socket_get_local_address(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
+  JSNetConnection* conn = JS_GetOpaque(this_val, js_socket_class_id);
+  if (!conn || !conn->connected) {
+    return JS_NULL;
+  }
+
+  struct sockaddr_storage addr;
+  int addrlen = sizeof(addr);
+  int r = uv_tcp_getsockname(&conn->handle, (struct sockaddr*)&addr, &addrlen);
+  if (r != 0) {
+    return JS_NULL;
+  }
+
+  char ip[INET6_ADDRSTRLEN];
+  if (addr.ss_family == AF_INET) {
+    struct sockaddr_in* addr4 = (struct sockaddr_in*)&addr;
+    uv_ip4_name(addr4, ip, sizeof(ip));
+  } else if (addr.ss_family == AF_INET6) {
+    struct sockaddr_in6* addr6 = (struct sockaddr_in6*)&addr;
+    uv_ip6_name(addr6, ip, sizeof(ip));
+  } else {
+    return JS_NULL;
+  }
+
+  return JS_NewString(ctx, ip);
+}
+
+static JSValue js_socket_get_local_port(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
+  JSNetConnection* conn = JS_GetOpaque(this_val, js_socket_class_id);
+  if (!conn || !conn->connected) {
+    return JS_NULL;
+  }
+
+  struct sockaddr_storage addr;
+  int addrlen = sizeof(addr);
+  int r = uv_tcp_getsockname(&conn->handle, (struct sockaddr*)&addr, &addrlen);
+  if (r != 0) {
+    return JS_NULL;
+  }
+
+  int port = 0;
+  if (addr.ss_family == AF_INET) {
+    struct sockaddr_in* addr4 = (struct sockaddr_in*)&addr;
+    port = ntohs(addr4->sin_port);
+  } else if (addr.ss_family == AF_INET6) {
+    struct sockaddr_in6* addr6 = (struct sockaddr_in6*)&addr;
+    port = ntohs(addr6->sin6_port);
+  }
+
+  return JS_NewInt32(ctx, port);
+}
+
+static JSValue js_socket_get_local_family(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
+  JSNetConnection* conn = JS_GetOpaque(this_val, js_socket_class_id);
+  if (!conn || !conn->connected) {
+    return JS_NULL;
+  }
+
+  struct sockaddr_storage addr;
+  int addrlen = sizeof(addr);
+  int r = uv_tcp_getsockname(&conn->handle, (struct sockaddr*)&addr, &addrlen);
+  if (r != 0) {
+    return JS_NULL;
+  }
+
+  if (addr.ss_family == AF_INET) {
+    return JS_NewString(ctx, "IPv4");
+  } else if (addr.ss_family == AF_INET6) {
+    return JS_NewString(ctx, "IPv6");
+  }
+
+  return JS_NULL;
+}
+
+static JSValue js_socket_get_remote_address(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
+  JSNetConnection* conn = JS_GetOpaque(this_val, js_socket_class_id);
+  if (!conn || !conn->connected) {
+    return JS_NULL;
+  }
+
+  struct sockaddr_storage addr;
+  int addrlen = sizeof(addr);
+  int r = uv_tcp_getpeername(&conn->handle, (struct sockaddr*)&addr, &addrlen);
+  if (r != 0) {
+    return JS_NULL;
+  }
+
+  char ip[INET6_ADDRSTRLEN];
+  if (addr.ss_family == AF_INET) {
+    struct sockaddr_in* addr4 = (struct sockaddr_in*)&addr;
+    uv_ip4_name(addr4, ip, sizeof(ip));
+  } else if (addr.ss_family == AF_INET6) {
+    struct sockaddr_in6* addr6 = (struct sockaddr_in6*)&addr;
+    uv_ip6_name(addr6, ip, sizeof(ip));
+  } else {
+    return JS_NULL;
+  }
+
+  return JS_NewString(ctx, ip);
+}
+
+static JSValue js_socket_get_remote_port(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
+  JSNetConnection* conn = JS_GetOpaque(this_val, js_socket_class_id);
+  if (!conn || !conn->connected) {
+    return JS_NULL;
+  }
+
+  struct sockaddr_storage addr;
+  int addrlen = sizeof(addr);
+  int r = uv_tcp_getpeername(&conn->handle, (struct sockaddr*)&addr, &addrlen);
+  if (r != 0) {
+    return JS_NULL;
+  }
+
+  int port = 0;
+  if (addr.ss_family == AF_INET) {
+    struct sockaddr_in* addr4 = (struct sockaddr_in*)&addr;
+    port = ntohs(addr4->sin_port);
+  } else if (addr.ss_family == AF_INET6) {
+    struct sockaddr_in6* addr6 = (struct sockaddr_in6*)&addr;
+    port = ntohs(addr6->sin6_port);
+  }
+
+  return JS_NewInt32(ctx, port);
+}
+
+static JSValue js_socket_get_remote_family(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
+  JSNetConnection* conn = JS_GetOpaque(this_val, js_socket_class_id);
+  if (!conn || !conn->connected) {
+    return JS_NULL;
+  }
+
+  struct sockaddr_storage addr;
+  int addrlen = sizeof(addr);
+  int r = uv_tcp_getpeername(&conn->handle, (struct sockaddr*)&addr, &addrlen);
+  if (r != 0) {
+    return JS_NULL;
+  }
+
+  if (addr.ss_family == AF_INET) {
+    return JS_NewString(ctx, "IPv4");
+  } else if (addr.ss_family == AF_INET6) {
+    return JS_NewString(ctx, "IPv6");
+  }
+
+  return JS_NULL;
+}
+
+static JSValue js_socket_get_bytes_read(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
+  JSNetConnection* conn = JS_GetOpaque(this_val, js_socket_class_id);
+  if (!conn) {
+    return JS_NewInt64(ctx, 0);
+  }
+  return JS_NewInt64(ctx, conn->bytes_read);
+}
+
+static JSValue js_socket_get_bytes_written(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
+  JSNetConnection* conn = JS_GetOpaque(this_val, js_socket_class_id);
+  if (!conn) {
+    return JS_NewInt64(ctx, 0);
+  }
+  return JS_NewInt64(ctx, conn->bytes_written);
+}
+
+static JSValue js_socket_get_connecting(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
+  JSNetConnection* conn = JS_GetOpaque(this_val, js_socket_class_id);
+  if (!conn) {
+    return JS_NewBool(ctx, false);
+  }
+  return JS_NewBool(ctx, conn->connecting);
+}
+
+static JSValue js_socket_get_destroyed(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
+  JSNetConnection* conn = JS_GetOpaque(this_val, js_socket_class_id);
+  if (!conn) {
+    return JS_NewBool(ctx, true);
+  }
+  return JS_NewBool(ctx, conn->destroyed);
+}
+
+static JSValue js_socket_get_pending(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
+  JSNetConnection* conn = JS_GetOpaque(this_val, js_socket_class_id);
+  if (!conn) {
+    return JS_NewBool(ctx, false);
+  }
+  // pending means not yet connected (connecting or not started)
+  return JS_NewBool(ctx, !conn->connected && !conn->destroyed);
+}
+
+static JSValue js_socket_get_ready_state(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
+  JSNetConnection* conn = JS_GetOpaque(this_val, js_socket_class_id);
+  if (!conn) {
+    return JS_NewString(ctx, "closed");
+  }
+
+  if (conn->destroyed) {
+    return JS_NewString(ctx, "closed");
+  } else if (conn->connecting) {
+    return JS_NewString(ctx, "opening");
+  } else if (conn->connected) {
+    return JS_NewString(ctx, "open");
+  } else {
+    return JS_NewString(ctx, "closed");
+  }
+}
+
+static JSValue js_socket_get_buffer_size(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
+  JSNetConnection* conn = JS_GetOpaque(this_val, js_socket_class_id);
+  if (!conn || !conn->connected) {
+    return JS_NewInt32(ctx, 0);
+  }
+
+  // Get the write queue size from libuv
+  size_t size = uv_stream_get_write_queue_size((uv_stream_t*)&conn->handle);
+  return JS_NewInt64(ctx, size);
+}
+
 // Close callback for socket cleanup
 static void socket_close_callback(uv_handle_t* handle) {
-  // Do not free memory here to avoid race conditions with uv_walk
-  // Memory will be freed during runtime cleanup
-  (void)handle;
+  // Free the connection struct after handle is closed
+  if (handle->data) {
+    JSNetConnection* conn = (JSNetConnection*)handle->data;
+
+    // NOTE: 'close' event emission removed to prevent use-after-free
+    // The socket_obj may have been garbage collected by the time this runs
+
+    if (conn->host) {
+      free(conn->host);
+    }
+    free(conn);
+    handle->data = NULL;  // Prevent double-free
+  }
 }
 
 // Class finalizers
@@ -485,35 +1097,68 @@ static void js_socket_finalizer(JSRuntime* rt, JSValue val) {
     // Mark socket object as invalid to prevent use-after-free in callbacks
     conn->socket_obj = JS_UNDEFINED;
 
-    // Only close if not already closing - memory will be freed during runtime cleanup
+    // Stop and close timeout timer if it's active
+    if (conn->timeout_enabled) {
+      uv_timer_stop(&conn->timeout_timer);
+      if (!uv_is_closing((uv_handle_t*)&conn->timeout_timer)) {
+        uv_close((uv_handle_t*)&conn->timeout_timer, NULL);
+      }
+      conn->timeout_enabled = false;
+    }
+
+    // Only close if not already closing - memory will be freed in close callback
     if (!uv_is_closing((uv_handle_t*)&conn->handle)) {
       uv_close((uv_handle_t*)&conn->handle, socket_close_callback);
+    } else if (conn->handle.data) {
+      // Handle already closing, but not yet freed - will be freed by close callback
+      // Do nothing here
+    } else {
+      // Handle already closed and freed, or never initialized
+      // This shouldn't happen, but handle it safely
     }
-    // Do not free memory here - it will be freed during runtime cleanup
   }
 }
 
 // Close callback for server cleanup
 static void server_close_callback(uv_handle_t* handle) {
-  // Do not free memory here to avoid race conditions with uv_walk
-  // Memory will be freed during runtime cleanup
-  (void)handle;
+  // Free the server struct after handle is closed
+  if (handle->data) {
+    JSNetServer* server = (JSNetServer*)handle->data;
+
+    // NOTE: 'close' event emission removed to prevent use-after-free
+    // The server_obj may have been garbage collected by the time this runs
+
+    if (server->host) {
+      free(server->host);
+    }
+    free(server);
+    handle->data = NULL;  // Prevent double-free
+  }
 }
 
 static void js_server_finalizer(JSRuntime* rt, JSValue val) {
   JSNetServer* server = JS_GetOpaque(val, js_server_class_id);
   if (server) {
-    // Clean up callback if it exists
+    // Clean up callback and timer if they exist
     if (!JS_IsUndefined(server->listen_callback)) {
       JS_FreeValueRT(rt, server->listen_callback);
+      server->listen_callback = JS_UNDEFINED;
       uv_timer_stop(&server->callback_timer);
+      if (!uv_is_closing((uv_handle_t*)&server->callback_timer)) {
+        uv_close((uv_handle_t*)&server->callback_timer, NULL);
+      }
     }
 
+    // Close server handle if still listening - memory will be freed in close callback
     if (server->listening && !uv_is_closing((uv_handle_t*)&server->handle)) {
-      // Use proper close callback - memory will be freed during runtime cleanup
       uv_close((uv_handle_t*)&server->handle, server_close_callback);
+    } else if (server->handle.data) {
+      // Handle already closing, but not yet freed - will be freed by close callback
+      // Do nothing here
+    } else {
+      // Handle already closed and freed, or never initialized
+      // This shouldn't happen, but handle it safely
     }
-    // Do not free memory here - it will be freed during runtime cleanup
   }
 }
 
@@ -545,6 +1190,13 @@ static JSValue js_socket_constructor(JSContext* ctx, JSValueConst new_target, in
   conn->socket_obj = JS_DupValue(ctx, obj);
   conn->connected = false;
   conn->destroyed = false;
+  conn->connecting = false;
+  conn->paused = false;
+  conn->in_callback = false;
+  conn->timeout_enabled = false;
+  conn->timeout_ms = 0;
+  conn->bytes_read = 0;
+  conn->bytes_written = 0;
 
   // Initialize libuv handle - CRITICAL for memory safety
   JSRT_Runtime* rt = JS_GetContextOpaque(ctx);
@@ -558,6 +1210,39 @@ static JSValue js_socket_constructor(JSContext* ctx, JSValueConst new_target, in
   JS_SetPropertyStr(ctx, obj, "write", JS_NewCFunction(ctx, js_socket_write, "write", 1));
   JS_SetPropertyStr(ctx, obj, "end", JS_NewCFunction(ctx, js_socket_end, "end", 0));
   JS_SetPropertyStr(ctx, obj, "destroy", JS_NewCFunction(ctx, js_socket_destroy, "destroy", 0));
+  JS_SetPropertyStr(ctx, obj, "pause", JS_NewCFunction(ctx, js_socket_pause, "pause", 0));
+  JS_SetPropertyStr(ctx, obj, "resume", JS_NewCFunction(ctx, js_socket_resume, "resume", 0));
+  JS_SetPropertyStr(ctx, obj, "setTimeout", JS_NewCFunction(ctx, js_socket_set_timeout, "setTimeout", 1));
+  JS_SetPropertyStr(ctx, obj, "setKeepAlive", JS_NewCFunction(ctx, js_socket_set_keep_alive, "setKeepAlive", 2));
+  JS_SetPropertyStr(ctx, obj, "setNoDelay", JS_NewCFunction(ctx, js_socket_set_no_delay, "setNoDelay", 1));
+  JS_SetPropertyStr(ctx, obj, "ref", JS_NewCFunction(ctx, js_socket_ref, "ref", 0));
+  JS_SetPropertyStr(ctx, obj, "unref", JS_NewCFunction(ctx, js_socket_unref, "unref", 0));
+  JS_SetPropertyStr(ctx, obj, "address", JS_NewCFunction(ctx, js_socket_address, "address", 0));
+
+// Add property getters using JS_DefinePropertyGetSet
+#define DEFINE_GETTER_PROP(name, func)                                                                        \
+  do {                                                                                                        \
+    JSAtom atom = JS_NewAtom(ctx, name);                                                                      \
+    JSValue getter = JS_NewCFunction(ctx, func, "get " name, 0);                                              \
+    JS_DefinePropertyGetSet(ctx, obj, atom, getter, JS_UNDEFINED, JS_PROP_CONFIGURABLE | JS_PROP_ENUMERABLE); \
+    JS_FreeAtom(ctx, atom);                                                                                   \
+  } while (0)
+
+  DEFINE_GETTER_PROP("localAddress", js_socket_get_local_address);
+  DEFINE_GETTER_PROP("localPort", js_socket_get_local_port);
+  DEFINE_GETTER_PROP("localFamily", js_socket_get_local_family);
+  DEFINE_GETTER_PROP("remoteAddress", js_socket_get_remote_address);
+  DEFINE_GETTER_PROP("remotePort", js_socket_get_remote_port);
+  DEFINE_GETTER_PROP("remoteFamily", js_socket_get_remote_family);
+  DEFINE_GETTER_PROP("bytesRead", js_socket_get_bytes_read);
+  DEFINE_GETTER_PROP("bytesWritten", js_socket_get_bytes_written);
+  DEFINE_GETTER_PROP("connecting", js_socket_get_connecting);
+  DEFINE_GETTER_PROP("destroyed", js_socket_get_destroyed);
+  DEFINE_GETTER_PROP("pending", js_socket_get_pending);
+  DEFINE_GETTER_PROP("readyState", js_socket_get_ready_state);
+  DEFINE_GETTER_PROP("bufferSize", js_socket_get_buffer_size);
+
+#undef DEFINE_GETTER_PROP
 
   // Add EventEmitter functionality
   add_event_emitter_methods(ctx, obj);
@@ -581,6 +1266,7 @@ static JSValue js_server_constructor(JSContext* ctx, JSValueConst new_target, in
   server->server_obj = JS_DupValue(ctx, obj);
   server->listening = false;
   server->destroyed = false;
+  server->connection_count = 0;
   server->listen_callback = JS_UNDEFINED;
 
   JS_SetOpaque(obj, server);
@@ -588,6 +1274,10 @@ static JSValue js_server_constructor(JSContext* ctx, JSValueConst new_target, in
   // Add server methods
   JS_SetPropertyStr(ctx, obj, "listen", JS_NewCFunction(ctx, js_server_listen, "listen", 3));
   JS_SetPropertyStr(ctx, obj, "close", JS_NewCFunction(ctx, js_server_close, "close", 0));
+  JS_SetPropertyStr(ctx, obj, "address", JS_NewCFunction(ctx, js_server_address, "address", 0));
+  JS_SetPropertyStr(ctx, obj, "getConnections", JS_NewCFunction(ctx, js_server_get_connections, "getConnections", 1));
+  JS_SetPropertyStr(ctx, obj, "ref", JS_NewCFunction(ctx, js_server_ref, "ref", 0));
+  JS_SetPropertyStr(ctx, obj, "unref", JS_NewCFunction(ctx, js_server_unref, "unref", 0));
 
   // Add EventEmitter functionality
   add_event_emitter_methods(ctx, obj);

@@ -49,6 +49,10 @@ typedef struct {
   int port;
   bool connected;
   bool destroyed;
+  bool connecting;
+  bool paused;
+  size_t bytes_read;
+  size_t bytes_written;
 } JSNetConnection;
 
 // Server state
@@ -106,6 +110,9 @@ static void on_socket_read(uv_stream_t* stream, ssize_t nread, const uv_buf_t* b
     uv_close((uv_handle_t*)stream, NULL);
     conn->connected = false;
   } else if (nread > 0) {
+    // Increment bytes read counter
+    conn->bytes_read += nread;
+
     // Emit 'data' event with the buffer content
     JSValue emit = JS_GetPropertyStr(ctx, conn->socket_obj, "emit");
     if (JS_IsFunction(ctx, emit)) {
@@ -195,6 +202,7 @@ static void on_connect(uv_connect_t* req, int status) {
 
   if (status == 0) {
     conn->connected = true;
+    conn->connecting = false;
 
     // Emit 'connect' event
     JSValue emit = JS_GetPropertyStr(ctx, conn->socket_obj, "emit");
@@ -205,6 +213,8 @@ static void on_connect(uv_connect_t* req, int status) {
     }
     JS_FreeValue(ctx, emit);
   } else {
+    conn->connecting = false;
+
     // Emit 'error' event
     JSValue emit = JS_GetPropertyStr(ctx, conn->socket_obj, "emit");
     if (JS_IsFunction(ctx, emit)) {
@@ -280,6 +290,9 @@ static JSValue js_socket_connect(JSContext* ctx, JSValueConst this_val, int argc
   conn->handle.data = conn;
   conn->connect_req.data = conn;
 
+  // Set connecting state
+  conn->connecting = true;
+
   // Resolve address and connect
   struct sockaddr_in addr;
   uv_ip4_addr(conn->host, conn->port, &addr);
@@ -287,6 +300,7 @@ static JSValue js_socket_connect(JSContext* ctx, JSValueConst this_val, int argc
   int result = uv_tcp_connect(&conn->connect_req, &conn->handle, (const struct sockaddr*)&addr, on_connect);
 
   if (result < 0) {
+    conn->connecting = false;
     return JS_ThrowInternalError(ctx, "Failed to connect: %s", uv_strerror(result));
   }
 
@@ -295,6 +309,9 @@ static JSValue js_socket_connect(JSContext* ctx, JSValueConst this_val, int argc
 
 // Async write completion callback
 static void on_socket_write_complete(uv_write_t* req, int status) {
+  // Get connection for updating bytes_written
+  JSNetConnection* conn = (JSNetConnection*)req->handle->data;
+
   // Free the write request and buffer data
   if (req->data) {
     free(req->data);  // Free the buffer data
@@ -339,6 +356,9 @@ static JSValue js_socket_write(JSContext* ctx, JSValueConst this_val, int argc, 
     free(write_req);
     return JS_ThrowInternalError(ctx, "Write failed: %s", uv_strerror(result));
   }
+
+  // Increment bytes written counter
+  conn->bytes_written += len;
 
   return JS_NewBool(ctx, true);
 }
@@ -471,6 +491,224 @@ static JSValue js_server_close(JSContext* ctx, JSValueConst this_val, int argc, 
   return JS_UNDEFINED;
 }
 
+// Socket property getters
+static JSValue js_socket_get_local_address(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
+  JSNetConnection* conn = JS_GetOpaque(this_val, js_socket_class_id);
+  if (!conn || !conn->connected) {
+    return JS_NULL;
+  }
+
+  struct sockaddr_storage addr;
+  int addrlen = sizeof(addr);
+  int r = uv_tcp_getsockname(&conn->handle, (struct sockaddr*)&addr, &addrlen);
+  if (r != 0) {
+    return JS_NULL;
+  }
+
+  char ip[INET6_ADDRSTRLEN];
+  if (addr.ss_family == AF_INET) {
+    struct sockaddr_in* addr4 = (struct sockaddr_in*)&addr;
+    uv_ip4_name(addr4, ip, sizeof(ip));
+  } else if (addr.ss_family == AF_INET6) {
+    struct sockaddr_in6* addr6 = (struct sockaddr_in6*)&addr;
+    uv_ip6_name(addr6, ip, sizeof(ip));
+  } else {
+    return JS_NULL;
+  }
+
+  return JS_NewString(ctx, ip);
+}
+
+static JSValue js_socket_get_local_port(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
+  JSNetConnection* conn = JS_GetOpaque(this_val, js_socket_class_id);
+  if (!conn || !conn->connected) {
+    return JS_NULL;
+  }
+
+  struct sockaddr_storage addr;
+  int addrlen = sizeof(addr);
+  int r = uv_tcp_getsockname(&conn->handle, (struct sockaddr*)&addr, &addrlen);
+  if (r != 0) {
+    return JS_NULL;
+  }
+
+  int port = 0;
+  if (addr.ss_family == AF_INET) {
+    struct sockaddr_in* addr4 = (struct sockaddr_in*)&addr;
+    port = ntohs(addr4->sin_port);
+  } else if (addr.ss_family == AF_INET6) {
+    struct sockaddr_in6* addr6 = (struct sockaddr_in6*)&addr;
+    port = ntohs(addr6->sin6_port);
+  }
+
+  return JS_NewInt32(ctx, port);
+}
+
+static JSValue js_socket_get_local_family(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
+  JSNetConnection* conn = JS_GetOpaque(this_val, js_socket_class_id);
+  if (!conn || !conn->connected) {
+    return JS_NULL;
+  }
+
+  struct sockaddr_storage addr;
+  int addrlen = sizeof(addr);
+  int r = uv_tcp_getsockname(&conn->handle, (struct sockaddr*)&addr, &addrlen);
+  if (r != 0) {
+    return JS_NULL;
+  }
+
+  if (addr.ss_family == AF_INET) {
+    return JS_NewString(ctx, "IPv4");
+  } else if (addr.ss_family == AF_INET6) {
+    return JS_NewString(ctx, "IPv6");
+  }
+
+  return JS_NULL;
+}
+
+static JSValue js_socket_get_remote_address(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
+  JSNetConnection* conn = JS_GetOpaque(this_val, js_socket_class_id);
+  if (!conn || !conn->connected) {
+    return JS_NULL;
+  }
+
+  struct sockaddr_storage addr;
+  int addrlen = sizeof(addr);
+  int r = uv_tcp_getpeername(&conn->handle, (struct sockaddr*)&addr, &addrlen);
+  if (r != 0) {
+    return JS_NULL;
+  }
+
+  char ip[INET6_ADDRSTRLEN];
+  if (addr.ss_family == AF_INET) {
+    struct sockaddr_in* addr4 = (struct sockaddr_in*)&addr;
+    uv_ip4_name(addr4, ip, sizeof(ip));
+  } else if (addr.ss_family == AF_INET6) {
+    struct sockaddr_in6* addr6 = (struct sockaddr_in6*)&addr;
+    uv_ip6_name(addr6, ip, sizeof(ip));
+  } else {
+    return JS_NULL;
+  }
+
+  return JS_NewString(ctx, ip);
+}
+
+static JSValue js_socket_get_remote_port(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
+  JSNetConnection* conn = JS_GetOpaque(this_val, js_socket_class_id);
+  if (!conn || !conn->connected) {
+    return JS_NULL;
+  }
+
+  struct sockaddr_storage addr;
+  int addrlen = sizeof(addr);
+  int r = uv_tcp_getpeername(&conn->handle, (struct sockaddr*)&addr, &addrlen);
+  if (r != 0) {
+    return JS_NULL;
+  }
+
+  int port = 0;
+  if (addr.ss_family == AF_INET) {
+    struct sockaddr_in* addr4 = (struct sockaddr_in*)&addr;
+    port = ntohs(addr4->sin_port);
+  } else if (addr.ss_family == AF_INET6) {
+    struct sockaddr_in6* addr6 = (struct sockaddr_in6*)&addr;
+    port = ntohs(addr6->sin6_port);
+  }
+
+  return JS_NewInt32(ctx, port);
+}
+
+static JSValue js_socket_get_remote_family(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
+  JSNetConnection* conn = JS_GetOpaque(this_val, js_socket_class_id);
+  if (!conn || !conn->connected) {
+    return JS_NULL;
+  }
+
+  struct sockaddr_storage addr;
+  int addrlen = sizeof(addr);
+  int r = uv_tcp_getpeername(&conn->handle, (struct sockaddr*)&addr, &addrlen);
+  if (r != 0) {
+    return JS_NULL;
+  }
+
+  if (addr.ss_family == AF_INET) {
+    return JS_NewString(ctx, "IPv4");
+  } else if (addr.ss_family == AF_INET6) {
+    return JS_NewString(ctx, "IPv6");
+  }
+
+  return JS_NULL;
+}
+
+static JSValue js_socket_get_bytes_read(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
+  JSNetConnection* conn = JS_GetOpaque(this_val, js_socket_class_id);
+  if (!conn) {
+    return JS_NewInt64(ctx, 0);
+  }
+  return JS_NewInt64(ctx, conn->bytes_read);
+}
+
+static JSValue js_socket_get_bytes_written(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
+  JSNetConnection* conn = JS_GetOpaque(this_val, js_socket_class_id);
+  if (!conn) {
+    return JS_NewInt64(ctx, 0);
+  }
+  return JS_NewInt64(ctx, conn->bytes_written);
+}
+
+static JSValue js_socket_get_connecting(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
+  JSNetConnection* conn = JS_GetOpaque(this_val, js_socket_class_id);
+  if (!conn) {
+    return JS_NewBool(ctx, false);
+  }
+  return JS_NewBool(ctx, conn->connecting);
+}
+
+static JSValue js_socket_get_destroyed(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
+  JSNetConnection* conn = JS_GetOpaque(this_val, js_socket_class_id);
+  if (!conn) {
+    return JS_NewBool(ctx, true);
+  }
+  return JS_NewBool(ctx, conn->destroyed);
+}
+
+static JSValue js_socket_get_pending(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
+  JSNetConnection* conn = JS_GetOpaque(this_val, js_socket_class_id);
+  if (!conn) {
+    return JS_NewBool(ctx, false);
+  }
+  // pending means not yet connected (connecting or not started)
+  return JS_NewBool(ctx, !conn->connected && !conn->destroyed);
+}
+
+static JSValue js_socket_get_ready_state(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
+  JSNetConnection* conn = JS_GetOpaque(this_val, js_socket_class_id);
+  if (!conn) {
+    return JS_NewString(ctx, "closed");
+  }
+
+  if (conn->destroyed) {
+    return JS_NewString(ctx, "closed");
+  } else if (conn->connecting) {
+    return JS_NewString(ctx, "opening");
+  } else if (conn->connected) {
+    return JS_NewString(ctx, "open");
+  } else {
+    return JS_NewString(ctx, "closed");
+  }
+}
+
+static JSValue js_socket_get_buffer_size(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
+  JSNetConnection* conn = JS_GetOpaque(this_val, js_socket_class_id);
+  if (!conn || !conn->connected) {
+    return JS_NewInt32(ctx, 0);
+  }
+
+  // Get the write queue size from libuv
+  size_t size = uv_stream_get_write_queue_size((uv_stream_t*)&conn->handle);
+  return JS_NewInt64(ctx, size);
+}
+
 // Close callback for socket cleanup
 static void socket_close_callback(uv_handle_t* handle) {
   // Do not free memory here to avoid race conditions with uv_walk
@@ -545,6 +783,10 @@ static JSValue js_socket_constructor(JSContext* ctx, JSValueConst new_target, in
   conn->socket_obj = JS_DupValue(ctx, obj);
   conn->connected = false;
   conn->destroyed = false;
+  conn->connecting = false;
+  conn->paused = false;
+  conn->bytes_read = 0;
+  conn->bytes_written = 0;
 
   // Initialize libuv handle - CRITICAL for memory safety
   JSRT_Runtime* rt = JS_GetContextOpaque(ctx);
@@ -558,6 +800,31 @@ static JSValue js_socket_constructor(JSContext* ctx, JSValueConst new_target, in
   JS_SetPropertyStr(ctx, obj, "write", JS_NewCFunction(ctx, js_socket_write, "write", 1));
   JS_SetPropertyStr(ctx, obj, "end", JS_NewCFunction(ctx, js_socket_end, "end", 0));
   JS_SetPropertyStr(ctx, obj, "destroy", JS_NewCFunction(ctx, js_socket_destroy, "destroy", 0));
+
+// Add property getters using JS_DefinePropertyGetSet
+#define DEFINE_GETTER_PROP(name, func)                                                                        \
+  do {                                                                                                        \
+    JSAtom atom = JS_NewAtom(ctx, name);                                                                      \
+    JSValue getter = JS_NewCFunction(ctx, func, "get " name, 0);                                              \
+    JS_DefinePropertyGetSet(ctx, obj, atom, getter, JS_UNDEFINED, JS_PROP_CONFIGURABLE | JS_PROP_ENUMERABLE); \
+    JS_FreeAtom(ctx, atom);                                                                                   \
+  } while (0)
+
+  DEFINE_GETTER_PROP("localAddress", js_socket_get_local_address);
+  DEFINE_GETTER_PROP("localPort", js_socket_get_local_port);
+  DEFINE_GETTER_PROP("localFamily", js_socket_get_local_family);
+  DEFINE_GETTER_PROP("remoteAddress", js_socket_get_remote_address);
+  DEFINE_GETTER_PROP("remotePort", js_socket_get_remote_port);
+  DEFINE_GETTER_PROP("remoteFamily", js_socket_get_remote_family);
+  DEFINE_GETTER_PROP("bytesRead", js_socket_get_bytes_read);
+  DEFINE_GETTER_PROP("bytesWritten", js_socket_get_bytes_written);
+  DEFINE_GETTER_PROP("connecting", js_socket_get_connecting);
+  DEFINE_GETTER_PROP("destroyed", js_socket_get_destroyed);
+  DEFINE_GETTER_PROP("pending", js_socket_get_pending);
+  DEFINE_GETTER_PROP("readyState", js_socket_get_ready_state);
+  DEFINE_GETTER_PROP("bufferSize", js_socket_get_buffer_size);
+
+#undef DEFINE_GETTER_PROP
 
   // Add EventEmitter functionality
   add_event_emitter_methods(ctx, obj);

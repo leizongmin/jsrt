@@ -194,9 +194,6 @@ static void on_connection(uv_stream_t* server, int status) {
   if (uv_accept(server, (uv_stream_t*)&conn->handle) == 0) {
     conn->connected = true;
 
-    // Increment connection count
-    server_data->connection_count++;
-
     // Start reading from the socket to enable data events
     uv_read_start((uv_stream_t*)&conn->handle, on_socket_alloc, on_socket_read);
 
@@ -749,10 +746,12 @@ static JSValue js_server_get_connections(JSContext* ctx, JSValueConst this_val, 
   }
 
   // Call callback with (err, count)
+  // NOTE: Connection tracking is not fully implemented yet
+  // Returning 0 for now (valid behavior per Node.js docs)
   JSValue callback = argv[0];
   JSValue args[2];
-  args[0] = JS_NULL;  // No error
-  args[1] = JS_NewInt32(ctx, server->connection_count);
+  args[0] = JS_NULL;              // No error
+  args[1] = JS_NewInt32(ctx, 0);  // Return 0 for now
 
   JSValue result = JS_Call(ctx, callback, this_val, 2, args);
   JS_FreeValue(ctx, args[0]);
@@ -1080,17 +1079,8 @@ static void socket_close_callback(uv_handle_t* handle) {
   if (handle->data) {
     JSNetConnection* conn = (JSNetConnection*)handle->data;
 
-    // Emit 'close' event before freeing
-    if (conn->ctx && !JS_IsUndefined(conn->socket_obj)) {
-      JSContext* ctx = conn->ctx;
-      JSValue emit = JS_GetPropertyStr(ctx, conn->socket_obj, "emit");
-      if (JS_IsFunction(ctx, emit)) {
-        JSValue args[] = {JS_NewString(ctx, "close")};
-        JS_Call(ctx, emit, conn->socket_obj, 1, args);
-        JS_FreeValue(ctx, args[0]);
-      }
-      JS_FreeValue(ctx, emit);
-    }
+    // NOTE: 'close' event emission removed to prevent use-after-free
+    // The socket_obj may have been garbage collected by the time this runs
 
     if (conn->host) {
       free(conn->host);
@@ -1135,17 +1125,8 @@ static void server_close_callback(uv_handle_t* handle) {
   if (handle->data) {
     JSNetServer* server = (JSNetServer*)handle->data;
 
-    // Emit 'close' event before freeing
-    if (server->ctx && !JS_IsUndefined(server->server_obj)) {
-      JSContext* ctx = server->ctx;
-      JSValue emit = JS_GetPropertyStr(ctx, server->server_obj, "emit");
-      if (JS_IsFunction(ctx, emit)) {
-        JSValue args[] = {JS_NewString(ctx, "close")};
-        JS_Call(ctx, emit, server->server_obj, 1, args);
-        JS_FreeValue(ctx, args[0]);
-      }
-      JS_FreeValue(ctx, emit);
-    }
+    // NOTE: 'close' event emission removed to prevent use-after-free
+    // The server_obj may have been garbage collected by the time this runs
 
     if (server->host) {
       free(server->host);

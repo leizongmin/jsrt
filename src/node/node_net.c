@@ -45,6 +45,7 @@ typedef struct {
   uv_tcp_t handle;
   uv_connect_t connect_req;
   uv_shutdown_t shutdown_req;
+  uv_timer_t timeout_timer;
   char* host;
   int port;
   bool connected;
@@ -52,6 +53,8 @@ typedef struct {
   bool connecting;
   bool paused;
   bool in_callback;  // Prevent finalization during callback execution
+  bool timeout_enabled;
+  unsigned int timeout_ms;
   size_t bytes_read;
   size_t bytes_written;
 } JSNetConnection;
@@ -75,6 +78,7 @@ static JSValue js_net_connect(JSContext* ctx, JSValueConst this_val, int argc, J
 static JSValue js_socket_constructor(JSContext* ctx, JSValueConst new_target, int argc, JSValueConst* argv);
 static JSValue js_server_constructor(JSContext* ctx, JSValueConst new_target, int argc, JSValueConst* argv);
 static void on_listen_callback_timer(uv_timer_t* timer);
+static void on_socket_timeout(uv_timer_t* timer);
 
 // Data read callback
 static void on_socket_read(uv_stream_t* stream, ssize_t nread, const uv_buf_t* buf) {
@@ -264,6 +268,30 @@ static void on_connect(uv_connect_t* req, int status) {
 
   // Clear callback flag
   conn->in_callback = false;
+}
+
+// Timeout callback for socket
+static void on_socket_timeout(uv_timer_t* timer) {
+  JSNetConnection* conn = (JSNetConnection*)timer->data;
+  if (!conn || !conn->ctx || conn->destroyed) {
+    return;
+  }
+
+  JSContext* ctx = conn->ctx;
+
+  // Check if socket object is still valid
+  if (JS_IsUndefined(conn->socket_obj) || JS_IsNull(conn->socket_obj)) {
+    return;
+  }
+
+  // Emit 'timeout' event
+  JSValue emit = JS_GetPropertyStr(ctx, conn->socket_obj, "emit");
+  if (JS_IsFunction(ctx, emit)) {
+    JSValue args[] = {JS_NewString(ctx, "timeout")};
+    JS_Call(ctx, emit, conn->socket_obj, 1, args);
+    JS_FreeValue(ctx, args[0]);
+  }
+  JS_FreeValue(ctx, emit);
 }
 
 // Async callback timer for listen() callback
@@ -473,6 +501,94 @@ static JSValue js_socket_resume(JSContext* ctx, JSValueConst this_val, int argc,
     // Resume reading from the socket
     uv_read_start((uv_stream_t*)&conn->handle, on_socket_alloc, on_socket_read);
     conn->paused = false;
+  }
+
+  return this_val;
+}
+
+static JSValue js_socket_set_timeout(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
+  JSNetConnection* conn = JS_GetOpaque(this_val, js_socket_class_id);
+  if (!conn || conn->destroyed) {
+    return this_val;
+  }
+
+  if (argc < 1) {
+    return JS_ThrowTypeError(ctx, "setTimeout requires timeout argument");
+  }
+
+  int timeout;
+  if (JS_ToInt32(ctx, &timeout, argv[0])) {
+    return JS_EXCEPTION;
+  }
+
+  if (timeout == 0) {
+    // Disable timeout
+    if (conn->timeout_enabled) {
+      uv_timer_stop(&conn->timeout_timer);
+      conn->timeout_enabled = false;
+    }
+  } else {
+    conn->timeout_ms = timeout;
+    conn->timeout_enabled = true;
+
+    // Initialize timer if not already initialized
+    if (!uv_is_active((uv_handle_t*)&conn->timeout_timer)) {
+      JSRT_Runtime* rt = JS_GetContextOpaque(ctx);
+      uv_timer_init(rt->uv_loop, &conn->timeout_timer);
+      conn->timeout_timer.data = conn;
+    }
+
+    // Start/restart the timeout timer
+    uv_timer_start(&conn->timeout_timer, on_socket_timeout, timeout, 0);
+  }
+
+  return this_val;
+}
+
+static JSValue js_socket_set_keep_alive(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
+  JSNetConnection* conn = JS_GetOpaque(this_val, js_socket_class_id);
+  if (!conn || conn->destroyed) {
+    return this_val;
+  }
+
+  bool enable = true;
+  unsigned int delay = 0;
+
+  if (argc > 0) {
+    enable = JS_ToBool(ctx, argv[0]);
+  }
+
+  if (argc > 1 && enable) {
+    int delay_val;
+    if (JS_ToInt32(ctx, &delay_val, argv[1]) == 0) {
+      delay = (unsigned int)delay_val / 1000;  // Convert ms to seconds for libuv
+    }
+  }
+
+  // Set TCP keepalive
+  int result = uv_tcp_keepalive(&conn->handle, enable ? 1 : 0, delay);
+  if (result < 0) {
+    return JS_ThrowInternalError(ctx, "Failed to set keepalive: %s", uv_strerror(result));
+  }
+
+  return this_val;
+}
+
+static JSValue js_socket_set_no_delay(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
+  JSNetConnection* conn = JS_GetOpaque(this_val, js_socket_class_id);
+  if (!conn || conn->destroyed) {
+    return this_val;
+  }
+
+  bool enable = true;
+  if (argc > 0) {
+    enable = JS_ToBool(ctx, argv[0]);
+  }
+
+  // Set TCP_NODELAY (Nagle's algorithm)
+  int result = uv_tcp_nodelay(&conn->handle, enable ? 1 : 0);
+  if (result < 0) {
+    return JS_ThrowInternalError(ctx, "Failed to set nodelay: %s", uv_strerror(result));
   }
 
   return this_val;
@@ -814,6 +930,15 @@ static void js_socket_finalizer(JSRuntime* rt, JSValue val) {
     // Mark socket object as invalid to prevent use-after-free in callbacks
     conn->socket_obj = JS_UNDEFINED;
 
+    // Stop and close timeout timer if it's active
+    if (conn->timeout_enabled) {
+      uv_timer_stop(&conn->timeout_timer);
+      if (!uv_is_closing((uv_handle_t*)&conn->timeout_timer)) {
+        uv_close((uv_handle_t*)&conn->timeout_timer, NULL);
+      }
+      conn->timeout_enabled = false;
+    }
+
     // Only close if not already closing - memory will be freed in close callback
     if (!uv_is_closing((uv_handle_t*)&conn->handle)) {
       uv_close((uv_handle_t*)&conn->handle, socket_close_callback);
@@ -897,6 +1022,8 @@ static JSValue js_socket_constructor(JSContext* ctx, JSValueConst new_target, in
   conn->connecting = false;
   conn->paused = false;
   conn->in_callback = false;
+  conn->timeout_enabled = false;
+  conn->timeout_ms = 0;
   conn->bytes_read = 0;
   conn->bytes_written = 0;
 
@@ -914,6 +1041,9 @@ static JSValue js_socket_constructor(JSContext* ctx, JSValueConst new_target, in
   JS_SetPropertyStr(ctx, obj, "destroy", JS_NewCFunction(ctx, js_socket_destroy, "destroy", 0));
   JS_SetPropertyStr(ctx, obj, "pause", JS_NewCFunction(ctx, js_socket_pause, "pause", 0));
   JS_SetPropertyStr(ctx, obj, "resume", JS_NewCFunction(ctx, js_socket_resume, "resume", 0));
+  JS_SetPropertyStr(ctx, obj, "setTimeout", JS_NewCFunction(ctx, js_socket_set_timeout, "setTimeout", 1));
+  JS_SetPropertyStr(ctx, obj, "setKeepAlive", JS_NewCFunction(ctx, js_socket_set_keep_alive, "setKeepAlive", 2));
+  JS_SetPropertyStr(ctx, obj, "setNoDelay", JS_NewCFunction(ctx, js_socket_set_no_delay, "setNoDelay", 1));
 
 // Add property getters using JS_DefinePropertyGetSet
 #define DEFINE_GETTER_PROP(name, func)                                                                        \

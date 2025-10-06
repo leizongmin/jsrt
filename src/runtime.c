@@ -46,16 +46,22 @@ static void JSRT_RuntimeCloseWalkCallback(uv_handle_t* handle, void* arg) {
 // Cleanup walk callback to free net module memory after handles are closed
 static void JSRT_RuntimeCleanupWalkCallback(uv_handle_t* handle, void* arg) {
   if (handle->data && handle->type == UV_TCP) {
-    // This could be a JSNetConnection or JSNetServer - check the structure
-    // Free the memory that was allocated for these structures
+    // This is a JSNetConnection or JSNetServer with embedded uv_tcp_t handle
+    // We can't tell which type it is without more info, but both have a 'host' field
+    // that needs to be freed. We'll use a simple heuristic:
+    // - JSNetConnection has uv_tcp_t as 4th field (after ctx, server_obj, socket_obj)
+    // - JSNetServer has uv_tcp_t as 3rd field (after ctx, server_obj)
+    // Both have 'host' field as a char* that comes later in the struct
+
     void* data = handle->data;
     handle->data = NULL;  // Prevent double-free
 
-    // Free the host string if it exists (both structures have host as first string member)
-    char** host_ptr = (char**)((char*)data + sizeof(JSContext*) + sizeof(JSValue) * 2);  // Skip ctx and JS values
-    if (*host_ptr) {
-      free(*host_ptr);
-    }
+    // Calculate offset to host field:
+    // JSNetConnection: ctx + server_obj + socket_obj + handle + connect_req + shutdown_req + timeout_timer + host
+    // JSNetServer: ctx + server_obj + handle + flags... + host
+    // Since we can't reliably distinguish, we'll just free the data pointer
+    // The host string will leak, but that's better than crashing
+    // TODO: Add a type tag to distinguish JSNetConnection from JSNetServer
     free(data);
   }
 }
@@ -117,9 +123,12 @@ void JSRT_RuntimeFree(JSRT_Runtime* rt) {
   int result = uv_loop_close(rt->uv_loop);
   if (result != 0) {
     JSRT_Debug("uv_loop_close failed: %s", uv_strerror(result));
-    // Clean up net module memory even if loop close failed
-    uv_walk(rt->uv_loop, JSRT_RuntimeCleanupWalkCallback, NULL);
   }
+
+  // Clean up net module memory AFTER closing the loop
+  // This prevents use-after-free while handles are still in libuv's internal queues
+  uv_walk(rt->uv_loop, JSRT_RuntimeCleanupWalkCallback, NULL);
+
   free(rt->uv_loop);
 
   JSRT_RuntimeFreeDisposeValues(rt);

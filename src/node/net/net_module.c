@@ -1,8 +1,55 @@
 #include "net_internal.h"
+#include <uv.h>
 
 // Class IDs for networking classes (exported, not static)
 JSClassID js_server_class_id;
 JSClassID js_socket_class_id;
+
+// Deferred cleanup list for handles with embedded structs
+// These will be freed after uv_loop_close to avoid use-after-free during uv_walk
+typedef struct cleanup_item {
+  void* ptr;
+  struct cleanup_item* next;
+} cleanup_item_t;
+
+static cleanup_item_t* cleanup_list_head = NULL;
+static uv_mutex_t cleanup_mutex;
+static bool cleanup_mutex_initialized = false;
+
+void net_add_to_cleanup_list(void* ptr) {
+  if (!cleanup_mutex_initialized) {
+    uv_mutex_init(&cleanup_mutex);
+    cleanup_mutex_initialized = true;
+  }
+
+  cleanup_item_t* item = (cleanup_item_t*)malloc(sizeof(cleanup_item_t));
+  item->ptr = ptr;
+
+  uv_mutex_lock(&cleanup_mutex);
+  item->next = cleanup_list_head;
+  cleanup_list_head = item;
+  uv_mutex_unlock(&cleanup_mutex);
+}
+
+void net_cleanup_deferred() {
+  if (!cleanup_mutex_initialized) {
+    return;
+  }
+
+  uv_mutex_lock(&cleanup_mutex);
+  cleanup_item_t* current = cleanup_list_head;
+  while (current) {
+    cleanup_item_t* next = current->next;
+    free(current->ptr);  // Free the actual socket/server struct
+    free(current);       // Free the list item
+    current = next;
+  }
+  cleanup_list_head = NULL;
+  uv_mutex_unlock(&cleanup_mutex);
+
+  uv_mutex_destroy(&cleanup_mutex);
+  cleanup_mutex_initialized = false;
+}
 
 // Class definitions
 static JSClassDef js_socket_class = {

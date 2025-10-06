@@ -23,17 +23,11 @@ void socket_timeout_timer_close_callback(uv_handle_t* handle) {
 }
 
 // Close callback for socket cleanup
+// NOTE: DO NOT free the connection struct here!
+// It will be freed by JSRT_RuntimeCleanupWalkCallback after the loop closes
+// Freeing here causes use-after-free during uv_walk in shutdown
 void socket_close_callback(uv_handle_t* handle) {
-  if (handle->data) {
-    JSNetConnection* conn = (JSNetConnection*)handle->data;
-    handle->data = NULL;
-
-    // Free the connection struct now that handle is closed
-    if (conn->host) {
-      free(conn->host);
-    }
-    free(conn);
-  }
+  // Do nothing - cleanup happens in JSRT_RuntimeCleanupWalkCallback
 }
 
 // Class finalizers
@@ -94,16 +88,12 @@ void server_callback_timer_close_callback(uv_handle_t* handle) {
   }
 }
 
-// Close callback for server cleanup - DO NOT FREE HERE
-// The struct will be freed during runtime cleanup to avoid use-after-free
-// when libuv walks handles during shutdown
+// Close callback for server cleanup
+// NOTE: DO NOT free the server struct here!
+// It will be freed by JSRT_RuntimeCleanupWalkCallback after the loop closes
+// Freeing here causes use-after-free during uv_walk in shutdown
 void server_close_callback(uv_handle_t* handle) {
-  if (handle->data) {
-    JSNetServer* server = (JSNetServer*)handle->data;
-    // Just NULL out the pointer, don't free
-    // Freeing here causes use-after-free during uv_walk in JSRT_RuntimeFree
-    handle->data = NULL;
-  }
+  // Do nothing - cleanup happens in JSRT_RuntimeCleanupWalkCallback
 }
 
 void js_server_finalizer(JSRuntime* rt, JSValue val) {

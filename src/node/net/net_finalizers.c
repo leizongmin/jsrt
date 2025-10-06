@@ -53,6 +53,12 @@ void js_socket_finalizer(JSRuntime* rt, JSValue val) {
     conn->timeout_enabled = false;
   }
 
+  // Free encoding string if set
+  if (conn->encoding) {
+    free(conn->encoding);
+    conn->encoding = NULL;
+  }
+
   // Close socket handle - callback will free the struct
   if (!uv_is_closing((uv_handle_t*)&conn->handle)) {
     conn->handle.data = conn;

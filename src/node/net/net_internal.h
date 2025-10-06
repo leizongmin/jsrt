@@ -38,7 +38,9 @@ typedef struct {
   unsigned int timeout_ms;
   size_t bytes_read;
   size_t bytes_written;
-  bool had_error;  // Track error state for close event
+  bool had_error;        // Track error state for close event
+  char* encoding;        // Encoding for data events ('utf8', 'hex', 'base64', etc.)
+  bool allow_half_open;  // Allow half-open TCP connections
 } JSNetConnection;
 
 // Server state
@@ -84,6 +86,7 @@ JSValue js_socket_resume(JSContext* ctx, JSValueConst this_val, int argc, JSValu
 JSValue js_socket_set_timeout(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv);
 JSValue js_socket_set_keep_alive(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv);
 JSValue js_socket_set_no_delay(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv);
+JSValue js_socket_set_encoding(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv);
 JSValue js_socket_ref(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv);
 JSValue js_socket_unref(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv);
 JSValue js_socket_address(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv);

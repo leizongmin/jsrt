@@ -261,6 +261,30 @@ JSValue js_socket_set_no_delay(JSContext* ctx, JSValueConst this_val, int argc, 
   return this_val;
 }
 
+JSValue js_socket_set_encoding(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
+  JSNetConnection* conn = JS_GetOpaque(this_val, js_socket_class_id);
+  if (!conn || conn->destroyed) {
+    return this_val;
+  }
+
+  // Free previous encoding if set
+  if (conn->encoding) {
+    free(conn->encoding);
+    conn->encoding = NULL;
+  }
+
+  // Set new encoding if provided
+  if (argc > 0 && !JS_IsNull(argv[0]) && !JS_IsUndefined(argv[0])) {
+    const char* encoding = JS_ToCString(ctx, argv[0]);
+    if (encoding) {
+      conn->encoding = strdup(encoding);
+      JS_FreeCString(ctx, encoding);
+    }
+  }
+
+  return this_val;
+}
+
 JSValue js_socket_ref(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
   JSNetConnection* conn = JS_GetOpaque(this_val, js_socket_class_id);
   if (!conn || conn->destroyed) {
@@ -348,6 +372,8 @@ JSValue js_socket_constructor(JSContext* ctx, JSValueConst new_target, int argc,
   conn->destroyed = false;
   conn->connecting = false;
   conn->paused = false;
+  conn->encoding = NULL;          // Default: binary/Buffer mode
+  conn->allow_half_open = false;  // Default: don't allow half-open
   conn->in_callback = false;
   conn->timeout_enabled = false;
   conn->timeout_timer_initialized = false;
@@ -375,6 +401,7 @@ JSValue js_socket_constructor(JSContext* ctx, JSValueConst new_target, int argc,
   JS_SetPropertyStr(ctx, obj, "setTimeout", JS_NewCFunction(ctx, js_socket_set_timeout, "setTimeout", 1));
   JS_SetPropertyStr(ctx, obj, "setKeepAlive", JS_NewCFunction(ctx, js_socket_set_keep_alive, "setKeepAlive", 2));
   JS_SetPropertyStr(ctx, obj, "setNoDelay", JS_NewCFunction(ctx, js_socket_set_no_delay, "setNoDelay", 1));
+  JS_SetPropertyStr(ctx, obj, "setEncoding", JS_NewCFunction(ctx, js_socket_set_encoding, "setEncoding", 1));
   JS_SetPropertyStr(ctx, obj, "ref", JS_NewCFunction(ctx, js_socket_ref, "ref", 0));
   JS_SetPropertyStr(ctx, obj, "unref", JS_NewCFunction(ctx, js_socket_unref, "unref", 0));
   JS_SetPropertyStr(ctx, obj, "address", JS_NewCFunction(ctx, js_socket_address, "address", 0));

@@ -201,24 +201,28 @@ console.log('  Original:', original);
 console.log('  Encoded: ', encoded);
 console.log('  Decoded: ', decoded);
 
-// Test error handling
+// Test error handling (Node.js behavior: gracefully handle empty inputs)
 // console.log('\n--- Testing Error Handling ---');
 
-try {
-  querystring.parse();
-  assert.fail('parse() without arguments should throw');
-} catch (error) {
-  assert.ok(error.message.includes('string'), 'Should require string argument');
-  // console.log('✓ parse() error handling works');
-}
+// parse() without arguments returns empty object (Node.js behavior)
+const emptyParse = querystring.parse();
+assert.deepEqual(emptyParse, {}, 'parse() without arguments should return {}');
 
-try {
-  querystring.stringify();
-  assert.fail('stringify() without arguments should throw');
-} catch (error) {
-  assert.ok(error.message.includes('object'), 'Should require object argument');
-  // console.log('✓ stringify() error handling works');
-}
+// parse(null) returns empty object
+const nullParse = querystring.parse(null);
+assert.deepEqual(nullParse, {}, 'parse(null) should return {}');
+
+// stringify() without arguments returns empty string
+const emptyStringify = querystring.stringify();
+assert.strictEqual(
+  emptyStringify,
+  '',
+  'stringify() without arguments should return ""'
+);
+
+// stringify(null) returns empty string
+const nullStringify = querystring.stringify(null);
+assert.strictEqual(nullStringify, '', 'stringify(null) should return ""');
 
 // console.log('\n✅ All Node.js Query String module tests passed!');
 console.log('📊 Node.js querystring compatibility implemented successfully!');

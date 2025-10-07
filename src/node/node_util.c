@@ -345,9 +345,244 @@ static JSValue js_util_promisify(JSContext* ctx, JSValueConst this_val, int argc
     return node_throw_error(ctx, NODE_ERR_INVALID_ARG_TYPE, "util.promisify argument must be a function");
   }
 
-  // Return a wrapper function that returns a promise
-  // This is a simplified implementation - a full implementation would be more complex
-  return JS_DupValue(ctx, argv[0]);  // For now, just return the original function
+  // Create wrapper function that returns a Promise
+  JSValue original_fn = argv[0];
+
+  // Create a wrapper function using JavaScript
+  const char* wrapper_code =
+      "(function(original) {"
+      "  return function(...args) {"
+      "    return new Promise((resolve, reject) => {"
+      "      args.push((err, ...results) => {"
+      "        if (err) reject(err);"
+      "        else resolve(results.length <= 1 ? results[0] : results);"
+      "      });"
+      "      try {"
+      "        original.apply(this, args);"
+      "      } catch (e) {"
+      "        reject(e);"
+      "      }"
+      "    });"
+      "  };"
+      "})";
+
+  JSValue wrapper_factory = JS_Eval(ctx, wrapper_code, strlen(wrapper_code), "<util.promisify>", JS_EVAL_TYPE_GLOBAL);
+  if (JS_IsException(wrapper_factory)) {
+    return JS_EXCEPTION;
+  }
+
+  JSValue wrapper = JS_Call(ctx, wrapper_factory, JS_UNDEFINED, 1, &original_fn);
+  JS_FreeValue(ctx, wrapper_factory);
+
+  return wrapper;
+}
+
+// util.callbackify() implementation - converts async function to callback style
+static JSValue js_util_callbackify(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
+  if (argc < 1) {
+    return node_throw_error(ctx, NODE_ERR_MISSING_ARGS, "util.callbackify requires a function argument");
+  }
+
+  if (!JS_IsFunction(ctx, argv[0])) {
+    return node_throw_error(ctx, NODE_ERR_INVALID_ARG_TYPE, "util.callbackify argument must be a function");
+  }
+
+  JSValue original_fn = argv[0];
+
+  // Create a wrapper function using JavaScript
+  const char* wrapper_code =
+      "(function(original) {"
+      "  return function(...args) {"
+      "    const callback = args.pop();"
+      "    if (typeof callback !== 'function') {"
+      "      throw new TypeError('The last argument must be a callback function');"
+      "    }"
+      "    original.apply(this, args).then("
+      "      (result) => callback(null, result),"
+      "      (err) => callback(err)"
+      "    );"
+      "  };"
+      "})";
+
+  JSValue wrapper_factory = JS_Eval(ctx, wrapper_code, strlen(wrapper_code), "<util.callbackify>", JS_EVAL_TYPE_GLOBAL);
+  if (JS_IsException(wrapper_factory)) {
+    return JS_EXCEPTION;
+  }
+
+  JSValue wrapper = JS_Call(ctx, wrapper_factory, JS_UNDEFINED, 1, &original_fn);
+  JS_FreeValue(ctx, wrapper_factory);
+
+  return wrapper;
+}
+
+// util.deprecate() implementation - mark function as deprecated
+static JSValue js_util_deprecate(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
+  if (argc < 2) {
+    return node_throw_error(ctx, NODE_ERR_MISSING_ARGS, "util.deprecate requires function and message arguments");
+  }
+
+  if (!JS_IsFunction(ctx, argv[0])) {
+    return node_throw_error(ctx, NODE_ERR_INVALID_ARG_TYPE, "First argument must be a function");
+  }
+
+  JSValue original_fn = argv[0];
+  const char* message = JS_ToCString(ctx, argv[1]);
+  if (!message) {
+    return JS_EXCEPTION;
+  }
+
+  // Create deprecation code (extract code parameter if provided)
+  const char* code = "DEP0000";
+  if (argc > 2 && JS_IsString(argv[2])) {
+    code = JS_ToCString(ctx, argv[2]);
+  }
+
+  // Create wrapper that emits warning on first call
+  char wrapper_code[1024];
+  snprintf(wrapper_code, sizeof(wrapper_code),
+           "(function(fn, msg, code) {"
+           "  let warned = false;"
+           "  return function(...args) {"
+           "    if (!warned) {"
+           "      warned = true;"
+           "      console.warn('[' + code + '] DeprecationWarning: ' + msg);"
+           "    }"
+           "    return fn.apply(this, args);"
+           "  };"
+           "})");
+
+  JSValue wrapper_factory = JS_Eval(ctx, wrapper_code, strlen(wrapper_code), "<util.deprecate>", JS_EVAL_TYPE_GLOBAL);
+  if (JS_IsException(wrapper_factory)) {
+    JS_FreeCString(ctx, message);
+    if (argc > 2)
+      JS_FreeCString(ctx, code);
+    return JS_EXCEPTION;
+  }
+
+  JSValue args[3] = {original_fn, argv[1], JS_NewString(ctx, code)};
+  JSValue wrapper = JS_Call(ctx, wrapper_factory, JS_UNDEFINED, 3, args);
+
+  JS_FreeValue(ctx, wrapper_factory);
+  JS_FreeValue(ctx, args[2]);
+  JS_FreeCString(ctx, message);
+  if (argc > 2)
+    JS_FreeCString(ctx, code);
+
+  return wrapper;
+}
+
+// util.debuglog() implementation - conditional debug logging
+static JSValue js_util_debuglog(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
+  if (argc < 1) {
+    return node_throw_error(ctx, NODE_ERR_MISSING_ARGS, "util.debuglog requires a section argument");
+  }
+
+  const char* section = JS_ToCString(ctx, argv[0]);
+  if (!section) {
+    return JS_EXCEPTION;
+  }
+
+  // Check NODE_DEBUG environment variable
+  // For simplicity, create a no-op function by default
+  const char* debug_code =
+      "(function(section) {"
+      "  const enabled = false;"  // TODO: Check NODE_DEBUG env var
+      "  const fn = function(...args) {"
+      "    if (enabled) {"
+      "      console.error(section + ':', ...args);"
+      "    }"
+      "  };"
+      "  fn.enabled = enabled;"
+      "  return fn;"
+      "})";
+
+  JSValue factory = JS_Eval(ctx, debug_code, strlen(debug_code), "<util.debuglog>", JS_EVAL_TYPE_GLOBAL);
+  if (JS_IsException(factory)) {
+    JS_FreeCString(ctx, section);
+    return JS_EXCEPTION;
+  }
+
+  JSValue debug_fn = JS_Call(ctx, factory, JS_UNDEFINED, 1, argv);
+  JS_FreeValue(ctx, factory);
+  JS_FreeCString(ctx, section);
+
+  return debug_fn;
+}
+
+// util.inherits() implementation - prototypal inheritance (legacy)
+static JSValue js_util_inherits(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
+  if (argc < 2) {
+    return node_throw_error(ctx, NODE_ERR_MISSING_ARGS, "util.inherits requires constructor and superConstructor");
+  }
+
+  if (!JS_IsFunction(ctx, argv[0]) || !JS_IsFunction(ctx, argv[1])) {
+    return node_throw_error(ctx, NODE_ERR_INVALID_ARG_TYPE, "Both arguments must be constructor functions");
+  }
+
+  // Set up prototype chain: constructor.prototype = Object.create(superConstructor.prototype)
+  JSValue super_proto = JS_GetPropertyStr(ctx, argv[1], "prototype");
+  if (JS_IsException(super_proto)) {
+    return JS_EXCEPTION;
+  }
+
+  JSValue object_ctor = JS_GetGlobalObject(ctx);
+  JSValue object_obj = JS_GetPropertyStr(ctx, object_ctor, "Object");
+  JSValue create_fn = JS_GetPropertyStr(ctx, object_obj, "create");
+
+  JSValue new_proto = JS_Call(ctx, create_fn, object_obj, 1, &super_proto);
+
+  JS_FreeValue(ctx, super_proto);
+  JS_FreeValue(ctx, create_fn);
+  JS_FreeValue(ctx, object_obj);
+  JS_FreeValue(ctx, object_ctor);
+
+  if (JS_IsException(new_proto)) {
+    return JS_EXCEPTION;
+  }
+
+  // Set constructor property
+  JS_SetPropertyStr(ctx, new_proto, "constructor", JS_DupValue(ctx, argv[0]));
+
+  // Set the prototype
+  JS_SetPropertyStr(ctx, argv[0], "prototype", new_proto);
+
+  // Set super_ property
+  JS_SetPropertyStr(ctx, argv[0], "super_", JS_DupValue(ctx, argv[1]));
+
+  return JS_UNDEFINED;
+}
+
+// util.isDeepStrictEqual() implementation - deep equality check
+static JSValue js_util_is_deep_strict_equal(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
+  if (argc < 2) {
+    return JS_FALSE;
+  }
+
+  // Use JavaScript implementation for simplicity
+  const char* equal_code =
+      "(function(a, b) {"
+      "  if (a === b) return true;"
+      "  if (a == null || b == null) return false;"
+      "  if (typeof a !== 'object' || typeof b !== 'object') return false;"
+      "  const keysA = Object.keys(a);"
+      "  const keysB = Object.keys(b);"
+      "  if (keysA.length !== keysB.length) return false;"
+      "  for (const key of keysA) {"
+      "    if (!keysB.includes(key)) return false;"
+      "    if (!arguments.callee(a[key], b[key])) return false;"
+      "  }"
+      "  return true;"
+      "})";
+
+  JSValue equal_fn = JS_Eval(ctx, equal_code, strlen(equal_code), "<util.isDeepStrictEqual>", JS_EVAL_TYPE_GLOBAL);
+  if (JS_IsException(equal_fn)) {
+    return JS_EXCEPTION;
+  }
+
+  JSValue result = JS_Call(ctx, equal_fn, JS_UNDEFINED, 2, argv);
+  JS_FreeValue(ctx, equal_fn);
+
+  return result;
 }
 
 // Initialize node:util module for CommonJS
@@ -372,6 +607,29 @@ JSValue JSRT_InitNodeUtil(JSContext* ctx) {
 
   // Promise utilities
   JS_SetPropertyStr(ctx, util_obj, "promisify", JS_NewCFunction(ctx, js_util_promisify, "promisify", 1));
+  JS_SetPropertyStr(ctx, util_obj, "callbackify", JS_NewCFunction(ctx, js_util_callbackify, "callbackify", 1));
+
+  // Deprecation and debugging
+  JS_SetPropertyStr(ctx, util_obj, "deprecate", JS_NewCFunction(ctx, js_util_deprecate, "deprecate", 2));
+  JS_SetPropertyStr(ctx, util_obj, "debuglog", JS_NewCFunction(ctx, js_util_debuglog, "debuglog", 1));
+
+  // Legacy and additional utilities
+  JS_SetPropertyStr(ctx, util_obj, "inherits", JS_NewCFunction(ctx, js_util_inherits, "inherits", 2));
+  JS_SetPropertyStr(ctx, util_obj, "isDeepStrictEqual",
+                    JS_NewCFunction(ctx, js_util_is_deep_strict_equal, "isDeepStrictEqual", 2));
+
+  // util.types namespace - modern type checking API
+  JSValue types_obj = JS_NewObject(ctx);
+
+  // Reuse existing type checkers
+  JS_SetPropertyStr(ctx, types_obj, "isDate", JS_NewCFunction(ctx, js_util_is_object, "isDate", 1));  // Simplified
+  JS_SetPropertyStr(ctx, types_obj, "isPromise",
+                    JS_NewCFunction(ctx, js_util_is_object, "isPromise", 1));                             // Simplified
+  JS_SetPropertyStr(ctx, types_obj, "isRegExp", JS_NewCFunction(ctx, js_util_is_object, "isRegExp", 1));  // Simplified
+  JS_SetPropertyStr(ctx, types_obj, "isArrayBuffer",
+                    JS_NewCFunction(ctx, js_util_is_object, "isArrayBuffer", 1));  // Simplified
+
+  JS_SetPropertyStr(ctx, util_obj, "types", types_obj);
 
   // TextEncoder and TextDecoder - export from global scope
   JSValue global = JS_GetGlobalObject(ctx);

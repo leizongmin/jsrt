@@ -41,21 +41,29 @@ JSValue js_server_listen(JSContext* ctx, JSValueConst this_val, int argc, JSValu
   struct sockaddr* addr = (struct sockaddr*)&addr_storage;
   int result;
 
+  // Handle common hostname aliases for bind addresses
+  const char* bind_host = server->host;
+  if (strcmp(server->host, "localhost") == 0) {
+    bind_host = "127.0.0.1";
+  } else if (strcmp(server->host, "ip6-localhost") == 0) {
+    bind_host = "::1";
+  }
+
   // Try IPv4 first
   struct sockaddr_in addr4;
-  if (uv_ip4_addr(server->host, server->port, &addr4) == 0) {
+  if (uv_ip4_addr(bind_host, server->port, &addr4) == 0) {
     // IPv4 address
     memcpy(&addr_storage, &addr4, sizeof(addr4));
   } else {
     // Try IPv6
     struct sockaddr_in6 addr6;
-    if (uv_ip6_addr(server->host, server->port, &addr6) == 0) {
+    if (uv_ip6_addr(bind_host, server->port, &addr6) == 0) {
       // IPv6 address
       memcpy(&addr_storage, &addr6, sizeof(addr6));
     } else {
       // Neither IPv4 nor IPv6
       uv_close((uv_handle_t*)&server->handle, NULL);
-      return JS_ThrowInternalError(ctx, "Invalid IP address: %s", server->host);
+      return JS_ThrowInternalError(ctx, "Invalid bind address: %s", server->host);
     }
   }
 

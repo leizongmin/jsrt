@@ -24,7 +24,8 @@ typedef struct {
   uv_tcp_t handle;
   uv_connect_t connect_req;
   uv_shutdown_t shutdown_req;
-  uv_timer_t* timeout_timer;  // Allocated pointer instead of embedded handle
+  uv_getaddrinfo_t getaddrinfo_req;  // For DNS hostname resolution
+  uv_timer_t* timeout_timer;         // Allocated pointer instead of embedded handle
   char* host;
   int port;
   bool connected;
@@ -64,6 +65,7 @@ typedef struct {
 void add_event_emitter_methods(JSContext* ctx, JSValue obj);
 
 // Callback functions (from net_callbacks.c)
+void on_getaddrinfo(uv_getaddrinfo_t* req, int status, struct addrinfo* res);
 void on_socket_read(uv_stream_t* stream, ssize_t nread, const uv_buf_t* buf);
 void on_socket_alloc(uv_handle_t* handle, size_t suggested_size, uv_buf_t* buf);
 void on_connection(uv_stream_t* server, int status);

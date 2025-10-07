@@ -1,5 +1,99 @@
 #include "net_internal.h"
 
+// DNS resolution callback - called after uv_getaddrinfo completes
+void on_getaddrinfo(uv_getaddrinfo_t* req, int status, struct addrinfo* res) {
+  JSNetConnection* conn = (JSNetConnection*)req->data;
+
+  // Check if connection is still valid BEFORE using res
+  if (!conn || !conn->ctx || conn->destroyed || uv_is_closing((uv_handle_t*)&conn->handle)) {
+    // Connection destroyed or being destroyed, just free result and return
+    if (res) {
+      uv_freeaddrinfo(res);
+    }
+    return;
+  }
+
+  JSContext* ctx = conn->ctx;
+
+  if (status < 0) {
+    // DNS lookup failed - emit error event
+    conn->connecting = false;
+    conn->had_error = true;
+
+    if (!JS_IsUndefined(conn->socket_obj)) {
+      JSValue error = JS_NewError(ctx);
+      JS_DefinePropertyValueStr(ctx, error, "message", JS_NewString(ctx, uv_strerror(status)),
+                                JS_PROP_WRITABLE | JS_PROP_CONFIGURABLE);
+      JS_DefinePropertyValueStr(ctx, error, "code", JS_NewString(ctx, "ENOTFOUND"),
+                                JS_PROP_WRITABLE | JS_PROP_CONFIGURABLE);
+      JS_DefinePropertyValueStr(ctx, error, "syscall", JS_NewString(ctx, "getaddrinfo"),
+                                JS_PROP_WRITABLE | JS_PROP_CONFIGURABLE);
+      JS_DefinePropertyValueStr(ctx, error, "hostname", JS_NewString(ctx, conn->host),
+                                JS_PROP_WRITABLE | JS_PROP_CONFIGURABLE);
+
+      JSValue argv[] = {JS_NewString(ctx, "error"), error};
+      JSValue emit_func = JS_GetPropertyStr(ctx, conn->socket_obj, "emit");
+      if (JS_IsFunction(ctx, emit_func)) {
+        JS_Call(ctx, emit_func, conn->socket_obj, 2, argv);
+      }
+      JS_FreeValue(ctx, emit_func);
+      JS_FreeValue(ctx, argv[0]);
+      JS_FreeValue(ctx, argv[1]);
+    }
+
+    if (res) {
+      uv_freeaddrinfo(res);
+    }
+    return;
+  }
+
+  // DNS lookup succeeded - use first address to connect
+  if (res && res->ai_addr) {
+    struct sockaddr_storage addr_storage;
+    if (res->ai_family == AF_INET) {
+      memcpy(&addr_storage, res->ai_addr, sizeof(struct sockaddr_in));
+      // Set port
+      ((struct sockaddr_in*)&addr_storage)->sin_port = htons(conn->port);
+    } else if (res->ai_family == AF_INET6) {
+      memcpy(&addr_storage, res->ai_addr, sizeof(struct sockaddr_in6));
+      // Set port
+      ((struct sockaddr_in6*)&addr_storage)->sin6_port = htons(conn->port);
+    }
+
+    // Free the DNS result before attempting to connect
+    uv_freeaddrinfo(res);
+    res = NULL;
+
+    int result = uv_tcp_connect(&conn->connect_req, &conn->handle, (struct sockaddr*)&addr_storage, on_connect);
+
+    if (result < 0) {
+      // Connection failed - emit error
+      conn->connecting = false;
+      conn->had_error = true;
+
+      if (!JS_IsUndefined(conn->socket_obj)) {
+        JSValue error = JS_NewError(ctx);
+        JS_DefinePropertyValueStr(ctx, error, "message", JS_NewString(ctx, uv_strerror(result)),
+                                  JS_PROP_WRITABLE | JS_PROP_CONFIGURABLE);
+
+        JSValue argv[] = {JS_NewString(ctx, "error"), error};
+        JSValue emit_func = JS_GetPropertyStr(ctx, conn->socket_obj, "emit");
+        if (JS_IsFunction(ctx, emit_func)) {
+          JS_Call(ctx, emit_func, conn->socket_obj, 2, argv);
+        }
+        JS_FreeValue(ctx, emit_func);
+        JS_FreeValue(ctx, argv[0]);
+        JS_FreeValue(ctx, argv[1]);
+      }
+    }
+  } else {
+    // Free result if we didn't use it
+    if (res) {
+      uv_freeaddrinfo(res);
+    }
+  }
+}
+
 // Helper function to add EventEmitter methods to an object
 void add_event_emitter_methods(JSContext* ctx, JSValue obj) {
   // Get the node:events module to access EventEmitter methods

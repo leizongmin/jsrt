@@ -38,8 +38,7 @@ JSValue js_socket_connect(JSContext* ctx, JSValueConst this_val, int argc, JSVal
   conn->connecting = true;
 
   // Resolve address and connect
-  // Try IPv4 first, then IPv6 if that fails
-  // TODO: Implement proper hostname resolution with uv_getaddrinfo for full Node.js compatibility
+  // Try IPv4 first, then IPv6, then use DNS resolution for hostnames
   struct sockaddr_storage addr_storage;
   struct sockaddr* addr = (struct sockaddr*)&addr_storage;
   int result;
@@ -58,19 +57,33 @@ JSValue js_socket_connect(JSContext* ctx, JSValueConst this_val, int argc, JSVal
       memcpy(&addr_storage, &addr6, sizeof(addr6));
       result = uv_tcp_connect(&conn->connect_req, &conn->handle, addr, on_connect);
     } else {
-      // Neither IPv4 nor IPv6 - invalid address
-      conn->connecting = false;
-      // Free resources before error return
-      char* error_host = conn->host;
-      conn->host = NULL;
-      JSValue error = JS_ThrowInternalError(ctx, "Invalid IP address: %s", error_host);
-      free(error_host);
-      if (conn->encoding) {
-        free(conn->encoding);
-        conn->encoding = NULL;
+      // Not an IP address - use DNS resolution
+      struct addrinfo hints;
+      memset(&hints, 0, sizeof(hints));
+      hints.ai_family = AF_UNSPEC;      // Allow IPv4 or IPv6
+      hints.ai_socktype = SOCK_STREAM;  // TCP socket
+      hints.ai_protocol = IPPROTO_TCP;
+
+      conn->getaddrinfo_req.data = conn;
+      result = uv_getaddrinfo(rt->uv_loop, &conn->getaddrinfo_req, on_getaddrinfo, conn->host, NULL, &hints);
+
+      if (result < 0) {
+        conn->connecting = false;
+        // Free resources before error return
+        char* error_host = conn->host;
+        conn->host = NULL;
+        JSValue error = JS_ThrowInternalError(ctx, "DNS lookup failed for %s: %s", error_host, uv_strerror(result));
+        free(error_host);
+        if (conn->encoding) {
+          free(conn->encoding);
+          conn->encoding = NULL;
+        }
+        uv_close((uv_handle_t*)&conn->handle, NULL);
+        return error;
       }
-      uv_close((uv_handle_t*)&conn->handle, NULL);
-      return error;
+
+      // DNS resolution started, return immediately
+      return this_val;
     }
   }
 

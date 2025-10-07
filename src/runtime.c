@@ -140,7 +140,8 @@ void JSRT_RuntimeFree(JSRT_Runtime* rt) {
     JSRT_Debug("uv_loop_close failed: %s", uv_strerror(result));
   }
 
-  // Now free all collected net module structs AFTER loop is closed
+  // Now free only string fields from collected net module structs
+  // DO NOT free the structs themselves - QuickJS finalizers will do that
   CleanupNode* current = cleanup_list_head;
   while (current) {
     CleanupNode* next = current->next;
@@ -156,7 +157,7 @@ void JSRT_RuntimeFree(JSRT_Runtime* rt) {
         free(conn->encoding);
         conn->encoding = NULL;
       }
-      free(conn);
+      // DO NOT free(conn) - finalizer will do it
     } else if (current->type_tag == NET_TYPE_SERVER) {
       // Use the actual struct definition from net_internal.h
       JSNetServer* server = (JSNetServer*)current->data;
@@ -164,7 +165,7 @@ void JSRT_RuntimeFree(JSRT_Runtime* rt) {
         free(server->host);
         server->host = NULL;
       }
-      free(server);
+      // DO NOT free(server) - finalizer will do it
     }
 
     free(current);

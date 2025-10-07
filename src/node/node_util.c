@@ -4,6 +4,9 @@
 #include <string.h>
 #include "node_modules.h"
 
+// Forward declarations
+static JSValue js_util_inspect(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv);
+
 // util.format() implementation - Node.js-compatible formatting with %s, %d, %j placeholders
 static JSValue js_util_format(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
   if (argc < 1) {
@@ -27,8 +30,43 @@ static JSValue js_util_format(JSContext* ctx, JSValueConst this_val, int argc, J
   int arg_index = 1;
 
   for (size_t i = 0; i < format_len; i++) {
-    if (format[i] == '%' && i + 1 < format_len && arg_index < argc) {
+    if (format[i] == '%' && i + 1 < format_len) {
       char placeholder = format[i + 1];
+
+      // Handle %% escape immediately
+      if (placeholder == '%') {
+        if (result_pos >= result_capacity - 1) {
+          result_capacity *= 2;
+          result = realloc(result, result_capacity);
+          if (!result) {
+            JS_FreeCString(ctx, format);
+            JS_ThrowOutOfMemory(ctx);
+            return JS_EXCEPTION;
+          }
+        }
+        result[result_pos++] = '%';
+        i++;  // Skip the second %
+        continue;
+      }
+
+      // For other placeholders, check if we have arguments
+      if (arg_index >= argc) {
+        // No more arguments, treat as literal
+        result[result_pos++] = '%';
+        if (result_pos >= result_capacity - 1) {
+          result_capacity *= 2;
+          result = realloc(result, result_capacity);
+          if (!result) {
+            JS_FreeCString(ctx, format);
+            JS_ThrowOutOfMemory(ctx);
+            return JS_EXCEPTION;
+          }
+        }
+        result[result_pos++] = placeholder;
+        i++;
+        continue;
+      }
+
       const char* replacement = NULL;
       char* temp_str = NULL;
       bool should_free = false;
@@ -39,11 +77,24 @@ static JSValue js_util_format(JSContext* ctx, JSValueConst this_val, int argc, J
           should_free = true;
           break;
         }
-        case 'd': {  // Number placeholder
+        case 'd':    // Number placeholder (integer)
+        case 'i': {  // Integer placeholder (same as %d)
           double num;
           if (JS_ToFloat64(ctx, &num, argv[arg_index]) == 0) {
             temp_str = malloc(32);
             snprintf(temp_str, 32, "%.0f", num);
+            replacement = temp_str;
+            should_free = true;
+          } else {
+            replacement = "NaN";
+          }
+          break;
+        }
+        case 'f': {  // Floating point placeholder
+          double num;
+          if (JS_ToFloat64(ctx, &num, argv[arg_index]) == 0) {
+            temp_str = malloc(64);
+            snprintf(temp_str, 64, "%f", num);
             replacement = temp_str;
             should_free = true;
           } else {
@@ -70,9 +121,16 @@ static JSValue js_util_format(JSContext* ctx, JSValueConst this_val, int argc, J
           JS_FreeValue(ctx, stringify_fn);
           break;
         }
-        case '%': {  // Escaped %
-          replacement = "%";
-          arg_index--;  // Don't consume an argument
+        case 'o':    // Object placeholder (util.inspect without options)
+        case 'O': {  // Object placeholder (util.inspect with options)
+          // Use util.inspect() for object formatting
+          JSValue inspect_args[1] = {argv[arg_index]};
+          JSValue inspect_result = js_util_inspect(ctx, JS_UNDEFINED, 1, inspect_args);
+          if (!JS_IsException(inspect_result)) {
+            replacement = JS_ToCString(ctx, inspect_result);
+            should_free = true;
+            JS_FreeValue(ctx, inspect_result);
+          }
           break;
         }
         default: {
@@ -162,6 +220,25 @@ static JSValue js_util_format(JSContext* ctx, JSValueConst this_val, int argc, J
   free(result);
   JS_FreeCString(ctx, format);
   return ret;
+}
+
+// util.formatWithOptions() implementation - format with custom inspect options
+static JSValue js_util_format_with_options(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
+  if (argc < 2) {
+    return JS_NewString(ctx, "");
+  }
+
+  // First argument is the inspectOptions object
+  JSValue inspect_options = argv[0];
+
+  // Remaining arguments are passed to format()
+  // We need to call format with the remaining arguments
+  int format_argc = argc - 1;
+  JSValueConst* format_argv = &argv[1];
+
+  // For now, we'll just call the regular format() function
+  // In the future, we can pass inspect_options to inspect() when used with %o/%O
+  return js_util_format(ctx, this_val, format_argc, format_argv);
 }
 
 // util.inspect() implementation - object inspection
@@ -279,6 +356,8 @@ JSValue JSRT_InitNodeUtil(JSContext* ctx) {
 
   // Add utility functions
   JS_SetPropertyStr(ctx, util_obj, "format", JS_NewCFunction(ctx, js_util_format, "format", 0));
+  JS_SetPropertyStr(ctx, util_obj, "formatWithOptions",
+                    JS_NewCFunction(ctx, js_util_format_with_options, "formatWithOptions", 2));
   JS_SetPropertyStr(ctx, util_obj, "inspect", JS_NewCFunction(ctx, js_util_inspect, "inspect", 1));
 
   // Type checking functions
@@ -294,6 +373,18 @@ JSValue JSRT_InitNodeUtil(JSContext* ctx) {
   // Promise utilities
   JS_SetPropertyStr(ctx, util_obj, "promisify", JS_NewCFunction(ctx, js_util_promisify, "promisify", 1));
 
+  // TextEncoder and TextDecoder - export from global scope
+  JSValue global = JS_GetGlobalObject(ctx);
+  JSValue text_encoder = JS_GetPropertyStr(ctx, global, "TextEncoder");
+  JSValue text_decoder = JS_GetPropertyStr(ctx, global, "TextDecoder");
+
+  JS_SetPropertyStr(ctx, util_obj, "TextEncoder", JS_DupValue(ctx, text_encoder));
+  JS_SetPropertyStr(ctx, util_obj, "TextDecoder", JS_DupValue(ctx, text_decoder));
+
+  JS_FreeValue(ctx, text_encoder);
+  JS_FreeValue(ctx, text_decoder);
+  JS_FreeValue(ctx, global);
+
   return util_obj;
 }
 
@@ -308,6 +399,10 @@ int js_node_util_init(JSContext* ctx, JSModuleDef* m) {
   JSValue format = JS_GetPropertyStr(ctx, util_module, "format");
   JS_SetModuleExport(ctx, m, "format", JS_DupValue(ctx, format));
   JS_FreeValue(ctx, format);
+
+  JSValue formatWithOptions = JS_GetPropertyStr(ctx, util_module, "formatWithOptions");
+  JS_SetModuleExport(ctx, m, "formatWithOptions", JS_DupValue(ctx, formatWithOptions));
+  JS_FreeValue(ctx, formatWithOptions);
 
   JSValue inspect = JS_GetPropertyStr(ctx, util_module, "inspect");
   JS_SetModuleExport(ctx, m, "inspect", JS_DupValue(ctx, inspect));
@@ -348,6 +443,15 @@ int js_node_util_init(JSContext* ctx, JSModuleDef* m) {
   JSValue promisify = JS_GetPropertyStr(ctx, util_module, "promisify");
   JS_SetModuleExport(ctx, m, "promisify", JS_DupValue(ctx, promisify));
   JS_FreeValue(ctx, promisify);
+
+  // Export TextEncoder and TextDecoder
+  JSValue textEncoder = JS_GetPropertyStr(ctx, util_module, "TextEncoder");
+  JS_SetModuleExport(ctx, m, "TextEncoder", JS_DupValue(ctx, textEncoder));
+  JS_FreeValue(ctx, textEncoder);
+
+  JSValue textDecoder = JS_GetPropertyStr(ctx, util_module, "TextDecoder");
+  JS_SetModuleExport(ctx, m, "TextDecoder", JS_DupValue(ctx, textDecoder));
+  JS_FreeValue(ctx, textDecoder);
 
   JS_FreeValue(ctx, util_module);
   return 0;

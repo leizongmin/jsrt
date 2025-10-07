@@ -168,8 +168,15 @@ void on_socket_read(uv_stream_t* stream, ssize_t nread, const uv_buf_t* buf) {
       JS_FreeValue(ctx, emit);
     }
 
-    // NOTE: 'close' event emission deferred - requires more complex lifecycle management
-    // to avoid use-after-free with libuv's internal queue handling
+    // Emit 'close' event before closing handle (while socket_obj is still valid)
+    JSValue emit_close = JS_GetPropertyStr(ctx, conn->socket_obj, "emit");
+    if (JS_IsFunction(ctx, emit_close)) {
+      JSValue args[] = {JS_NewString(ctx, "close"), JS_NewBool(ctx, conn->had_error)};
+      JS_Call(ctx, emit_close, conn->socket_obj, 2, args);
+      JS_FreeValue(ctx, args[0]);
+      JS_FreeValue(ctx, args[1]);
+    }
+    JS_FreeValue(ctx, emit_close);
 
     // Close the connection - only if not already closing
     if (!uv_is_closing((uv_handle_t*)stream)) {

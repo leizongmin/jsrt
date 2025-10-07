@@ -26,6 +26,7 @@ void socket_timeout_timer_close_callback(uv_handle_t* handle) {
 // NOTE: DO NOT free the connection struct here!
 // It will be freed by JSRT_RuntimeCleanupWalkCallback after the loop closes
 // Freeing here causes use-after-free during uv_walk in shutdown
+// NOTE: DO NOT emit close event here - socket_obj may be invalid after finalizer runs
 void socket_close_callback(uv_handle_t* handle) {
   // Do nothing - cleanup happens in JSRT_RuntimeCleanupWalkCallback
 }
@@ -99,6 +100,7 @@ void server_callback_timer_close_callback(uv_handle_t* handle) {
 // NOTE: DO NOT free the server struct here!
 // It will be freed by JSRT_RuntimeCleanupWalkCallback after the loop closes
 // Freeing here causes use-after-free during uv_walk in shutdown
+// NOTE: DO NOT emit close event here - server_obj may be invalid after finalizer runs
 void server_close_callback(uv_handle_t* handle) {
   // Do nothing - cleanup happens in JSRT_RuntimeCleanupWalkCallback
 }

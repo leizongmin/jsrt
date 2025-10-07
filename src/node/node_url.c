@@ -705,7 +705,7 @@ static const JSCFunctionListEntry js_url_funcs[] = {
 };
 
 // ES Module initialization
-static int js_node_url_init(JSContext* ctx, JSModuleDef* m) {
+int js_node_url_init(JSContext* ctx, JSModuleDef* m) {
   // Export URL class (get from global object)
   JSValue global = JS_GetGlobalObject(ctx);
   JSValue url_class = JS_GetPropertyStr(ctx, global, "URL");

@@ -748,8 +748,8 @@ static JSValue js_os_set_priority(JSContext* ctx, JSValueConst this_val, int arg
 static JSValue js_os_loadavg(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
   JSValue loadavg_array = JS_NewArray(ctx);
 
-#ifdef _WIN32
-  // Windows doesn't have load average, return zeros
+#if defined(_WIN32) || defined(__ANDROID__)
+  // Windows and Android don't have load average, return zeros
   JS_SetPropertyUint32(ctx, loadavg_array, 0, JS_NewFloat64(ctx, 0.0));
   JS_SetPropertyUint32(ctx, loadavg_array, 1, JS_NewFloat64(ctx, 0.0));
   JS_SetPropertyUint32(ctx, loadavg_array, 2, JS_NewFloat64(ctx, 0.0));

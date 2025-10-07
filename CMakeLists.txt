@@ -4,6 +4,10 @@ set(CMAKE_C_STANDARD 11)
 set(CMAKE_CXX_FLAGS "-Wall -Wextra")
 set(CMAKE_CFLAGS "-Wall -Wextra")
 
+# Feature test macros for POSIX extensions (preadv/pwritev, LLONG_MAX, etc.)
+# Note: Android/Bionic requires _GNU_SOURCE for preadv/pwritev
+add_definitions(-D_GNU_SOURCE -D_DEFAULT_SOURCE)
+
 # Check if git submodules are initialized
 if(NOT EXISTS "${CMAKE_SOURCE_DIR}/deps/quickjs/quickjs.h")
     message(FATAL_ERROR "Git submodules are not initialized. Please run: git submodule update --init --recursive")
@@ -158,6 +162,12 @@ if(WIN32)
 endif()
 
 add_subdirectory(deps/libuv)
+
+# Fix Android-specific issues: libuv needs LLONG_MAX from limits.h
+if(ANDROID)
+    target_compile_definitions(uv_a PRIVATE -DLLONG_MAX=9223372036854775807LL)
+    target_compile_definitions(uv PRIVATE -DLLONG_MAX=9223372036854775807LL)
+endif()
 
 # Verify and fix libuv build after configuration
 if(WIN32)
@@ -650,6 +660,9 @@ elseif(APPLE)
     # On macOS, dl and m are part of system libraries and don't need explicit linking
     # libuv already handles pthread linking on Unix systems
     set(JSRT_PLATFORM_LIBS "")
+elseif(ANDROID)
+    # Android needs log library for WAMR and semaphore library for POSIX semaphores
+    set(JSRT_PLATFORM_LIBS dl m log android android-posix-semaphore)
 else()
     # Linux and other Unix systems may need explicit dl and m linking
     # Note: libuv already links pthread on Unix systems, so we only add dl and m to avoid duplicates
@@ -719,11 +732,21 @@ set(JSRT_LINK_LIBS
     quickjs
     uv_a
     llhttp
-    readline
     vmlib
     ${JSRT_PLATFORM_LIBS}
     ${FFI_LIBRARIES}
     ${OPENSSL_LIBRARIES})
+
+# Add readline libraries separately to ensure they're linked
+if(READLINE_WORKING)
+    # Directly link readline library
+    find_library(READLINE_LIB readline REQUIRED)
+    find_library(NCURSES_LIB ncurses)
+    list(APPEND JSRT_LINK_LIBS ${READLINE_LIB})
+    if(NCURSES_LIB)
+        list(APPEND JSRT_LINK_LIBS ${NCURSES_LIB})
+    endif()
+endif()
 add_library(jsrtcore STATIC ${JSRT_LIB_FILES})
 target_compile_definitions(jsrtcore PRIVATE JSRT_VERSION="${JSRT_VERSION}" QUICKJS_VERSION="${QUICKJS_VERSION}")
 if(JSRT_NODE_COMPAT)

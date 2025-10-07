@@ -218,10 +218,18 @@ static JSRT_HttpResponse try_curl_fallback(const char* url) {
   JSRT_HttpResponse response = {0};
   response.error = JSRT_HTTP_ERROR_NETWORK;
 
-  char temp_file[] = "/tmp/jsrt_curl_XXXXXX";
+  // Use TMPDIR environment variable, fallback to /tmp
+  const char* tmpdir = getenv("TMPDIR");
+  if (!tmpdir || strlen(tmpdir) == 0) {
+    tmpdir = "/tmp";
+  }
+
+  char temp_file[1024];
+  snprintf(temp_file, sizeof(temp_file), "%s/jsrt_curl_XXXXXX", tmpdir);
+
   int temp_fd = mkstemp(temp_file);
   if (temp_fd == -1) {
-    JSRT_Debug("HTTP Client: curl fallback - failed to create temp file");
+    JSRT_Debug("HTTP Client: curl fallback - failed to create temp file in %s", tmpdir);
     return response;
   }
   close(temp_fd);

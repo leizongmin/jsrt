@@ -213,9 +213,10 @@ While significantly improved, some limitations remain:
 
 1. **Complex Types**: Structs, unions, and complex nested types are not yet supported
 2. **Callbacks**: No support for C functions calling JavaScript functions (partially implemented)
-3. **No libffi**: Still uses basic x86_64 calling conventions 
+3. **No libffi**: Still uses basic x86_64 calling conventions
 4. **Platform Dependencies**: Some math functions may not be available on all systems
 5. **Array Length Information**: C functions returning arrays need explicit length information
+6. **⚠️ Android/Termux ARM64**: FFI is currently **not supported** on Android/Termux ARM64 due to libffi compatibility issues (see Platform-Specific Notes below)
 
 ### What Works ✅
 
@@ -275,6 +276,57 @@ To further enhance this FFI implementation:
 - **v2.0.0**: Enhanced function calling with 16 arguments, memory management, type system improvements
 - **v2.1.0**: Added array support with conversion functions and automatic argument handling
 - **v2.2.0**: Enhanced error reporting with function context, detailed validation, and platform-specific suggestions
+
+## Platform-Specific Notes
+
+### Android/Termux ARM64 ⚠️
+
+**Status**: FFI is currently **NOT SUPPORTED** on Android/Termux ARM64
+
+**Reason**: The FFI implementation experiences crashes on Android/Termux ARM64 due to the following issues:
+
+1. **ARM64 Calling Convention Differences**: ARM64 uses a different Application Binary Interface (ABI) and calling convention compared to x86_64, which the current FFI implementation is optimized for.
+
+2. **libffi Compatibility Issues**: The current version of libffi (3.4.7) on Android's Bionic libc has known compatibility issues with ARM64 architecture, resulting in:
+   - Illegal instruction errors
+   - Segmentation faults during function calls
+   - Memory alignment violations
+
+3. **Bionic libc Specifics**: Android's Bionic C library has subtle differences from glibc that can affect foreign function calls on ARM architectures.
+
+**Workaround**: FFI tests automatically skip on Android/Termux ARM64 with the following detection:
+
+```javascript
+const os = require('node:os');
+
+if (os.platform() === 'linux' && os.arch() === 'arm64') {
+  console.log('⚠️ FFI not supported on Android/Termux ARM64');
+  // Skip FFI operations
+}
+```
+
+**Alternative Solutions**:
+
+If you need to call native functions on Android/Termux ARM64, consider:
+
+1. **Node.js Native Addons**: Write a native Node.js addon using N-API
+2. **WebAssembly**: Compile C/C++ code to WebAssembly and use jsrt's WASM support
+3. **Child Processes**: Execute native binaries as child processes and communicate via stdin/stdout
+4. **JNI (Android)**: If running in a full Android app context, use Java Native Interface
+
+**Future Work**: To support FFI on Android ARM64 would require:
+- Custom ARM64 calling convention implementation
+- Testing with alternative FFI libraries
+- Potential integration with newer libffi versions
+- Platform-specific assembly code for function trampolines
+
+### Other Platforms ✅
+
+FFI works well on the following platforms:
+
+- ✅ **Linux x86_64**: Full support, tested with glibc
+- ✅ **macOS x86_64/ARM64**: Full support with system libraries
+- ✅ **Windows x86_64**: Full support with MSVC and MinGW
 
 ## Version
 

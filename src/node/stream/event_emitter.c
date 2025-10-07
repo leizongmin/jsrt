@@ -70,16 +70,8 @@ void parse_stream_options(JSContext* ctx, JSValueConst options_obj, StreamOption
   JS_FreeValue(ctx, auto_destroy);
 }
 
-// Static cache for EventEmitter constructor
-static JSValue cached_event_emitter_ctor = JS_UNDEFINED;
-
-// Helper: Get or create EventEmitter constructor
+// Helper: Get EventEmitter constructor (no caching to avoid use-after-free)
 static JSValue get_event_emitter_ctor(JSContext* ctx) {
-  // If already cached and valid, return it
-  if (!JS_IsUndefined(cached_event_emitter_ctor)) {
-    return JS_DupValue(ctx, cached_event_emitter_ctor);
-  }
-
   // Try to get from node:events module using the C API
   extern JSValue JSRT_InitNodeEvents(JSContext * ctx);  // From node_events.c
   JSValue events_module = JSRT_InitNodeEvents(ctx);
@@ -96,9 +88,6 @@ static JSValue get_event_emitter_ctor(JSContext* ctx) {
     JS_FreeValue(ctx, emitter_ctor);
     return JS_UNDEFINED;
   }
-
-  // Cache it
-  cached_event_emitter_ctor = JS_DupValue(ctx, emitter_ctor);
 
   return emitter_ctor;
 }

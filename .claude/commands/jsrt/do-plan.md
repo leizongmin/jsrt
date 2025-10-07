@@ -5,6 +5,7 @@ Requirements:
 - Run mandatory tests: make test && make wpt
 - Ensure code formatting: make format
 - Verify build integrity: make clean && make
+- Update plan document with latest progress after completing each major task
 
 @jsrt-code-reviewer Conduct comprehensive review focusing on:
 - Memory safety: leak prevention, proper allocation/deallocation

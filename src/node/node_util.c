@@ -552,6 +552,70 @@ static JSValue js_util_inherits(JSContext* ctx, JSValueConst this_val, int argc,
   return JS_UNDEFINED;
 }
 
+// util.types.isDate() implementation - check if value is a Date object
+static JSValue js_util_types_is_date(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
+  if (argc < 1) {
+    return JS_FALSE;
+  }
+
+  JSValue global = JS_GetGlobalObject(ctx);
+  JSValue date_ctor = JS_GetPropertyStr(ctx, global, "Date");
+  int is_date = JS_IsInstanceOf(ctx, argv[0], date_ctor);
+
+  JS_FreeValue(ctx, date_ctor);
+  JS_FreeValue(ctx, global);
+
+  return JS_NewBool(ctx, is_date > 0);
+}
+
+// util.types.isPromise() implementation - check if value is a Promise object
+static JSValue js_util_types_is_promise(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
+  if (argc < 1) {
+    return JS_FALSE;
+  }
+
+  JSValue global = JS_GetGlobalObject(ctx);
+  JSValue promise_ctor = JS_GetPropertyStr(ctx, global, "Promise");
+  int is_promise = JS_IsInstanceOf(ctx, argv[0], promise_ctor);
+
+  JS_FreeValue(ctx, promise_ctor);
+  JS_FreeValue(ctx, global);
+
+  return JS_NewBool(ctx, is_promise > 0);
+}
+
+// util.types.isRegExp() implementation - check if value is a RegExp object
+static JSValue js_util_types_is_regexp(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
+  if (argc < 1) {
+    return JS_FALSE;
+  }
+
+  JSValue global = JS_GetGlobalObject(ctx);
+  JSValue regexp_ctor = JS_GetPropertyStr(ctx, global, "RegExp");
+  int is_regexp = JS_IsInstanceOf(ctx, argv[0], regexp_ctor);
+
+  JS_FreeValue(ctx, regexp_ctor);
+  JS_FreeValue(ctx, global);
+
+  return JS_NewBool(ctx, is_regexp > 0);
+}
+
+// util.types.isArrayBuffer() implementation - check if value is an ArrayBuffer object
+static JSValue js_util_types_is_array_buffer(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
+  if (argc < 1) {
+    return JS_FALSE;
+  }
+
+  JSValue global = JS_GetGlobalObject(ctx);
+  JSValue ab_ctor = JS_GetPropertyStr(ctx, global, "ArrayBuffer");
+  int is_ab = JS_IsInstanceOf(ctx, argv[0], ab_ctor);
+
+  JS_FreeValue(ctx, ab_ctor);
+  JS_FreeValue(ctx, global);
+
+  return JS_NewBool(ctx, is_ab > 0);
+}
+
 // util.isDeepStrictEqual() implementation - deep equality check
 static JSValue js_util_is_deep_strict_equal(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
   if (argc < 2) {
@@ -621,13 +685,12 @@ JSValue JSRT_InitNodeUtil(JSContext* ctx) {
   // util.types namespace - modern type checking API
   JSValue types_obj = JS_NewObject(ctx);
 
-  // Reuse existing type checkers
-  JS_SetPropertyStr(ctx, types_obj, "isDate", JS_NewCFunction(ctx, js_util_is_object, "isDate", 1));  // Simplified
-  JS_SetPropertyStr(ctx, types_obj, "isPromise",
-                    JS_NewCFunction(ctx, js_util_is_object, "isPromise", 1));                             // Simplified
-  JS_SetPropertyStr(ctx, types_obj, "isRegExp", JS_NewCFunction(ctx, js_util_is_object, "isRegExp", 1));  // Simplified
+  // Proper type checkers using JS_IsInstanceOf()
+  JS_SetPropertyStr(ctx, types_obj, "isDate", JS_NewCFunction(ctx, js_util_types_is_date, "isDate", 1));
+  JS_SetPropertyStr(ctx, types_obj, "isPromise", JS_NewCFunction(ctx, js_util_types_is_promise, "isPromise", 1));
+  JS_SetPropertyStr(ctx, types_obj, "isRegExp", JS_NewCFunction(ctx, js_util_types_is_regexp, "isRegExp", 1));
   JS_SetPropertyStr(ctx, types_obj, "isArrayBuffer",
-                    JS_NewCFunction(ctx, js_util_is_object, "isArrayBuffer", 1));  // Simplified
+                    JS_NewCFunction(ctx, js_util_types_is_array_buffer, "isArrayBuffer", 1));
 
   JS_SetPropertyStr(ctx, util_obj, "types", types_obj);
 
@@ -701,6 +764,30 @@ int js_node_util_init(JSContext* ctx, JSModuleDef* m) {
   JSValue promisify = JS_GetPropertyStr(ctx, util_module, "promisify");
   JS_SetModuleExport(ctx, m, "promisify", JS_DupValue(ctx, promisify));
   JS_FreeValue(ctx, promisify);
+
+  JSValue callbackify = JS_GetPropertyStr(ctx, util_module, "callbackify");
+  JS_SetModuleExport(ctx, m, "callbackify", JS_DupValue(ctx, callbackify));
+  JS_FreeValue(ctx, callbackify);
+
+  JSValue deprecate = JS_GetPropertyStr(ctx, util_module, "deprecate");
+  JS_SetModuleExport(ctx, m, "deprecate", JS_DupValue(ctx, deprecate));
+  JS_FreeValue(ctx, deprecate);
+
+  JSValue debuglog = JS_GetPropertyStr(ctx, util_module, "debuglog");
+  JS_SetModuleExport(ctx, m, "debuglog", JS_DupValue(ctx, debuglog));
+  JS_FreeValue(ctx, debuglog);
+
+  JSValue inherits = JS_GetPropertyStr(ctx, util_module, "inherits");
+  JS_SetModuleExport(ctx, m, "inherits", JS_DupValue(ctx, inherits));
+  JS_FreeValue(ctx, inherits);
+
+  JSValue isDeepStrictEqual = JS_GetPropertyStr(ctx, util_module, "isDeepStrictEqual");
+  JS_SetModuleExport(ctx, m, "isDeepStrictEqual", JS_DupValue(ctx, isDeepStrictEqual));
+  JS_FreeValue(ctx, isDeepStrictEqual);
+
+  JSValue types = JS_GetPropertyStr(ctx, util_module, "types");
+  JS_SetModuleExport(ctx, m, "types", JS_DupValue(ctx, types));
+  JS_FreeValue(ctx, types);
 
   // Export TextEncoder and TextDecoder
   JSValue textEncoder = JS_GetPropertyStr(ctx, util_module, "TextEncoder");

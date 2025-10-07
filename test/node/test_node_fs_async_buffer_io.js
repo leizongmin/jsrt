@@ -1,5 +1,7 @@
 // Test fs.read() and fs.write() async buffer I/O operations
 const fs = require('node:fs');
+const os = require('node:os');
+const path = require('node:path');
 const { Buffer } = require('node:buffer');
 
 function assert(condition, message) {
@@ -8,9 +10,12 @@ function assert(condition, message) {
   }
 }
 
+// Get tmpdir from os module
+const tmpdir = os.tmpdir();
+
 // Test 1: fs.write() - write data to a file using buffer I/O
 console.log('Test 1: fs.write() async buffer I/O');
-const fd1 = fs.openSync('/tmp/test_write.txt', 'w');
+const fd1 = fs.openSync(path.join(tmpdir, 'test_write.txt'), 'w');
 const writeBuffer = Buffer.from('Hello from async write!');
 
 fs.write(
@@ -35,7 +40,7 @@ fs.write(
 
     // Test 2: fs.read() - read data from file using buffer I/O
     console.log('Test 2: fs.read() async buffer I/O');
-    const fd2 = fs.openSync('/tmp/test_write.txt', 'r');
+    const fd2 = fs.openSync(path.join(tmpdir, 'test_write.txt'), 'r');
     const readBuffer = Buffer.alloc(100);
 
     fs.read(fd2, readBuffer, 0, 100, 0, (err, bytesRead, buffer) => {
@@ -58,7 +63,7 @@ fs.write(
 
       // Test 3: fs.write() with position
       console.log('Test 3: fs.write() with specific position');
-      const fd3 = fs.openSync('/tmp/test_position.txt', 'w');
+      const fd3 = fs.openSync(path.join(tmpdir, 'test_position.txt'), 'w');
       const buf1 = Buffer.from('Hello');
       const buf2 = Buffer.from('World');
 
@@ -78,7 +83,7 @@ fs.write(
           fs.closeSync(fd3);
 
           // Verify the result
-          const fd4 = fs.openSync('/tmp/test_position.txt', 'r');
+          const fd4 = fs.openSync(path.join(tmpdir, 'test_position.txt'), 'r');
           const verifyBuf = Buffer.alloc(20);
 
           fs.read(fd4, verifyBuf, 0, 20, 0, (err3, bytesRead3) => {
@@ -98,7 +103,7 @@ fs.write(
 
             // Test 4: fs.read() with null position (current position)
             console.log('Test 4: fs.read() with null position');
-            const fd5 = fs.openSync('/tmp/test_write.txt', 'r');
+            const fd5 = fs.openSync(path.join(tmpdir, 'test_write.txt'), 'r');
             const seqBuf1 = Buffer.alloc(5);
             const seqBuf2 = Buffer.alloc(10);
 
@@ -130,11 +135,11 @@ fs.write(
 
                 // Test 5: fs.readv() - vectored read
                 console.log('Test 5: fs.readv() vectored read');
-                const fd6 = fs.openSync('/tmp/test_readv.txt', 'w');
-                fs.writeFileSync('/tmp/test_readv.txt', 'AAAABBBBCCCCDDDD');
+                const fd6 = fs.openSync(path.join(tmpdir, 'test_readv.txt'), 'w');
+                fs.writeFileSync(path.join(tmpdir, 'test_readv.txt'), 'AAAABBBBCCCCDDDD');
                 fs.closeSync(fd6);
 
-                const fd7 = fs.openSync('/tmp/test_readv.txt', 'r');
+                const fd7 = fs.openSync(path.join(tmpdir, 'test_readv.txt'), 'r');
                 const bufs = [
                   Buffer.alloc(4),
                   Buffer.alloc(4),
@@ -173,7 +178,7 @@ fs.write(
 
                   // Test 6: fs.writev() - vectored write
                   console.log('Test 6: fs.writev() vectored write');
-                  const fd8 = fs.openSync('/tmp/test_writev.txt', 'w');
+                  const fd8 = fs.openSync(path.join(tmpdir, 'test_writev.txt'), 'w');
                   const writeBufs = [
                     Buffer.from('Part1'),
                     Buffer.from('Part2'),
@@ -198,7 +203,7 @@ fs.write(
                       fs.closeSync(fd8);
 
                       const written = fs.readFileSync(
-                        '/tmp/test_writev.txt',
+                        path.join(tmpdir, 'test_writev.txt'),
                         'utf8'
                       );
                       assert(
@@ -208,9 +213,9 @@ fs.write(
 
                       // Test 7: fs.rm() - remove file
                       console.log('Test 7: fs.rm() remove file');
-                      fs.writeFileSync('/tmp/test_rm.txt', 'delete me');
+                      fs.writeFileSync(path.join(tmpdir, 'test_rm.txt'), 'delete me');
 
-                      fs.rm('/tmp/test_rm.txt', (errRm) => {
+                      fs.rm(path.join(tmpdir, 'test_rm.txt'), (errRm) => {
                         if (errRm) {
                           console.error('fs.rm() error:', errRm);
                           process.exit(1);
@@ -218,17 +223,17 @@ fs.write(
 
                         console.log('  File removed successfully');
                         assert(
-                          !fs.existsSync('/tmp/test_rm.txt'),
+                          !fs.existsSync(path.join(tmpdir, 'test_rm.txt')),
                           'file should be removed'
                         );
 
                         // Test 8: fs.cp() - copy file
                         console.log('Test 8: fs.cp() copy file');
-                        fs.writeFileSync('/tmp/test_cp_src.txt', 'copy this');
+                        fs.writeFileSync(path.join(tmpdir, 'test_cp_src.txt'), 'copy this');
 
                         fs.cp(
-                          '/tmp/test_cp_src.txt',
-                          '/tmp/test_cp_dest.txt',
+                          path.join(tmpdir, 'test_cp_src.txt'),
+                          path.join(tmpdir, 'test_cp_dest.txt'),
                           (errCp) => {
                             if (errCp) {
                               console.error('fs.cp() error:', errCp);
@@ -237,12 +242,12 @@ fs.write(
 
                             console.log('  File copied successfully');
                             assert(
-                              fs.existsSync('/tmp/test_cp_dest.txt'),
+                              fs.existsSync(path.join(tmpdir, 'test_cp_dest.txt')),
                               'destination should exist'
                             );
 
                             const copiedContent = fs.readFileSync(
-                              '/tmp/test_cp_dest.txt',
+                              path.join(tmpdir, 'test_cp_dest.txt'),
                               'utf8'
                             );
                             assert(
@@ -251,10 +256,10 @@ fs.write(
                             );
 
                             // Cleanup
-                            fs.unlinkSync('/tmp/test_cp_src.txt');
-                            fs.unlinkSync('/tmp/test_cp_dest.txt');
-                            fs.unlinkSync('/tmp/test_readv.txt');
-                            fs.unlinkSync('/tmp/test_writev.txt');
+                            fs.unlinkSync(path.join(tmpdir, 'test_cp_src.txt'));
+                            fs.unlinkSync(path.join(tmpdir, 'test_cp_dest.txt'));
+                            fs.unlinkSync(path.join(tmpdir, 'test_readv.txt'));
+                            fs.unlinkSync(path.join(tmpdir, 'test_writev.txt'));
 
                             console.log('✓ All async buffer I/O tests passed!');
                           }

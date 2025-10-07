@@ -9,15 +9,29 @@ static JSClassID js_writable_class_id;
 static JSClassID js_transform_class_id;
 static JSClassID js_passthrough_class_id;
 
-// Stream base class
+// Forward declare stream options structure
 typedef struct {
+  int highWaterMark;
+  bool objectMode;
+  const char* encoding;
+  const char* defaultEncoding;
+  bool emitClose;
+  bool autoDestroy;
+} StreamOptions;
+
+// Stream base class - all streams extend EventEmitter
+typedef struct {
+  JSValue event_emitter;  // EventEmitter instance (opaque)
   bool readable;
   bool writable;
   bool destroyed;
   bool ended;
+  bool errored;
+  JSValue error_value;  // Store error object when errored
   JSValue* buffered_data;
   size_t buffer_size;
   size_t buffer_capacity;
+  StreamOptions options;  // Stream options
 } JSStreamData;
 
 static void js_stream_finalizer(JSRuntime* rt, JSValue obj) {
@@ -33,12 +47,24 @@ static void js_stream_finalizer(JSRuntime* rt, JSValue obj) {
   }
 
   if (stream) {
+    // Free EventEmitter instance
+    if (!JS_IsUndefined(stream->event_emitter)) {
+      JS_FreeValueRT(rt, stream->event_emitter);
+    }
+    // Free error value if present
+    if (!JS_IsUndefined(stream->error_value)) {
+      JS_FreeValueRT(rt, stream->error_value);
+    }
+    // Free buffered data
     if (stream->buffered_data) {
       for (size_t i = 0; i < stream->buffer_size; i++) {
         JS_FreeValueRT(rt, stream->buffered_data[i]);
       }
       free(stream->buffered_data);
     }
+    // Free option strings if allocated
+    // Note: For now, options.encoding and options.defaultEncoding are assumed
+    // to be string literals or static. If they become dynamic, add free logic here.
     free(stream);
   }
 }
@@ -47,6 +73,275 @@ static JSClassDef js_readable_class = {"Readable", .finalizer = js_stream_finali
 static JSClassDef js_writable_class = {"Writable", .finalizer = js_stream_finalizer};
 static JSClassDef js_transform_class = {"Transform", .finalizer = js_stream_finalizer};
 static JSClassDef js_passthrough_class = {"PassThrough", .finalizer = js_stream_finalizer};
+
+// Helper: Parse options from constructor arguments
+static void parse_stream_options(JSContext* ctx, JSValueConst options_obj, StreamOptions* opts) {
+  // Set defaults
+  opts->highWaterMark = 16384;  // 16KB default for byte streams
+  opts->objectMode = false;
+  opts->encoding = NULL;
+  opts->defaultEncoding = "utf8";
+  opts->emitClose = true;
+  opts->autoDestroy = true;
+
+  if (JS_IsUndefined(options_obj) || JS_IsNull(options_obj)) {
+    return;
+  }
+
+  // Parse highWaterMark
+  JSValue hwm = JS_GetPropertyStr(ctx, options_obj, "highWaterMark");
+  if (!JS_IsUndefined(hwm) && !JS_IsNull(hwm)) {
+    int32_t value;
+    if (JS_ToInt32(ctx, &value, hwm) == 0 && value >= 0) {
+      opts->highWaterMark = value;
+    }
+  }
+  JS_FreeValue(ctx, hwm);
+
+  // Parse objectMode
+  JSValue obj_mode = JS_GetPropertyStr(ctx, options_obj, "objectMode");
+  if (JS_IsBool(obj_mode)) {
+    opts->objectMode = JS_ToBool(ctx, obj_mode);
+    if (opts->objectMode) {
+      opts->highWaterMark = 16;  // Default 16 objects for object mode
+    }
+  }
+  JS_FreeValue(ctx, obj_mode);
+
+  // Parse encoding
+  JSValue enc = JS_GetPropertyStr(ctx, options_obj, "encoding");
+  if (!JS_IsUndefined(enc) && !JS_IsNull(enc)) {
+    const char* enc_str = JS_ToCString(ctx, enc);
+    if (enc_str) {
+      opts->encoding = enc_str;  // TODO: Consider strdup for ownership
+    }
+  }
+  JS_FreeValue(ctx, enc);
+
+  // Parse defaultEncoding
+  JSValue def_enc = JS_GetPropertyStr(ctx, options_obj, "defaultEncoding");
+  if (!JS_IsUndefined(def_enc) && !JS_IsNull(def_enc)) {
+    const char* def_enc_str = JS_ToCString(ctx, def_enc);
+    if (def_enc_str) {
+      opts->defaultEncoding = def_enc_str;  // TODO: Consider strdup for ownership
+    }
+  }
+  JS_FreeValue(ctx, def_enc);
+
+  // Parse emitClose
+  JSValue emit_close = JS_GetPropertyStr(ctx, options_obj, "emitClose");
+  if (JS_IsBool(emit_close)) {
+    opts->emitClose = JS_ToBool(ctx, emit_close);
+  }
+  JS_FreeValue(ctx, emit_close);
+
+  // Parse autoDestroy
+  JSValue auto_destroy = JS_GetPropertyStr(ctx, options_obj, "autoDestroy");
+  if (JS_IsBool(auto_destroy)) {
+    opts->autoDestroy = JS_ToBool(ctx, auto_destroy);
+  }
+  JS_FreeValue(ctx, auto_destroy);
+}
+
+// Helper: Initialize EventEmitter for a stream
+static JSValue init_stream_event_emitter(JSContext* ctx, JSValue stream_obj) {
+  // Get EventEmitter constructor
+  JSValue global = JS_GetGlobalObject(ctx);
+  JSValue emitter_ctor = JS_GetPropertyStr(ctx, global, "EventEmitter");
+  JS_FreeValue(ctx, global);
+
+  if (JS_IsException(emitter_ctor) || JS_IsUndefined(emitter_ctor)) {
+    JS_FreeValue(ctx, emitter_ctor);
+    return JS_UNDEFINED;
+  }
+
+  // Create EventEmitter instance
+  JSValue emitter = JS_CallConstructor(ctx, emitter_ctor, 0, NULL);
+  JS_FreeValue(ctx, emitter_ctor);
+
+  if (JS_IsException(emitter)) {
+    return JS_UNDEFINED;
+  }
+
+  // Store emitter as an internal property
+  JS_SetPropertyStr(ctx, stream_obj, "_emitter", JS_DupValue(ctx, emitter));
+
+  return emitter;
+}
+
+// Helper: Emit an event on stream
+static void stream_emit(JSContext* ctx, JSStreamData* stream, const char* event_name, int argc, JSValueConst* argv) {
+  if (JS_IsUndefined(stream->event_emitter)) {
+    return;
+  }
+
+  JSValue emit_method = JS_GetPropertyStr(ctx, stream->event_emitter, "emit");
+  if (JS_IsException(emit_method) || JS_IsUndefined(emit_method)) {
+    JS_FreeValue(ctx, emit_method);
+    return;
+  }
+
+  // Build arguments array: [event_name, ...argv]
+  JSValue* args = malloc(sizeof(JSValue) * (argc + 1));
+  args[0] = JS_NewString(ctx, event_name);
+  for (int i = 0; i < argc; i++) {
+    args[i + 1] = JS_DupValue(ctx, argv[i]);
+  }
+
+  JSValue result = JS_Call(ctx, emit_method, stream->event_emitter, argc + 1, args);
+
+  // Cleanup
+  for (int i = 0; i < argc + 1; i++) {
+    JS_FreeValue(ctx, args[i]);
+  }
+  free(args);
+  JS_FreeValue(ctx, emit_method);
+  JS_FreeValue(ctx, result);
+}
+
+// Wrapper methods for EventEmitter on streams
+static JSValue js_stream_on(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
+  JSValue emitter = JS_GetPropertyStr(ctx, this_val, "_emitter");
+  if (JS_IsUndefined(emitter)) {
+    JS_FreeValue(ctx, emitter);
+    return JS_ThrowTypeError(ctx, "Stream has no EventEmitter");
+  }
+
+  JSValue on_method = JS_GetPropertyStr(ctx, emitter, "on");
+  JSValue result = JS_Call(ctx, on_method, emitter, argc, argv);
+  JS_FreeValue(ctx, on_method);
+  JS_FreeValue(ctx, emitter);
+
+  // Return this for chaining
+  if (!JS_IsException(result)) {
+    JS_FreeValue(ctx, result);
+    return JS_DupValue(ctx, this_val);
+  }
+  return result;
+}
+
+static JSValue js_stream_once(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
+  JSValue emitter = JS_GetPropertyStr(ctx, this_val, "_emitter");
+  if (JS_IsUndefined(emitter)) {
+    JS_FreeValue(ctx, emitter);
+    return JS_ThrowTypeError(ctx, "Stream has no EventEmitter");
+  }
+
+  JSValue once_method = JS_GetPropertyStr(ctx, emitter, "once");
+  JSValue result = JS_Call(ctx, once_method, emitter, argc, argv);
+  JS_FreeValue(ctx, once_method);
+  JS_FreeValue(ctx, emitter);
+
+  if (!JS_IsException(result)) {
+    JS_FreeValue(ctx, result);
+    return JS_DupValue(ctx, this_val);
+  }
+  return result;
+}
+
+static JSValue js_stream_emit(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
+  JSValue emitter = JS_GetPropertyStr(ctx, this_val, "_emitter");
+  if (JS_IsUndefined(emitter)) {
+    JS_FreeValue(ctx, emitter);
+    return JS_ThrowTypeError(ctx, "Stream has no EventEmitter");
+  }
+
+  JSValue emit_method = JS_GetPropertyStr(ctx, emitter, "emit");
+  JSValue result = JS_Call(ctx, emit_method, emitter, argc, argv);
+  JS_FreeValue(ctx, emit_method);
+  JS_FreeValue(ctx, emitter);
+  return result;
+}
+
+static JSValue js_stream_off(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
+  JSValue emitter = JS_GetPropertyStr(ctx, this_val, "_emitter");
+  if (JS_IsUndefined(emitter)) {
+    JS_FreeValue(ctx, emitter);
+    return JS_ThrowTypeError(ctx, "Stream has no EventEmitter");
+  }
+
+  JSValue off_method = JS_GetPropertyStr(ctx, emitter, "off");
+  JSValue result = JS_Call(ctx, off_method, emitter, argc, argv);
+  JS_FreeValue(ctx, off_method);
+  JS_FreeValue(ctx, emitter);
+
+  if (!JS_IsException(result)) {
+    JS_FreeValue(ctx, result);
+    return JS_DupValue(ctx, this_val);
+  }
+  return result;
+}
+
+static JSValue js_stream_remove_listener(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
+  JSValue emitter = JS_GetPropertyStr(ctx, this_val, "_emitter");
+  if (JS_IsUndefined(emitter)) {
+    JS_FreeValue(ctx, emitter);
+    return JS_ThrowTypeError(ctx, "Stream has no EventEmitter");
+  }
+
+  JSValue method = JS_GetPropertyStr(ctx, emitter, "removeListener");
+  JSValue result = JS_Call(ctx, method, emitter, argc, argv);
+  JS_FreeValue(ctx, method);
+  JS_FreeValue(ctx, emitter);
+
+  if (!JS_IsException(result)) {
+    JS_FreeValue(ctx, result);
+    return JS_DupValue(ctx, this_val);
+  }
+  return result;
+}
+
+static JSValue js_stream_add_listener(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
+  JSValue emitter = JS_GetPropertyStr(ctx, this_val, "_emitter");
+  if (JS_IsUndefined(emitter)) {
+    JS_FreeValue(ctx, emitter);
+    return JS_ThrowTypeError(ctx, "Stream has no EventEmitter");
+  }
+
+  JSValue method = JS_GetPropertyStr(ctx, emitter, "addListener");
+  JSValue result = JS_Call(ctx, method, emitter, argc, argv);
+  JS_FreeValue(ctx, method);
+  JS_FreeValue(ctx, emitter);
+
+  if (!JS_IsException(result)) {
+    JS_FreeValue(ctx, result);
+    return JS_DupValue(ctx, this_val);
+  }
+  return result;
+}
+
+static JSValue js_stream_remove_all_listeners(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
+  JSValue emitter = JS_GetPropertyStr(ctx, this_val, "_emitter");
+  if (JS_IsUndefined(emitter)) {
+    JS_FreeValue(ctx, emitter);
+    return JS_ThrowTypeError(ctx, "Stream has no EventEmitter");
+  }
+
+  JSValue method = JS_GetPropertyStr(ctx, emitter, "removeAllListeners");
+  JSValue result = JS_Call(ctx, method, emitter, argc, argv);
+  JS_FreeValue(ctx, method);
+  JS_FreeValue(ctx, emitter);
+
+  if (!JS_IsException(result)) {
+    JS_FreeValue(ctx, result);
+    return JS_DupValue(ctx, this_val);
+  }
+  return result;
+}
+
+static JSValue js_stream_listener_count(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
+  JSValue emitter = JS_GetPropertyStr(ctx, this_val, "_emitter");
+  if (JS_IsUndefined(emitter)) {
+    JS_FreeValue(ctx, emitter);
+    return JS_ThrowTypeError(ctx, "Stream has no EventEmitter");
+  }
+
+  JSValue method = JS_GetPropertyStr(ctx, emitter, "listenerCount");
+  JSValue result = JS_Call(ctx, method, emitter, argc, argv);
+  JS_FreeValue(ctx, method);
+  JS_FreeValue(ctx, emitter);
+  return result;
+}
 
 // Readable stream implementation
 static JSValue js_readable_constructor(JSContext* ctx, JSValueConst new_target, int argc, JSValueConst* argv) {
@@ -61,12 +356,21 @@ static JSValue js_readable_constructor(JSContext* ctx, JSValueConst new_target, 
     return JS_ThrowOutOfMemory(ctx);
   }
 
+  // Parse options (first argument)
+  parse_stream_options(ctx, argc > 0 ? argv[0] : JS_UNDEFINED, &stream->options);
+
+  // Initialize base state
   stream->readable = true;
   stream->writable = false;
   stream->destroyed = false;
   stream->ended = false;
+  stream->errored = false;
+  stream->error_value = JS_UNDEFINED;
   stream->buffer_capacity = 16;
   stream->buffered_data = malloc(sizeof(JSValue) * stream->buffer_capacity);
+
+  // Initialize EventEmitter
+  stream->event_emitter = init_stream_event_emitter(ctx, obj);
 
   JS_SetOpaque(obj, stream);
 
@@ -75,6 +379,93 @@ static JSValue js_readable_constructor(JSContext* ctx, JSValueConst new_target, 
   JS_DefinePropertyValueStr(ctx, obj, "destroyed", JS_NewBool(ctx, false), JS_PROP_WRITABLE);
 
   return obj;
+}
+
+// Base method: stream.destroy([error])
+static JSValue js_stream_destroy(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
+  // Try to get opaque data from any stream class
+  JSStreamData* stream = JS_GetOpaque(this_val, js_readable_class_id);
+  if (!stream) {
+    stream = JS_GetOpaque(this_val, js_writable_class_id);
+  }
+  if (!stream) {
+    stream = JS_GetOpaque(this_val, js_transform_class_id);
+  }
+  if (!stream) {
+    stream = JS_GetOpaque(this_val, js_passthrough_class_id);
+  }
+
+  if (!stream) {
+    return JS_ThrowTypeError(ctx, "Not a stream");
+  }
+
+  if (stream->destroyed) {
+    return this_val;  // Already destroyed
+  }
+
+  stream->destroyed = true;
+
+  // If error provided, store it and mark as errored
+  if (argc > 0 && !JS_IsUndefined(argv[0]) && !JS_IsNull(argv[0])) {
+    stream->errored = true;
+    stream->error_value = JS_DupValue(ctx, argv[0]);
+    // Emit error event
+    stream_emit(ctx, stream, "error", 1, argv);
+  }
+
+  // Update destroyed property
+  JS_SetPropertyStr(ctx, this_val, "destroyed", JS_NewBool(ctx, true));
+
+  // Emit close event if emitClose option is true
+  if (stream->options.emitClose) {
+    stream_emit(ctx, stream, "close", 0, NULL);
+  }
+
+  return this_val;
+}
+
+// Property getter: stream.destroyed
+static JSValue js_stream_get_destroyed(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
+  JSStreamData* stream = JS_GetOpaque(this_val, js_readable_class_id);
+  if (!stream) {
+    stream = JS_GetOpaque(this_val, js_writable_class_id);
+  }
+  if (!stream) {
+    stream = JS_GetOpaque(this_val, js_transform_class_id);
+  }
+  if (!stream) {
+    stream = JS_GetOpaque(this_val, js_passthrough_class_id);
+  }
+
+  if (!stream) {
+    return JS_UNDEFINED;
+  }
+
+  return JS_NewBool(ctx, stream->destroyed);
+}
+
+// Property getter: stream.errored
+static JSValue js_stream_get_errored(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
+  JSStreamData* stream = JS_GetOpaque(this_val, js_readable_class_id);
+  if (!stream) {
+    stream = JS_GetOpaque(this_val, js_writable_class_id);
+  }
+  if (!stream) {
+    stream = JS_GetOpaque(this_val, js_transform_class_id);
+  }
+  if (!stream) {
+    stream = JS_GetOpaque(this_val, js_passthrough_class_id);
+  }
+
+  if (!stream) {
+    return JS_NULL;
+  }
+
+  if (stream->errored && !JS_IsUndefined(stream->error_value)) {
+    return JS_DupValue(ctx, stream->error_value);
+  }
+
+  return JS_NULL;
 }
 
 // Readable.prototype.read
@@ -141,10 +532,19 @@ static JSValue js_writable_constructor(JSContext* ctx, JSValueConst new_target, 
     return JS_ThrowOutOfMemory(ctx);
   }
 
+  // Parse options (first argument)
+  parse_stream_options(ctx, argc > 0 ? argv[0] : JS_UNDEFINED, &stream->options);
+
+  // Initialize base state
   stream->readable = false;
   stream->writable = true;
   stream->destroyed = false;
   stream->ended = false;
+  stream->errored = false;
+  stream->error_value = JS_UNDEFINED;
+
+  // Initialize EventEmitter
+  stream->event_emitter = init_stream_event_emitter(ctx, obj);
 
   JS_SetOpaque(obj, stream);
 
@@ -200,12 +600,21 @@ static JSValue js_passthrough_constructor(JSContext* ctx, JSValueConst new_targe
     return JS_ThrowOutOfMemory(ctx);
   }
 
+  // Parse options (first argument)
+  parse_stream_options(ctx, argc > 0 ? argv[0] : JS_UNDEFINED, &stream->options);
+
+  // Initialize base state
   stream->readable = true;
   stream->writable = true;
   stream->destroyed = false;
   stream->ended = false;
+  stream->errored = false;
+  stream->error_value = JS_UNDEFINED;
   stream->buffer_capacity = 16;
   stream->buffered_data = malloc(sizeof(JSValue) * stream->buffer_capacity);
+
+  // Initialize EventEmitter
+  stream->event_emitter = init_stream_event_emitter(ctx, obj);
 
   JS_SetOpaque(obj, stream);
 
@@ -323,6 +732,74 @@ JSValue JSRT_InitNodeStream(JSContext* ctx) {
   JSValue readable_proto = JS_NewObject(ctx);
   JSValue writable_proto = JS_NewObject(ctx);
   JSValue passthrough_proto = JS_NewObject(ctx);
+
+  // Add EventEmitter wrapper methods (common to all streams)
+  JSValue on_method = JS_NewCFunction(ctx, js_stream_on, "on", 2);
+  JSValue once_method = JS_NewCFunction(ctx, js_stream_once, "once", 2);
+  JSValue emit_method = JS_NewCFunction(ctx, js_stream_emit, "emit", 1);
+  JSValue off_method = JS_NewCFunction(ctx, js_stream_off, "off", 2);
+  JSValue remove_listener_method = JS_NewCFunction(ctx, js_stream_remove_listener, "removeListener", 2);
+  JSValue add_listener_method = JS_NewCFunction(ctx, js_stream_add_listener, "addListener", 2);
+  JSValue remove_all_method = JS_NewCFunction(ctx, js_stream_remove_all_listeners, "removeAllListeners", 1);
+  JSValue listener_count_method = JS_NewCFunction(ctx, js_stream_listener_count, "listenerCount", 1);
+
+  // Add to readable prototype
+  JS_SetPropertyStr(ctx, readable_proto, "on", JS_DupValue(ctx, on_method));
+  JS_SetPropertyStr(ctx, readable_proto, "once", JS_DupValue(ctx, once_method));
+  JS_SetPropertyStr(ctx, readable_proto, "emit", JS_DupValue(ctx, emit_method));
+  JS_SetPropertyStr(ctx, readable_proto, "off", JS_DupValue(ctx, off_method));
+  JS_SetPropertyStr(ctx, readable_proto, "removeListener", JS_DupValue(ctx, remove_listener_method));
+  JS_SetPropertyStr(ctx, readable_proto, "addListener", JS_DupValue(ctx, add_listener_method));
+  JS_SetPropertyStr(ctx, readable_proto, "removeAllListeners", JS_DupValue(ctx, remove_all_method));
+  JS_SetPropertyStr(ctx, readable_proto, "listenerCount", JS_DupValue(ctx, listener_count_method));
+
+  // Add to writable prototype
+  JS_SetPropertyStr(ctx, writable_proto, "on", JS_DupValue(ctx, on_method));
+  JS_SetPropertyStr(ctx, writable_proto, "once", JS_DupValue(ctx, once_method));
+  JS_SetPropertyStr(ctx, writable_proto, "emit", JS_DupValue(ctx, emit_method));
+  JS_SetPropertyStr(ctx, writable_proto, "off", JS_DupValue(ctx, off_method));
+  JS_SetPropertyStr(ctx, writable_proto, "removeListener", JS_DupValue(ctx, remove_listener_method));
+  JS_SetPropertyStr(ctx, writable_proto, "addListener", JS_DupValue(ctx, add_listener_method));
+  JS_SetPropertyStr(ctx, writable_proto, "removeAllListeners", JS_DupValue(ctx, remove_all_method));
+  JS_SetPropertyStr(ctx, writable_proto, "listenerCount", JS_DupValue(ctx, listener_count_method));
+
+  // Add to passthrough prototype
+  JS_SetPropertyStr(ctx, passthrough_proto, "on", on_method);
+  JS_SetPropertyStr(ctx, passthrough_proto, "once", once_method);
+  JS_SetPropertyStr(ctx, passthrough_proto, "emit", emit_method);
+  JS_SetPropertyStr(ctx, passthrough_proto, "off", off_method);
+  JS_SetPropertyStr(ctx, passthrough_proto, "removeListener", remove_listener_method);
+  JS_SetPropertyStr(ctx, passthrough_proto, "addListener", add_listener_method);
+  JS_SetPropertyStr(ctx, passthrough_proto, "removeAllListeners", remove_all_method);
+  JS_SetPropertyStr(ctx, passthrough_proto, "listenerCount", listener_count_method);
+
+  // Add base methods (common to all streams)
+  JSValue destroy_method = JS_NewCFunction(ctx, js_stream_destroy, "destroy", 1);
+  JS_SetPropertyStr(ctx, readable_proto, "destroy", JS_DupValue(ctx, destroy_method));
+  JS_SetPropertyStr(ctx, writable_proto, "destroy", JS_DupValue(ctx, destroy_method));
+  JS_SetPropertyStr(ctx, passthrough_proto, "destroy", destroy_method);
+
+  // Add base property getters
+  JSValue get_destroyed = JS_NewCFunction(ctx, js_stream_get_destroyed, "get destroyed", 0);
+  JSValue get_errored = JS_NewCFunction(ctx, js_stream_get_errored, "get errored", 0);
+
+  // Define destroyed property getter on all prototypes
+  JSAtom destroyed_atom = JS_NewAtom(ctx, "destroyed");
+  JS_DefinePropertyGetSet(ctx, readable_proto, destroyed_atom, JS_DupValue(ctx, get_destroyed), JS_UNDEFINED,
+                          JS_PROP_CONFIGURABLE);
+  JS_DefinePropertyGetSet(ctx, writable_proto, destroyed_atom, JS_DupValue(ctx, get_destroyed), JS_UNDEFINED,
+                          JS_PROP_CONFIGURABLE);
+  JS_DefinePropertyGetSet(ctx, passthrough_proto, destroyed_atom, get_destroyed, JS_UNDEFINED, JS_PROP_CONFIGURABLE);
+  JS_FreeAtom(ctx, destroyed_atom);
+
+  // Define errored property getter on all prototypes
+  JSAtom errored_atom = JS_NewAtom(ctx, "errored");
+  JS_DefinePropertyGetSet(ctx, readable_proto, errored_atom, JS_DupValue(ctx, get_errored), JS_UNDEFINED,
+                          JS_PROP_CONFIGURABLE);
+  JS_DefinePropertyGetSet(ctx, writable_proto, errored_atom, JS_DupValue(ctx, get_errored), JS_UNDEFINED,
+                          JS_PROP_CONFIGURABLE);
+  JS_DefinePropertyGetSet(ctx, passthrough_proto, errored_atom, get_errored, JS_UNDEFINED, JS_PROP_CONFIGURABLE);
+  JS_FreeAtom(ctx, errored_atom);
 
   // Add methods to Readable prototype
   JS_SetPropertyStr(ctx, readable_proto, "read", JS_NewCFunction(ctx, js_readable_read, "read", 0));

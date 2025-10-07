@@ -46,6 +46,15 @@ static void js_stream_finalizer(JSRuntime* rt, JSValue obj) {
       }
       free(stream->pipe_destinations);
     }
+    // Free write callbacks (Phase 3)
+    if (stream->write_callbacks) {
+      for (size_t i = 0; i < stream->write_callback_count; i++) {
+        if (!JS_IsUndefined(stream->write_callbacks[i].callback)) {
+          JS_FreeValueRT(rt, stream->write_callbacks[i].callback);
+        }
+      }
+      free(stream->write_callbacks);
+    }
     // Free option strings if allocated
     // Note: For now, options.encoding and options.defaultEncoding are assumed
     // to be string literals or static. If they become dynamic, add free logic here.

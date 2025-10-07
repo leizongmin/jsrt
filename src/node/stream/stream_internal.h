@@ -21,6 +21,11 @@ typedef struct {
   bool autoDestroy;
 } StreamOptions;
 
+// Callback structure for queued write callbacks
+typedef struct {
+  JSValue callback;  // Callback function to call when write completes
+} WriteCallback;
+
 // Stream base class - all streams extend EventEmitter
 typedef struct {
   JSValue event_emitter;  // EventEmitter instance (opaque)
@@ -43,6 +48,15 @@ typedef struct {
   JSValue* pipe_destinations;  // Array of piped destinations
   size_t pipe_count;
   size_t pipe_capacity;
+
+  // Phase 3: Writable stream state
+  bool writable_ended;             // end() has been called
+  bool writable_finished;          // All writes completed
+  int writable_corked;             // Cork count (can be nested)
+  bool need_drain;                 // Need to emit 'drain' event
+  WriteCallback* write_callbacks;  // Array of pending write callbacks
+  size_t write_callback_count;
+  size_t write_callback_capacity;
 } JSStreamData;
 
 // event_emitter.c

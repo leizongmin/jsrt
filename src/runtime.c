@@ -11,6 +11,7 @@
 
 #include "crypto/crypto.h"
 #include "http/fetch.h"
+#include "node/net/net_internal.h"
 #include "node/process/process.h"
 #include "node/process/process_node.h"
 #include "std/abort.h"
@@ -47,34 +48,32 @@ static void JSRT_RuntimeCloseWalkCallback(uv_handle_t* handle, void* arg) {
 #define NET_TYPE_SOCKET 0x534F434B  // 'SOCK' in hex
 #define NET_TYPE_SERVER 0x53525652  // 'SRVR' in hex
 
-// Cleanup walk callback to free net module memory after handles are closed
-static void JSRT_RuntimeCleanupWalkCallback(uv_handle_t* handle, void* arg) {
+// Simple linked list to collect structs for cleanup
+typedef struct CleanupNode {
+  void* data;
+  uint32_t type_tag;
+  struct CleanupNode* next;
+} CleanupNode;
+
+static CleanupNode* cleanup_list_head = NULL;
+
+// Collect walk callback - builds list of structs to free BEFORE closing loop
+static void JSRT_RuntimeCollectWalkCallback(uv_handle_t* handle, void* arg) {
   if (handle->data && handle->type == UV_TCP) {
     // Check the type tag to determine if this is a socket or server
-    uint32_t* type_tag_ptr = (uint32_t*)handle->data;
-    uint32_t type_tag = *type_tag_ptr;
+    uint32_t type_tag = *(uint32_t*)handle->data;
 
-    if (type_tag == NET_TYPE_SOCKET) {
-      // This is a JSNetConnection
-      // Offset calculated with offsetof(): 456 bytes
-      size_t host_offset = 456;
-      char** host_ptr = (char**)((char*)handle->data + host_offset);
-      if (*host_ptr) {
-        free(*host_ptr);
-      }
-    } else if (type_tag == NET_TYPE_SERVER) {
-      // This is a JSNetServer
-      // Offset calculated with offsetof(): 272 bytes
-      size_t host_offset = 272;
-      char** host_ptr = (char**)((char*)handle->data + host_offset);
-      if (*host_ptr) {
-        free(*host_ptr);
+    if (type_tag == NET_TYPE_SOCKET || type_tag == NET_TYPE_SERVER) {
+      // Add to cleanup list
+      CleanupNode* node = malloc(sizeof(CleanupNode));
+      if (node) {
+        node->data = handle->data;
+        node->type_tag = type_tag;
+        node->next = cleanup_list_head;
+        cleanup_list_head = node;
+        // DO NOT set handle->data = NULL here - loop still needs it
       }
     }
-
-    // Free the main struct
-    handle->data = NULL;
-    free(type_tag_ptr);
   }
 }
 
@@ -126,6 +125,10 @@ JSRT_Runtime* JSRT_RuntimeNew() {
 }
 
 void JSRT_RuntimeFree(JSRT_Runtime* rt) {
+  // First, collect all net module structs BEFORE closing anything
+  cleanup_list_head = NULL;
+  uv_walk(rt->uv_loop, JSRT_RuntimeCollectWalkCallback, NULL);
+
   // Close all handles before closing the loop
   uv_walk(rt->uv_loop, JSRT_RuntimeCloseWalkCallback, NULL);
 
@@ -137,9 +140,37 @@ void JSRT_RuntimeFree(JSRT_Runtime* rt) {
     JSRT_Debug("uv_loop_close failed: %s", uv_strerror(result));
   }
 
-  // Clean up net module memory AFTER closing the loop
-  // This prevents use-after-free while handles are still in libuv's internal queues
-  uv_walk(rt->uv_loop, JSRT_RuntimeCleanupWalkCallback, NULL);
+  // Now free all collected net module structs AFTER loop is closed
+  CleanupNode* current = cleanup_list_head;
+  while (current) {
+    CleanupNode* next = current->next;
+
+    if (current->type_tag == NET_TYPE_SOCKET) {
+      // Use the actual struct definition from net_internal.h
+      JSNetConnection* conn = (JSNetConnection*)current->data;
+      if (conn->host) {
+        free(conn->host);
+        conn->host = NULL;
+      }
+      if (conn->encoding) {
+        free(conn->encoding);
+        conn->encoding = NULL;
+      }
+      free(conn);
+    } else if (current->type_tag == NET_TYPE_SERVER) {
+      // Use the actual struct definition from net_internal.h
+      JSNetServer* server = (JSNetServer*)current->data;
+      if (server->host) {
+        free(server->host);
+        server->host = NULL;
+      }
+      free(server);
+    }
+
+    free(current);
+    current = next;
+  }
+  cleanup_list_head = NULL;
 
   free(rt->uv_loop);
 

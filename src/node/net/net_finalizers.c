@@ -67,6 +67,7 @@ void js_socket_finalizer(JSRuntime* rt, JSValue val) {
     // Handle already closing or closed, free immediately
     if (conn->host) {
       free(conn->host);
+      conn->host = NULL;
     }
     free(conn);
   }

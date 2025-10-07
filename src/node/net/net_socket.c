@@ -60,13 +60,31 @@ JSValue js_socket_connect(JSContext* ctx, JSValueConst this_val, int argc, JSVal
     } else {
       // Neither IPv4 nor IPv6 - invalid address
       conn->connecting = false;
+      // Free resources before error return
+      char* error_host = conn->host;
+      conn->host = NULL;
+      JSValue error = JS_ThrowInternalError(ctx, "Invalid IP address: %s", error_host);
+      free(error_host);
+      if (conn->encoding) {
+        free(conn->encoding);
+        conn->encoding = NULL;
+      }
       uv_close((uv_handle_t*)&conn->handle, NULL);
-      return JS_ThrowInternalError(ctx, "Invalid IP address: %s", conn->host);
+      return error;
     }
   }
 
   if (result < 0) {
     conn->connecting = false;
+    // Free resources before error return
+    if (conn->host) {
+      free(conn->host);
+      conn->host = NULL;
+    }
+    if (conn->encoding) {
+      free(conn->encoding);
+      conn->encoding = NULL;
+    }
     uv_close((uv_handle_t*)&conn->handle, NULL);
     return JS_ThrowInternalError(ctx, "Failed to connect: %s", uv_strerror(result));
   }
@@ -94,11 +112,19 @@ JSValue js_socket_write(JSContext* ctx, JSValueConst this_val, int argc, JSValue
 
   // Allocate buffer that will persist during async write
   char* buffer = malloc(len);
+  if (!buffer) {
+    JS_FreeCString(ctx, data);
+    return JS_ThrowOutOfMemory(ctx);
+  }
   memcpy(buffer, data, len);
   JS_FreeCString(ctx, data);
 
   // Create write request
   uv_write_t* write_req = malloc(sizeof(uv_write_t));
+  if (!write_req) {
+    free(buffer);
+    return JS_ThrowOutOfMemory(ctx);
+  }
   write_req->data = buffer;  // Store buffer for cleanup
 
   uv_buf_t buf = uv_buf_init(buffer, len);

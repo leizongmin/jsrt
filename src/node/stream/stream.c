@@ -176,6 +176,27 @@ static JSValue js_writable_end(JSContext* ctx, JSValueConst this_val, int argc, 
 JSValue JSRT_InitNodeStream(JSContext* ctx) {
   JSValue stream_module = JS_NewObject(ctx);
 
+  // Ensure EventEmitter is available globally (needed for stream event handling)
+  JSValue global = JS_GetGlobalObject(ctx);
+  JSValue existing_ee = JS_GetPropertyStr(ctx, global, "EventEmitter");
+  if (JS_IsUndefined(existing_ee)) {
+    // Load EventEmitter from node:events and register globally
+    extern JSValue JSRT_InitNodeEvents(JSContext * ctx);
+    JSValue events_module = JSRT_InitNodeEvents(ctx);
+    if (!JS_IsException(events_module) && !JS_IsUndefined(events_module)) {
+      JSValue ee_ctor = JS_GetPropertyStr(ctx, events_module, "EventEmitter");
+      if (!JS_IsException(ee_ctor) && !JS_IsUndefined(ee_ctor)) {
+        JS_SetPropertyStr(ctx, global, "EventEmitter", ee_ctor);
+      } else {
+        JS_FreeValue(ctx, ee_ctor);
+      }
+      JS_FreeValue(ctx, events_module);
+    }
+  } else {
+    JS_FreeValue(ctx, existing_ee);
+  }
+  JS_FreeValue(ctx, global);
+
   // Register class IDs
   JS_NewClassID(&js_readable_class_id);
   JS_NewClassID(&js_writable_class_id);

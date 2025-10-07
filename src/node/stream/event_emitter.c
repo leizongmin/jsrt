@@ -75,12 +75,34 @@ JSValue init_stream_event_emitter(JSContext* ctx, JSValue stream_obj) {
   // Get EventEmitter constructor from global object
   JSValue global = JS_GetGlobalObject(ctx);
   JSValue emitter_ctor = JS_GetPropertyStr(ctx, global, "EventEmitter");
-  JS_FreeValue(ctx, global);
 
-  if (JS_IsException(emitter_ctor) || JS_IsUndefined(emitter_ctor)) {
+  // If EventEmitter not in global, load it from node:events and register globally
+  if (JS_IsUndefined(emitter_ctor) || JS_IsException(emitter_ctor)) {
     JS_FreeValue(ctx, emitter_ctor);
-    return JS_UNDEFINED;
+
+    // Load node:events module
+    extern JSValue JSRT_InitNodeEvents(JSContext * ctx);
+    JSValue events_module = JSRT_InitNodeEvents(ctx);
+
+    if (!JS_IsException(events_module) && !JS_IsUndefined(events_module)) {
+      emitter_ctor = JS_GetPropertyStr(ctx, events_module, "EventEmitter");
+
+      // Register EventEmitter globally for future use
+      if (!JS_IsException(emitter_ctor) && !JS_IsUndefined(emitter_ctor)) {
+        JS_SetPropertyStr(ctx, global, "EventEmitter", JS_DupValue(ctx, emitter_ctor));
+      }
+
+      JS_FreeValue(ctx, events_module);
+    }
+
+    if (JS_IsException(emitter_ctor) || JS_IsUndefined(emitter_ctor)) {
+      JS_FreeValue(ctx, emitter_ctor);
+      JS_FreeValue(ctx, global);
+      return JS_UNDEFINED;
+    }
   }
+
+  JS_FreeValue(ctx, global);
 
   // Create EventEmitter instance
   JSValue emitter = JS_CallConstructor(ctx, emitter_ctor, 0, NULL);

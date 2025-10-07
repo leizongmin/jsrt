@@ -15,17 +15,7 @@ void parse_stream_options(JSContext* ctx, JSValueConst options_obj, StreamOption
     return;
   }
 
-  // Parse highWaterMark
-  JSValue hwm = JS_GetPropertyStr(ctx, options_obj, "highWaterMark");
-  if (!JS_IsUndefined(hwm) && !JS_IsNull(hwm)) {
-    int32_t value;
-    if (JS_ToInt32(ctx, &value, hwm) == 0 && value >= 0) {
-      opts->highWaterMark = value;
-    }
-  }
-  JS_FreeValue(ctx, hwm);
-
-  // Parse objectMode
+  // Parse objectMode first (affects highWaterMark default)
   JSValue obj_mode = JS_GetPropertyStr(ctx, options_obj, "objectMode");
   if (JS_IsBool(obj_mode)) {
     opts->objectMode = JS_ToBool(ctx, obj_mode);
@@ -34,6 +24,16 @@ void parse_stream_options(JSContext* ctx, JSValueConst options_obj, StreamOption
     }
   }
   JS_FreeValue(ctx, obj_mode);
+
+  // Parse highWaterMark (overrides objectMode default if explicitly provided)
+  JSValue hwm = JS_GetPropertyStr(ctx, options_obj, "highWaterMark");
+  if (!JS_IsUndefined(hwm) && !JS_IsNull(hwm)) {
+    int32_t value;
+    if (JS_ToInt32(ctx, &value, hwm) == 0 && value >= 0) {
+      opts->highWaterMark = value;
+    }
+  }
+  JS_FreeValue(ctx, hwm);
 
   // Parse encoding
   JSValue enc = JS_GetPropertyStr(ctx, options_obj, "encoding");
@@ -70,33 +70,15 @@ void parse_stream_options(JSContext* ctx, JSValueConst options_obj, StreamOption
   JS_FreeValue(ctx, auto_destroy);
 }
 
-// Helper: Get EventEmitter constructor (no caching to avoid use-after-free)
-static JSValue get_event_emitter_ctor(JSContext* ctx) {
-  // Try to get from node:events module using the C API
-  extern JSValue JSRT_InitNodeEvents(JSContext * ctx);  // From node_events.c
-  JSValue events_module = JSRT_InitNodeEvents(ctx);
-
-  if (JS_IsException(events_module) || JS_IsUndefined(events_module)) {
-    JS_FreeValue(ctx, events_module);
-    return JS_UNDEFINED;
-  }
-
-  JSValue emitter_ctor = JS_GetPropertyStr(ctx, events_module, "EventEmitter");
-  JS_FreeValue(ctx, events_module);
+// Helper: Initialize EventEmitter for a stream
+JSValue init_stream_event_emitter(JSContext* ctx, JSValue stream_obj) {
+  // Get EventEmitter constructor from global object
+  JSValue global = JS_GetGlobalObject(ctx);
+  JSValue emitter_ctor = JS_GetPropertyStr(ctx, global, "EventEmitter");
+  JS_FreeValue(ctx, global);
 
   if (JS_IsException(emitter_ctor) || JS_IsUndefined(emitter_ctor)) {
     JS_FreeValue(ctx, emitter_ctor);
-    return JS_UNDEFINED;
-  }
-
-  return emitter_ctor;
-}
-
-// Helper: Initialize EventEmitter for a stream
-JSValue init_stream_event_emitter(JSContext* ctx, JSValue stream_obj) {
-  JSValue emitter_ctor = get_event_emitter_ctor(ctx);
-
-  if (JS_IsUndefined(emitter_ctor)) {
     return JS_UNDEFINED;
   }
 

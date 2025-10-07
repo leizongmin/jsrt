@@ -178,6 +178,7 @@ static JSValue js_writable_write(JSContext* ctx, JSValueConst this_val, int argc
   stream->buffered_data[stream->buffer_size++] = JS_DupValue(ctx, chunk);
 
   // Check if we're over high water mark (backpressure)
+  // Return false (backpressure) when buffer exceeds highWaterMark
   size_t current_size = calculate_buffer_size(stream);
   bool backpressure = current_size > (size_t)stream->options.highWaterMark;
 

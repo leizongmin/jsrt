@@ -52,4 +52,19 @@ assert.ok(endianness === 'LE' || endianness === 'BE');
 
 const eol = os.EOL;
 assert.ok(typeof eol === 'string');
-assert.ok(eol === '\n' || eol === '\r\n');
+assert.ok(eol === '\r\n' || eol === '\n');
+
+// Test cpus() returns real data
+const cpus = os.cpus();
+assert.ok(Array.isArray(cpus));
+assert.ok(cpus.length > 0);
+const cpu = cpus[0];
+assert.ok(typeof cpu === 'object');
+assert.ok(typeof cpu.model === 'string');
+assert.ok(typeof cpu.speed === 'number');
+assert.ok(typeof cpu.times === 'object');
+assert.ok(typeof cpu.times.user === 'number');
+assert.ok(typeof cpu.times.nice === 'number');
+assert.ok(typeof cpu.times.sys === 'number');
+assert.ok(typeof cpu.times.idle === 'number');
+assert.ok(typeof cpu.times.irq === 'number');

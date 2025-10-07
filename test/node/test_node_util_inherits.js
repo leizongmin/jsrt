@@ -9,7 +9,7 @@ console.log('=== Test 1: Basic inheritance ===');
 function Animal(name) {
   this.name = name;
 }
-Animal.prototype.speak = function() {
+Animal.prototype.speak = function () {
   return this.name + ' makes a sound';
 };
 
@@ -38,7 +38,7 @@ console.log('✓ super_ property works');
 
 // Test 4: Method overriding
 console.log('\n=== Test 4: Method overriding ===');
-Dog.prototype.speak = function() {
+Dog.prototype.speak = function () {
   return this.name + ' barks';
 };
 assert.strictEqual(dog.speak(), 'Rex barks', 'Overridden method works');

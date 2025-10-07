@@ -1,13 +1,13 @@
 // Test ESM module imports
 
 // Test 1: Named imports
-import { hello, value } from './test_module.mjs';
+import { hello, value } from './module_basic.mjs';
 const result1 = hello('World');
 // Verify result exists
 if (!result1) console.error('Named import failed');
 
 // Test 2: Dynamic import
-import('./test_module.mjs')
+import('./module_basic.mjs')
   .then((mod) => {
     const result2 = mod.hello('Dynamic');
     // Verify results exist

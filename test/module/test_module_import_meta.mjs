@@ -1,4 +1,4 @@
-import { testMessage } from './test_import_meta_module.mjs';
+import { testMessage } from './module_import_meta_resolve.mjs';
 
 // console.log('=== import.meta Tests ===');
 

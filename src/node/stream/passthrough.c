@@ -26,8 +26,8 @@ JSValue js_passthrough_constructor(JSContext* ctx, JSValueConst new_target, int 
   stream->buffer_capacity = 16;
   stream->buffered_data = malloc(sizeof(JSValue) * stream->buffer_capacity);
 
-  // Initialize EventEmitter
-  stream->event_emitter = init_stream_event_emitter(ctx, obj);
+  // Initialize EventEmitter (stored as "_emitter" property, not in struct)
+  init_stream_event_emitter(ctx, obj);
 
   JS_SetOpaque(obj, stream);
 

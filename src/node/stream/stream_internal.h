@@ -28,7 +28,8 @@ typedef struct {
 
 // Stream base class - all streams extend EventEmitter
 typedef struct {
-  JSValue event_emitter;  // EventEmitter instance (opaque)
+  // Note: event_emitter is stored as "_emitter" property on the stream object
+  // NOT stored in this struct to avoid reference counting issues
   bool readable;
   bool writable;
   bool destroyed;
@@ -62,7 +63,7 @@ typedef struct {
 // event_emitter.c
 void parse_stream_options(JSContext* ctx, JSValueConst options_obj, StreamOptions* opts);
 JSValue init_stream_event_emitter(JSContext* ctx, JSValue stream_obj);
-void stream_emit(JSContext* ctx, JSStreamData* stream, const char* event_name, int argc, JSValueConst* argv);
+void stream_emit(JSContext* ctx, JSValueConst stream_obj, const char* event_name, int argc, JSValueConst* argv);
 JSValue js_stream_on(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv);
 JSValue js_stream_once(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv);
 JSValue js_stream_emit(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv);

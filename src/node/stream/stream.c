@@ -24,10 +24,10 @@ static void js_stream_finalizer(JSRuntime* rt, JSValue obj) {
   }
 
   if (stream) {
-    // Free EventEmitter instance
-    if (!JS_IsUndefined(stream->event_emitter)) {
-      JS_FreeValueRT(rt, stream->event_emitter);
-    }
+    // Note: We do NOT free event_emitter here because it's stored as the "_emitter"
+    // property on the stream object and will be freed automatically when the object
+    // properties are cleaned up. Freeing it here would cause a double-free.
+
     // Free error value if present
     if (!JS_IsUndefined(stream->error_value)) {
       JS_FreeValueRT(rt, stream->error_value);
@@ -97,18 +97,22 @@ JSValue js_stream_destroy(JSContext* ctx, JSValueConst this_val, int argc, JSVal
     stream->errored = true;
     stream->error_value = JS_DupValue(ctx, argv[0]);
     // Emit error event
-    stream_emit(ctx, stream, "error", 1, argv);
+    stream_emit(ctx, this_val, "error", 1, argv);
   }
 
   // Update destroyed property
-  JS_SetPropertyStr(ctx, this_val, "destroyed", JS_NewBool(ctx, true));
+  JSValue destroyed_val = JS_NewBool(ctx, true);
+  int ret = JS_SetPropertyStr(ctx, this_val, "destroyed", destroyed_val);
+  if (ret < 0) {
+    return JS_EXCEPTION;
+  }
 
   // Emit close event if emitClose option is true
   if (stream->options.emitClose) {
-    stream_emit(ctx, stream, "close", 0, NULL);
+    stream_emit(ctx, this_val, "close", 0, NULL);
   }
 
-  return this_val;
+  return JS_DupValue(ctx, this_val);
 }
 
 // Property getter: stream.destroyed

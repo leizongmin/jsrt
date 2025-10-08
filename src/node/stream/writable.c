@@ -44,10 +44,11 @@ JSValue js_writable_constructor(JSContext* ctx, JSValueConst new_target, int arg
   stream->write_callbacks = NULL;
   stream->need_drain = false;
 
-  // Initialize EventEmitter
-  stream->event_emitter = init_stream_event_emitter(ctx, obj);
-
+  // Set opaque BEFORE initializing EventEmitter
   JS_SetOpaque(obj, stream);
+
+  // Initialize EventEmitter (stored as "_emitter" property, not in struct)
+  init_stream_event_emitter(ctx, obj);
 
   // Set properties
   JS_DefinePropertyValueStr(ctx, obj, "writable", JS_NewBool(ctx, true), JS_PROP_WRITABLE);
@@ -122,7 +123,7 @@ static JSValue js_writable_write(JSContext* ctx, JSValueConst this_val, int argc
   if (!stream->writable) {
     JSValue err = JS_NewError(ctx);
     JS_SetPropertyStr(ctx, err, "message", JS_NewString(ctx, "write after end"));
-    stream_emit(ctx, stream, "error", 1, &err);
+    stream_emit(ctx, this_val, "error", 1, &err);
     JS_FreeValue(ctx, err);
     return JS_NewBool(ctx, false);
   }
@@ -310,7 +311,7 @@ static JSValue js_writable_end(JSContext* ctx, JSValueConst this_val, int argc, 
 
   // Mark as finished and emit 'finish' event
   stream->writable_finished = true;
-  stream_emit(ctx, stream, "finish", 0, NULL);
+  stream_emit(ctx, this_val, "finish", 0, NULL);
 
   return JS_UNDEFINED;
 }

@@ -1,4 +1,5 @@
 #include <string.h>
+#include "../../util/debug.h"
 #include "stream_internal.h"
 
 // Helper: Parse options from constructor arguments
@@ -113,20 +114,26 @@ JSValue init_stream_event_emitter(JSContext* ctx, JSValue stream_obj) {
   }
 
   // Store emitter as an internal property
-  JS_SetPropertyStr(ctx, stream_obj, "_emitter", JS_DupValue(ctx, emitter));
+  // JS_SetPropertyStr takes ownership of the value, transferring it to the property
+  JS_SetPropertyStr(ctx, stream_obj, "_emitter", emitter);
 
-  return emitter;
+  // Don't return anything - the emitter is accessed via the _emitter property when needed
+  return JS_UNDEFINED;
 }
 
 // Helper: Emit an event on stream
-void stream_emit(JSContext* ctx, JSStreamData* stream, const char* event_name, int argc, JSValueConst* argv) {
-  if (JS_IsUndefined(stream->event_emitter)) {
+// Note: Changed to accept stream_obj instead of stream data to access _emitter property
+void stream_emit(JSContext* ctx, JSValueConst stream_obj, const char* event_name, int argc, JSValueConst* argv) {
+  JSValue event_emitter = JS_GetPropertyStr(ctx, stream_obj, "_emitter");
+  if (JS_IsUndefined(event_emitter) || JS_IsException(event_emitter)) {
+    JS_FreeValue(ctx, event_emitter);
     return;
   }
 
-  JSValue emit_method = JS_GetPropertyStr(ctx, stream->event_emitter, "emit");
+  JSValue emit_method = JS_GetPropertyStr(ctx, event_emitter, "emit");
   if (JS_IsException(emit_method) || JS_IsUndefined(emit_method)) {
     JS_FreeValue(ctx, emit_method);
+    JS_FreeValue(ctx, event_emitter);
     return;
   }
 
@@ -137,7 +144,7 @@ void stream_emit(JSContext* ctx, JSStreamData* stream, const char* event_name, i
     args[i + 1] = JS_DupValue(ctx, argv[i]);
   }
 
-  JSValue result = JS_Call(ctx, emit_method, stream->event_emitter, argc + 1, args);
+  JSValue result = JS_Call(ctx, emit_method, event_emitter, argc + 1, args);
 
   // Cleanup
   for (int i = 0; i < argc + 1; i++) {
@@ -145,6 +152,7 @@ void stream_emit(JSContext* ctx, JSStreamData* stream, const char* event_name, i
   }
   free(args);
   JS_FreeValue(ctx, emit_method);
+  JS_FreeValue(ctx, event_emitter);
   JS_FreeValue(ctx, result);
 }
 

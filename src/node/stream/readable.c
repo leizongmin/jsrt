@@ -1,3 +1,4 @@
+#include "../../util/debug.h"
 #include "stream_internal.h"
 
 // Readable stream implementation
@@ -35,10 +36,11 @@ JSValue js_readable_constructor(JSContext* ctx, JSValueConst new_target, int arg
   stream->pipe_count = 0;
   stream->pipe_capacity = 0;
 
-  // Initialize EventEmitter
-  stream->event_emitter = init_stream_event_emitter(ctx, obj);
-
+  // Set opaque BEFORE initializing EventEmitter to ensure object is fully set up
   JS_SetOpaque(obj, stream);
+
+  // Initialize EventEmitter (stored as "_emitter" property, not in struct)
+  init_stream_event_emitter(ctx, obj);
 
   // Set properties
   JS_DefinePropertyValueStr(ctx, obj, "readable", JS_NewBool(ctx, true), JS_PROP_WRITABLE);
@@ -75,7 +77,7 @@ static JSValue js_readable_read(JSContext* ctx, JSValueConst this_val, int argc,
     // If ended, emit 'end' event if not yet emitted
     if (stream->ended && !stream->ended_emitted) {
       stream->ended_emitted = true;
-      stream_emit(ctx, stream, "end", 0, NULL);
+      stream_emit(ctx, this_val, "end", 0, NULL);
     }
 
     return JS_NULL;
@@ -99,7 +101,7 @@ static JSValue js_readable_read(JSContext* ctx, JSValueConst this_val, int argc,
   // If ended and buffer is empty, emit 'end'
   if (stream->ended && stream->buffer_size == 0 && !stream->ended_emitted) {
     stream->ended_emitted = true;
-    stream_emit(ctx, stream, "end", 0, NULL);
+    stream_emit(ctx, this_val, "end", 0, NULL);
   }
 
   return data;
@@ -126,7 +128,7 @@ static JSValue js_readable_push(JSContext* ctx, JSValueConst this_val, int argc,
     // Emit 'end' event if not already emitted and buffer is empty
     if (!stream->ended_emitted && stream->buffer_size == 0) {
       stream->ended_emitted = true;
-      stream_emit(ctx, stream, "end", 0, NULL);
+      stream_emit(ctx, this_val, "end", 0, NULL);
     }
 
     return JS_NewBool(ctx, false);
@@ -153,7 +155,7 @@ static JSValue js_readable_push(JSContext* ctx, JSValueConst this_val, int argc,
       stream->buffer_size--;
 
       // Emit 'data' event (stream_emit will dup the value for listeners)
-      stream_emit(ctx, stream, "data", 1, &data);
+      stream_emit(ctx, this_val, "data", 1, &data);
 
       // Free the data value after emitting (we own it from the shift)
       JS_FreeValue(ctx, data);
@@ -162,13 +164,13 @@ static JSValue js_readable_push(JSContext* ctx, JSValueConst this_val, int argc,
     // If ended and buffer is empty, emit 'end'
     if (stream->ended && stream->buffer_size == 0 && !stream->ended_emitted) {
       stream->ended_emitted = true;
-      stream_emit(ctx, stream, "end", 0, NULL);
+      stream_emit(ctx, this_val, "end", 0, NULL);
     }
   } else {
     // In paused mode, emit 'readable' event if not already emitted
     if (!stream->readable_emitted && stream->buffer_size > 0) {
       stream->readable_emitted = true;
-      stream_emit(ctx, stream, "readable", 0, NULL);
+      stream_emit(ctx, this_val, "readable", 0, NULL);
     }
   }
 
@@ -189,7 +191,7 @@ static JSValue js_readable_pause(JSContext* ctx, JSValueConst this_val, int argc
 
   if (stream->flowing) {
     stream->flowing = false;
-    stream_emit(ctx, stream, "pause", 0, NULL);
+    stream_emit(ctx, this_val, "pause", 0, NULL);
   }
 
   return JS_DupValue(ctx, this_val);  // Return this for chaining
@@ -204,7 +206,7 @@ static JSValue js_readable_resume(JSContext* ctx, JSValueConst this_val, int arg
 
   if (!stream->flowing) {
     stream->flowing = true;
-    stream_emit(ctx, stream, "resume", 0, NULL);
+    stream_emit(ctx, this_val, "resume", 0, NULL);
 
     // Emit queued data in flowing mode
     while (stream->buffer_size > 0 && stream->flowing) {
@@ -217,7 +219,7 @@ static JSValue js_readable_resume(JSContext* ctx, JSValueConst this_val, int arg
       stream->buffer_size--;
 
       // Emit 'data' event
-      stream_emit(ctx, stream, "data", 1, &data);
+      stream_emit(ctx, this_val, "data", 1, &data);
 
       // Free the data value after emitting
       JS_FreeValue(ctx, data);
@@ -226,7 +228,7 @@ static JSValue js_readable_resume(JSContext* ctx, JSValueConst this_val, int arg
     // If ended and buffer is empty, emit 'end'
     if (stream->ended && stream->buffer_size == 0 && !stream->ended_emitted) {
       stream->ended_emitted = true;
-      stream_emit(ctx, stream, "end", 0, NULL);
+      stream_emit(ctx, this_val, "end", 0, NULL);
     }
   }
 
@@ -309,12 +311,12 @@ static JSValue js_readable_pipe(JSContext* ctx, JSValueConst this_val, int argc,
   src->pipe_destinations[src->pipe_count++] = JS_DupValue(ctx, dest);
 
   // Emit 'pipe' event
-  stream_emit(ctx, src, "pipe", 1, &dest);
+  stream_emit(ctx, this_val, "pipe", 1, &dest);
 
   // Switch to flowing mode
   if (!src->flowing) {
     src->flowing = true;
-    stream_emit(ctx, src, "resume", 0, NULL);
+    stream_emit(ctx, this_val, "resume", 0, NULL);
 
     // Emit queued data
     while (src->buffer_size > 0 && src->flowing) {
@@ -335,7 +337,7 @@ static JSValue js_readable_pipe(JSContext* ctx, JSValueConst this_val, int argc,
       JS_FreeValue(ctx, write_method);
 
       // Emit 'data' event
-      stream_emit(ctx, src, "data", 1, &data);
+      stream_emit(ctx, this_val, "data", 1, &data);
 
       JS_FreeValue(ctx, data);
     }
@@ -359,7 +361,7 @@ static JSValue js_readable_unpipe(JSContext* ctx, JSValueConst this_val, int arg
   if (argc == 0 || JS_IsUndefined(argv[0])) {
     for (size_t i = 0; i < src->pipe_count; i++) {
       JSValue dest = src->pipe_destinations[i];
-      stream_emit(ctx, src, "unpipe", 1, &dest);
+      stream_emit(ctx, this_val, "unpipe", 1, &dest);
       JS_FreeValue(ctx, dest);
     }
     src->pipe_count = 0;
@@ -371,7 +373,7 @@ static JSValue js_readable_unpipe(JSContext* ctx, JSValueConst this_val, int arg
       // Simple equality check (could be enhanced)
       if (JS_VALUE_GET_PTR(src->pipe_destinations[i]) == JS_VALUE_GET_PTR(dest_to_remove)) {
         JSValue dest = src->pipe_destinations[i];
-        stream_emit(ctx, src, "unpipe", 1, &dest);
+        stream_emit(ctx, this_val, "unpipe", 1, &dest);
         JS_FreeValue(ctx, dest);
 
         // Shift remaining destinations

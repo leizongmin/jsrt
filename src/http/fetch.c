@@ -6,6 +6,7 @@
 #include <uv.h>
 #include "../crypto/crypto.h"
 #include "../util/debug.h"
+#include "../util/http_request.h"
 #include "../util/jsutils.h"
 #include "../util/ssl_client.h"
 #include "../util/url_parser.h"
@@ -80,62 +81,9 @@ static int parse_url(const char* url, char** host, int* port, char** path, int* 
 
 static char* build_http_request(const char* method, const char* path, const char* host, int port, const char* body,
                                 size_t body_len, jsrt_header_entry_t* headers) {
-  size_t request_size = strlen(method) + strlen(path) + strlen(host) + body_len + 1024;
-
-  // Calculate additional space needed for custom headers
-  jsrt_header_entry_t* header = headers;
-  while (header) {
-    request_size += strlen(header->name) + strlen(header->value) + 4;  // ": \r\n"
-    header = header->next;
-  }
-
-  char* request = malloc(request_size);
-  if (!request)
-    return NULL;
-
-  int len = snprintf(request, request_size,
-                     "%s %s HTTP/1.1\r\n"
-                     "Host: %s:%d\r\n",
-                     method, path, host, port);
-
-  // Add custom headers, with defaults if not specified
-  int has_user_agent = 0;
-  int has_content_type = 0;
-
-  header = headers;
-  while (header) {
-    len += snprintf(request + len, request_size - len, "%s: %s\r\n", header->name, header->value);
-
-    if (strcasecmp(header->name, "User-Agent") == 0)
-      has_user_agent = 1;
-    if (strcasecmp(header->name, "Content-Type") == 0)
-      has_content_type = 1;
-
-    header = header->next;
-  }
-
-  // Add default headers if not provided
-  if (!has_user_agent) {
-    const char* user_agent = jsrt_get_static_user_agent();
-    len += snprintf(request + len, request_size - len, "User-Agent: %s\r\n", user_agent);
-  }
-
-  len += snprintf(request + len, request_size - len, "Connection: close\r\n");
-
-  if (body && body_len > 0) {
-    len += snprintf(request + len, request_size - len, "Content-Length: %zu\r\n", body_len);
-  }
-
-  len += snprintf(request + len, request_size - len, "\r\n");
-
-  if (body && body_len > 0) {
-    if (len + body_len < request_size) {
-      memcpy(request + len, body, body_len);
-      len += body_len;
-    }
-  }
-
-  return request;
+  // Use the shared HTTP request builder
+  // Note: jsrt_header_entry_t and jsrt_http_header_entry_t are compatible types
+  return jsrt_http_build_request(method, path, host, port, body, body_len, (jsrt_http_header_entry_t*)headers);
 }
 
 static void free_header_list(jsrt_header_entry_t* headers) {

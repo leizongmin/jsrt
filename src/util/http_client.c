@@ -1,8 +1,69 @@
 #include "http_client.h"
 #include "debug.h"
+#include "http_request.h"
 #include "ssl_client.h"
 #include "url_parser.h"
 #include "user_agent.h"
+
+// Forward declarations to use parser without including its header (to avoid enum conflicts)
+// These match the definitions in ../http/parser.h but with renamed types to avoid conflicts
+
+typedef enum {
+  JSRT_PARSER_OK = 0,
+  JSRT_PARSER_ERROR_INVALID_DATA,
+  JSRT_PARSER_ERROR_MEMORY,
+  JSRT_PARSER_ERROR_NETWORK,
+  JSRT_PARSER_ERROR_TIMEOUT,
+  JSRT_PARSER_ERROR_PROTOCOL,
+  JSRT_PARSER_ERROR_INCOMPLETE
+} jsrt_parser_error_t;
+
+typedef struct jsrt_http_header_impl {
+  char* name;
+  char* value;
+  struct jsrt_http_header_impl* next;
+} jsrt_http_header_impl_t;
+
+typedef struct {
+  jsrt_http_header_impl_t* first;
+  jsrt_http_header_impl_t* last;
+  int count;
+} jsrt_http_headers_impl_t;
+
+typedef struct {
+  char* data;
+  size_t size;
+  size_t capacity;
+} jsrt_buffer_impl_t;
+
+typedef struct {
+  int major_version;
+  int minor_version;
+  int status_code;
+  char* status_message;
+  char* method;
+  char* url;
+  jsrt_http_headers_impl_t headers;
+  jsrt_buffer_impl_t body;
+  int complete;
+  int error;
+  char* _current_header_field;
+  char* _current_header_value;
+} jsrt_http_message_impl_t;
+
+typedef struct jsrt_http_parser {
+  char llhttp_parser[128];    // Opaque llhttp parser
+  char llhttp_settings[128];  // Opaque llhttp settings
+  jsrt_http_message_impl_t* current_message;
+  void* ctx;
+  void* user_data;
+} jsrt_http_parser_impl_t;
+
+// Parser API functions (external)
+extern jsrt_http_parser_impl_t* jsrt_http_parser_create(void* ctx, int type);
+extern void jsrt_http_parser_destroy(jsrt_http_parser_impl_t* parser);
+extern jsrt_parser_error_t jsrt_http_parser_execute(jsrt_http_parser_impl_t* parser, const char* data, size_t len);
+extern const char* jsrt_http_headers_get(jsrt_http_headers_impl_t* headers, const char* name);
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -23,27 +84,7 @@ typedef int socklen_t;
 #include <unistd.h>
 #endif
 
-// Cross-platform case-insensitive string comparison
-#ifdef _WIN32
-#define jsrt_strncasecmp _strnicmp
-#else
-#ifdef __GNUC__
-#define jsrt_strncasecmp strncasecmp
-#else
-// Fallback implementation for systems without strncasecmp
-static int jsrt_strncasecmp(const char* s1, const char* s2, size_t n) {
-  for (size_t i = 0; i < n; i++) {
-    char c1 = s1[i] >= 'A' && s1[i] <= 'Z' ? s1[i] + ('a' - 'A') : s1[i];
-    char c2 = s2[i] >= 'A' && s2[i] <= 'Z' ? s2[i] + ('a' - 'A') : s2[i];
-    if (c1 != c2)
-      return c1 - c2;
-    if (c1 == '\0')
-      return 0;
-  }
-  return 0;
-}
-#endif
-#endif
+// Cross-platform case-insensitive string comparison is now handled by http_request.c
 
 // Internal function to parse URLs using unified parser
 static int parse_url(const char* url, char** host, int* port, char** path, int* is_https) {
@@ -78,91 +119,37 @@ static int init_ssl_functions(void) {
   return jsrt_ssl_global_init();
 }
 
-// Extract Location header for redirect handling
+// Extract Location header for redirect handling using parser
 static char* extract_location_header(const char* response_data, size_t response_size) {
-  const char* headers_end = strstr(response_data, "\r\n\r\n");
-  if (!headers_end) {
-    headers_end = strstr(response_data, "\n\n");
-    if (!headers_end) {
-      return NULL;
+  // Use the HTTP parser to extract headers properly
+  jsrt_http_parser_impl_t* parser = jsrt_http_parser_create(NULL, 1);  // 1 = RESPONSE type
+  if (!parser) {
+    return NULL;
+  }
+
+  // Parse the response
+  jsrt_http_parser_execute(parser, response_data, response_size);
+  jsrt_http_parser_execute(parser, "", 0);  // Force completion
+
+  char* location = NULL;
+  if (parser->current_message) {
+    const char* loc = jsrt_http_headers_get(&parser->current_message->headers, "Location");
+    if (loc) {
+      location = strdup(loc);
     }
   }
 
-  // Look for Location header (case insensitive)
-  const char* current = response_data;
-  while (current < headers_end) {
-    const char* line_end = strstr(current, "\r\n");
-    if (!line_end) {
-      line_end = strstr(current, "\n");
-      if (!line_end)
-        break;
-    }
-
-    // Check if this line starts with Location:
-    if ((jsrt_strncasecmp(current, "location:", 9) == 0) || (jsrt_strncasecmp(current, "Location:", 9) == 0)) {
-      const char* value_start = current + 9;
-
-      // Skip whitespace
-      while (value_start < line_end && (*value_start == ' ' || *value_start == '\t')) {
-        value_start++;
-      }
-
-      // Extract location value
-      size_t value_len = line_end - value_start;
-      if (value_len > 0) {
-        char* location = malloc(value_len + 1);
-        if (location) {
-          strncpy(location, value_start, value_len);
-          location[value_len] = '\0';
-          return location;
-        }
-      }
-    }
-
-    current = line_end + (line_end[0] == '\r' ? 2 : 1);
-  }
-
-  return NULL;
+  jsrt_http_parser_destroy(parser);
+  return location;
 }
 
-// Internal function to build HTTP request
+// Internal function to build HTTP request (now uses shared implementation)
 static char* build_http_request(const char* method, const char* path, const char* host, int port) {
-  size_t request_size = strlen(method) + strlen(path) + strlen(host) + 200;
-  char* request = malloc(request_size);
-  if (!request)
-    return NULL;
-
-  // Use static user-agent since we don't have JavaScript context here
-  const char* user_agent = jsrt_get_static_user_agent();
-
-  int len;
-  if (port == 80 || port == 443) {
-    len = snprintf(request, request_size,
-                   "%s %s HTTP/1.1\r\n"
-                   "Host: %s\r\n"
-                   "Connection: close\r\n"
-                   "User-Agent: %s\r\n"
-                   "\r\n",
-                   method, path, host, user_agent);
-  } else {
-    len = snprintf(request, request_size,
-                   "%s %s HTTP/1.1\r\n"
-                   "Host: %s:%d\r\n"
-                   "Connection: close\r\n"
-                   "User-Agent: %s\r\n"
-                   "\r\n",
-                   method, path, host, port, user_agent);
-  }
-
-  if (len >= (int)request_size) {
-    free(request);
-    return NULL;
-  }
-
-  return request;
+  // Use the shared HTTP request builder with no custom headers or body
+  return jsrt_http_build_request(method, path, host, port, NULL, 0, NULL);
 }
 
-// Internal function to parse HTTP response
+// Internal function to parse HTTP response using jsrt_http_parser
 static JSRT_HttpResponse parse_http_response(const char* response_data, size_t response_size) {
   JSRT_HttpResponse response = {0};
 
@@ -171,45 +158,62 @@ static JSRT_HttpResponse parse_http_response(const char* response_data, size_t r
     return response;
   }
 
-  // Find end of headers
-  const char* headers_end = strstr(response_data, "\r\n\r\n");
-  if (!headers_end) {
-    headers_end = strstr(response_data, "\n\n");
-    if (!headers_end) {
-      response.error = JSRT_HTTP_ERROR_HTTP_ERROR;
-      return response;
-    }
-    headers_end += 2;
-  } else {
-    headers_end += 4;
+  // Create HTTP parser for response parsing (ctx can be NULL for non-JS contexts)
+  jsrt_http_parser_impl_t* parser = jsrt_http_parser_create(NULL, 1);  // 1 = RESPONSE type
+  if (!parser) {
+    response.error = JSRT_HTTP_ERROR_OUT_OF_MEMORY;
+    return response;
   }
 
-  // Parse status line
-  int major, minor;
-  char status_text_buffer[256] = {0};
-  if (sscanf(response_data, "HTTP/%d.%d %d %255[^\r\n]", &major, &minor, &response.status, status_text_buffer) >= 3) {
-    if (strlen(status_text_buffer) > 0) {
-      response.status_text = strdup(status_text_buffer);
-    } else {
-      response.status_text = strdup("OK");
-    }
-  } else {
-    response.status = 500;
-    response.status_text = strdup("Parse Error");
+  // Parse the response data
+  jsrt_parser_error_t parse_error = jsrt_http_parser_execute(parser, response_data, response_size);
+
+  // Force completion for synchronous parsing
+  if (parse_error == JSRT_PARSER_ERROR_INCOMPLETE || parse_error == JSRT_PARSER_OK) {
+    // Try to finish parsing with empty data to trigger completion
+    jsrt_http_parser_execute(parser, "", 0);
   }
 
-  // Extract body
-  size_t body_size = response_size - (headers_end - response_data);
-  if (body_size > 0) {
-    response.body = malloc(body_size + 1);
+  if (!parser->current_message || parser->current_message->status_code == 0) {
+    response.error = JSRT_HTTP_ERROR_HTTP_ERROR;
+    jsrt_http_parser_destroy(parser);
+    return response;
+  }
+
+  jsrt_http_message_impl_t* msg = parser->current_message;
+
+  // Convert to JSRT_HttpResponse structure
+  response.status = msg->status_code;
+  response.status_text = msg->status_message ? strdup(msg->status_message) : strdup("OK");
+
+  // Copy body
+  if (msg->body.data && msg->body.size > 0) {
+    response.body = malloc(msg->body.size + 1);
     if (response.body) {
-      memcpy(response.body, headers_end, body_size);
-      response.body[body_size] = '\0';
-      response.body_size = body_size;
+      memcpy(response.body, msg->body.data, msg->body.size);
+      response.body[msg->body.size] = '\0';
+      response.body_size = msg->body.size;
     }
+  }
+
+  // Extract headers
+  const char* content_type = jsrt_http_headers_get(&msg->headers, "Content-Type");
+  if (content_type) {
+    response.content_type = strdup(content_type);
+  }
+
+  const char* etag = jsrt_http_headers_get(&msg->headers, "ETag");
+  if (etag) {
+    response.etag = strdup(etag);
+  }
+
+  const char* last_modified = jsrt_http_headers_get(&msg->headers, "Last-Modified");
+  if (last_modified) {
+    response.last_modified = strdup(last_modified);
   }
 
   response.error = JSRT_HTTP_OK;
+  jsrt_http_parser_destroy(parser);
   return response;
 }
 

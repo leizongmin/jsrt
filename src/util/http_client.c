@@ -217,89 +217,6 @@ static JSRT_HttpResponse parse_http_response(const char* response_data, size_t r
   return response;
 }
 
-// Curl fallback function for SSL handshake failures
-static JSRT_HttpResponse try_curl_fallback(const char* url) {
-  JSRT_HttpResponse response = {0};
-  response.error = JSRT_HTTP_ERROR_NETWORK;
-
-  // Use TMPDIR environment variable, fallback to /tmp
-  const char* tmpdir = getenv("TMPDIR");
-  if (!tmpdir || strlen(tmpdir) == 0) {
-    tmpdir = "/tmp";
-  }
-
-  char temp_file[1024];
-  snprintf(temp_file, sizeof(temp_file), "%s/jsrt_curl_XXXXXX", tmpdir);
-
-  int temp_fd = mkstemp(temp_file);
-  if (temp_fd == -1) {
-    JSRT_Debug("HTTP Client: curl fallback - failed to create temp file in %s", tmpdir);
-    return response;
-  }
-  close(temp_fd);
-
-  // Build curl command with redirects, silence progress, and write to temp file
-  char curl_cmd[2048];
-  snprintf(curl_cmd, sizeof(curl_cmd), "curl -s -L --max-time 30 --connect-timeout 10 -o '%s' '%s' 2>/dev/null",
-           temp_file, url);
-
-  JSRT_Debug("HTTP Client: curl fallback - executing curl command");
-
-  int curl_result = system(curl_cmd);
-  if (curl_result != 0) {
-    JSRT_Debug("HTTP Client: curl fallback - curl command failed with exit code %d", curl_result);
-    unlink(temp_file);
-    return response;
-  }
-
-  // Read the response from temp file
-  FILE* temp_fp = fopen(temp_file, "rb");
-  if (!temp_fp) {
-    JSRT_Debug("HTTP Client: curl fallback - failed to open temp file");
-    unlink(temp_file);
-    return response;
-  }
-
-  // Get file size
-  fseek(temp_fp, 0, SEEK_END);
-  long file_size = ftell(temp_fp);
-  fseek(temp_fp, 0, SEEK_SET);
-
-  if (file_size <= 0) {
-    JSRT_Debug("HTTP Client: curl fallback - temp file is empty");
-    fclose(temp_fp);
-    unlink(temp_file);
-    return response;
-  }
-
-  // Allocate and read data
-  response.body = malloc(file_size + 1);
-  if (!response.body) {
-    JSRT_Debug("HTTP Client: curl fallback - failed to allocate memory");
-    fclose(temp_fp);
-    unlink(temp_file);
-    return response;
-  }
-
-  size_t bytes_read = fread(response.body, 1, file_size, temp_fp);
-  fclose(temp_fp);
-  unlink(temp_file);
-
-  if ((long)bytes_read != file_size) {
-    JSRT_Debug("HTTP Client: curl fallback - failed to read complete file");
-    free(response.body);
-    response.body = NULL;
-    return response;
-  }
-
-  response.body[file_size] = '\0';
-  response.body_size = file_size;
-  response.status = 200;  // Assume success if curl succeeded
-  response.error = JSRT_HTTP_OK;
-
-  JSRT_Debug("HTTP Client: curl fallback - successfully read %zu bytes", response.body_size);
-  return response;
-}
 
 // Internal function to perform HTTP request with SSL/redirect support
 static JSRT_HttpResponse http_request_internal(const char* url, int redirect_count);
@@ -426,30 +343,7 @@ static JSRT_HttpResponse http_request_internal(const char* url, int redirect_cou
     }
 
     if (jsrt_ssl_client_handshake(ssl_client) != 1) {
-      JSRT_Debug("HTTP Client: SSL handshake failed - trying curl fallback");
-
-      // Try using curl as a fallback
-      JSRT_HttpResponse curl_response = try_curl_fallback(url);
-      if (curl_response.error == JSRT_HTTP_OK) {
-        JSRT_Debug("HTTP Client: curl fallback succeeded");
-        // Clean up current SSL resources first
-        if (ssl_client)
-          jsrt_ssl_client_free(ssl_client);
-#ifdef _WIN32
-        if (sockfd != INVALID_SOCKET)
-          closesocket(sockfd);
-        WSACleanup();
-#else
-        if (sockfd >= 0)
-          close(sockfd);
-#endif
-        free(host);
-        free(path);
-        return curl_response;
-      } else {
-        JSRT_Debug("HTTP Client: curl fallback also failed");
-      }
-
+      JSRT_Debug("HTTP Client: SSL handshake failed");
       response.error = JSRT_HTTP_ERROR_SSL_ERROR;
       goto cleanup;
     }

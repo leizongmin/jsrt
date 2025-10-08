@@ -84,8 +84,14 @@ try {
   console.log('✓ linkSync test passed');
 } catch (error) {
   // On some filesystems (like Android/Termux), hardlinks might not be supported
-  if (error.code === 'EACCES' || error.code === 'EPERM' || error.code === 'ENOTSUP') {
-    console.log('⚠ linkSync test skipped: Hard links not supported on this filesystem');
+  if (
+    error.code === 'EACCES' ||
+    error.code === 'EPERM' ||
+    error.code === 'ENOTSUP'
+  ) {
+    console.log(
+      '⚠ linkSync test skipped: Hard links not supported on this filesystem'
+    );
   } else {
     console.error('✗ linkSync test failed:', error.message);
     throw error;

@@ -135,11 +135,20 @@ fs.write(
 
                 // Test 5: fs.readv() - vectored read
                 console.log('Test 5: fs.readv() vectored read');
-                const fd6 = fs.openSync(path.join(tmpdir, 'test_readv.txt'), 'w');
-                fs.writeFileSync(path.join(tmpdir, 'test_readv.txt'), 'AAAABBBBCCCCDDDD');
+                const fd6 = fs.openSync(
+                  path.join(tmpdir, 'test_readv.txt'),
+                  'w'
+                );
+                fs.writeFileSync(
+                  path.join(tmpdir, 'test_readv.txt'),
+                  'AAAABBBBCCCCDDDD'
+                );
                 fs.closeSync(fd6);
 
-                const fd7 = fs.openSync(path.join(tmpdir, 'test_readv.txt'), 'r');
+                const fd7 = fs.openSync(
+                  path.join(tmpdir, 'test_readv.txt'),
+                  'r'
+                );
                 const bufs = [
                   Buffer.alloc(4),
                   Buffer.alloc(4),
@@ -178,7 +187,10 @@ fs.write(
 
                   // Test 6: fs.writev() - vectored write
                   console.log('Test 6: fs.writev() vectored write');
-                  const fd8 = fs.openSync(path.join(tmpdir, 'test_writev.txt'), 'w');
+                  const fd8 = fs.openSync(
+                    path.join(tmpdir, 'test_writev.txt'),
+                    'w'
+                  );
                   const writeBufs = [
                     Buffer.from('Part1'),
                     Buffer.from('Part2'),
@@ -213,7 +225,10 @@ fs.write(
 
                       // Test 7: fs.rm() - remove file
                       console.log('Test 7: fs.rm() remove file');
-                      fs.writeFileSync(path.join(tmpdir, 'test_rm.txt'), 'delete me');
+                      fs.writeFileSync(
+                        path.join(tmpdir, 'test_rm.txt'),
+                        'delete me'
+                      );
 
                       fs.rm(path.join(tmpdir, 'test_rm.txt'), (errRm) => {
                         if (errRm) {
@@ -229,7 +244,10 @@ fs.write(
 
                         // Test 8: fs.cp() - copy file
                         console.log('Test 8: fs.cp() copy file');
-                        fs.writeFileSync(path.join(tmpdir, 'test_cp_src.txt'), 'copy this');
+                        fs.writeFileSync(
+                          path.join(tmpdir, 'test_cp_src.txt'),
+                          'copy this'
+                        );
 
                         fs.cp(
                           path.join(tmpdir, 'test_cp_src.txt'),
@@ -242,7 +260,9 @@ fs.write(
 
                             console.log('  File copied successfully');
                             assert(
-                              fs.existsSync(path.join(tmpdir, 'test_cp_dest.txt')),
+                              fs.existsSync(
+                                path.join(tmpdir, 'test_cp_dest.txt')
+                              ),
                               'destination should exist'
                             );
 
@@ -257,7 +277,9 @@ fs.write(
 
                             // Cleanup
                             fs.unlinkSync(path.join(tmpdir, 'test_cp_src.txt'));
-                            fs.unlinkSync(path.join(tmpdir, 'test_cp_dest.txt'));
+                            fs.unlinkSync(
+                              path.join(tmpdir, 'test_cp_dest.txt')
+                            );
                             fs.unlinkSync(path.join(tmpdir, 'test_readv.txt'));
                             fs.unlinkSync(path.join(tmpdir, 'test_writev.txt'));
 

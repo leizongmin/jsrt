@@ -163,7 +163,9 @@ function runTests() {
 if (typeof crypto === 'undefined') {
   console.log('❌ SKIP: crypto object not available (OpenSSL not found)');
 } else if (process.env.SKIP_HTTP_MODULE_TESTS) {
-  console.log('ℹ️  SKIP: HTTP module tests skipped (SKIP_HTTP_MODULE_TESTS set)');
+  console.log(
+    'ℹ️  SKIP: HTTP module tests skipped (SKIP_HTTP_MODULE_TESTS set)'
+  );
 } else {
   try {
     runTests();
@@ -178,7 +180,9 @@ if (typeof crypto === 'undefined') {
 
     if (isNetworkError) {
       console.log('⚠️  SKIP: HTTP module tests failed due to network issues');
-      console.log('   This is common in restricted environments (Android/Termux, corporate networks, etc.)');
+      console.log(
+        '   This is common in restricted environments (Android/Termux, corporate networks, etc.)'
+      );
       console.log('   Error:', errorMsg);
       console.log('   To skip this test, set SKIP_HTTP_MODULE_TESTS=1');
       // Don't fail the test - treat network issues as acceptable skip condition

@@ -3,7 +3,9 @@ const os = require('node:os');
 
 // Skip FFI tests on Android/Termux due to libffi compatibility issues on ARM64
 if (os.platform() === 'linux' && os.arch() === 'arm64') {
-  console.log('⚠️  FFI tests skipped on Android/Termux ARM64 (known libffi compatibility issue)');
+  console.log(
+    '⚠️  FFI tests skipped on Android/Termux ARM64 (known libffi compatibility issue)'
+  );
   process.exit(0);
 }
 

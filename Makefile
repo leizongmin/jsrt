@@ -163,12 +163,12 @@ prettier: npm-install
 
 .PHONY: test
 test: jsrt npm-install
-	cd target/release && ctest --verbose
+	cd target/release && ctest --verbose $(if $(N),-R "test_$(subst /,_,$(N))")
 
 # Fast parallel test execution (4 jobs)
 .PHONY: test-fast
 test-fast: jsrt
-	cd target/release && ctest --verbose --parallel 4
+	cd target/release && ctest --verbose --parallel 4 $(if $(N),-R "test_$(subst /,_,$(N))")
 
 # Quick test - only essential tests without network dependencies
 .PHONY: test-quick
@@ -177,19 +177,19 @@ test-quick: jsrt
 
 .PHONY: test_g
 test_g: jsrt_g
-	cd target/debug && ctest --verbose
+	cd target/debug && ctest --verbose $(if $(N),-R "test_$(subst /,_,$(N))")
 
 .PHONY: test_m
 test_m: jsrt_m
-	cd target/asan && ctest --verbose
+	cd target/asan && ctest --verbose $(if $(N),-R "test_$(subst /,_,$(N))")
 
 .PHONY: test_cov
 test_cov: jsrt_cov
-	cd target/coverage && ctest --verbose
+	cd target/coverage && ctest --verbose $(if $(N),-R "test_$(subst /,_,$(N))")
 
 .PHONY: test_static
 test_static: jsrt_static npm-install
-	cd target/static && ctest --verbose
+	cd target/static && ctest --verbose $(if $(N),-R "test_$(subst /,_,$(N))")
 
 .PHONY: coverage
 coverage: test_cov
@@ -360,6 +360,10 @@ help:
 	@echo "  make wpt           - Run Web Platform Tests (release build)"
 	@echo "  make wpt_static    - Run Web Platform Tests (static build)"
 	@echo "  make coverage      - Generate coverage report"
+	@echo ""
+	@echo "Test Options (use with make test/test_g/test_m/test_cov/test_static):"
+	@echo "  N=path             - Run specific test(s) by path"
+	@echo "                       Examples: N=node/stream, N=assert, N=node/stream/writable"
 	@echo ""
 	@echo "WPT Options (use with make wpt/wpt_g/wpt_static):"
 	@echo "  N=category         - Run specific test category"

@@ -217,7 +217,6 @@ static JSRT_HttpResponse parse_http_response(const char* response_data, size_t r
   return response;
 }
 
-
 // Internal function to perform HTTP request with SSL/redirect support
 static JSRT_HttpResponse http_request_internal(const char* url, int redirect_count);
 

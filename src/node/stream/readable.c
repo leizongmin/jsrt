@@ -154,6 +154,21 @@ static JSValue js_readable_push(JSContext* ctx, JSValueConst this_val, int argc,
       }
       stream->buffer_size--;
 
+      // Write to all piped destinations
+      if (stream->pipe_destinations != NULL && stream->pipe_count > 0) {
+        for (size_t i = 0; i < stream->pipe_count; i++) {
+          JSValue dest = stream->pipe_destinations[i];
+          JSValue write_method = JS_GetPropertyStr(ctx, dest, "write");
+          if (JS_IsFunction(ctx, write_method)) {
+            JSValue result = JS_Call(ctx, write_method, dest, 1, &data);
+            if (!JS_IsException(result)) {
+              JS_FreeValue(ctx, result);
+            }
+          }
+          JS_FreeValue(ctx, write_method);
+        }
+      }
+
       // Emit 'data' event (stream_emit will dup the value for listeners)
       stream_emit(ctx, this_val, "data", 1, &data);
 
@@ -343,7 +358,7 @@ static JSValue js_readable_pipe(JSContext* ctx, JSValueConst this_val, int argc,
     }
   }
 
-  return dest;  // Return destination for chaining
+  return JS_DupValue(ctx, dest);  // Return destination for chaining
 }
 
 // Readable.prototype.unpipe([destination])

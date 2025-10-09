@@ -227,29 +227,16 @@ static JSValue js_node_sign_sign(JSContext* ctx, JSValueConst this_val, int argc
     js_free(ctx, hex);
     free(signature);
   } else if (encoding && strcmp(encoding, "base64") == 0) {
-    // Base64 encoding - create buffer first then encode
-    JSValue global = JS_GetGlobalObject(ctx);
-    JSValue array_buffer = JS_NewArrayBufferCopy(ctx, signature, signature_len);
+    // Base64 encoding - use simple C-based encoder
+    char* base64_str = node_crypto_base64_encode(signature, signature_len);
     free(signature);
-
-    JSValue uint8_array_ctor = JS_GetPropertyStr(ctx, global, "Uint8Array");
-    JSValue uint8_array = JS_CallConstructor(ctx, uint8_array_ctor, 1, &array_buffer);
-
-    // Use btoa for base64 encoding
-    JSValue btoa = JS_GetPropertyStr(ctx, global, "btoa");
-    JSValue spread = JS_Eval(ctx, "(...args) => String.fromCharCode(...args)", 42, NULL, 0);
-    JSValue args[] = {uint8_array};
-    JSValue str = JS_Call(ctx, spread, JS_UNDEFINED, 1, args);
-    JSValue base64_args[] = {str};
-    js_result = JS_Call(ctx, btoa, JS_UNDEFINED, 1, base64_args);
-
-    JS_FreeValue(ctx, spread);
-    JS_FreeValue(ctx, str);
-    JS_FreeValue(ctx, uint8_array);
-    JS_FreeValue(ctx, uint8_array_ctor);
-    JS_FreeValue(ctx, array_buffer);
-    JS_FreeValue(ctx, btoa);
-    JS_FreeValue(ctx, global);
+    if (!base64_str) {
+      if (encoding)
+        JS_FreeCString(ctx, encoding);
+      return JS_ThrowOutOfMemory(ctx);
+    }
+    js_result = JS_NewString(ctx, base64_str);
+    free(base64_str);
   } else {
     // Return as Buffer (Uint8Array)
     JSValue global = JS_GetGlobalObject(ctx);

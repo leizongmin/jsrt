@@ -97,12 +97,14 @@ typedef struct {
   void (*EVP_CIPHER_CTX_free)(void* ctx);
 
   // Encryption operations
-  int (*EVP_EncryptInit_ex)(void* ctx, const void* cipher, void* impl, const unsigned char* key, const unsigned char* iv);
+  int (*EVP_EncryptInit_ex)(void* ctx, const void* cipher, void* impl, const unsigned char* key,
+                            const unsigned char* iv);
   int (*EVP_EncryptUpdate)(void* ctx, unsigned char* out, int* outl, const unsigned char* in, int inl);
   int (*EVP_EncryptFinal_ex)(void* ctx, unsigned char* out, int* outl);
 
   // Decryption operations
-  int (*EVP_DecryptInit_ex)(void* ctx, const void* cipher, void* impl, const unsigned char* key, const unsigned char* iv);
+  int (*EVP_DecryptInit_ex)(void* ctx, const void* cipher, void* impl, const unsigned char* key,
+                            const unsigned char* iv);
   int (*EVP_DecryptUpdate)(void* ctx, unsigned char* out, int* outl, const unsigned char* in, int inl);
   int (*EVP_DecryptFinal_ex)(void* ctx, unsigned char* out, int* outl);
 

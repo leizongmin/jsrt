@@ -463,6 +463,36 @@ void jsrt_evp_pkey_free_wrapper(void* pkey) {
   jsrt_evp_pkey_free(pkey);
 }
 
+// Create EC public key from DER-encoded data
+void* jsrt_ec_create_public_key_from_der(const uint8_t* key_data, size_t key_data_length) {
+  if (!jsrt_ec_init() || !key_data || key_data_length == 0) {
+    return NULL;
+  }
+
+  if (!d2i_pubkey) {
+    return NULL;
+  }
+
+  const unsigned char* der_ptr = key_data;
+  void* pkey = d2i_pubkey(NULL, &der_ptr, key_data_length);
+  return pkey;
+}
+
+// Create EC private key from DER-encoded data
+void* jsrt_ec_create_private_key_from_der(const uint8_t* key_data, size_t key_data_length) {
+  if (!jsrt_ec_init() || !key_data || key_data_length == 0) {
+    return NULL;
+  }
+
+  if (!d2i_autoprivatekey) {
+    return NULL;
+  }
+
+  const unsigned char* der_ptr = key_data;
+  void* pkey = d2i_autoprivatekey(NULL, &der_ptr, key_data_length);
+  return pkey;
+}
+
 static void* jsrt_evp_md_ctx_new(void) {
   if (evp_md_ctx_new) {
     return evp_md_ctx_new();

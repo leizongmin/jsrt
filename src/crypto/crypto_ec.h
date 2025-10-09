@@ -42,4 +42,8 @@ int jsrt_ec_get_openssl_nid(jsrt_ec_curve_t curve);
 // Memory management
 void jsrt_evp_pkey_free_wrapper(void* pkey);
 
+// Key loading from DER
+void* jsrt_ec_create_public_key_from_der(const uint8_t* key_data, size_t key_data_length);
+void* jsrt_ec_create_private_key_from_der(const uint8_t* key_data, size_t key_data_length);
+
 #endif  // JSRT_CRYPTO_EC_H

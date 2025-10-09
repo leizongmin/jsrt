@@ -8,7 +8,9 @@
 #include <string.h>
 
 #include "../../crypto/crypto_digest.h"
+#include "../../crypto/crypto_ec.h"
 #include "../../crypto/crypto_hmac.h"
+#include "../../crypto/crypto_rsa.h"
 #include "../../crypto/crypto_subtle.h"
 #include "../../crypto/crypto_symmetric.h"
 #include "../../util/debug.h"
@@ -17,6 +19,8 @@
 extern JSClassID js_node_hash_class_id;
 extern JSClassID js_node_hmac_class_id;
 extern JSClassID js_node_cipher_class_id;
+extern JSClassID js_node_sign_class_id;
+extern JSClassID js_node_verify_class_id;
 
 // Hash class structure
 typedef struct {
@@ -57,6 +61,28 @@ typedef struct {
   bool finalized;
 } JSNodeCipher;
 
+// Sign class structure
+typedef struct {
+  JSContext* ctx;
+  jsrt_rsa_algorithm_t algorithm;
+  jsrt_rsa_hash_algorithm_t hash_algorithm;
+  uint8_t* buffer;
+  size_t buffer_len;
+  size_t buffer_capacity;
+  bool finalized;
+} JSNodeSign;
+
+// Verify class structure
+typedef struct {
+  JSContext* ctx;
+  jsrt_rsa_algorithm_t algorithm;
+  jsrt_rsa_hash_algorithm_t hash_algorithm;
+  uint8_t* buffer;
+  size_t buffer_len;
+  size_t buffer_capacity;
+  bool finalized;
+} JSNodeVerify;
+
 // Hash API functions
 JSValue js_crypto_create_hash(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv);
 void js_node_hash_init_class(JSRuntime* rt);
@@ -78,9 +104,23 @@ openssl_symmetric_funcs_t* jsrt_get_openssl_symmetric_funcs(void);
 #define EVP_CTRL_GCM_GET_TAG 0x10
 #define EVP_CTRL_GCM_SET_TAG 0x11
 
+// Sign/Verify API functions
+JSValue js_crypto_create_sign(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv);
+JSValue js_crypto_create_verify(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv);
+void js_node_sign_init_class(JSRuntime* rt);
+void js_node_verify_init_class(JSRuntime* rt);
+
 // Random API functions
 JSValue js_crypto_random_bytes(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv);
 JSValue js_crypto_random_uuid(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv);
+
+// KDF API functions
+JSValue js_crypto_pbkdf2(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv);
+JSValue js_crypto_pbkdf2_sync(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv);
+JSValue js_crypto_hkdf(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv);
+JSValue js_crypto_hkdf_sync(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv);
+JSValue js_crypto_scrypt(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv);
+JSValue js_crypto_scrypt_sync(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv);
 
 // Constants
 JSValue create_crypto_constants(JSContext* ctx);

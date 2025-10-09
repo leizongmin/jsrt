@@ -309,9 +309,11 @@ static JSValue js_node_cipher_set_aad(JSContext* ctx, JSValueConst this_val, int
   int len;
   int result;
   if (cipher->is_encrypt) {
-    result = cipher->openssl_funcs->EVP_EncryptUpdate(cipher->evp_ctx, NULL, &len, cipher->aad_data, cipher->aad_length);
+    result =
+        cipher->openssl_funcs->EVP_EncryptUpdate(cipher->evp_ctx, NULL, &len, cipher->aad_data, cipher->aad_length);
   } else {
-    result = cipher->openssl_funcs->EVP_DecryptUpdate(cipher->evp_ctx, NULL, &len, cipher->aad_data, cipher->aad_length);
+    result =
+        cipher->openssl_funcs->EVP_DecryptUpdate(cipher->evp_ctx, NULL, &len, cipher->aad_data, cipher->aad_length);
   }
 
   if (result != 1) {

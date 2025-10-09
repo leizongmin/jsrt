@@ -21,6 +21,9 @@ endif()
 if(NOT EXISTS "${CMAKE_SOURCE_DIR}/deps/wamr/CMakeLists.txt")
     message(FATAL_ERROR "Git submodules are not initialized. Please run: git submodule update --init --recursive")
 endif()
+if(NOT EXISTS "${CMAKE_SOURCE_DIR}/deps/zlib/zlib.h")
+    message(FATAL_ERROR "Git submodules are not initialized. Please run: git submodule update --init --recursive")
+endif()
 
 # optimization flags
 if(CMAKE_BUILD_TYPE STREQUAL "Release")
@@ -74,7 +77,7 @@ else()
     set(FFI_LIBRARIES "")
 endif()
 
-include_directories(src deps/quickjs deps/libuv/include deps/libuv/src deps/readline deps/llhttp/build deps/wamr/core/iwasm/include)
+include_directories(src deps/quickjs deps/libuv/include deps/libuv/src deps/readline deps/llhttp/build deps/wamr/core/iwasm/include deps/zlib)
 
 # Read jsrt version from VERSION file
 file(STRINGS VERSION JSRT_VERSION)
@@ -98,6 +101,29 @@ target_compile_definitions(quickjs PRIVATE CONFIG_VERSION="${QUICKJS_VERSION}" _
 if(CMAKE_BUILD_TYPE STREQUAL "Debug")
     target_compile_definitions(quickjs PRIVATE NDEBUG)
 endif()
+
+# build zlib as static library
+set(ZLIB_LIB_FILES
+    deps/zlib/adler32.c
+    deps/zlib/compress.c
+    deps/zlib/crc32.c
+    deps/zlib/deflate.c
+    deps/zlib/gzclose.c
+    deps/zlib/gzlib.c
+    deps/zlib/gzread.c
+    deps/zlib/gzwrite.c
+    deps/zlib/infback.c
+    deps/zlib/inffast.c
+    deps/zlib/inflate.c
+    deps/zlib/inftrees.c
+    deps/zlib/trees.c
+    deps/zlib/uncompr.c
+    deps/zlib/zutil.c
+)
+add_library(zlib_static STATIC ${ZLIB_LIB_FILES})
+target_include_directories(zlib_static PUBLIC deps/zlib)
+target_compile_definitions(zlib_static PRIVATE _GNU_SOURCE)
+message(STATUS "zlib static library configured")
 
 # build qjs and qjsc, use flag -DBUILD_QJS=ON to enable
 option(BUILD_QJS "Build qjs and qjsc executable" OFF)
@@ -730,6 +756,7 @@ set(JSRT_LIB_FILES
 set(JSRT_LINK_LIBS
     jsrtcore
     quickjs
+    zlib_static
     uv_a
     llhttp
     vmlib

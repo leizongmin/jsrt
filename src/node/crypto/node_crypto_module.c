@@ -54,6 +54,19 @@ JSValue JSRT_InitNodeCrypto(JSContext* ctx) {
   // Add constants
   JS_SetPropertyStr(ctx, crypto_obj, "constants", create_crypto_constants(ctx));
 
+  // Add webcrypto and subtle aliases (reference globalThis.crypto)
+  JSValue global_obj = JS_GetGlobalObject(ctx);
+  JSValue global_crypto = JS_GetPropertyStr(ctx, global_obj, "crypto");
+  if (!JS_IsUndefined(global_crypto)) {
+    JS_SetPropertyStr(ctx, crypto_obj, "webcrypto", JS_DupValue(ctx, global_crypto));
+    JSValue subtle = JS_GetPropertyStr(ctx, global_crypto, "subtle");
+    if (!JS_IsUndefined(subtle)) {
+      JS_SetPropertyStr(ctx, crypto_obj, "subtle", subtle);
+    }
+  }
+  JS_FreeValue(ctx, global_crypto);
+  JS_FreeValue(ctx, global_obj);
+
   // Export as default export for CommonJS
   JS_SetPropertyStr(ctx, crypto_obj, "default", JS_DupValue(ctx, crypto_obj));
 
@@ -81,6 +94,8 @@ int js_node_crypto_init(JSContext* ctx, JSModuleDef* m) {
   JS_SetModuleExport(ctx, m, "scryptSync", JS_GetPropertyStr(ctx, crypto_module, "scryptSync"));
   JS_SetModuleExport(ctx, m, "createECDH", JS_GetPropertyStr(ctx, crypto_module, "createECDH"));
   JS_SetModuleExport(ctx, m, "constants", JS_GetPropertyStr(ctx, crypto_module, "constants"));
+  JS_SetModuleExport(ctx, m, "webcrypto", JS_GetPropertyStr(ctx, crypto_module, "webcrypto"));
+  JS_SetModuleExport(ctx, m, "subtle", JS_GetPropertyStr(ctx, crypto_module, "subtle"));
 
   // Also export the whole module as default
   JS_SetModuleExport(ctx, m, "default", crypto_module);

@@ -8,6 +8,7 @@
 // Forward declare class IDs (defined in stream.c)
 extern JSClassID js_readable_class_id;
 extern JSClassID js_writable_class_id;
+extern JSClassID js_duplex_class_id;
 extern JSClassID js_transform_class_id;
 extern JSClassID js_passthrough_class_id;
 
@@ -81,6 +82,14 @@ void js_readable_init_prototype(JSContext* ctx, JSValue readable_proto);
 JSValue js_writable_constructor(JSContext* ctx, JSValueConst new_target, int argc, JSValueConst* argv);
 void js_writable_init_prototype(JSContext* ctx, JSValue writable_proto);
 
+// duplex.c
+JSValue js_duplex_constructor(JSContext* ctx, JSValueConst new_target, int argc, JSValueConst* argv);
+void js_duplex_init_prototype(JSContext* ctx, JSValue duplex_proto);
+
+// transform.c
+JSValue js_transform_constructor(JSContext* ctx, JSValueConst new_target, int argc, JSValueConst* argv);
+void js_transform_init_prototype(JSContext* ctx, JSValue transform_proto);
+
 // passthrough.c
 JSValue js_passthrough_constructor(JSContext* ctx, JSValueConst new_target, int argc, JSValueConst* argv);
 void js_passthrough_init_prototype(JSContext* ctx, JSValue passthrough_proto);
@@ -89,5 +98,8 @@ void js_passthrough_init_prototype(JSContext* ctx, JSValue passthrough_proto);
 JSValue js_stream_destroy(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv);
 JSValue js_stream_get_destroyed(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv);
 JSValue js_stream_get_errored(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv);
+
+// utilities.c - Phase 5 utility functions
+void js_stream_init_utilities(JSContext* ctx, JSValue stream_module);
 
 #endif  // JSRT_NODE_STREAM_INTERNAL_H

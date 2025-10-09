@@ -7,6 +7,7 @@
 // Define class IDs (not static - shared across modules)
 JSClassID js_readable_class_id;
 JSClassID js_writable_class_id;
+JSClassID js_duplex_class_id;
 JSClassID js_transform_class_id;
 JSClassID js_passthrough_class_id;
 
@@ -15,6 +16,9 @@ static void js_stream_finalizer(JSRuntime* rt, JSValue obj) {
   JSStreamData* stream = JS_GetOpaque(obj, js_readable_class_id);
   if (!stream) {
     stream = JS_GetOpaque(obj, js_writable_class_id);
+  }
+  if (!stream) {
+    stream = JS_GetOpaque(obj, js_duplex_class_id);
   }
   if (!stream) {
     stream = JS_GetOpaque(obj, js_transform_class_id);
@@ -65,6 +69,7 @@ static void js_stream_finalizer(JSRuntime* rt, JSValue obj) {
 // Class definitions
 static JSClassDef js_readable_class = {"Readable", .finalizer = js_stream_finalizer};
 static JSClassDef js_writable_class = {"Writable", .finalizer = js_stream_finalizer};
+static JSClassDef js_duplex_class = {"Duplex", .finalizer = js_stream_finalizer};
 static JSClassDef js_transform_class = {"Transform", .finalizer = js_stream_finalizer};
 static JSClassDef js_passthrough_class = {"PassThrough", .finalizer = js_stream_finalizer};
 
@@ -74,6 +79,9 @@ JSValue js_stream_destroy(JSContext* ctx, JSValueConst this_val, int argc, JSVal
   JSStreamData* stream = JS_GetOpaque(this_val, js_readable_class_id);
   if (!stream) {
     stream = JS_GetOpaque(this_val, js_writable_class_id);
+  }
+  if (!stream) {
+    stream = JS_GetOpaque(this_val, js_duplex_class_id);
   }
   if (!stream) {
     stream = JS_GetOpaque(this_val, js_transform_class_id);
@@ -122,6 +130,9 @@ JSValue js_stream_get_destroyed(JSContext* ctx, JSValueConst this_val, int argc,
     stream = JS_GetOpaque(this_val, js_writable_class_id);
   }
   if (!stream) {
+    stream = JS_GetOpaque(this_val, js_duplex_class_id);
+  }
+  if (!stream) {
     stream = JS_GetOpaque(this_val, js_transform_class_id);
   }
   if (!stream) {
@@ -142,6 +153,9 @@ JSValue js_stream_get_errored(JSContext* ctx, JSValueConst this_val, int argc, J
     stream = JS_GetOpaque(this_val, js_writable_class_id);
   }
   if (!stream) {
+    stream = JS_GetOpaque(this_val, js_duplex_class_id);
+  }
+  if (!stream) {
     stream = JS_GetOpaque(this_val, js_transform_class_id);
   }
   if (!stream) {
@@ -159,9 +173,15 @@ JSValue js_stream_get_errored(JSContext* ctx, JSValueConst this_val, int argc, J
   return JS_NULL;
 }
 
-// Writable.prototype.end - shared with PassThrough
+// Writable.prototype.end - shared with PassThrough, Duplex, Transform
 static JSValue js_writable_end(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
   JSStreamData* stream = JS_GetOpaque(this_val, js_writable_class_id);
+  if (!stream) {
+    stream = JS_GetOpaque(this_val, js_duplex_class_id);
+  }
+  if (!stream) {
+    stream = JS_GetOpaque(this_val, js_transform_class_id);
+  }
   if (!stream) {
     stream = JS_GetOpaque(this_val, js_passthrough_class_id);
   }
@@ -204,24 +224,30 @@ JSValue JSRT_InitNodeStream(JSContext* ctx) {
   // Register class IDs
   JS_NewClassID(&js_readable_class_id);
   JS_NewClassID(&js_writable_class_id);
+  JS_NewClassID(&js_duplex_class_id);
   JS_NewClassID(&js_transform_class_id);
   JS_NewClassID(&js_passthrough_class_id);
 
   // Create class definitions
   JS_NewClass(JS_GetRuntime(ctx), js_readable_class_id, &js_readable_class);
   JS_NewClass(JS_GetRuntime(ctx), js_writable_class_id, &js_writable_class);
+  JS_NewClass(JS_GetRuntime(ctx), js_duplex_class_id, &js_duplex_class);
   JS_NewClass(JS_GetRuntime(ctx), js_transform_class_id, &js_transform_class);
   JS_NewClass(JS_GetRuntime(ctx), js_passthrough_class_id, &js_passthrough_class);
 
   // Create constructors
   JSValue readable_ctor = JS_NewCFunction2(ctx, js_readable_constructor, "Readable", 1, JS_CFUNC_constructor, 0);
   JSValue writable_ctor = JS_NewCFunction2(ctx, js_writable_constructor, "Writable", 1, JS_CFUNC_constructor, 0);
+  JSValue duplex_ctor = JS_NewCFunction2(ctx, js_duplex_constructor, "Duplex", 1, JS_CFUNC_constructor, 0);
+  JSValue transform_ctor = JS_NewCFunction2(ctx, js_transform_constructor, "Transform", 1, JS_CFUNC_constructor, 0);
   JSValue passthrough_ctor =
       JS_NewCFunction2(ctx, js_passthrough_constructor, "PassThrough", 0, JS_CFUNC_constructor, 0);
 
   // Create prototypes
   JSValue readable_proto = JS_NewObject(ctx);
   JSValue writable_proto = JS_NewObject(ctx);
+  JSValue duplex_proto = JS_NewObject(ctx);
+  JSValue transform_proto = JS_NewObject(ctx);
   JSValue passthrough_proto = JS_NewObject(ctx);
 
   // Add EventEmitter wrapper methods (common to all streams)
@@ -254,6 +280,26 @@ JSValue JSRT_InitNodeStream(JSContext* ctx) {
   JS_SetPropertyStr(ctx, writable_proto, "removeAllListeners", JS_DupValue(ctx, remove_all_method));
   JS_SetPropertyStr(ctx, writable_proto, "listenerCount", JS_DupValue(ctx, listener_count_method));
 
+  // Add to duplex prototype
+  JS_SetPropertyStr(ctx, duplex_proto, "on", JS_DupValue(ctx, on_method));
+  JS_SetPropertyStr(ctx, duplex_proto, "once", JS_DupValue(ctx, once_method));
+  JS_SetPropertyStr(ctx, duplex_proto, "emit", JS_DupValue(ctx, emit_method));
+  JS_SetPropertyStr(ctx, duplex_proto, "off", JS_DupValue(ctx, off_method));
+  JS_SetPropertyStr(ctx, duplex_proto, "removeListener", JS_DupValue(ctx, remove_listener_method));
+  JS_SetPropertyStr(ctx, duplex_proto, "addListener", JS_DupValue(ctx, add_listener_method));
+  JS_SetPropertyStr(ctx, duplex_proto, "removeAllListeners", JS_DupValue(ctx, remove_all_method));
+  JS_SetPropertyStr(ctx, duplex_proto, "listenerCount", JS_DupValue(ctx, listener_count_method));
+
+  // Add to transform prototype
+  JS_SetPropertyStr(ctx, transform_proto, "on", JS_DupValue(ctx, on_method));
+  JS_SetPropertyStr(ctx, transform_proto, "once", JS_DupValue(ctx, once_method));
+  JS_SetPropertyStr(ctx, transform_proto, "emit", JS_DupValue(ctx, emit_method));
+  JS_SetPropertyStr(ctx, transform_proto, "off", JS_DupValue(ctx, off_method));
+  JS_SetPropertyStr(ctx, transform_proto, "removeListener", JS_DupValue(ctx, remove_listener_method));
+  JS_SetPropertyStr(ctx, transform_proto, "addListener", JS_DupValue(ctx, add_listener_method));
+  JS_SetPropertyStr(ctx, transform_proto, "removeAllListeners", JS_DupValue(ctx, remove_all_method));
+  JS_SetPropertyStr(ctx, transform_proto, "listenerCount", JS_DupValue(ctx, listener_count_method));
+
   // Add to passthrough prototype
   JS_SetPropertyStr(ctx, passthrough_proto, "on", on_method);
   JS_SetPropertyStr(ctx, passthrough_proto, "once", once_method);
@@ -268,6 +314,8 @@ JSValue JSRT_InitNodeStream(JSContext* ctx) {
   JSValue destroy_method = JS_NewCFunction(ctx, js_stream_destroy, "destroy", 1);
   JS_SetPropertyStr(ctx, readable_proto, "destroy", JS_DupValue(ctx, destroy_method));
   JS_SetPropertyStr(ctx, writable_proto, "destroy", JS_DupValue(ctx, destroy_method));
+  JS_SetPropertyStr(ctx, duplex_proto, "destroy", JS_DupValue(ctx, destroy_method));
+  JS_SetPropertyStr(ctx, transform_proto, "destroy", JS_DupValue(ctx, destroy_method));
   JS_SetPropertyStr(ctx, passthrough_proto, "destroy", destroy_method);
 
   // Add base property getters
@@ -280,6 +328,10 @@ JSValue JSRT_InitNodeStream(JSContext* ctx) {
                           JS_PROP_CONFIGURABLE);
   JS_DefinePropertyGetSet(ctx, writable_proto, destroyed_atom, JS_DupValue(ctx, get_destroyed), JS_UNDEFINED,
                           JS_PROP_CONFIGURABLE);
+  JS_DefinePropertyGetSet(ctx, duplex_proto, destroyed_atom, JS_DupValue(ctx, get_destroyed), JS_UNDEFINED,
+                          JS_PROP_CONFIGURABLE);
+  JS_DefinePropertyGetSet(ctx, transform_proto, destroyed_atom, JS_DupValue(ctx, get_destroyed), JS_UNDEFINED,
+                          JS_PROP_CONFIGURABLE);
   JS_DefinePropertyGetSet(ctx, passthrough_proto, destroyed_atom, get_destroyed, JS_UNDEFINED, JS_PROP_CONFIGURABLE);
   JS_FreeAtom(ctx, destroyed_atom);
 
@@ -289,40 +341,55 @@ JSValue JSRT_InitNodeStream(JSContext* ctx) {
                           JS_PROP_CONFIGURABLE);
   JS_DefinePropertyGetSet(ctx, writable_proto, errored_atom, JS_DupValue(ctx, get_errored), JS_UNDEFINED,
                           JS_PROP_CONFIGURABLE);
+  JS_DefinePropertyGetSet(ctx, duplex_proto, errored_atom, JS_DupValue(ctx, get_errored), JS_UNDEFINED,
+                          JS_PROP_CONFIGURABLE);
+  JS_DefinePropertyGetSet(ctx, transform_proto, errored_atom, JS_DupValue(ctx, get_errored), JS_UNDEFINED,
+                          JS_PROP_CONFIGURABLE);
   JS_DefinePropertyGetSet(ctx, passthrough_proto, errored_atom, get_errored, JS_UNDEFINED, JS_PROP_CONFIGURABLE);
   JS_FreeAtom(ctx, errored_atom);
 
   // Initialize stream-specific methods
   js_readable_init_prototype(ctx, readable_proto);
   js_writable_init_prototype(ctx, writable_proto);
+  js_duplex_init_prototype(ctx, duplex_proto);
+  js_transform_init_prototype(ctx, transform_proto);
   js_passthrough_init_prototype(ctx, passthrough_proto);
 
-  // Add end() method to PassThrough (shared with Writable)
+  // Add end() method to Duplex, Transform and PassThrough (shared with Writable)
+  JS_SetPropertyStr(ctx, duplex_proto, "end", JS_NewCFunction(ctx, js_writable_end, "end", 0));
+  JS_SetPropertyStr(ctx, transform_proto, "end", JS_NewCFunction(ctx, js_writable_end, "end", 0));
   JS_SetPropertyStr(ctx, passthrough_proto, "end", JS_NewCFunction(ctx, js_writable_end, "end", 0));
 
   // Set prototypes
   JS_SetPropertyStr(ctx, readable_ctor, "prototype", readable_proto);
   JS_SetPropertyStr(ctx, writable_ctor, "prototype", writable_proto);
+  JS_SetPropertyStr(ctx, duplex_ctor, "prototype", duplex_proto);
+  JS_SetPropertyStr(ctx, transform_ctor, "prototype", transform_proto);
   JS_SetPropertyStr(ctx, passthrough_ctor, "prototype", passthrough_proto);
 
   // Set constructor property on prototypes
   JS_SetPropertyStr(ctx, readable_proto, "constructor", JS_DupValue(ctx, readable_ctor));
   JS_SetPropertyStr(ctx, writable_proto, "constructor", JS_DupValue(ctx, writable_ctor));
+  JS_SetPropertyStr(ctx, duplex_proto, "constructor", JS_DupValue(ctx, duplex_ctor));
+  JS_SetPropertyStr(ctx, transform_proto, "constructor", JS_DupValue(ctx, transform_ctor));
   JS_SetPropertyStr(ctx, passthrough_proto, "constructor", JS_DupValue(ctx, passthrough_ctor));
 
   // Set class prototypes
   JS_SetClassProto(ctx, js_readable_class_id, JS_DupValue(ctx, readable_proto));
   JS_SetClassProto(ctx, js_writable_class_id, JS_DupValue(ctx, writable_proto));
+  JS_SetClassProto(ctx, js_duplex_class_id, JS_DupValue(ctx, duplex_proto));
+  JS_SetClassProto(ctx, js_transform_class_id, JS_DupValue(ctx, transform_proto));
   JS_SetClassProto(ctx, js_passthrough_class_id, JS_DupValue(ctx, passthrough_proto));
-  JS_SetClassProto(ctx, js_transform_class_id, JS_DupValue(ctx, passthrough_proto));
 
   // Add to module
   JS_SetPropertyStr(ctx, stream_module, "Readable", readable_ctor);
   JS_SetPropertyStr(ctx, stream_module, "Writable", writable_ctor);
+  JS_SetPropertyStr(ctx, stream_module, "Duplex", duplex_ctor);
+  JS_SetPropertyStr(ctx, stream_module, "Transform", transform_ctor);
   JS_SetPropertyStr(ctx, stream_module, "PassThrough", passthrough_ctor);
 
-  // Transform is an alias for PassThrough in this basic implementation
-  JS_SetPropertyStr(ctx, stream_module, "Transform", JS_DupValue(ctx, passthrough_ctor));
+  // Initialize Phase 5 utilities (pipeline, finished, Readable.from, etc.)
+  js_stream_init_utilities(ctx, stream_module);
 
   return stream_module;
 }
@@ -334,6 +401,7 @@ int js_node_stream_init(JSContext* ctx, JSModuleDef* m) {
   // Export individual classes
   JS_SetModuleExport(ctx, m, "Readable", JS_GetPropertyStr(ctx, stream_module, "Readable"));
   JS_SetModuleExport(ctx, m, "Writable", JS_GetPropertyStr(ctx, stream_module, "Writable"));
+  JS_SetModuleExport(ctx, m, "Duplex", JS_GetPropertyStr(ctx, stream_module, "Duplex"));
   JS_SetModuleExport(ctx, m, "Transform", JS_GetPropertyStr(ctx, stream_module, "Transform"));
   JS_SetModuleExport(ctx, m, "PassThrough", JS_GetPropertyStr(ctx, stream_module, "PassThrough"));
 

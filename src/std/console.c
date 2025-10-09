@@ -531,7 +531,33 @@ JSValue JSRT_StringFormat(JSContext* ctx, JSValueConst this_val, int argc, JSVal
   return JS_UNDEFINED;
 }
 
-void JSRT_GetJSValuePrettyString(DynBuf* s, JSContext* ctx, JSValueConst value, const char* name, bool colors) {
+// Structure to track visited objects for circular reference detection
+typedef struct VisitedObject {
+  void* ptr;  // Object pointer (opaque data from JSValue)
+  struct VisitedObject* next;
+} VisitedObject;
+
+// Check if an object has been visited (circular reference detection)
+static bool is_visited(VisitedObject* visited, void* ptr) {
+  while (visited != NULL) {
+    if (visited->ptr == ptr) {
+      return true;
+    }
+    visited = visited->next;
+  }
+  return false;
+}
+
+// Internal implementation with circular reference detection
+static void JSRT_GetJSValuePrettyStringInternal(DynBuf* s, JSContext* ctx, JSValueConst value, const char* name,
+                                                bool colors, VisitedObject* visited, int depth) {
+  // Limit recursion depth to prevent stack overflow even with non-circular deep structures
+  const int MAX_DEPTH = 10;
+  if (depth > MAX_DEPTH) {
+    dbuf_putstr(s, "[Maximum depth reached]");
+    return;
+  }
+
   uint32_t tag = JS_VALUE_GET_NORM_TAG(value);
   size_t len;
   const char* str;
@@ -590,6 +616,20 @@ void JSRT_GetJSValuePrettyString(DynBuf* s, JSContext* ctx, JSValueConst value, 
       break;
     }
     case JS_TAG_OBJECT: {
+      // Get object pointer for circular reference detection
+      void* obj_ptr = (void*)(uintptr_t)JS_VALUE_GET_PTR(value);
+
+      // Check for circular reference
+      if (is_visited(visited, obj_ptr)) {
+        colors&& dbuf_putstr(s, JSRT_ColorizeFontMagenta);
+        dbuf_putstr(s, "[Circular]");
+        colors&& dbuf_putstr(s, JSRT_ColorizeClear);
+        break;
+      }
+
+      // Add current object to visited list
+      VisitedObject current = {.ptr = obj_ptr, .next = visited};
+
       if (JS_IsFunction(ctx, value)) {
         colors&& dbuf_putstr(s, JSRT_ColorizeFontCyan);
         dbuf_putstr(s, "[Function: ");
@@ -628,29 +668,41 @@ void JSRT_GetJSValuePrettyString(DynBuf* s, JSContext* ctx, JSValueConst value, 
         }
 
         if (JS_GetOwnPropertyNames(ctx, &tab, &keys_len, value, JS_GPN_STRING_MASK | JS_GPN_ENUM_ONLY) >= 0) {
-          for (uint32_t i = 0; i < keys_len; i++) {
+          // Limit number of properties to display
+          const uint32_t MAX_PROPS = 100;
+          uint32_t display_len = keys_len > MAX_PROPS ? MAX_PROPS : keys_len;
+
+          for (uint32_t i = 0; i < display_len; i++) {
             // k is an number?
             k = JS_AtomToCString(ctx, tab[i].atom);
             if (k) {
               dbuf_putstr(s, k);
               dbuf_putstr(s, ": ");
               v = JS_GetProperty(ctx, value, tab[i].atom);
-              JSRT_GetJSValuePrettyString(s, ctx, v, k, colors);
+              JSRT_GetJSValuePrettyStringInternal(s, ctx, v, k, colors, &current, depth + 1);
               JS_FreeCString(ctx, k);
               JS_FreeValue(ctx, v);
-              if (i < keys_len - 1) {
+              if (i < display_len - 1) {
                 dbuf_putstr(s, ", ");
               }
             } else {
               dbuf_putstr(s, "[invalid key]: ");
               v = JS_GetProperty(ctx, value, tab[i].atom);
-              JSRT_GetJSValuePrettyString(s, ctx, v, NULL, colors);
+              JSRT_GetJSValuePrettyStringInternal(s, ctx, v, NULL, colors, &current, depth + 1);
               JS_FreeValue(ctx, v);
-              if (i < keys_len - 1) {
+              if (i < display_len - 1) {
                 dbuf_putstr(s, ", ");
               }
             }
           }
+
+          if (keys_len > MAX_PROPS) {
+            char buf[64];
+            snprintf(buf, sizeof(buf), " ... %u more properties", keys_len - MAX_PROPS);
+            dbuf_putstr(s, buf);
+          }
+
+          js_free(ctx, tab);
         }
 
         if (is_array) {
@@ -664,4 +716,9 @@ void JSRT_GetJSValuePrettyString(DynBuf* s, JSContext* ctx, JSValueConst value, 
       dbuf_putstr(s, "<unknown>");
       break;
   }
+}
+
+// Public API - entry point for pretty printing
+void JSRT_GetJSValuePrettyString(DynBuf* s, JSContext* ctx, JSValueConst value, const char* name, bool colors) {
+  JSRT_GetJSValuePrettyStringInternal(s, ctx, value, name, colors, NULL, 0);
 }

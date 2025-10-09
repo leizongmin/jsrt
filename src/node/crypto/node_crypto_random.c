@@ -1,13 +1,11 @@
-#include <stdlib.h>
-#include <string.h>
-#include "../util/debug.h"
-#include "node_modules.h"
+#include "node_crypto_internal.h"
 
-// Basic crypto implementation using existing WebCrypto where possible
-// This provides a Node.js-compatible interface on top of jsrt's crypto capabilities
+//==============================================================================
+// Random Functions (Node.js randomBytes, randomUUID)
+//==============================================================================
 
 // crypto.randomBytes(size[, callback])
-static JSValue js_crypto_random_bytes(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
+JSValue js_crypto_random_bytes(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
   if (argc < 1) {
     return JS_ThrowTypeError(ctx, "crypto.randomBytes() requires size argument");
   }
@@ -91,7 +89,7 @@ static JSValue js_crypto_random_bytes(JSContext* ctx, JSValueConst this_val, int
 }
 
 // crypto.randomUUID()
-static JSValue js_crypto_random_uuid(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
+JSValue js_crypto_random_uuid(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
   // Generate a RFC 4122 version 4 UUID
   uint8_t bytes[16];
 
@@ -112,50 +110,4 @@ static JSValue js_crypto_random_uuid(JSContext* ctx, JSValueConst this_val, int 
            bytes[11], bytes[12], bytes[13], bytes[14], bytes[15]);
 
   return JS_NewString(ctx, uuid_str);
-}
-
-// crypto.constants - basic constants object
-static JSValue create_crypto_constants(JSContext* ctx) {
-  JSValue constants = JS_NewObject(ctx);
-
-  // OpenSSL-style constants (basic subset)
-  JS_SetPropertyStr(ctx, constants, "SSL_OP_ALL", JS_NewInt32(ctx, 0x80000BFF));
-  JS_SetPropertyStr(ctx, constants, "SSL_OP_NO_SSLv2", JS_NewInt32(ctx, 0x01000000));
-  JS_SetPropertyStr(ctx, constants, "SSL_OP_NO_SSLv3", JS_NewInt32(ctx, 0x02000000));
-  JS_SetPropertyStr(ctx, constants, "SSL_OP_NO_TLSv1", JS_NewInt32(ctx, 0x04000000));
-  JS_SetPropertyStr(ctx, constants, "SSL_OP_NO_TLSv1_1", JS_NewInt32(ctx, 0x10000000));
-
-  return constants;
-}
-
-// CommonJS module export
-JSValue JSRT_InitNodeCrypto(JSContext* ctx) {
-  JSValue crypto_obj = JS_NewObject(ctx);
-
-  // Add crypto functions
-  JS_SetPropertyStr(ctx, crypto_obj, "randomBytes", JS_NewCFunction(ctx, js_crypto_random_bytes, "randomBytes", 2));
-  JS_SetPropertyStr(ctx, crypto_obj, "randomUUID", JS_NewCFunction(ctx, js_crypto_random_uuid, "randomUUID", 0));
-
-  // Add constants
-  JS_SetPropertyStr(ctx, crypto_obj, "constants", create_crypto_constants(ctx));
-
-  // Export as default export for CommonJS
-  JS_SetPropertyStr(ctx, crypto_obj, "default", JS_DupValue(ctx, crypto_obj));
-
-  return crypto_obj;
-}
-
-// ES Module initialization
-int js_node_crypto_init(JSContext* ctx, JSModuleDef* m) {
-  JSValue crypto_module = JSRT_InitNodeCrypto(ctx);
-
-  // Export individual functions
-  JS_SetModuleExport(ctx, m, "randomBytes", JS_GetPropertyStr(ctx, crypto_module, "randomBytes"));
-  JS_SetModuleExport(ctx, m, "randomUUID", JS_GetPropertyStr(ctx, crypto_module, "randomUUID"));
-  JS_SetModuleExport(ctx, m, "constants", JS_GetPropertyStr(ctx, crypto_module, "constants"));
-
-  // Also export the whole module as default
-  JS_SetModuleExport(ctx, m, "default", crypto_module);
-
-  return 0;
 }

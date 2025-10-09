@@ -79,4 +79,41 @@ size_t jsrt_crypto_get_aes_key_size(jsrt_crypto_algorithm_t alg, int key_length_
 // Parameter management
 void jsrt_crypto_symmetric_params_free(jsrt_symmetric_params_t* params);
 
+// OpenSSL function pointers for symmetric encryption (exposed for node:crypto streaming)
+typedef struct {
+  // Cipher functions
+  const void* (*EVP_aes_128_cbc)(void);
+  const void* (*EVP_aes_192_cbc)(void);
+  const void* (*EVP_aes_256_cbc)(void);
+  const void* (*EVP_aes_128_gcm)(void);
+  const void* (*EVP_aes_192_gcm)(void);
+  const void* (*EVP_aes_256_gcm)(void);
+  const void* (*EVP_aes_128_ctr)(void);
+  const void* (*EVP_aes_192_ctr)(void);
+  const void* (*EVP_aes_256_ctr)(void);
+
+  // Context management
+  void* (*EVP_CIPHER_CTX_new)(void);
+  void (*EVP_CIPHER_CTX_free)(void* ctx);
+
+  // Encryption operations
+  int (*EVP_EncryptInit_ex)(void* ctx, const void* cipher, void* impl, const unsigned char* key, const unsigned char* iv);
+  int (*EVP_EncryptUpdate)(void* ctx, unsigned char* out, int* outl, const unsigned char* in, int inl);
+  int (*EVP_EncryptFinal_ex)(void* ctx, unsigned char* out, int* outl);
+
+  // Decryption operations
+  int (*EVP_DecryptInit_ex)(void* ctx, const void* cipher, void* impl, const unsigned char* key, const unsigned char* iv);
+  int (*EVP_DecryptUpdate)(void* ctx, unsigned char* out, int* outl, const unsigned char* in, int inl);
+  int (*EVP_DecryptFinal_ex)(void* ctx, unsigned char* out, int* outl);
+
+  // GCM specific functions
+  int (*EVP_CIPHER_CTX_ctrl)(void* ctx, int type, int arg, void* ptr);
+
+  // Random number generation
+  int (*RAND_bytes)(unsigned char* buf, int num);
+} openssl_symmetric_funcs_t;
+
+// Get OpenSSL function pointers (for advanced usage like node:crypto streaming)
+openssl_symmetric_funcs_t* jsrt_get_openssl_symmetric_funcs(void);
+
 #endif  // JSRT_CRYPTO_SYMMETRIC_H

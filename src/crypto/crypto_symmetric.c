@@ -22,42 +22,6 @@ extern void* openssl_handle;
 #define JSRT_DLSYM(handle, name) dlsym(handle, name)
 #endif
 
-// OpenSSL function pointers for symmetric encryption
-typedef struct {
-  // Cipher functions
-  const void* (*EVP_aes_128_cbc)(void);
-  const void* (*EVP_aes_192_cbc)(void);
-  const void* (*EVP_aes_256_cbc)(void);
-  const void* (*EVP_aes_128_gcm)(void);
-  const void* (*EVP_aes_192_gcm)(void);
-  const void* (*EVP_aes_256_gcm)(void);
-  const void* (*EVP_aes_128_ctr)(void);
-  const void* (*EVP_aes_192_ctr)(void);
-  const void* (*EVP_aes_256_ctr)(void);
-
-  // Context management
-  void* (*EVP_CIPHER_CTX_new)(void);
-  void (*EVP_CIPHER_CTX_free)(void* ctx);
-
-  // Encryption operations
-  int (*EVP_EncryptInit_ex)(void* ctx, const void* cipher, void* impl, const unsigned char* key,
-                            const unsigned char* iv);
-  int (*EVP_EncryptUpdate)(void* ctx, unsigned char* out, int* outl, const unsigned char* in, int inl);
-  int (*EVP_EncryptFinal_ex)(void* ctx, unsigned char* out, int* outl);
-
-  // Decryption operations
-  int (*EVP_DecryptInit_ex)(void* ctx, const void* cipher, void* impl, const unsigned char* key,
-                            const unsigned char* iv);
-  int (*EVP_DecryptUpdate)(void* ctx, unsigned char* out, int* outl, const unsigned char* in, int inl);
-  int (*EVP_DecryptFinal_ex)(void* ctx, unsigned char* out, int* outl);
-
-  // GCM specific functions
-  int (*EVP_CIPHER_CTX_ctrl)(void* ctx, int type, int arg, void* ptr);
-
-  // Random number generation (for key generation)
-  int (*RAND_bytes)(unsigned char* buf, int num);
-} openssl_symmetric_funcs_t;
-
 static openssl_symmetric_funcs_t openssl_symmetric_funcs = {0};
 static bool symmetric_funcs_loaded = false;
 
@@ -762,4 +726,12 @@ void jsrt_crypto_symmetric_params_free(jsrt_symmetric_params_t* params) {
 
     free(params);
   }
+}
+
+// Helper function to get OpenSSL symmetric function pointers (for node:crypto)
+openssl_symmetric_funcs_t* jsrt_get_openssl_symmetric_funcs(void) {
+  if (!load_symmetric_functions()) {
+    return NULL;
+  }
+  return &openssl_symmetric_funcs;
 }

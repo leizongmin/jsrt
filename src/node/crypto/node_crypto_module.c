@@ -7,6 +7,7 @@
 #include "node_crypto_hash.c"
 #include "node_crypto_hmac.c"
 #include "node_crypto_kdf.c"
+#include "node_crypto_keyobject.c"
 #include "node_crypto_random.c"
 #include "node_crypto_sign.c"
 #include "node_crypto_util.c"
@@ -17,7 +18,7 @@
 
 // CommonJS module export
 JSValue JSRT_InitNodeCrypto(JSContext* ctx) {
-  // Register Hash, Hmac, Cipher, Sign, Verify and ECDH classes
+  // Register Hash, Hmac, Cipher, Sign, Verify, ECDH and KeyObject classes
   JSRuntime* rt = JS_GetRuntime(ctx);
   js_node_hash_init_class(rt);
   js_node_hmac_init_class(rt);
@@ -25,6 +26,7 @@ JSValue JSRT_InitNodeCrypto(JSContext* ctx) {
   js_node_sign_init_class(rt);
   js_node_verify_init_class(rt);
   js_node_ecdh_init_class(rt);
+  js_node_keyobject_init_class(rt);
 
   JSValue crypto_obj = JS_NewObject(ctx);
 
@@ -50,6 +52,21 @@ JSValue JSRT_InitNodeCrypto(JSContext* ctx) {
 
   // Add ECDH function
   JS_SetPropertyStr(ctx, crypto_obj, "createECDH", JS_NewCFunction(ctx, js_crypto_create_ecdh, "createECDH", 1));
+
+  // Add KeyObject factory functions
+  JS_SetPropertyStr(ctx, crypto_obj, "createSecretKey",
+                    JS_NewCFunction(ctx, js_crypto_create_secret_key, "createSecretKey", 2));
+  JS_SetPropertyStr(ctx, crypto_obj, "createPublicKey",
+                    JS_NewCFunction(ctx, js_crypto_create_public_key, "createPublicKey", 1));
+  JS_SetPropertyStr(ctx, crypto_obj, "createPrivateKey",
+                    JS_NewCFunction(ctx, js_crypto_create_private_key, "createPrivateKey", 1));
+
+  // Add internal helper for KeyObject creation (used by factory functions)
+  JSValue global_this = JS_GetGlobalObject(ctx);
+  JS_SetPropertyStr(
+      ctx, global_this, "__createKeyObjectFromCryptoKey",
+      JS_NewCFunction(ctx, js_node_keyobject_from_cryptokey_wrapper, "__createKeyObjectFromCryptoKey", 1));
+  JS_FreeValue(ctx, global_this);
 
   // Add constants
   JS_SetPropertyStr(ctx, crypto_obj, "constants", create_crypto_constants(ctx));
@@ -93,6 +110,9 @@ int js_node_crypto_init(JSContext* ctx, JSModuleDef* m) {
   JS_SetModuleExport(ctx, m, "scrypt", JS_GetPropertyStr(ctx, crypto_module, "scrypt"));
   JS_SetModuleExport(ctx, m, "scryptSync", JS_GetPropertyStr(ctx, crypto_module, "scryptSync"));
   JS_SetModuleExport(ctx, m, "createECDH", JS_GetPropertyStr(ctx, crypto_module, "createECDH"));
+  JS_SetModuleExport(ctx, m, "createSecretKey", JS_GetPropertyStr(ctx, crypto_module, "createSecretKey"));
+  JS_SetModuleExport(ctx, m, "createPublicKey", JS_GetPropertyStr(ctx, crypto_module, "createPublicKey"));
+  JS_SetModuleExport(ctx, m, "createPrivateKey", JS_GetPropertyStr(ctx, crypto_module, "createPrivateKey"));
   JS_SetModuleExport(ctx, m, "constants", JS_GetPropertyStr(ctx, crypto_module, "constants"));
   JS_SetModuleExport(ctx, m, "webcrypto", JS_GetPropertyStr(ctx, crypto_module, "webcrypto"));
   JS_SetModuleExport(ctx, m, "subtle", JS_GetPropertyStr(ctx, crypto_module, "subtle"));

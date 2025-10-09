@@ -18,7 +18,7 @@
 
 // CommonJS module export
 JSValue JSRT_InitNodeCrypto(JSContext* ctx) {
-  // Register Hash, Hmac, Cipher, Sign, Verify, ECDH and KeyObject classes
+  // Register Hash, Hmac, Cipher, Sign, Verify, ECDH, DH and KeyObject classes
   JSRuntime* rt = JS_GetRuntime(ctx);
   js_node_hash_init_class(rt);
   js_node_hmac_init_class(rt);
@@ -26,6 +26,7 @@ JSValue JSRT_InitNodeCrypto(JSContext* ctx) {
   js_node_sign_init_class(rt);
   js_node_verify_init_class(rt);
   js_node_ecdh_init_class(rt);
+  js_node_dh_init_class(rt);
   js_node_keyobject_init_class(rt);
 
   JSValue crypto_obj = JS_NewObject(ctx);
@@ -50,8 +51,10 @@ JSValue JSRT_InitNodeCrypto(JSContext* ctx) {
   JS_SetPropertyStr(ctx, crypto_obj, "scrypt", JS_NewCFunction(ctx, js_crypto_scrypt, "scrypt", 5));
   JS_SetPropertyStr(ctx, crypto_obj, "scryptSync", JS_NewCFunction(ctx, js_crypto_scrypt_sync, "scryptSync", 4));
 
-  // Add ECDH function
+  // Add ECDH and DH functions
   JS_SetPropertyStr(ctx, crypto_obj, "createECDH", JS_NewCFunction(ctx, js_crypto_create_ecdh, "createECDH", 1));
+  JS_SetPropertyStr(ctx, crypto_obj, "createDiffieHellman",
+                    JS_NewCFunction(ctx, js_crypto_create_diffie_hellman, "createDiffieHellman", 2));
 
   // Add KeyObject factory functions
   JS_SetPropertyStr(ctx, crypto_obj, "createSecretKey",
@@ -110,6 +113,7 @@ int js_node_crypto_init(JSContext* ctx, JSModuleDef* m) {
   JS_SetModuleExport(ctx, m, "scrypt", JS_GetPropertyStr(ctx, crypto_module, "scrypt"));
   JS_SetModuleExport(ctx, m, "scryptSync", JS_GetPropertyStr(ctx, crypto_module, "scryptSync"));
   JS_SetModuleExport(ctx, m, "createECDH", JS_GetPropertyStr(ctx, crypto_module, "createECDH"));
+  JS_SetModuleExport(ctx, m, "createDiffieHellman", JS_GetPropertyStr(ctx, crypto_module, "createDiffieHellman"));
   JS_SetModuleExport(ctx, m, "createSecretKey", JS_GetPropertyStr(ctx, crypto_module, "createSecretKey"));
   JS_SetModuleExport(ctx, m, "createPublicKey", JS_GetPropertyStr(ctx, crypto_module, "createPublicKey"));
   JS_SetModuleExport(ctx, m, "createPrivateKey", JS_GetPropertyStr(ctx, crypto_module, "createPrivateKey"));

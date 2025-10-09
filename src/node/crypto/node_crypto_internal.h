@@ -127,6 +127,10 @@ JSValue js_crypto_scrypt_sync(JSContext* ctx, JSValueConst this_val, int argc, J
 JSValue js_crypto_create_ecdh(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv);
 void js_node_ecdh_init_class(JSRuntime* rt);
 
+// Classic DH API functions
+JSValue js_crypto_create_diffie_hellman(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv);
+void js_node_dh_init_class(JSRuntime* rt);
+
 // KeyObject API functions
 JSValue js_node_keyobject_from_cryptokey(JSContext* ctx, JSValue crypto_key);
 JSValue js_node_keyobject_from_cryptokey_wrapper(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv);

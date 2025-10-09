@@ -469,3 +469,176 @@ JSValue js_crypto_create_ecdh(JSContext* ctx, JSValueConst this_val, int argc, J
 
   return obj;
 }
+
+//==============================================================================
+// Classic DiffieHellman Class Implementation (Phase 7)
+//==============================================================================
+
+// DiffieHellman class structure
+typedef struct {
+  JSContext* ctx;
+  void* dh_key;    // EVP_PKEY* for DH parameters and keys
+  uint8_t* prime;  // Prime modulus (p)
+  size_t prime_len;
+  uint8_t* generator;  // Generator (g)
+  size_t generator_len;
+  uint8_t* public_key;  // Public key
+  size_t public_key_len;
+  uint8_t* private_key;  // Private key
+  size_t private_key_len;
+  bool keys_generated;
+} JSNodeDH;
+
+// DH class ID
+static JSClassID js_node_dh_class_id;
+
+// DH finalizer
+static void js_node_dh_finalizer(JSRuntime* rt, JSValue val) {
+  JSNodeDH* dh = JS_GetOpaque(val, js_node_dh_class_id);
+  if (dh) {
+    if (dh->dh_key) {
+      jsrt_evp_pkey_free_wrapper(dh->dh_key);
+      dh->dh_key = NULL;
+    }
+    if (dh->prime) {
+      js_free(dh->ctx, dh->prime);
+      dh->prime = NULL;
+    }
+    if (dh->generator) {
+      js_free(dh->ctx, dh->generator);
+      dh->generator = NULL;
+    }
+    if (dh->public_key) {
+      js_free(dh->ctx, dh->public_key);
+      dh->public_key = NULL;
+    }
+    if (dh->private_key) {
+      js_free(dh->ctx, dh->private_key);
+      dh->private_key = NULL;
+    }
+    js_free(dh->ctx, dh);
+  }
+}
+
+// DH class definition
+static JSClassDef js_node_dh_class = {
+    "DiffieHellman",
+    .finalizer = js_node_dh_finalizer,
+};
+
+// Initialize DH class
+void js_node_dh_init_class(JSRuntime* rt) {
+  JS_NewClassID(&js_node_dh_class_id);
+  JS_NewClass(rt, js_node_dh_class_id, &js_node_dh_class);
+}
+
+//==============================================================================
+// Classic DH Instance Methods
+//==============================================================================
+
+// dh.generateKeys()
+static JSValue js_dh_generate_keys(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
+  JSNodeDH* dh = JS_GetOpaque(this_val, js_node_dh_class_id);
+  if (!dh) {
+    return JS_ThrowTypeError(ctx, "Not a DiffieHellman instance");
+  }
+
+  // For now, return a stub implementation
+  // Full implementation requires OpenSSL EVP_PKEY_keygen with DH parameters
+  return JS_ThrowInternalError(ctx, "Classic DH not yet implemented - use ECDH instead");
+}
+
+// dh.computeSecret(otherPublicKey, inputEncoding, outputEncoding)
+static JSValue js_dh_compute_secret(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
+  JSNodeDH* dh = JS_GetOpaque(this_val, js_node_dh_class_id);
+  if (!dh) {
+    return JS_ThrowTypeError(ctx, "Not a DiffieHellman instance");
+  }
+
+  return JS_ThrowInternalError(ctx, "Classic DH not yet implemented - use ECDH instead");
+}
+
+// dh.getPublicKey(encoding)
+static JSValue js_dh_get_public_key(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
+  JSNodeDH* dh = JS_GetOpaque(this_val, js_node_dh_class_id);
+  if (!dh) {
+    return JS_ThrowTypeError(ctx, "Not a DiffieHellman instance");
+  }
+
+  return JS_ThrowInternalError(ctx, "Classic DH not yet implemented - use ECDH instead");
+}
+
+// dh.getPrivateKey(encoding)
+static JSValue js_dh_get_private_key(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
+  JSNodeDH* dh = JS_GetOpaque(this_val, js_node_dh_class_id);
+  if (!dh) {
+    return JS_ThrowTypeError(ctx, "Not a DiffieHellman instance");
+  }
+
+  return JS_ThrowInternalError(ctx, "Classic DH not yet implemented - use ECDH instead");
+}
+
+// dh.getPrime(encoding)
+static JSValue js_dh_get_prime(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
+  JSNodeDH* dh = JS_GetOpaque(this_val, js_node_dh_class_id);
+  if (!dh) {
+    return JS_ThrowTypeError(ctx, "Not a DiffieHellman instance");
+  }
+
+  return JS_ThrowInternalError(ctx, "Classic DH not yet implemented - use ECDH instead");
+}
+
+// dh.getGenerator(encoding)
+static JSValue js_dh_get_generator(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
+  JSNodeDH* dh = JS_GetOpaque(this_val, js_node_dh_class_id);
+  if (!dh) {
+    return JS_ThrowTypeError(ctx, "Not a DiffieHellman instance");
+  }
+
+  return JS_ThrowInternalError(ctx, "Classic DH not yet implemented - use ECDH instead");
+}
+
+//==============================================================================
+// createDiffieHellman Factory Functions
+//==============================================================================
+
+JSValue js_crypto_create_diffie_hellman(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
+  // Create DH instance
+  JSNodeDH* dh = js_mallocz(ctx, sizeof(JSNodeDH));
+  if (!dh) {
+    return JS_EXCEPTION;
+  }
+
+  dh->ctx = ctx;
+  dh->dh_key = NULL;
+  dh->prime = NULL;
+  dh->prime_len = 0;
+  dh->generator = NULL;
+  dh->generator_len = 0;
+  dh->public_key = NULL;
+  dh->public_key_len = 0;
+  dh->private_key = NULL;
+  dh->private_key_len = 0;
+  dh->keys_generated = false;
+
+  // Create JS object
+  JSValue obj = JS_NewObjectClass(ctx, js_node_dh_class_id);
+  if (JS_IsException(obj)) {
+    js_free(ctx, dh);
+    return obj;
+  }
+
+  JS_SetOpaque(obj, dh);
+
+  // Add methods
+  JS_SetPropertyStr(ctx, obj, "generateKeys", JS_NewCFunction(ctx, js_dh_generate_keys, "generateKeys", 0));
+  JS_SetPropertyStr(ctx, obj, "computeSecret", JS_NewCFunction(ctx, js_dh_compute_secret, "computeSecret", 3));
+  JS_SetPropertyStr(ctx, obj, "getPublicKey", JS_NewCFunction(ctx, js_dh_get_public_key, "getPublicKey", 1));
+  JS_SetPropertyStr(ctx, obj, "getPrivateKey", JS_NewCFunction(ctx, js_dh_get_private_key, "getPrivateKey", 1));
+  JS_SetPropertyStr(ctx, obj, "getPrime", JS_NewCFunction(ctx, js_dh_get_prime, "getPrime", 1));
+  JS_SetPropertyStr(ctx, obj, "getGenerator", JS_NewCFunction(ctx, js_dh_get_generator, "getGenerator", 1));
+
+  // Note: This is a stub implementation that throws "not yet implemented"
+  // Full implementation requires OpenSSL EVP_PKEY DH parameter generation and key exchange
+  return obj;
+}

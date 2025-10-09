@@ -486,9 +486,231 @@ JSValue js_crypto_create_public_key(JSContext* ctx, JSValueConst this_val, int a
     return JS_ThrowTypeError(ctx, "createPublicKey requires at least 1 argument");
   }
 
-  // TODO: Parse key input (KeyObject, PEM string, DER buffer, JWK)
-  // For now, throw not implemented error
-  return JS_ThrowTypeError(ctx, "createPublicKey not fully implemented yet");
+  JSValue key_input = argv[0];
+
+  // Case 1: Input is already a KeyObject - just return it if it's a public key
+  if (JS_IsObject(key_input)) {
+    JSNodeKeyObject* existing_keyobj = JS_GetOpaque(key_input, js_node_keyobject_class_id);
+    if (existing_keyobj) {
+      // Verify it's a public key
+      JSValue type_val = JS_GetPropertyStr(ctx, existing_keyobj->crypto_key, "type");
+      const char* type = JS_ToCString(ctx, type_val);
+      JS_FreeValue(ctx, type_val);
+
+      if (strcmp(type, "public") == 0) {
+        JS_FreeCString(ctx, type);
+        return JS_DupValue(ctx, key_input);
+      }
+      JS_FreeCString(ctx, type);
+      return JS_ThrowTypeError(ctx, "Input KeyObject is not a public key");
+    }
+
+    // Case 2: Input is a JWK object
+    JSValue kty_val = JS_GetPropertyStr(ctx, key_input, "kty");
+    if (!JS_IsUndefined(kty_val)) {
+      JS_FreeValue(ctx, kty_val);
+
+      // Determine algorithm from JWK
+      JSValue alg_val = JS_GetPropertyStr(ctx, key_input, "alg");
+      const char* alg_str = NULL;
+      if (!JS_IsUndefined(alg_val)) {
+        alg_str = JS_ToCString(ctx, alg_val);
+      }
+      JS_FreeValue(ctx, alg_val);
+
+      // Map JWK alg to WebCrypto algorithm
+      const char* webcrypto_alg = "RSASSA-PKCS1-v1_5";  // Default
+      const char* hash = "SHA-256";
+
+      if (alg_str) {
+        if (strcmp(alg_str, "RS256") == 0) {
+          webcrypto_alg = "RSASSA-PKCS1-v1_5";
+          hash = "SHA-256";
+        } else if (strcmp(alg_str, "RS384") == 0) {
+          webcrypto_alg = "RSASSA-PKCS1-v1_5";
+          hash = "SHA-384";
+        } else if (strcmp(alg_str, "RS512") == 0) {
+          webcrypto_alg = "RSASSA-PKCS1-v1_5";
+          hash = "SHA-512";
+        } else if (strcmp(alg_str, "ES256") == 0) {
+          webcrypto_alg = "ECDSA";
+          hash = "SHA-256";
+        } else if (strcmp(alg_str, "ES384") == 0) {
+          webcrypto_alg = "ECDSA";
+          hash = "SHA-384";
+        } else if (strcmp(alg_str, "ES512") == 0) {
+          webcrypto_alg = "ECDSA";
+          hash = "SHA-512";
+        }
+        JS_FreeCString(ctx, alg_str);
+      }
+
+      // Call WebCrypto importKey with JWK
+      JSValue global = JS_GetGlobalObject(ctx);
+      JSValue crypto = JS_GetPropertyStr(ctx, global, "crypto");
+      JSValue subtle = JS_GetPropertyStr(ctx, crypto, "subtle");
+      JSValue import_key = JS_GetPropertyStr(ctx, subtle, "importKey");
+
+      JSValue alg = JS_NewObject(ctx);
+      JS_SetPropertyStr(ctx, alg, "name", JS_NewString(ctx, webcrypto_alg));
+      JS_SetPropertyStr(ctx, alg, "hash", JS_NewString(ctx, hash));
+
+      JSValue usages = JS_NewArray(ctx);
+      JS_SetPropertyUint32(ctx, usages, 0, JS_NewString(ctx, "verify"));
+
+      JSValue args[5];
+      args[0] = JS_NewString(ctx, "jwk");
+      args[1] = JS_DupValue(ctx, key_input);
+      args[2] = alg;
+      args[3] = JS_NewBool(ctx, true);  // extractable
+      args[4] = usages;
+
+      JSValue crypto_key_promise = JS_Call(ctx, import_key, subtle, 5, args);
+
+      JS_FreeValue(ctx, args[0]);
+      JS_FreeValue(ctx, args[1]);
+      JS_FreeValue(ctx, args[2]);
+      JS_FreeValue(ctx, args[3]);
+      JS_FreeValue(ctx, args[4]);
+      JS_FreeValue(ctx, import_key);
+      JS_FreeValue(ctx, subtle);
+      JS_FreeValue(ctx, crypto);
+      JS_FreeValue(ctx, global);
+
+      // Wrap promise result with KeyObject
+      const char* wrapper_code =
+          "(async (promise) => {"
+          "  const cryptoKey = await promise;"
+          "  return globalThis.__createKeyObjectFromCryptoKey(cryptoKey);"
+          "})";
+
+      JSValue wrapper = JS_Eval(ctx, wrapper_code, strlen(wrapper_code), "<createPublicKey>", JS_EVAL_TYPE_GLOBAL);
+      JSValue wrapper_args[1] = {crypto_key_promise};
+      JSValue result = JS_Call(ctx, wrapper, JS_UNDEFINED, 1, wrapper_args);
+
+      JS_FreeValue(ctx, wrapper);
+      JS_FreeValue(ctx, crypto_key_promise);
+
+      return result;
+    }
+  }
+
+  // Case 3: Input is a string (could be PEM)
+  if (JS_IsString(key_input)) {
+    const char* key_str = JS_ToCString(ctx, key_input);
+    if (!key_str) {
+      return JS_ThrowTypeError(ctx, "Invalid key string");
+    }
+
+    // Check if it's PEM format
+    if (strstr(key_str, "-----BEGIN") != NULL) {
+      // Simple PEM to DER conversion (remove header/footer and decode base64)
+      // For now, return not fully implemented
+      JS_FreeCString(ctx, key_str);
+      return JS_ThrowTypeError(ctx, "PEM format not yet fully supported - use DER or JWK instead");
+    }
+
+    JS_FreeCString(ctx, key_str);
+  }
+
+  // Case 4: Input is a Buffer/TypedArray (DER format)
+  size_t der_size;
+  uint8_t* der_data = JS_GetArrayBuffer(ctx, &der_size, key_input);
+
+  // If not ArrayBuffer, try TypedArray
+  if (!der_data) {
+    JSValue buffer_val = JS_GetPropertyStr(ctx, key_input, "buffer");
+    JSValue byteOffset_val = JS_GetPropertyStr(ctx, key_input, "byteOffset");
+    JSValue byteLength_val = JS_GetPropertyStr(ctx, key_input, "byteLength");
+
+    if (!JS_IsUndefined(buffer_val) && !JS_IsUndefined(byteOffset_val) && !JS_IsUndefined(byteLength_val)) {
+      size_t buffer_size;
+      uint8_t* buffer_data = JS_GetArrayBuffer(ctx, &buffer_size, buffer_val);
+
+      if (buffer_data) {
+        uint32_t offset, length;
+        JS_ToUint32(ctx, &offset, byteOffset_val);
+        JS_ToUint32(ctx, &length, byteLength_val);
+
+        der_data = buffer_data + offset;
+        der_size = length;
+      }
+    }
+
+    JS_FreeValue(ctx, buffer_val);
+    JS_FreeValue(ctx, byteOffset_val);
+    JS_FreeValue(ctx, byteLength_val);
+  }
+
+  if (!der_data) {
+    return JS_ThrowTypeError(ctx, "Key must be a KeyObject, JWK, PEM string, or DER buffer");
+  }
+
+  // Import DER format (SPKI) as public key
+  JSValue global = JS_GetGlobalObject(ctx);
+  JSValue crypto = JS_GetPropertyStr(ctx, global, "crypto");
+  JSValue subtle = JS_GetPropertyStr(ctx, crypto, "subtle");
+  JSValue import_key = JS_GetPropertyStr(ctx, subtle, "importKey");
+
+  // Create a copy of DER data for import
+  uint8_t* der_copy = js_malloc(ctx, der_size);
+  if (!der_copy) {
+    JS_FreeValue(ctx, import_key);
+    JS_FreeValue(ctx, subtle);
+    JS_FreeValue(ctx, crypto);
+    JS_FreeValue(ctx, global);
+    return JS_ThrowOutOfMemory(ctx);
+  }
+  memcpy(der_copy, der_data, der_size);
+
+  JSValue der_buffer = JS_NewArrayBuffer(ctx, der_copy, der_size, NULL, NULL, 0);
+
+  // Try RSA first (most common for public keys)
+  JSValue alg = JS_NewObject(ctx);
+  JS_SetPropertyStr(ctx, alg, "name", JS_NewString(ctx, "RSASSA-PKCS1-v1_5"));
+  JS_SetPropertyStr(ctx, alg, "hash", JS_NewString(ctx, "SHA-256"));
+
+  JSValue usages = JS_NewArray(ctx);
+  JS_SetPropertyUint32(ctx, usages, 0, JS_NewString(ctx, "verify"));
+
+  JSValue args[5];
+  args[0] = JS_NewString(ctx, "spki");
+  args[1] = der_buffer;
+  args[2] = alg;
+  args[3] = JS_NewBool(ctx, true);  // extractable
+  args[4] = usages;
+
+  JSValue crypto_key_promise = JS_Call(ctx, import_key, subtle, 5, args);
+
+  JS_FreeValue(ctx, args[0]);
+  JS_FreeValue(ctx, args[1]);
+  JS_FreeValue(ctx, args[2]);
+  JS_FreeValue(ctx, args[3]);
+  JS_FreeValue(ctx, args[4]);
+  JS_FreeValue(ctx, import_key);
+  JS_FreeValue(ctx, subtle);
+  JS_FreeValue(ctx, crypto);
+  JS_FreeValue(ctx, global);
+
+  // Wrap promise result with KeyObject
+  const char* wrapper_code =
+      "(async (promise) => {"
+      "  try {"
+      "    const cryptoKey = await promise;"
+      "    return globalThis.__createKeyObjectFromCryptoKey(cryptoKey);"
+      "  } catch (e) {"
+      "    throw new TypeError('Failed to import public key: ' + e.message);"
+      "  }"
+      "})";
+
+  JSValue wrapper = JS_Eval(ctx, wrapper_code, strlen(wrapper_code), "<createPublicKey>", JS_EVAL_TYPE_GLOBAL);
+  JSValue wrapper_args[1] = {crypto_key_promise};
+  JSValue result = JS_Call(ctx, wrapper, JS_UNDEFINED, 1, wrapper_args);
+
+  JS_FreeValue(ctx, wrapper);
+  JS_FreeValue(ctx, crypto_key_promise);
+
+  return result;
 }
 
 // createPrivateKey(key)
@@ -497,7 +719,229 @@ JSValue js_crypto_create_private_key(JSContext* ctx, JSValueConst this_val, int 
     return JS_ThrowTypeError(ctx, "createPrivateKey requires at least 1 argument");
   }
 
-  // TODO: Parse key input (KeyObject, PEM string, DER buffer, JWK)
-  // For now, throw not implemented error
-  return JS_ThrowTypeError(ctx, "createPrivateKey not fully implemented yet");
+  JSValue key_input = argv[0];
+
+  // Case 1: Input is already a KeyObject - just return it if it's a private key
+  if (JS_IsObject(key_input)) {
+    JSNodeKeyObject* existing_keyobj = JS_GetOpaque(key_input, js_node_keyobject_class_id);
+    if (existing_keyobj) {
+      // Verify it's a private key
+      JSValue type_val = JS_GetPropertyStr(ctx, existing_keyobj->crypto_key, "type");
+      const char* type = JS_ToCString(ctx, type_val);
+      JS_FreeValue(ctx, type_val);
+
+      if (strcmp(type, "private") == 0) {
+        JS_FreeCString(ctx, type);
+        return JS_DupValue(ctx, key_input);
+      }
+      JS_FreeCString(ctx, type);
+      return JS_ThrowTypeError(ctx, "Input KeyObject is not a private key");
+    }
+
+    // Case 2: Input is a JWK object
+    JSValue kty_val = JS_GetPropertyStr(ctx, key_input, "kty");
+    if (!JS_IsUndefined(kty_val)) {
+      JS_FreeValue(ctx, kty_val);
+
+      // Determine algorithm from JWK
+      JSValue alg_val = JS_GetPropertyStr(ctx, key_input, "alg");
+      const char* alg_str = NULL;
+      if (!JS_IsUndefined(alg_val)) {
+        alg_str = JS_ToCString(ctx, alg_val);
+      }
+      JS_FreeValue(ctx, alg_val);
+
+      // Map JWK alg to WebCrypto algorithm
+      const char* webcrypto_alg = "RSASSA-PKCS1-v1_5";  // Default
+      const char* hash = "SHA-256";
+
+      if (alg_str) {
+        if (strcmp(alg_str, "RS256") == 0) {
+          webcrypto_alg = "RSASSA-PKCS1-v1_5";
+          hash = "SHA-256";
+        } else if (strcmp(alg_str, "RS384") == 0) {
+          webcrypto_alg = "RSASSA-PKCS1-v1_5";
+          hash = "SHA-384";
+        } else if (strcmp(alg_str, "RS512") == 0) {
+          webcrypto_alg = "RSASSA-PKCS1-v1_5";
+          hash = "SHA-512";
+        } else if (strcmp(alg_str, "ES256") == 0) {
+          webcrypto_alg = "ECDSA";
+          hash = "SHA-256";
+        } else if (strcmp(alg_str, "ES384") == 0) {
+          webcrypto_alg = "ECDSA";
+          hash = "SHA-384";
+        } else if (strcmp(alg_str, "ES512") == 0) {
+          webcrypto_alg = "ECDSA";
+          hash = "SHA-512";
+        }
+        JS_FreeCString(ctx, alg_str);
+      }
+
+      // Call WebCrypto importKey with JWK
+      JSValue global = JS_GetGlobalObject(ctx);
+      JSValue crypto = JS_GetPropertyStr(ctx, global, "crypto");
+      JSValue subtle = JS_GetPropertyStr(ctx, crypto, "subtle");
+      JSValue import_key = JS_GetPropertyStr(ctx, subtle, "importKey");
+
+      JSValue alg = JS_NewObject(ctx);
+      JS_SetPropertyStr(ctx, alg, "name", JS_NewString(ctx, webcrypto_alg));
+      JS_SetPropertyStr(ctx, alg, "hash", JS_NewString(ctx, hash));
+
+      JSValue usages = JS_NewArray(ctx);
+      JS_SetPropertyUint32(ctx, usages, 0, JS_NewString(ctx, "sign"));
+
+      JSValue args[5];
+      args[0] = JS_NewString(ctx, "jwk");
+      args[1] = JS_DupValue(ctx, key_input);
+      args[2] = alg;
+      args[3] = JS_NewBool(ctx, true);  // extractable
+      args[4] = usages;
+
+      JSValue crypto_key_promise = JS_Call(ctx, import_key, subtle, 5, args);
+
+      JS_FreeValue(ctx, args[0]);
+      JS_FreeValue(ctx, args[1]);
+      JS_FreeValue(ctx, args[2]);
+      JS_FreeValue(ctx, args[3]);
+      JS_FreeValue(ctx, args[4]);
+      JS_FreeValue(ctx, import_key);
+      JS_FreeValue(ctx, subtle);
+      JS_FreeValue(ctx, crypto);
+      JS_FreeValue(ctx, global);
+
+      // Wrap promise result with KeyObject
+      const char* wrapper_code =
+          "(async (promise) => {"
+          "  const cryptoKey = await promise;"
+          "  return globalThis.__createKeyObjectFromCryptoKey(cryptoKey);"
+          "})";
+
+      JSValue wrapper = JS_Eval(ctx, wrapper_code, strlen(wrapper_code), "<createPrivateKey>", JS_EVAL_TYPE_GLOBAL);
+      JSValue wrapper_args[1] = {crypto_key_promise};
+      JSValue result = JS_Call(ctx, wrapper, JS_UNDEFINED, 1, wrapper_args);
+
+      JS_FreeValue(ctx, wrapper);
+      JS_FreeValue(ctx, crypto_key_promise);
+
+      return result;
+    }
+  }
+
+  // Case 3: Input is a string (could be PEM)
+  if (JS_IsString(key_input)) {
+    const char* key_str = JS_ToCString(ctx, key_input);
+    if (!key_str) {
+      return JS_ThrowTypeError(ctx, "Invalid key string");
+    }
+
+    // Check if it's PEM format
+    if (strstr(key_str, "-----BEGIN") != NULL) {
+      // Simple PEM to DER conversion (remove header/footer and decode base64)
+      // For now, return not fully implemented
+      JS_FreeCString(ctx, key_str);
+      return JS_ThrowTypeError(ctx, "PEM format not yet fully supported - use DER or JWK instead");
+    }
+
+    JS_FreeCString(ctx, key_str);
+  }
+
+  // Case 4: Input is a Buffer/TypedArray (DER format)
+  size_t der_size;
+  uint8_t* der_data = JS_GetArrayBuffer(ctx, &der_size, key_input);
+
+  // If not ArrayBuffer, try TypedArray
+  if (!der_data) {
+    JSValue buffer_val = JS_GetPropertyStr(ctx, key_input, "buffer");
+    JSValue byteOffset_val = JS_GetPropertyStr(ctx, key_input, "byteOffset");
+    JSValue byteLength_val = JS_GetPropertyStr(ctx, key_input, "byteLength");
+
+    if (!JS_IsUndefined(buffer_val) && !JS_IsUndefined(byteOffset_val) && !JS_IsUndefined(byteLength_val)) {
+      size_t buffer_size;
+      uint8_t* buffer_data = JS_GetArrayBuffer(ctx, &buffer_size, buffer_val);
+
+      if (buffer_data) {
+        uint32_t offset, length;
+        JS_ToUint32(ctx, &offset, byteOffset_val);
+        JS_ToUint32(ctx, &length, byteLength_val);
+
+        der_data = buffer_data + offset;
+        der_size = length;
+      }
+    }
+
+    JS_FreeValue(ctx, buffer_val);
+    JS_FreeValue(ctx, byteOffset_val);
+    JS_FreeValue(ctx, byteLength_val);
+  }
+
+  if (!der_data) {
+    return JS_ThrowTypeError(ctx, "Key must be a KeyObject, JWK, PEM string, or DER buffer");
+  }
+
+  // Import DER format (PKCS8) as private key
+  JSValue global = JS_GetGlobalObject(ctx);
+  JSValue crypto = JS_GetPropertyStr(ctx, global, "crypto");
+  JSValue subtle = JS_GetPropertyStr(ctx, crypto, "subtle");
+  JSValue import_key = JS_GetPropertyStr(ctx, subtle, "importKey");
+
+  // Create a copy of DER data for import
+  uint8_t* der_copy = js_malloc(ctx, der_size);
+  if (!der_copy) {
+    JS_FreeValue(ctx, import_key);
+    JS_FreeValue(ctx, subtle);
+    JS_FreeValue(ctx, crypto);
+    JS_FreeValue(ctx, global);
+    return JS_ThrowOutOfMemory(ctx);
+  }
+  memcpy(der_copy, der_data, der_size);
+
+  JSValue der_buffer = JS_NewArrayBuffer(ctx, der_copy, der_size, NULL, NULL, 0);
+
+  // Try RSA first (most common for private keys)
+  JSValue alg = JS_NewObject(ctx);
+  JS_SetPropertyStr(ctx, alg, "name", JS_NewString(ctx, "RSASSA-PKCS1-v1_5"));
+  JS_SetPropertyStr(ctx, alg, "hash", JS_NewString(ctx, "SHA-256"));
+
+  JSValue usages = JS_NewArray(ctx);
+  JS_SetPropertyUint32(ctx, usages, 0, JS_NewString(ctx, "sign"));
+
+  JSValue args[5];
+  args[0] = JS_NewString(ctx, "pkcs8");
+  args[1] = der_buffer;
+  args[2] = alg;
+  args[3] = JS_NewBool(ctx, true);  // extractable
+  args[4] = usages;
+
+  JSValue crypto_key_promise = JS_Call(ctx, import_key, subtle, 5, args);
+
+  JS_FreeValue(ctx, args[0]);
+  JS_FreeValue(ctx, args[1]);
+  JS_FreeValue(ctx, args[2]);
+  JS_FreeValue(ctx, args[3]);
+  JS_FreeValue(ctx, args[4]);
+  JS_FreeValue(ctx, import_key);
+  JS_FreeValue(ctx, subtle);
+  JS_FreeValue(ctx, crypto);
+  JS_FreeValue(ctx, global);
+
+  // Wrap promise result with KeyObject
+  const char* wrapper_code =
+      "(async (promise) => {"
+      "  try {"
+      "    const cryptoKey = await promise;"
+      "    return globalThis.__createKeyObjectFromCryptoKey(cryptoKey);"
+      "  } catch (e) {"
+      "    throw new TypeError('Failed to import private key: ' + e.message);"
+      "  }"
+      "})";
+
+  JSValue wrapper = JS_Eval(ctx, wrapper_code, strlen(wrapper_code), "<createPrivateKey>", JS_EVAL_TYPE_GLOBAL);
+  JSValue wrapper_args[1] = {crypto_key_promise};
+  JSValue result = JS_Call(ctx, wrapper, JS_UNDEFINED, 1, wrapper_args);
+
+  JS_FreeValue(ctx, wrapper);
+  JS_FreeValue(ctx, crypto_key_promise);
+
+  return result;
 }

@@ -561,5 +561,9 @@ JSValue JSRT_InitNodeZlib(JSContext* ctx) {
 
   JS_SetPropertyFunctionList(ctx, exports, js_zlib_funcs, countof(js_zlib_funcs));
 
+  // Export constants and utilities
+  zlib_export_constants(ctx, exports);
+  zlib_export_utilities(ctx, exports);
+
   return exports;
 }

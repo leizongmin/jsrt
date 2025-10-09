@@ -65,6 +65,10 @@ JSValue zlib_async_inflate(JSContext* ctx, const uint8_t* input, size_t input_le
 JSValue zlib_throw_error(JSContext* ctx, int err_code, const char* msg);
 const char* zlib_error_message(int err_code);
 
+// Constants and utilities
+void zlib_export_constants(JSContext* ctx, JSValue exports);
+void zlib_export_utilities(JSContext* ctx, JSValue exports);
+
 // Compression formats
 #define ZLIB_FORMAT_GZIP 16    // Add 16 to windowBits for gzip
 #define ZLIB_FORMAT_DEFLATE 0  // Default windowBits for deflate

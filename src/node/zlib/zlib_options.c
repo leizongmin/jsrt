@@ -35,7 +35,7 @@ int zlib_parse_options(JSContext* ctx, JSValue opts_val, ZlibOptions* opts) {
 
   JSValue val;
 
-  // Parse level (0-9)
+  // Parse level (0-9, or -1 for default)
   val = JS_GetPropertyStr(ctx, opts_val, "level");
   if (!JS_IsUndefined(val) && !JS_IsNull(val)) {
     int32_t level;
@@ -43,9 +43,9 @@ int zlib_parse_options(JSContext* ctx, JSValue opts_val, ZlibOptions* opts) {
       JS_FreeValue(ctx, val);
       return -1;
     }
-    if (level < 0 || level > 9) {
+    if (level < -1 || level > 9) {
       JS_FreeValue(ctx, val);
-      JS_ThrowRangeError(ctx, "level must be between 0 and 9");
+      JS_ThrowRangeError(ctx, "level must be between -1 and 9");
       return -1;
     }
     opts->level = level;

@@ -102,4 +102,8 @@ JSValue js_stream_get_errored(JSContext* ctx, JSValueConst this_val, int argc, J
 // utilities.c - Phase 5 utility functions
 void js_stream_init_utilities(JSContext* ctx, JSValue stream_module);
 
+// promises.c - Phase 6 Promises API
+JSValue JSRT_InitNodeStreamPromises(JSContext* ctx);
+int js_node_stream_promises_init(JSContext* ctx, JSModuleDef* m);
+
 #endif  // JSRT_NODE_STREAM_INTERNAL_H

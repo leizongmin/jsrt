@@ -1,23 +1,145 @@
-#include "zlib_internal.h"
-#include "../node_modules.h"
-#include "../../util/macro.h"
 #include <string.h>
+#include "../../util/macro.h"
+#include "../node_modules.h"
+#include "zlib_internal.h"
 
-// Placeholder functions - to be implemented
+// Helper to get buffer data from JSValue
+static int get_buffer_data(JSContext* ctx, JSValueConst val, const uint8_t** data, size_t* len) {
+  size_t size;
+  uint8_t* buf = JS_GetArrayBuffer(ctx, &size, val);
+
+  if (buf) {
+    *data = buf;
+    *len = size;
+    return 0;
+  }
+
+  // Try to get as typed array
+  JSValue buffer = JS_GetTypedArrayBuffer(ctx, val, NULL, NULL, NULL);
+  if (!JS_IsException(buffer)) {
+    buf = JS_GetArrayBuffer(ctx, &size, buffer);
+    JS_FreeValue(ctx, buffer);
+    if (buf) {
+      *data = buf;
+      *len = size;
+      return 0;
+    }
+  }
+
+  JS_ThrowTypeError(ctx, "argument must be a Buffer or Uint8Array");
+  return -1;
+}
+
+// gzipSync implementation
 static JSValue js_zlib_gzip_sync(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
-  return JS_ThrowInternalError(ctx, "gzipSync not yet implemented");
+  if (argc < 1) {
+    return JS_ThrowTypeError(ctx, "gzipSync requires at least 1 argument");
+  }
+
+  const uint8_t* input;
+  size_t input_len;
+  if (get_buffer_data(ctx, argv[0], &input, &input_len) < 0) {
+    return JS_EXCEPTION;
+  }
+
+  ZlibOptions opts;
+  if (argc > 1 && zlib_parse_options(ctx, argv[1], &opts) < 0) {
+    return JS_EXCEPTION;
+  } else if (argc <= 1) {
+    zlib_options_init_defaults(&opts);
+  }
+
+  JSValue result = zlib_deflate_sync(ctx, input, input_len, &opts, ZLIB_FORMAT_GZIP);
+
+  if (argc > 1) {
+    zlib_options_cleanup(&opts);
+  }
+
+  return result;
 }
 
+// gunzipSync implementation
 static JSValue js_zlib_gunzip_sync(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
-  return JS_ThrowInternalError(ctx, "gunzipSync not yet implemented");
+  if (argc < 1) {
+    return JS_ThrowTypeError(ctx, "gunzipSync requires at least 1 argument");
+  }
+
+  const uint8_t* input;
+  size_t input_len;
+  if (get_buffer_data(ctx, argv[0], &input, &input_len) < 0) {
+    return JS_EXCEPTION;
+  }
+
+  ZlibOptions opts;
+  if (argc > 1 && zlib_parse_options(ctx, argv[1], &opts) < 0) {
+    return JS_EXCEPTION;
+  } else if (argc <= 1) {
+    zlib_options_init_defaults(&opts);
+  }
+
+  JSValue result = zlib_inflate_sync(ctx, input, input_len, &opts, ZLIB_FORMAT_GZIP);
+
+  if (argc > 1) {
+    zlib_options_cleanup(&opts);
+  }
+
+  return result;
 }
 
+// deflateSync implementation
 static JSValue js_zlib_deflate_sync(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
-  return JS_ThrowInternalError(ctx, "deflateSync not yet implemented");
+  if (argc < 1) {
+    return JS_ThrowTypeError(ctx, "deflateSync requires at least 1 argument");
+  }
+
+  const uint8_t* input;
+  size_t input_len;
+  if (get_buffer_data(ctx, argv[0], &input, &input_len) < 0) {
+    return JS_EXCEPTION;
+  }
+
+  ZlibOptions opts;
+  if (argc > 1 && zlib_parse_options(ctx, argv[1], &opts) < 0) {
+    return JS_EXCEPTION;
+  } else if (argc <= 1) {
+    zlib_options_init_defaults(&opts);
+  }
+
+  JSValue result = zlib_deflate_sync(ctx, input, input_len, &opts, ZLIB_FORMAT_DEFLATE);
+
+  if (argc > 1) {
+    zlib_options_cleanup(&opts);
+  }
+
+  return result;
 }
 
+// inflateSync implementation
 static JSValue js_zlib_inflate_sync(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
-  return JS_ThrowInternalError(ctx, "inflateSync not yet implemented");
+  if (argc < 1) {
+    return JS_ThrowTypeError(ctx, "inflateSync requires at least 1 argument");
+  }
+
+  const uint8_t* input;
+  size_t input_len;
+  if (get_buffer_data(ctx, argv[0], &input, &input_len) < 0) {
+    return JS_EXCEPTION;
+  }
+
+  ZlibOptions opts;
+  if (argc > 1 && zlib_parse_options(ctx, argv[1], &opts) < 0) {
+    return JS_EXCEPTION;
+  } else if (argc <= 1) {
+    zlib_options_init_defaults(&opts);
+  }
+
+  JSValue result = zlib_inflate_sync(ctx, input, input_len, &opts, ZLIB_FORMAT_DEFLATE);
+
+  if (argc > 1) {
+    zlib_options_cleanup(&opts);
+  }
+
+  return result;
 }
 
 static const JSCFunctionListEntry js_zlib_funcs[] = {

@@ -9,10 +9,10 @@ console.log('inflateSync:', typeof zlib.inflateSync);
 
 // Test that placeholder functions throw
 try {
-    zlib.gzipSync(Buffer.from('test'));
-    console.error('ERROR: gzipSync should have thrown');
+  zlib.gzipSync(Buffer.from('test'));
+  console.error('ERROR: gzipSync should have thrown');
 } catch (e) {
-    console.log('✓ gzipSync throws as expected:', e.message);
+  console.log('✓ gzipSync throws as expected:', e.message);
 }
 
 console.log('\n✓ All basic module tests passed');

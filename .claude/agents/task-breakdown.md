@@ -32,6 +32,14 @@ The task plan document must contain ALL of the following sections:
 4. **Progress Dashboard**: Real-time status updates
 5. **History**: Changes, blockers, and resolutions
 
+### Step 3: Document Conciseness Principles
+**MANDATORY: Keep documents concise and focused**
+- **No redundant descriptions**: Don't repeat well-known information or obvious details
+- **No code examples**: Never insert large code blocks or implementation examples in plan documents
+- **Summary over details**: Reference existing documentation instead of duplicating content
+- **Minimal verbosity**: Use bullet points and tables over lengthy paragraphs
+- **STRICT SIZE LIMIT**: Main plan document MUST NOT exceed 2000 lines - use sub-documents if needed
+
 ## Task Breakdown Methodology
 
 ### Core Principles
@@ -72,165 +80,84 @@ L4: Atomic Operations (single file/function changes with tests)
 
 When you receive a task, create `docs/plan/<feature-name>-plan.md` with this EXACT structure:
 
+### Document Size Management
+**CRITICAL: Strict 2000-line limit - NO EXCEPTIONS**
+
+The main plan document **MUST NOT exceed 2000 lines**. Use **sub-documents** for complex plans:
+
+#### Sub-document Strategy
+- **Directory Convention**: Create subdirectory `<main-plan-name>/` for sub-documents
+  - Example: `docs/plan/node-dgram-plan.md` → `docs/plan/node-dgram-plan/` (subdirectory)
+- **Naming Convention**: `<main-plan-name>/<subdoc-topic>.md`
+  - Example: `node-dgram-plan/implementation.md`, `node-dgram-plan/testing.md`
+- **Reference Syntax**: Use `@<full-path>` with complete path from project root
+  - ✅ Correct: `See details: @docs/plan/node-dgram-plan/implementation.md`
+  - ✅ Correct: `API reference: @docs/plan/node-dgram-plan/api-reference.md`
+  - ❌ Wrong: `@node-dgram-plan/implementation.md` (incomplete path)
+- **Sub-document Limits**: Each sub-document should also stay under 1000 lines for maintainability
+- **No nested sub-documents**: Sub-documents cannot have their own sub-documents (max 2 levels)
+- **Split by Phase**: Separate L1 epic phases into individual sub-documents when approaching limit
+- **Keep main plan as index**: Main document serves as navigation hub with high-level overview
+
+#### MANDATORY: Create Sub-documents When
+- Main plan approaches 1500 lines (proactive split to prevent exceeding 2000)
+- Individual L1 phase exceeds 400 lines of detail
+- Technical implementation requires extensive API mappings
+- Test cases or validation steps are complex
+- Research findings are voluminous
+
+#### Size Check Protocol
+1. Monitor line count after each major update
+2. At 1500 lines: Begin extracting content to sub-documents
+3. At 1800 lines: URGENT - must split immediately
+4. **NEVER** exceed 2000 lines in main plan
+
+### Template Structure (Minimal Example)
+
+**Main sections required:**
 ```markdown
 ---
 Created: {ISO 8601 Timestamp}
 Last Updated: {ISO 8601 Timestamp}
 Status: 🟡 PLANNING | 🔵 IN_PROGRESS | 🟢 COMPLETED | 🔴 BLOCKED
-Overall Progress: 0/N tasks completed (0%)
+Overall Progress: 0/N tasks (0%)
 ---
 
 # Task Plan: {Task Name}
 
 ## 📋 Task Analysis & Breakdown
 ### L0 Main Task
-**Requirement:** {Original user requirement}
-**Success Criteria:** {Measurable outcomes}
-**Constraints:** {Tech stack, quality requirements, existing patterns}
-**Risk Assessment:** {High-level risks and assumptions}
+- Requirement: {Brief description}
+- Success Criteria: {Measurable outcomes}
+- Constraints: {Tech stack, patterns}
 
 ### L1 Epic Phases
-1. [S][R:LOW][C:SIMPLE] **Setup & Research** - Environment preparation and requirement analysis
-   - Execution: SEQUENTIAL (must complete before phase 2)
-   - Dependencies: None (can start immediately)
+1. [S][R:LOW][C:SIMPLE] Setup & Research
+2. [S][R:MED][C:COMPLEX] Core Implementation [D:1]
+3. [P][R:LOW][C:MEDIUM] Testing [D:2]
 
-2. [S][R:MED][C:COMPLEX] **Core Implementation** - Main functionality development
-   - Execution: SEQUENTIAL (critical path)
-   - Dependencies: [D:1] (requires Setup & Research complete)
-
-3. [P][R:LOW][C:MEDIUM] **Testing & Validation** - Test suite and quality assurance
-   - Execution: PARALLEL (can run with phase 4)
-   - Dependencies: [D:2] (requires Core Implementation complete)
-
-4. [P][R:LOW][C:SIMPLE] **Documentation & Cleanup** - Code documentation and refactoring
-   - Execution: PARALLEL (can run with phase 3)
-   - Dependencies: [SD:3] (preferably after Testing but not blocking)
-
-### L2 User Stories (Phase 1 Example)
-**1.1** [S][R:LOW][C:SIMPLE] Research existing codebase patterns
-   - Execution: SEQUENTIAL (must complete first)
-   - Dependencies: None
-
-**1.2** [P][R:LOW][C:TRIVIAL] Set up development environment
-   - Execution: PARALLEL (can run with 1.3)
-   - Dependencies: [D:1.1] (after research complete)
-
-**1.3** [P][R:MED][C:MEDIUM] Design API interfaces
-   - Execution: PARALLEL (can run with 1.2)
-   - Dependencies: [D:1.1] (after research complete)
-
-### L3 Technical Tasks (1.1 Example)
-**1.1.1** [S][R:LOW][C:SIMPLE] Analyze current module structure
-   - Execution: SEQUENTIAL
-   - Dependencies: None (first task in sequence)
-
-**1.1.2** [S][R:LOW][C:SIMPLE] Identify reusable patterns
-   - Execution: SEQUENTIAL
-   - Dependencies: [D:1.1.1] (needs structure analysis first)
-
-**1.1.3** [P][R:LOW][C:TRIVIAL] Document integration points
-   - Execution: PARALLEL (can run independently)
-   - Dependencies: [D:1.1.2] (after patterns identified)
-
-### L4 Atomic Operations (1.1.1 Example)
-- **1.1.1.a** Read and catalog all relevant files
-- **1.1.1.b** Analyze common patterns [D:1.1.1.a]
-- **1.1.1.c** Document conventions [D:1.1.1.b]
-
----
+### L2+ Tasks
+{Hierarchical breakdown - see sub-documents if detailed}
 
 ## 📝 Task Execution Tracker
+| ID | Level | Task | Mode | Status | Deps | Risk | Complexity |
+|----|-------|------|------|--------|------|------|------------|
+| 1 | L1 | Setup | [S] | ⏳ | None | LOW | SIMPLE |
+...
 
-### Task List
-| ID | Level | Task | Exec Mode | Status | Dependencies | Risk | Complexity |
-|----|-------|------|-----------|--------|--------------|------|------------|
-| 1 | L1 | Setup & Research | [S] | ⏳ PENDING | None | LOW | SIMPLE |
-| 1.1 | L2 | Research codebase patterns | [S] | ⏳ PENDING | None | LOW | SIMPLE |
-| 1.1.1 | L3 | Analyze module structure | [S] | ⏳ PENDING | None | LOW | SIMPLE |
-| 1.1.2 | L3 | Identify patterns | [S] | ⏳ PENDING | 1.1.1 | LOW | SIMPLE |
-| 1.2 | L2 | Set up environment | [P] | ⏳ PENDING | 1.1 | LOW | TRIVIAL |
-| 1.3 | L2 | Design API interfaces | [P] | ⏳ PENDING | 1.1 | MED | MEDIUM |
-| 2 | L1 | Core Implementation | [S] | ⏳ PENDING | 1 | MED | COMPLEX |
-| 2.1 | L2 | Implement base functionality | [S] | ⏳ PENDING | 1 | MED | MEDIUM |
-| 3 | L1 | Testing & Validation | [P] | ⏳ PENDING | 2 | LOW | MEDIUM |
-| 4 | L1 | Documentation | [P] | ⏳ PENDING | 2 (soft) | LOW | SIMPLE |
+## 🚀 Execution Dashboard
+- Current Phase: {Phase name}
+- Progress: {N/M tasks} ({%})
+- Active Task: {Current work}
+- Next Tasks: {Upcoming work}
 
-### Execution Mode Legend
-- [S] = Sequential - Must complete before next task
-- [P] = Parallel - Can run simultaneously with other [P] tasks
-- [PS] = Parallel-Sequential - Parallel within group, sequential between groups
-
-### Status Legend
-- ⏳ PENDING - Not started
-- 🔄 IN_PROGRESS - Currently working
-- ✅ COMPLETED - Done and verified
-- ⚠️ DELAYED - Behind schedule
-- 🔴 BLOCKED - Cannot proceed
-
----
-
-## 🚀 Live Execution Dashboard
-
-### Current Phase: L1.2 Core Implementation
-**Overall Progress:** 23/45 atomic tasks completed (51%)
-
-**Complexity Status:** Currently handling MEDIUM complexity tasks
-
-**Status:** ON TRACK ✅
-
-### Parallel Execution Opportunities
-**Can Run Now (No Dependencies):**
-- None currently available
-
-**Can Run in Parallel (Same Dependencies Met):**
-- Task 3 & 4: Both waiting for Task 2 completion
-- Task 1.2 & 1.3: Both can start after 1.1 completes
-
-### Active Work Stream
-🔄 **Task 2.3** [S][R:MED][C:MEDIUM] Implementing error handling logic
-   - Execution Mode: SEQUENTIAL (blocking 2.4)
-   - Dependencies: [D:2.2] ✅ Met
-   - Status: IN_PROGRESS
-   - Started: {timestamp}
-   - Subtasks:
-     - ✅ 2.3.a Define error types and codes
-     - 🔄 2.3.b Write exception wrapper functions
-     - ⏳ 2.3.c Add validation checks [D:2.3.b]
-   - Notes: Higher complexity than estimated, breaking into smaller units
-
-### Completed Today
-- ✅ 1.1 Research codebase patterns [S] - Unblocked 1.2 and 1.3
-- ✅ 2.1 Base module structure [S] - Unblocked 2.2
-- ✅ 2.2 API interfaces [S] - Unblocked 2.3
-
-### Next Up (Dependency Order)
-- ⏳ 2.3.c Validation checks [S] - Blocked by 2.3.b
-- ⏳ 2.4 Integration [S] - Blocked by 2.3
-- ⏳ 3 Testing [P] - Blocked by 2
-- ⏳ 4 Documentation [P] - Can run with 3 after 2
-
-### Blockers & Adjustments
-⚠️ **COMPLEXITY NOTE:** Task 2.3 requires additional decomposition
-   → **Action:** Created subtasks 2.3.a-c for better tracking
-   → **Impact:** May extend timeline by 1 iteration
-
----
-
-## 📜 Execution History
-
-### Updates Log
+## 📜 History
 | Timestamp | Action | Details |
 |-----------|--------|---------|
-| {ISO 8601} | CREATED | Task plan created, initial breakdown complete |
-| {ISO 8601} | STARTED | Began execution with task 1.1 |
-| {ISO 8601} | COMPLETED | Task 1.1 completed successfully |
-| {ISO 8601} | BLOCKED | Task 2.3 blocked - complexity higher than expected |
-| {ISO 8601} | ADJUSTED | Task 2.3 broken into subtasks |
-
-### Lessons Learned
-- {Key insight or adjustment made during execution}
-- {Pattern discovered that can be reused}
+| ... | ... | ... |
 ```
+
+**Keep it concise** - Move detailed breakdowns to sub-documents when approaching 1500 lines
 
 ## Execution Workflow
 
@@ -345,5 +272,85 @@ Track these outcomes:
 - Use Write tool to create the initial document
 - Use Edit/MultiEdit tools to update progress
 - Keep all sections updated throughout execution
+
+### Document Quality Guidelines
+**MANDATORY: Maintain document clarity and efficiency**
+
+1. **Conciseness Rules**
+   - **No redundant information**: Don't describe well-known concepts or repeat common knowledge
+   - **No code in plans**: Never include implementation code, examples, or large snippets
+   - **Reference, don't duplicate**: Link to existing docs instead of copying content
+   - **Brevity over verbosity**: Use tables, lists, and short descriptions
+
+2. **Size Control Limits**
+   - **ABSOLUTE LIMIT**: Main plan document MUST NOT exceed 2000 lines - NO EXCEPTIONS
+   - **Proactive threshold**: Begin splitting at 1500 lines
+   - **Emergency threshold**: MUST split immediately at 1800 lines
+   - **Sub-document directory**: Create `docs/plan/<main-plan>/` subdirectory for all sub-documents
+   - **Sub-document naming**: `<main-plan>/<topic>.md` within the subdirectory
+   - **Reference syntax**: `@docs/plan/<main-plan>/<subdoc>.md` (full path from project root)
+   - **Example**: `@docs/plan/node-dgram-plan/api-reference.md`
+   - **Compliance**: Check line count regularly, split before reaching limit
+
+3. **Content Focus**
+   - **Task breakdown**: What needs to be done (not how to implement)
+   - **Dependencies**: Task relationships and execution order
+   - **Progress tracking**: Status updates and blockers
+   - **High-level notes**: Brief observations, not detailed explanations
+
+4. **What NOT to Include**
+   - ❌ Code examples or implementation snippets
+   - ❌ Detailed API documentation (reference existing docs instead)
+   - ❌ Verbose explanations of standard concepts
+   - ❌ Duplicate information from other documents
+   - ❌ Long-form tutorials or guides
+
+### Example: Good vs Bad Documentation
+
+**❌ BAD - Verbose with code examples (adds 200+ lines)**
+```markdown
+### Phase 1: Socket Creation
+We need to implement the socket creation functionality. Here's how:
+
+1. First, we'll create the socket structure:
+```c
+typedef struct {
+  uint32_t type_tag;
+  JSContext* ctx;
+  JSValue socket_obj;
+  uv_udp_t handle;
+  // ... 50 more lines of code
+} JSDgramSocket;
+```
+
+2. Then implement the factory function...
+[100+ more lines with detailed code]
+```
+
+**✅ GOOD - Concise with references (15 lines)**
+```markdown
+### Phase 1: Socket Creation (25 tasks)
+**Goal**: Implement createSocket() factory and Socket class
+**Pattern**: Adapt from @src/node/net/net_socket.c (90% reusable)
+**Details**: @docs/plan/node-dgram-plan/implementation.md
+
+Tasks:
+- 1.1 [S] Register Socket class [8 tasks] - See architecture doc
+- 1.2 [S] Factory function [9 tasks] - Handle type/options overloads
+- 1.3 [P] Module exports [8 tasks] - CommonJS/ESM support
+```
+
+### Document Update Triggers (MANDATORY)
+
+Update the plan document **immediately** when:
+1. ✅ **Task completed** - Change status to ✅ COMPLETED, update progress %
+2. 🔄 **Task started** - Change status to 🔄 IN_PROGRESS, log start time
+3. 🔴 **Task blocked** - Change to 🔴 BLOCKED, document blocker in History
+4. 📝 **Scope changed** - Add new tasks or modify existing, log in History
+5. ⚠️ **Risk discovered** - Update risk level, add mitigation notes
+6. 🔀 **Dependencies changed** - Update dependency markers, adjust parallel opportunities
+7. 📊 **Phase completed** - Update overall progress, unblock dependent phases
+
+**Update frequency**: After EVERY significant state change, not in batches
 
 Remember: The task plan document is NOT optional. It must be created immediately upon receiving a task and continuously updated throughout execution. This provides complete transparency and traceability for the user.

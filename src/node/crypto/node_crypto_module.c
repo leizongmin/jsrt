@@ -3,6 +3,7 @@
 
 // Include all implementation files
 #include "node_crypto_cipher.c"
+#include "node_crypto_dh.c"
 #include "node_crypto_hash.c"
 #include "node_crypto_hmac.c"
 #include "node_crypto_kdf.c"
@@ -16,13 +17,14 @@
 
 // CommonJS module export
 JSValue JSRT_InitNodeCrypto(JSContext* ctx) {
-  // Register Hash, Hmac, Cipher, Sign and Verify classes
+  // Register Hash, Hmac, Cipher, Sign, Verify and ECDH classes
   JSRuntime* rt = JS_GetRuntime(ctx);
   js_node_hash_init_class(rt);
   js_node_hmac_init_class(rt);
   js_node_cipher_init_class(rt);
   js_node_sign_init_class(rt);
   js_node_verify_init_class(rt);
+  js_node_ecdh_init_class(rt);
 
   JSValue crypto_obj = JS_NewObject(ctx);
 
@@ -45,6 +47,9 @@ JSValue JSRT_InitNodeCrypto(JSContext* ctx) {
   JS_SetPropertyStr(ctx, crypto_obj, "hkdfSync", JS_NewCFunction(ctx, js_crypto_hkdf_sync, "hkdfSync", 5));
   JS_SetPropertyStr(ctx, crypto_obj, "scrypt", JS_NewCFunction(ctx, js_crypto_scrypt, "scrypt", 5));
   JS_SetPropertyStr(ctx, crypto_obj, "scryptSync", JS_NewCFunction(ctx, js_crypto_scrypt_sync, "scryptSync", 4));
+
+  // Add ECDH function
+  JS_SetPropertyStr(ctx, crypto_obj, "createECDH", JS_NewCFunction(ctx, js_crypto_create_ecdh, "createECDH", 1));
 
   // Add constants
   JS_SetPropertyStr(ctx, crypto_obj, "constants", create_crypto_constants(ctx));
@@ -74,6 +79,7 @@ int js_node_crypto_init(JSContext* ctx, JSModuleDef* m) {
   JS_SetModuleExport(ctx, m, "hkdfSync", JS_GetPropertyStr(ctx, crypto_module, "hkdfSync"));
   JS_SetModuleExport(ctx, m, "scrypt", JS_GetPropertyStr(ctx, crypto_module, "scrypt"));
   JS_SetModuleExport(ctx, m, "scryptSync", JS_GetPropertyStr(ctx, crypto_module, "scryptSync"));
+  JS_SetModuleExport(ctx, m, "createECDH", JS_GetPropertyStr(ctx, crypto_module, "createECDH"));
   JS_SetModuleExport(ctx, m, "constants", JS_GetPropertyStr(ctx, crypto_module, "constants"));
 
   // Also export the whole module as default

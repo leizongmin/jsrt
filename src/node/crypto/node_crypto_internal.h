@@ -21,6 +21,7 @@ extern JSClassID js_node_hmac_class_id;
 extern JSClassID js_node_cipher_class_id;
 extern JSClassID js_node_sign_class_id;
 extern JSClassID js_node_verify_class_id;
+extern JSClassID js_node_ecdh_class_id;
 
 // Hash class structure
 typedef struct {
@@ -121,6 +122,10 @@ JSValue js_crypto_hkdf(JSContext* ctx, JSValueConst this_val, int argc, JSValueC
 JSValue js_crypto_hkdf_sync(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv);
 JSValue js_crypto_scrypt(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv);
 JSValue js_crypto_scrypt_sync(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv);
+
+// ECDH API functions
+JSValue js_crypto_create_ecdh(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv);
+void js_node_ecdh_init_class(JSRuntime* rt);
 
 // Constants
 JSValue create_crypto_constants(JSContext* ctx);

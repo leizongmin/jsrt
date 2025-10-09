@@ -142,11 +142,102 @@ static JSValue js_zlib_inflate_sync(JSContext* ctx, JSValueConst this_val, int a
   return result;
 }
 
+// deflateRawSync implementation
+static JSValue js_zlib_deflate_raw_sync(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
+  if (argc < 1) {
+    return JS_ThrowTypeError(ctx, "deflateRawSync requires at least 1 argument");
+  }
+
+  const uint8_t* input;
+  size_t input_len;
+  if (get_buffer_data(ctx, argv[0], &input, &input_len) < 0) {
+    return JS_EXCEPTION;
+  }
+
+  ZlibOptions opts;
+  if (argc > 1 && zlib_parse_options(ctx, argv[1], &opts) < 0) {
+    return JS_EXCEPTION;
+  } else if (argc <= 1) {
+    zlib_options_init_defaults(&opts);
+  }
+
+  JSValue result = zlib_deflate_sync(ctx, input, input_len, &opts, ZLIB_FORMAT_RAW);
+
+  if (argc > 1) {
+    zlib_options_cleanup(&opts);
+  }
+
+  return result;
+}
+
+// inflateRawSync implementation
+static JSValue js_zlib_inflate_raw_sync(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
+  if (argc < 1) {
+    return JS_ThrowTypeError(ctx, "inflateRawSync requires at least 1 argument");
+  }
+
+  const uint8_t* input;
+  size_t input_len;
+  if (get_buffer_data(ctx, argv[0], &input, &input_len) < 0) {
+    return JS_EXCEPTION;
+  }
+
+  ZlibOptions opts;
+  if (argc > 1 && zlib_parse_options(ctx, argv[1], &opts) < 0) {
+    return JS_EXCEPTION;
+  } else if (argc <= 1) {
+    zlib_options_init_defaults(&opts);
+  }
+
+  JSValue result = zlib_inflate_sync(ctx, input, input_len, &opts, ZLIB_FORMAT_RAW);
+
+  if (argc > 1) {
+    zlib_options_cleanup(&opts);
+  }
+
+  return result;
+}
+
+// unzipSync implementation (auto-detect gzip or deflate)
+static JSValue js_zlib_unzip_sync(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
+  if (argc < 1) {
+    return JS_ThrowTypeError(ctx, "unzipSync requires at least 1 argument");
+  }
+
+  const uint8_t* input;
+  size_t input_len;
+  if (get_buffer_data(ctx, argv[0], &input, &input_len) < 0) {
+    return JS_EXCEPTION;
+  }
+
+  ZlibOptions opts;
+  if (argc > 1 && zlib_parse_options(ctx, argv[1], &opts) < 0) {
+    return JS_EXCEPTION;
+  } else if (argc <= 1) {
+    zlib_options_init_defaults(&opts);
+  }
+
+  // Use windowBits + 32 to auto-detect gzip or deflate format
+  // This is a special zlib feature
+  opts.windowBits = 15 + 32;  // Enable auto-detection
+
+  JSValue result = zlib_inflate_sync(ctx, input, input_len, &opts, ZLIB_FORMAT_DEFLATE);
+
+  if (argc > 1) {
+    zlib_options_cleanup(&opts);
+  }
+
+  return result;
+}
+
 static const JSCFunctionListEntry js_zlib_funcs[] = {
     JS_CFUNC_DEF("gzipSync", 1, js_zlib_gzip_sync),
     JS_CFUNC_DEF("gunzipSync", 1, js_zlib_gunzip_sync),
     JS_CFUNC_DEF("deflateSync", 1, js_zlib_deflate_sync),
     JS_CFUNC_DEF("inflateSync", 1, js_zlib_inflate_sync),
+    JS_CFUNC_DEF("deflateRawSync", 1, js_zlib_deflate_raw_sync),
+    JS_CFUNC_DEF("inflateRawSync", 1, js_zlib_inflate_raw_sync),
+    JS_CFUNC_DEF("unzipSync", 1, js_zlib_unzip_sync),
 };
 
 static int js_zlib_init_module(JSContext* ctx, JSModuleDef* m) {

@@ -1,9 +1,9 @@
 ---
 Created: 2025-10-09T00:00:00Z
-Last Updated: 2025-10-09T14:10:00Z
+Last Updated: 2025-10-09T14:20:00Z
 Status: 🟢 IN PROGRESS
-Overall Progress: 13/96 tasks (13.5%)
-API Coverage: 4/48+ methods (8.3%)
+Overall Progress: 16/96 tasks (16.7%)
+API Coverage: 7/48+ methods (14.6%)
 ---
 
 # Node.js zlib Module Implementation Plan
@@ -219,13 +219,13 @@ node:zlib (CommonJS/ESM)
 ## 📊 Overall Progress Tracking
 
 **Total Tasks**: 96 (without Zstd Phase 5, +1 for static zlib setup)
-**Completed**: 13
+**Completed**: 16
 **In Progress**: 0
-**Remaining**: 83
+**Remaining**: 80
 
-**Completion**: 13.5%
+**Completion**: 16.7%
 
-**Estimated Timeline**: 16-21 days (2.5 days completed)
+**Estimated Timeline**: 16-21 days (3.5 days completed)
 
 ---
 
@@ -1367,9 +1367,9 @@ make wpt             # Ensure WPT baseline maintained
 - [x] gunzipSync(buffer, [options])
 - [x] deflateSync(buffer, [options])
 - [x] inflateSync(buffer, [options])
-- [ ] deflateRawSync(buffer, [options])
-- [ ] inflateRawSync(buffer, [options])
-- [ ] unzipSync(buffer, [options])
+- [x] deflateRawSync(buffer, [options])
+- [x] inflateRawSync(buffer, [options])
+- [x] unzipSync(buffer, [options])
 - [ ] brotliCompressSync(buffer, [options])
 - [ ] brotliDecompressSync(buffer, [options])
 - [ ] crc32(data, [value])

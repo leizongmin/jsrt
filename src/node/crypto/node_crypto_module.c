@@ -70,6 +70,14 @@ JSValue JSRT_InitNodeCrypto(JSContext* ctx) {
   JS_SetPropertyStr(ctx, crypto_obj, "generateKeySync",
                     JS_NewCFunction(ctx, js_crypto_generate_key_sync, "generateKeySync", 2));
 
+  // Add Utility functions
+  JS_SetPropertyStr(ctx, crypto_obj, "timingSafeEqual",
+                    JS_NewCFunction(ctx, js_crypto_timing_safe_equal, "timingSafeEqual", 2));
+  JS_SetPropertyStr(ctx, crypto_obj, "randomInt", JS_NewCFunction(ctx, js_crypto_random_int, "randomInt", 3));
+  JS_SetPropertyStr(ctx, crypto_obj, "getCiphers", JS_NewCFunction(ctx, js_crypto_get_ciphers, "getCiphers", 0));
+  JS_SetPropertyStr(ctx, crypto_obj, "getHashes", JS_NewCFunction(ctx, js_crypto_get_hashes, "getHashes", 0));
+  JS_SetPropertyStr(ctx, crypto_obj, "getCurves", JS_NewCFunction(ctx, js_crypto_get_curves, "getCurves", 0));
+
   // Add internal helper for KeyObject creation (used by factory functions)
   JSValue global_this = JS_GetGlobalObject(ctx);
   JS_SetPropertyStr(
@@ -125,6 +133,11 @@ int js_node_crypto_init(JSContext* ctx, JSModuleDef* m) {
   JS_SetModuleExport(ctx, m, "createPrivateKey", JS_GetPropertyStr(ctx, crypto_module, "createPrivateKey"));
   JS_SetModuleExport(ctx, m, "generateKeyPairSync", JS_GetPropertyStr(ctx, crypto_module, "generateKeyPairSync"));
   JS_SetModuleExport(ctx, m, "generateKeySync", JS_GetPropertyStr(ctx, crypto_module, "generateKeySync"));
+  JS_SetModuleExport(ctx, m, "timingSafeEqual", JS_GetPropertyStr(ctx, crypto_module, "timingSafeEqual"));
+  JS_SetModuleExport(ctx, m, "randomInt", JS_GetPropertyStr(ctx, crypto_module, "randomInt"));
+  JS_SetModuleExport(ctx, m, "getCiphers", JS_GetPropertyStr(ctx, crypto_module, "getCiphers"));
+  JS_SetModuleExport(ctx, m, "getHashes", JS_GetPropertyStr(ctx, crypto_module, "getHashes"));
+  JS_SetModuleExport(ctx, m, "getCurves", JS_GetPropertyStr(ctx, crypto_module, "getCurves"));
   JS_SetModuleExport(ctx, m, "constants", JS_GetPropertyStr(ctx, crypto_module, "constants"));
   JS_SetModuleExport(ctx, m, "webcrypto", JS_GetPropertyStr(ctx, crypto_module, "webcrypto"));
   JS_SetModuleExport(ctx, m, "subtle", JS_GetPropertyStr(ctx, crypto_module, "subtle"));

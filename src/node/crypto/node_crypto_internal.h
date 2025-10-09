@@ -143,6 +143,13 @@ JSValue js_crypto_create_private_key(JSContext* ctx, JSValueConst this_val, int 
 JSValue js_crypto_generate_keypair_sync(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv);
 JSValue js_crypto_generate_key_sync(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv);
 
+// Utility API functions
+JSValue js_crypto_timing_safe_equal(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv);
+JSValue js_crypto_random_int(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv);
+JSValue js_crypto_get_ciphers(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv);
+JSValue js_crypto_get_hashes(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv);
+JSValue js_crypto_get_curves(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv);
+
 // Constants
 JSValue create_crypto_constants(JSContext* ctx);
 

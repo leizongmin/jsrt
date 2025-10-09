@@ -3052,9 +3052,11 @@ static void writefile_promise_open_cb(uv_fs_t* req) {
   work->fd = (int)req->result;
 
   // Write data
+  // For append mode, use -1 as offset to append at end of file
+  int64_t offset = (work->flags & O_APPEND) ? -1 : 0;
   uv_buf_t buf = uv_buf_init((char*)work->buffer, (unsigned int)work->size);
   uv_fs_req_cleanup(req);
-  uv_fs_write(loop, req, work->fd, &buf, 1, 0, writefile_promise_write_cb);
+  uv_fs_write(loop, req, work->fd, &buf, 1, offset, writefile_promise_write_cb);
 }
 
 // fs.promises.writeFile(path, data) - returns Promise<void>
@@ -3099,7 +3101,8 @@ JSValue js_fs_promises_writeFile(JSContext* ctx, JSValueConst this_val, int argc
       }
     } else {
       // Clear exception and try direct ArrayBuffer
-      JS_GetException(ctx);
+      JSValue exc = JS_GetException(ctx);
+      JS_FreeValue(ctx, exc);
       size_t size;
       uint8_t* buf = JS_GetArrayBuffer(ctx, &size, argv[1]);
       if (buf) {
@@ -3202,7 +3205,8 @@ JSValue js_fs_promises_appendFile(JSContext* ctx, JSValueConst this_val, int arg
       }
     } else {
       // Clear exception and try direct ArrayBuffer
-      JS_GetException(ctx);
+      JSValue exc = JS_GetException(ctx);
+      JS_FreeValue(ctx, exc);
       size_t size;
       uint8_t* buf = JS_GetArrayBuffer(ctx, &size, argv[1]);
       if (buf) {

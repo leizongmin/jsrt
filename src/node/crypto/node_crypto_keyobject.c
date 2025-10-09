@@ -945,3 +945,309 @@ JSValue js_crypto_create_private_key(JSContext* ctx, JSValueConst this_val, int 
 
   return result;
 }
+
+//==============================================================================
+// Key Generation APIs
+//==============================================================================
+
+// generateKeyPairSync(type, options)
+JSValue js_crypto_generate_keypair_sync(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
+  if (argc < 1) {
+    return JS_ThrowTypeError(ctx, "generateKeyPairSync requires at least 1 argument");
+  }
+
+  // Get key type
+  const char* type = JS_ToCString(ctx, argv[0]);
+  if (!type) {
+    return JS_ThrowTypeError(ctx, "Key type must be a string");
+  }
+
+  // Parse options object
+  JSValue options = argc > 1 ? argv[1] : JS_UNDEFINED;
+
+  // Variables for algorithm configuration
+  const char* webcrypto_alg = NULL;
+  JSValue alg_obj = JS_NewObject(ctx);
+  JSValue usages_public = JS_NewArray(ctx);
+  JSValue usages_private = JS_NewArray(ctx);
+
+  // Configure based on key type
+  if (strcmp(type, "rsa") == 0 || strcmp(type, "rsa-pss") == 0) {
+    // RSA key generation
+    int modulus_length = 2048;  // Default
+    JSValue public_exponent = JS_UNDEFINED;
+
+    if (JS_IsObject(options)) {
+      // Get modulusLength
+      JSValue ml_val = JS_GetPropertyStr(ctx, options, "modulusLength");
+      if (!JS_IsUndefined(ml_val)) {
+        JS_ToInt32(ctx, &modulus_length, ml_val);
+      }
+      JS_FreeValue(ctx, ml_val);
+
+      // Get publicExponent (optional)
+      public_exponent = JS_GetPropertyStr(ctx, options, "publicExponent");
+    }
+
+    // Set algorithm
+    if (strcmp(type, "rsa-pss") == 0) {
+      webcrypto_alg = "RSA-PSS";
+    } else {
+      webcrypto_alg = "RSASSA-PKCS1-v1_5";
+    }
+
+    JS_SetPropertyStr(ctx, alg_obj, "name", JS_NewString(ctx, webcrypto_alg));
+    JS_SetPropertyStr(ctx, alg_obj, "modulusLength", JS_NewInt32(ctx, modulus_length));
+
+    // Set publicExponent (default to 65537 = [0x01, 0x00, 0x01])
+    if (JS_IsUndefined(public_exponent)) {
+      JSValue exp_array = JS_NewArrayBufferCopy(ctx, (const uint8_t[]){0x01, 0x00, 0x01}, 3);
+      JS_SetPropertyStr(ctx, alg_obj, "publicExponent", exp_array);
+    } else {
+      JS_SetPropertyStr(ctx, alg_obj, "publicExponent", public_exponent);
+    }
+
+    JS_SetPropertyStr(ctx, alg_obj, "hash", JS_NewString(ctx, "SHA-256"));
+
+    // Usages
+    JS_SetPropertyUint32(ctx, usages_public, 0, JS_NewString(ctx, "verify"));
+    JS_SetPropertyUint32(ctx, usages_private, 0, JS_NewString(ctx, "sign"));
+
+  } else if (strcmp(type, "ec") == 0) {
+    // EC key generation
+    const char* named_curve = "P-256";  // Default
+
+    if (JS_IsObject(options)) {
+      JSValue nc_val = JS_GetPropertyStr(ctx, options, "namedCurve");
+      if (!JS_IsUndefined(nc_val)) {
+        named_curve = JS_ToCString(ctx, nc_val);
+        JS_FreeValue(ctx, nc_val);
+      } else {
+        JS_FreeValue(ctx, nc_val);
+      }
+    }
+
+    webcrypto_alg = "ECDSA";
+    JS_SetPropertyStr(ctx, alg_obj, "name", JS_NewString(ctx, webcrypto_alg));
+    JS_SetPropertyStr(ctx, alg_obj, "namedCurve", JS_NewString(ctx, named_curve));
+
+    // Usages
+    JS_SetPropertyUint32(ctx, usages_public, 0, JS_NewString(ctx, "verify"));
+    JS_SetPropertyUint32(ctx, usages_private, 0, JS_NewString(ctx, "sign"));
+
+  } else if (strcmp(type, "ed25519") == 0) {
+    // Ed25519 key generation
+    webcrypto_alg = "Ed25519";
+    JS_SetPropertyStr(ctx, alg_obj, "name", JS_NewString(ctx, webcrypto_alg));
+
+    // Usages
+    JS_SetPropertyUint32(ctx, usages_public, 0, JS_NewString(ctx, "verify"));
+    JS_SetPropertyUint32(ctx, usages_private, 0, JS_NewString(ctx, "sign"));
+
+  } else if (strcmp(type, "ed448") == 0) {
+    // Ed448 key generation
+    webcrypto_alg = "Ed448";
+    JS_SetPropertyStr(ctx, alg_obj, "name", JS_NewString(ctx, webcrypto_alg));
+
+    // Usages
+    JS_SetPropertyUint32(ctx, usages_public, 0, JS_NewString(ctx, "verify"));
+    JS_SetPropertyUint32(ctx, usages_private, 0, JS_NewString(ctx, "sign"));
+
+  } else {
+    JS_FreeCString(ctx, type);
+    JS_FreeValue(ctx, alg_obj);
+    JS_FreeValue(ctx, usages_public);
+    JS_FreeValue(ctx, usages_private);
+    return JS_ThrowTypeError(ctx, "Unsupported key type");
+  }
+
+  JS_FreeCString(ctx, type);
+
+  // Call WebCrypto generateKey
+  JSValue global = JS_GetGlobalObject(ctx);
+  JSValue crypto = JS_GetPropertyStr(ctx, global, "crypto");
+  JSValue subtle = JS_GetPropertyStr(ctx, crypto, "subtle");
+  JSValue generate_key = JS_GetPropertyStr(ctx, subtle, "generateKey");
+
+  JSValue args[3];
+  args[0] = alg_obj;
+  args[1] = JS_NewBool(ctx, true);  // extractable
+
+  // For key pairs, we need to combine usages
+  JSValue combined_usages = JS_NewArray(ctx);
+  JS_SetPropertyUint32(ctx, combined_usages, 0, JS_GetPropertyUint32(ctx, usages_public, 0));
+  JS_SetPropertyUint32(ctx, combined_usages, 1, JS_GetPropertyUint32(ctx, usages_private, 0));
+  args[2] = combined_usages;
+
+  JSValue keypair_promise = JS_Call(ctx, generate_key, subtle, 3, args);
+
+  JS_FreeValue(ctx, args[0]);
+  JS_FreeValue(ctx, args[1]);
+  JS_FreeValue(ctx, args[2]);
+  JS_FreeValue(ctx, usages_public);
+  JS_FreeValue(ctx, usages_private);
+  JS_FreeValue(ctx, generate_key);
+  JS_FreeValue(ctx, subtle);
+  JS_FreeValue(ctx, crypto);
+  JS_FreeValue(ctx, global);
+
+  // Wrap the promise result to return KeyObject pair
+  const char* wrapper_code =
+      "(async (promise) => {"
+      "  try {"
+      "    const { publicKey, privateKey } = await promise;"
+      "    return {"
+      "      publicKey: globalThis.__createKeyObjectFromCryptoKey(publicKey),"
+      "      privateKey: globalThis.__createKeyObjectFromCryptoKey(privateKey)"
+      "    };"
+      "  } catch (e) {"
+      "    throw new TypeError('Failed to generate key pair: ' + e.message);"
+      "  }"
+      "})";
+
+  JSValue wrapper = JS_Eval(ctx, wrapper_code, strlen(wrapper_code), "<generateKeyPairSync>", JS_EVAL_TYPE_GLOBAL);
+  JSValue wrapper_args[1] = {keypair_promise};
+  JSValue result = JS_Call(ctx, wrapper, JS_UNDEFINED, 1, wrapper_args);
+
+  JS_FreeValue(ctx, wrapper);
+  JS_FreeValue(ctx, keypair_promise);
+
+  return result;
+}
+
+// generateKeySync(type, options)
+JSValue js_crypto_generate_key_sync(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
+  if (argc < 1) {
+    return JS_ThrowTypeError(ctx, "generateKeySync requires at least 1 argument");
+  }
+
+  // Get key type
+  const char* type = JS_ToCString(ctx, argv[0]);
+  if (!type) {
+    return JS_ThrowTypeError(ctx, "Key type must be a string");
+  }
+
+  // Parse options object
+  JSValue options = argc > 1 ? argv[1] : JS_UNDEFINED;
+
+  // Variables for algorithm configuration
+  const char* webcrypto_alg = NULL;
+  JSValue alg_obj = JS_NewObject(ctx);
+  JSValue usages = JS_NewArray(ctx);
+  int key_length = 256;  // Default length in bits
+
+  // Configure based on key type
+  if (strcmp(type, "hmac") == 0) {
+    // HMAC key generation
+    const char* hash = "SHA-256";  // Default
+
+    if (JS_IsObject(options)) {
+      // Get length
+      JSValue len_val = JS_GetPropertyStr(ctx, options, "length");
+      if (!JS_IsUndefined(len_val)) {
+        JS_ToInt32(ctx, &key_length, len_val);
+      }
+      JS_FreeValue(ctx, len_val);
+
+      // Get hash algorithm
+      JSValue hash_val = JS_GetPropertyStr(ctx, options, "hash");
+      if (!JS_IsUndefined(hash_val)) {
+        hash = JS_ToCString(ctx, hash_val);
+        JS_FreeValue(ctx, hash_val);
+      } else {
+        JS_FreeValue(ctx, hash_val);
+      }
+    }
+
+    webcrypto_alg = "HMAC";
+    JS_SetPropertyStr(ctx, alg_obj, "name", JS_NewString(ctx, webcrypto_alg));
+    JS_SetPropertyStr(ctx, alg_obj, "hash", JS_NewString(ctx, hash));
+    JS_SetPropertyStr(ctx, alg_obj, "length", JS_NewInt32(ctx, key_length));
+
+    // Usages
+    JS_SetPropertyUint32(ctx, usages, 0, JS_NewString(ctx, "sign"));
+    JS_SetPropertyUint32(ctx, usages, 1, JS_NewString(ctx, "verify"));
+
+  } else if (strcmp(type, "aes") == 0 || strcmp(type, "aes-cbc") == 0 || strcmp(type, "aes-gcm") == 0) {
+    // AES key generation
+    if (JS_IsObject(options)) {
+      JSValue len_val = JS_GetPropertyStr(ctx, options, "length");
+      if (!JS_IsUndefined(len_val)) {
+        JS_ToInt32(ctx, &key_length, len_val);
+      }
+      JS_FreeValue(ctx, len_val);
+    }
+
+    // Validate AES key length (128, 192, or 256 bits)
+    if (key_length != 128 && key_length != 192 && key_length != 256) {
+      JS_FreeCString(ctx, type);
+      JS_FreeValue(ctx, alg_obj);
+      JS_FreeValue(ctx, usages);
+      return JS_ThrowTypeError(ctx, "AES key length must be 128, 192, or 256 bits");
+    }
+
+    if (strcmp(type, "aes-gcm") == 0) {
+      webcrypto_alg = "AES-GCM";
+    } else if (strcmp(type, "aes-cbc") == 0) {
+      webcrypto_alg = "AES-CBC";
+    } else {
+      webcrypto_alg = "AES-GCM";  // Default to GCM
+    }
+
+    JS_SetPropertyStr(ctx, alg_obj, "name", JS_NewString(ctx, webcrypto_alg));
+    JS_SetPropertyStr(ctx, alg_obj, "length", JS_NewInt32(ctx, key_length));
+
+    // Usages
+    JS_SetPropertyUint32(ctx, usages, 0, JS_NewString(ctx, "encrypt"));
+    JS_SetPropertyUint32(ctx, usages, 1, JS_NewString(ctx, "decrypt"));
+
+  } else {
+    JS_FreeCString(ctx, type);
+    JS_FreeValue(ctx, alg_obj);
+    JS_FreeValue(ctx, usages);
+    return JS_ThrowTypeError(ctx, "Unsupported key type for symmetric key generation");
+  }
+
+  JS_FreeCString(ctx, type);
+
+  // Call WebCrypto generateKey
+  JSValue global = JS_GetGlobalObject(ctx);
+  JSValue crypto = JS_GetPropertyStr(ctx, global, "crypto");
+  JSValue subtle = JS_GetPropertyStr(ctx, crypto, "subtle");
+  JSValue generate_key = JS_GetPropertyStr(ctx, subtle, "generateKey");
+
+  JSValue args[3];
+  args[0] = alg_obj;
+  args[1] = JS_NewBool(ctx, true);  // extractable
+  args[2] = usages;
+
+  JSValue key_promise = JS_Call(ctx, generate_key, subtle, 3, args);
+
+  JS_FreeValue(ctx, args[0]);
+  JS_FreeValue(ctx, args[1]);
+  JS_FreeValue(ctx, args[2]);
+  JS_FreeValue(ctx, generate_key);
+  JS_FreeValue(ctx, subtle);
+  JS_FreeValue(ctx, crypto);
+  JS_FreeValue(ctx, global);
+
+  // Wrap the promise result to return KeyObject
+  const char* wrapper_code =
+      "(async (promise) => {"
+      "  try {"
+      "    const cryptoKey = await promise;"
+      "    return globalThis.__createKeyObjectFromCryptoKey(cryptoKey);"
+      "  } catch (e) {"
+      "    throw new TypeError('Failed to generate key: ' + e.message);"
+      "  }"
+      "})";
+
+  JSValue wrapper = JS_Eval(ctx, wrapper_code, strlen(wrapper_code), "<generateKeySync>", JS_EVAL_TYPE_GLOBAL);
+  JSValue wrapper_args[1] = {key_promise};
+  JSValue result = JS_Call(ctx, wrapper, JS_UNDEFINED, 1, wrapper_args);
+
+  JS_FreeValue(ctx, wrapper);
+  JS_FreeValue(ctx, key_promise);
+
+  return result;
+}

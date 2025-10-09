@@ -64,6 +64,12 @@ JSValue JSRT_InitNodeCrypto(JSContext* ctx) {
   JS_SetPropertyStr(ctx, crypto_obj, "createPrivateKey",
                     JS_NewCFunction(ctx, js_crypto_create_private_key, "createPrivateKey", 1));
 
+  // Add Key Generation functions
+  JS_SetPropertyStr(ctx, crypto_obj, "generateKeyPairSync",
+                    JS_NewCFunction(ctx, js_crypto_generate_keypair_sync, "generateKeyPairSync", 2));
+  JS_SetPropertyStr(ctx, crypto_obj, "generateKeySync",
+                    JS_NewCFunction(ctx, js_crypto_generate_key_sync, "generateKeySync", 2));
+
   // Add internal helper for KeyObject creation (used by factory functions)
   JSValue global_this = JS_GetGlobalObject(ctx);
   JS_SetPropertyStr(
@@ -117,6 +123,8 @@ int js_node_crypto_init(JSContext* ctx, JSModuleDef* m) {
   JS_SetModuleExport(ctx, m, "createSecretKey", JS_GetPropertyStr(ctx, crypto_module, "createSecretKey"));
   JS_SetModuleExport(ctx, m, "createPublicKey", JS_GetPropertyStr(ctx, crypto_module, "createPublicKey"));
   JS_SetModuleExport(ctx, m, "createPrivateKey", JS_GetPropertyStr(ctx, crypto_module, "createPrivateKey"));
+  JS_SetModuleExport(ctx, m, "generateKeyPairSync", JS_GetPropertyStr(ctx, crypto_module, "generateKeyPairSync"));
+  JS_SetModuleExport(ctx, m, "generateKeySync", JS_GetPropertyStr(ctx, crypto_module, "generateKeySync"));
   JS_SetModuleExport(ctx, m, "constants", JS_GetPropertyStr(ctx, crypto_module, "constants"));
   JS_SetModuleExport(ctx, m, "webcrypto", JS_GetPropertyStr(ctx, crypto_module, "webcrypto"));
   JS_SetModuleExport(ctx, m, "subtle", JS_GetPropertyStr(ctx, crypto_module, "subtle"));

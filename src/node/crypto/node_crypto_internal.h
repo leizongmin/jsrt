@@ -139,6 +139,10 @@ JSValue js_crypto_create_secret_key(JSContext* ctx, JSValueConst this_val, int a
 JSValue js_crypto_create_public_key(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv);
 JSValue js_crypto_create_private_key(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv);
 
+// Key Generation API functions
+JSValue js_crypto_generate_keypair_sync(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv);
+JSValue js_crypto_generate_key_sync(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv);
+
 // Constants
 JSValue create_crypto_constants(JSContext* ctx);
 

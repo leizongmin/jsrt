@@ -1,15 +1,14 @@
-@agent-task-breakdown Execute the plan in $1 with parallel task execution
+If $1 is empty, ask user for plan file path (search and show available plans in docs/plan/). Then ask for optional additional requirements.
 
-Requirements:
+Execute plan in $1 with these requirements:
 - Follow jsrt development guidelines strictly
 - Run mandatory tests: make test && make wpt
 - Ensure code formatting: make format
 - Verify build integrity: make clean && make
-- Update plan document with latest progress after completing each major task
+- Update plan document with latest progress
 
-@jsrt-code-reviewer Conduct comprehensive review focusing on:
-- Memory safety: leak prevention, proper allocation/deallocation
-- Standards compliance: Web Platform Tests compatibility
-- Performance impact: runtime efficiency, resource usage
-- Edge case handling: error conditions, boundary values
-- Code quality: maintainability, readability
+Additional requirements: $2
+
+@agent-task-breakdown Execute the plan with parallel task execution
+
+@jsrt-code-reviewer Review focusing on: memory safety, standards compliance, performance, edge cases, code quality

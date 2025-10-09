@@ -3,7 +3,7 @@ Created: 2025-10-09T12:30:00Z
 Last Updated: 2025-10-09T15:31:00Z
 Status: 🟢 IN PROGRESS
 Overall Progress: 152/168 tasks (90.5%)
-API Coverage: 16/85+ methods (18.8%)
+API Coverage: 19/85+ methods (22.4%)
 ---
 
 # Node.js crypto Module Implementation Plan
@@ -176,7 +176,7 @@ Implement complete Node.js `node:crypto` module API compatible with Node.js v20+
 
 ### Phase 7: Diffie-Hellman [S][R:MED][C:COMPLEX][D:5]
 **Goal**: Implement DH and ECDH key exchange
-**Duration**: ~2 hours | **Status**: ⏳ PENDING
+**Duration**: ~2 hours | **Status**: ✅ COMPLETED (ECDH only, Classic DH deferred)
 
 ### Phase 8: Integration & Testing [S][R:MED][C:MEDIUM][D:1,2,3,4,5,6,7]
 **Goal**: Comprehensive testing, documentation, final validation
@@ -568,7 +568,7 @@ Implement complete Node.js `node:crypto` module API compatible with Node.js v20+
 | Phase 4 | 33 | 33 | ✅ COMPLETED | None |
 | Phase 5 | 38 | 0 | ⏳ PENDING | Deferred (not required for ECDH) |
 | Phase 6 | 25 | 25 | ✅ COMPLETED | None (ran in parallel) |
-| Phase 7 | 27 | 14 | ✅ COMPLETED | ECDH only (Classic DH deferred) |
+| Phase 7 | 27 | 14 | ✅ COMPLETED | ECDH complete (Classic DH deferred) |
 | Phase 8 | 15 | 0 | ⏳ PENDING | Waiting on Phase 5 |
 
 ### Parallel Execution Opportunities
@@ -606,6 +606,7 @@ Implement complete Node.js `node:crypto` module API compatible with Node.js v20+
 | 2025-10-09T15:20:00Z | Status | 🟢 IN PROGRESS - Phase 0-4,6 complete (138/168 tasks, 82.1%) |
 | 2025-10-09T15:31:00Z | Phase 7 | ✅ Completed - ECDH implemented (14/14 tests passing), Classic DH deferred |
 | 2025-10-09T15:31:00Z | Status | 🟢 IN PROGRESS - Phase 0-4,6-7 complete (152/168 tasks, 90.5%) |
+| 2025-10-09T15:45:00Z | Commit | feat(node:crypto): implement Phase 7 - ECDH key exchange (commit 128c993) |
 
 ---
 
@@ -657,7 +658,7 @@ crypto.subtle.generateKey() → generateKeyPair backend
 
 ### Complete API Coverage Matrix
 
-**Implemented (13/85+)** - 15.3% coverage:
+**Implemented (19/85+)** - 22.4% coverage:
 - ✅ crypto.createHash(algorithm, [options])
 - ✅ crypto.createHmac(algorithm, key, [options])
 - ✅ crypto.createCipheriv(algorithm, key, iv, [options])
@@ -671,6 +672,13 @@ crypto.subtle.generateKey() → generateKeyPair backend
 - ✅ crypto.hkdfSync(digest, ikm, salt, info, keylen)
 - ⚠️ crypto.scrypt - Stub (not implemented)
 - ⚠️ crypto.scryptSync - Stub (not implemented)
+- ✅ crypto.createECDH(curveName)
+- ✅ ecdh.generateKeys()
+- ✅ ecdh.computeSecret(otherPublicKey, inputEncoding, outputEncoding)
+- ✅ ecdh.getPublicKey(encoding, format)
+- ✅ ecdh.getPrivateKey(encoding)
+- ✅ ecdh.setPrivateKey(privateKey, encoding)
+- ✅ ecdh.setPublicKey(publicKey, encoding)
 
 **Planned (82+)**:
 
@@ -736,9 +744,9 @@ crypto.subtle.generateKey() → generateKeyPair backend
 - ✅ crypto.hkdfSync(digest, ikm, salt, info, keylen)
 
 *Phase 7 (DH - 20+ methods)*:
-- ⚠️ crypto.createDiffieHellman(primeLength, [generator]) - Deferred
-- ⚠️ crypto.createDiffieHellman(prime, [primeEncoding], [generator], [generatorEncoding]) - Deferred
-- ⚠️ crypto.createDiffieHellmanGroup(name) - Deferred
+- ⏳ crypto.createDiffieHellman(primeLength, [generator]) - Deferred
+- ⏳ crypto.createDiffieHellman(prime, [primeEncoding], [generator], [generatorEncoding]) - Deferred
+- ⏳ crypto.createDiffieHellmanGroup(name) - Deferred
 - ✅ crypto.createECDH(curveName)
 - ✅ ecdh.generateKeys()
 - ✅ ecdh.computeSecret(otherPublicKey, inputEncoding, outputEncoding)

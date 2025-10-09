@@ -55,6 +55,12 @@ void zlib_options_cleanup(ZlibOptions* opts);
 JSValue zlib_deflate_sync(JSContext* ctx, const uint8_t* input, size_t input_len, const ZlibOptions* opts, int format);
 JSValue zlib_inflate_sync(JSContext* ctx, const uint8_t* input, size_t input_len, const ZlibOptions* opts, int format);
 
+// Asynchronous operations
+JSValue zlib_async_deflate(JSContext* ctx, const uint8_t* input, size_t input_len, const ZlibOptions* opts, int format,
+                           JSValue callback);
+JSValue zlib_async_inflate(JSContext* ctx, const uint8_t* input, size_t input_len, const ZlibOptions* opts, int format,
+                           JSValue callback);
+
 // Error handling
 JSValue zlib_throw_error(JSContext* ctx, int err_code, const char* msg);
 const char* zlib_error_message(int err_code);

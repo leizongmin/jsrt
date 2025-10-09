@@ -230,6 +230,297 @@ static JSValue js_zlib_unzip_sync(JSContext* ctx, JSValueConst this_val, int arg
   return result;
 }
 
+// gzip async implementation
+static JSValue js_zlib_gzip(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
+  if (argc < 2) {
+    return JS_ThrowTypeError(ctx, "gzip requires at least 2 arguments");
+  }
+
+  const uint8_t* input;
+  size_t input_len;
+  if (get_buffer_data(ctx, argv[0], &input, &input_len) < 0) {
+    return JS_EXCEPTION;
+  }
+
+  // Check if second arg is options or callback
+  JSValue callback;
+  ZlibOptions opts;
+  if (argc == 2) {
+    // buffer, callback
+    callback = argv[1];
+    zlib_options_init_defaults(&opts);
+  } else {
+    // buffer, options, callback
+    if (zlib_parse_options(ctx, argv[1], &opts) < 0) {
+      return JS_EXCEPTION;
+    }
+    callback = argv[2];
+  }
+
+  if (!JS_IsFunction(ctx, callback)) {
+    if (argc > 2) {
+      zlib_options_cleanup(&opts);
+    }
+    return JS_ThrowTypeError(ctx, "callback must be a function");
+  }
+
+  JSValue result = zlib_async_deflate(ctx, input, input_len, &opts, ZLIB_FORMAT_GZIP, callback);
+
+  if (argc > 2) {
+    zlib_options_cleanup(&opts);
+  }
+
+  return result;
+}
+
+// gunzip async implementation
+static JSValue js_zlib_gunzip(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
+  if (argc < 2) {
+    return JS_ThrowTypeError(ctx, "gunzip requires at least 2 arguments");
+  }
+
+  const uint8_t* input;
+  size_t input_len;
+  if (get_buffer_data(ctx, argv[0], &input, &input_len) < 0) {
+    return JS_EXCEPTION;
+  }
+
+  // Check if second arg is options or callback
+  JSValue callback;
+  ZlibOptions opts;
+  if (argc == 2) {
+    // buffer, callback
+    callback = argv[1];
+    zlib_options_init_defaults(&opts);
+  } else {
+    // buffer, options, callback
+    if (zlib_parse_options(ctx, argv[1], &opts) < 0) {
+      return JS_EXCEPTION;
+    }
+    callback = argv[2];
+  }
+
+  if (!JS_IsFunction(ctx, callback)) {
+    if (argc > 2) {
+      zlib_options_cleanup(&opts);
+    }
+    return JS_ThrowTypeError(ctx, "callback must be a function");
+  }
+
+  JSValue result = zlib_async_inflate(ctx, input, input_len, &opts, ZLIB_FORMAT_GZIP, callback);
+
+  if (argc > 2) {
+    zlib_options_cleanup(&opts);
+  }
+
+  return result;
+}
+
+// deflate async implementation
+static JSValue js_zlib_deflate(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
+  if (argc < 2) {
+    return JS_ThrowTypeError(ctx, "deflate requires at least 2 arguments");
+  }
+
+  const uint8_t* input;
+  size_t input_len;
+  if (get_buffer_data(ctx, argv[0], &input, &input_len) < 0) {
+    return JS_EXCEPTION;
+  }
+
+  // Check if second arg is options or callback
+  JSValue callback;
+  ZlibOptions opts;
+  if (argc == 2) {
+    callback = argv[1];
+    zlib_options_init_defaults(&opts);
+  } else {
+    if (zlib_parse_options(ctx, argv[1], &opts) < 0) {
+      return JS_EXCEPTION;
+    }
+    callback = argv[2];
+  }
+
+  if (!JS_IsFunction(ctx, callback)) {
+    if (argc > 2) {
+      zlib_options_cleanup(&opts);
+    }
+    return JS_ThrowTypeError(ctx, "callback must be a function");
+  }
+
+  JSValue result = zlib_async_deflate(ctx, input, input_len, &opts, ZLIB_FORMAT_DEFLATE, callback);
+
+  if (argc > 2) {
+    zlib_options_cleanup(&opts);
+  }
+
+  return result;
+}
+
+// inflate async implementation
+static JSValue js_zlib_inflate(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
+  if (argc < 2) {
+    return JS_ThrowTypeError(ctx, "inflate requires at least 2 arguments");
+  }
+
+  const uint8_t* input;
+  size_t input_len;
+  if (get_buffer_data(ctx, argv[0], &input, &input_len) < 0) {
+    return JS_EXCEPTION;
+  }
+
+  // Check if second arg is options or callback
+  JSValue callback;
+  ZlibOptions opts;
+  if (argc == 2) {
+    callback = argv[1];
+    zlib_options_init_defaults(&opts);
+  } else {
+    if (zlib_parse_options(ctx, argv[1], &opts) < 0) {
+      return JS_EXCEPTION;
+    }
+    callback = argv[2];
+  }
+
+  if (!JS_IsFunction(ctx, callback)) {
+    if (argc > 2) {
+      zlib_options_cleanup(&opts);
+    }
+    return JS_ThrowTypeError(ctx, "callback must be a function");
+  }
+
+  JSValue result = zlib_async_inflate(ctx, input, input_len, &opts, ZLIB_FORMAT_DEFLATE, callback);
+
+  if (argc > 2) {
+    zlib_options_cleanup(&opts);
+  }
+
+  return result;
+}
+
+// deflateRaw async implementation
+static JSValue js_zlib_deflate_raw(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
+  if (argc < 2) {
+    return JS_ThrowTypeError(ctx, "deflateRaw requires at least 2 arguments");
+  }
+
+  const uint8_t* input;
+  size_t input_len;
+  if (get_buffer_data(ctx, argv[0], &input, &input_len) < 0) {
+    return JS_EXCEPTION;
+  }
+
+  JSValue callback;
+  ZlibOptions opts;
+  if (argc == 2) {
+    callback = argv[1];
+    zlib_options_init_defaults(&opts);
+  } else {
+    if (zlib_parse_options(ctx, argv[1], &opts) < 0) {
+      return JS_EXCEPTION;
+    }
+    callback = argv[2];
+  }
+
+  if (!JS_IsFunction(ctx, callback)) {
+    if (argc > 2) {
+      zlib_options_cleanup(&opts);
+    }
+    return JS_ThrowTypeError(ctx, "callback must be a function");
+  }
+
+  JSValue result = zlib_async_deflate(ctx, input, input_len, &opts, ZLIB_FORMAT_RAW, callback);
+
+  if (argc > 2) {
+    zlib_options_cleanup(&opts);
+  }
+
+  return result;
+}
+
+// inflateRaw async implementation
+static JSValue js_zlib_inflate_raw(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
+  if (argc < 2) {
+    return JS_ThrowTypeError(ctx, "inflateRaw requires at least 2 arguments");
+  }
+
+  const uint8_t* input;
+  size_t input_len;
+  if (get_buffer_data(ctx, argv[0], &input, &input_len) < 0) {
+    return JS_EXCEPTION;
+  }
+
+  JSValue callback;
+  ZlibOptions opts;
+  if (argc == 2) {
+    callback = argv[1];
+    zlib_options_init_defaults(&opts);
+  } else {
+    if (zlib_parse_options(ctx, argv[1], &opts) < 0) {
+      return JS_EXCEPTION;
+    }
+    callback = argv[2];
+  }
+
+  if (!JS_IsFunction(ctx, callback)) {
+    if (argc > 2) {
+      zlib_options_cleanup(&opts);
+    }
+    return JS_ThrowTypeError(ctx, "callback must be a function");
+  }
+
+  JSValue result = zlib_async_inflate(ctx, input, input_len, &opts, ZLIB_FORMAT_RAW, callback);
+
+  if (argc > 2) {
+    zlib_options_cleanup(&opts);
+  }
+
+  return result;
+}
+
+// unzip async implementation
+static JSValue js_zlib_unzip(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
+  if (argc < 2) {
+    return JS_ThrowTypeError(ctx, "unzip requires at least 2 arguments");
+  }
+
+  const uint8_t* input;
+  size_t input_len;
+  if (get_buffer_data(ctx, argv[0], &input, &input_len) < 0) {
+    return JS_EXCEPTION;
+  }
+
+  JSValue callback;
+  ZlibOptions opts;
+  if (argc == 2) {
+    callback = argv[1];
+    zlib_options_init_defaults(&opts);
+  } else {
+    if (zlib_parse_options(ctx, argv[1], &opts) < 0) {
+      return JS_EXCEPTION;
+    }
+    callback = argv[2];
+  }
+
+  if (!JS_IsFunction(ctx, callback)) {
+    if (argc > 2) {
+      zlib_options_cleanup(&opts);
+    }
+    return JS_ThrowTypeError(ctx, "callback must be a function");
+  }
+
+  // Use windowBits + 32 for auto-detection
+  opts.windowBits = 15 + 32;
+
+  JSValue result = zlib_async_inflate(ctx, input, input_len, &opts, ZLIB_FORMAT_DEFLATE, callback);
+
+  if (argc > 2) {
+    zlib_options_cleanup(&opts);
+  }
+
+  return result;
+}
+
 static const JSCFunctionListEntry js_zlib_funcs[] = {
     JS_CFUNC_DEF("gzipSync", 1, js_zlib_gzip_sync),
     JS_CFUNC_DEF("gunzipSync", 1, js_zlib_gunzip_sync),
@@ -238,6 +529,13 @@ static const JSCFunctionListEntry js_zlib_funcs[] = {
     JS_CFUNC_DEF("deflateRawSync", 1, js_zlib_deflate_raw_sync),
     JS_CFUNC_DEF("inflateRawSync", 1, js_zlib_inflate_raw_sync),
     JS_CFUNC_DEF("unzipSync", 1, js_zlib_unzip_sync),
+    JS_CFUNC_DEF("gzip", 2, js_zlib_gzip),
+    JS_CFUNC_DEF("gunzip", 2, js_zlib_gunzip),
+    JS_CFUNC_DEF("deflate", 2, js_zlib_deflate),
+    JS_CFUNC_DEF("inflate", 2, js_zlib_inflate),
+    JS_CFUNC_DEF("deflateRaw", 2, js_zlib_deflate_raw),
+    JS_CFUNC_DEF("inflateRaw", 2, js_zlib_inflate_raw),
+    JS_CFUNC_DEF("unzip", 2, js_zlib_unzip),
 };
 
 static int js_zlib_init_module(JSContext* ctx, JSModuleDef* m) {

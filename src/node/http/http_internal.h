@@ -22,10 +22,12 @@ extern JSClassID js_http_client_request_class_id;
 #define HTTP_TYPE_REQUEST 0x48545251   // 'HTRQ' in hex
 #define HTTP_TYPE_RESPONSE 0x48545250  // 'HTRP' in hex
 
-// Global HTTP server reference for connection handler workaround
-extern JSValue g_current_http_server;
-extern JSContext* g_current_http_server_ctx;
-extern bool g_http_server_initialized;
+// CRITICAL FIX #1.4: Connection handler wrapper to avoid global server state
+// This wrapper stores the server reference with the connection handler function
+typedef struct {
+  JSContext* ctx;
+  JSValue server;
+} JSHttpConnectionHandlerWrapper;
 
 // HTTP Connection state for parsing
 typedef struct {
@@ -71,7 +73,8 @@ typedef struct {
   JSValue server_obj;
   JSValue net_server;  // Underlying net.Server
   bool destroyed;
-  uint32_t timeout_ms;  // Default connection timeout (0 = no timeout)
+  uint32_t timeout_ms;                           // Default connection timeout (0 = no timeout)
+  JSHttpConnectionHandlerWrapper* conn_wrapper;  // CRITICAL FIX #1.4: Store wrapper for cleanup
 } JSHttpServer;
 
 // HTTP Request state (IncomingMessage)

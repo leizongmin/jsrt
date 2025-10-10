@@ -7,10 +7,6 @@ JSClassID js_http_response_class_id;
 JSClassID js_http_client_request_class_id;
 JSClassID js_http_agent_class_id;
 
-JSValue g_current_http_server;
-JSContext* g_current_http_server_ctx = NULL;
-bool g_http_server_initialized = false;
-
 // Helper function to add EventEmitter methods and proper inheritance
 void setup_event_emitter_inheritance(JSContext* ctx, JSValue obj) {
   JSValue events_module = JSRT_LoadNodeModuleCommonJS(ctx, "events");
@@ -65,23 +61,27 @@ JSValue js_http_create_server(JSContext* ctx, JSValueConst this_val, int argc, J
   if (http_server) {
     JSValue net_on_method = JS_GetPropertyStr(ctx, http_server->net_server, "on");
     if (JS_IsFunction(ctx, net_on_method)) {
-      // Create a connection handler function that processes HTTP requests
-      JSValue connection_handler = JS_NewCFunction(ctx, js_http_net_connection_handler, "connectionHandler", 1);
+      // CRITICAL FIX #1.4: Use wrapper to store server reference instead of global variable
+      // Create wrapper that holds server reference
+      JSHttpConnectionHandlerWrapper* wrapper = malloc(sizeof(JSHttpConnectionHandlerWrapper));
+      if (wrapper) {
+        wrapper->ctx = ctx;
+        wrapper->server = JS_DupValue(ctx, server);
 
-      // Store reference to HTTP server in global variable (workaround for event system)
-      if (g_http_server_initialized) {
-        JS_FreeValue(g_current_http_server_ctx, g_current_http_server);
+        // Store wrapper in server for cleanup
+        http_server->conn_wrapper = wrapper;
+
+        // Create connection handler with wrapper as opaque data
+        JSValue connection_handler = JS_NewCFunction(ctx, js_http_net_connection_handler, "connectionHandler", 1);
+        JS_SetOpaque(connection_handler, wrapper);
+
+        JSValue args[] = {JS_NewString(ctx, "connection"), connection_handler};
+        JSValue result = JS_Call(ctx, net_on_method, http_server->net_server, 2, args);
+        JS_FreeValue(ctx, result);
+        JS_FreeValue(ctx, args[0]);
+        // DO NOT free connection_handler (args[1]) - it needs to persist for event callbacks
+        // The event system will manage its lifecycle
       }
-      g_current_http_server = JS_DupValue(ctx, server);
-      g_current_http_server_ctx = ctx;
-      g_http_server_initialized = true;
-
-      JSValue args[] = {JS_NewString(ctx, "connection"), connection_handler};
-      JSValue result = JS_Call(ctx, net_on_method, http_server->net_server, 2, args);
-      JS_FreeValue(ctx, result);
-      JS_FreeValue(ctx, args[0]);
-      // DO NOT free connection_handler (args[1]) - it needs to persist for event callbacks
-      // The event system will manage its lifecycle
     }
     JS_FreeValue(ctx, net_on_method);
   }

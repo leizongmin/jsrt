@@ -757,9 +757,10 @@ JSValue js_http_close_handler(JSContext* ctx, JSValueConst this_val, int argc, J
 // C function wrapper for connection handling
 JSValue js_http_net_connection_handler(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
   if (argc > 0) {
-    // Use global HTTP server reference (workaround for event system property loss)
-    if (g_http_server_initialized && g_current_http_server_ctx == ctx) {
-      js_http_connection_handler(ctx, g_current_http_server, argv[0]);
+    // CRITICAL FIX #1.4: Extract server from wrapper instead of global variable
+    JSHttpConnectionHandlerWrapper* wrapper = JS_GetOpaque(this_val, 0);
+    if (wrapper && wrapper->ctx == ctx) {
+      js_http_connection_handler(ctx, wrapper->server, argv[0]);
     }
   }
   return JS_UNDEFINED;

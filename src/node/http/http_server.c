@@ -143,6 +143,13 @@ JSValue js_http_server_set_timeout(JSContext* ctx, JSValueConst this_val, int ar
 void js_http_server_finalizer(JSRuntime* rt, JSValue val) {
   JSHttpServer* server = JS_GetOpaque(val, js_http_server_class_id);
   if (server) {
+    // CRITICAL FIX #1.4: Clean up connection handler wrapper
+    if (server->conn_wrapper) {
+      JS_FreeValueRT(rt, server->conn_wrapper->server);
+      free(server->conn_wrapper);
+      server->conn_wrapper = NULL;
+    }
+
     JS_FreeValueRT(rt, server->net_server);
     free(server);
   }
@@ -164,7 +171,8 @@ JSValue js_http_server_constructor(JSContext* ctx, JSValueConst new_target, int 
   server->ctx = ctx;
   server->server_obj = JS_DupValue(ctx, obj);
   server->destroyed = false;
-  server->timeout_ms = 0;  // No timeout by default
+  server->timeout_ms = 0;       // No timeout by default
+  server->conn_wrapper = NULL;  // CRITICAL FIX #1.4: Initialize wrapper pointer
 
   // Create underlying net.Server
   JSValue net_module = JSRT_LoadNodeModuleCommonJS(ctx, "net");

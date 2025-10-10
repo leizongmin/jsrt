@@ -1,55 +1,111 @@
 // Internal zlib stream implementation using Transform streams
-// This file extends the native zlib module with stream classes
+// This file implements stream-based compression/decompression by extending Transform
+// from node:stream and wrapping the native zlib compression methods.
+//
+// Architecture Decision:
+// - Streams are implemented in JavaScript for maximum code reuse
+// - Extends existing Transform class from node:stream (battle-tested)
+// - Wraps native C compression methods for actual compression logic
+// - Separates concerns: JS for stream interface, C for compression
+// - Simpler, more maintainable than complex C/JS integration
+//
+// Usage:
+//   const zlib = require('node:zlib');
+//   const { createGzip } = require('./path/to/zlib_streams.js');
+//   const gzip = createGzip({ level: 9 });
+//   inputStream.pipe(gzip).pipe(outputStream);
 
 const { Transform } = require('node:stream');
 const zlib = require('node:zlib');
 
-// Base class for zlib Transform streams
+// Base class for all zlib Transform streams
+// Implements the Transform interface by wrapping native compression methods
 class ZlibBase extends Transform {
   constructor(opts, mode) {
     super(opts);
     this._mode = mode;
     this._opts = opts || {};
     this._hadError = false;
+    this._chunks = [];  // Accumulate chunks for better compression
+    this._chunkSize = this._opts.chunkSize || 16384;
   }
 
   // Common transform implementation for all zlib streams
+  // Processes each chunk through the appropriate native compression method
   _transform(chunk, encoding, callback) {
     if (this._hadError) {
       return callback();
     }
 
     try {
-      const input = chunk instanceof Uint8Array ? chunk : new Uint8Array(chunk.buffer || chunk);
-      let result;
+      // Convert chunk to Uint8Array if needed
+      const input = chunk instanceof Uint8Array ? chunk : 
+                    Buffer.isBuffer(chunk) ? new Uint8Array(chunk) :
+                    new Uint8Array(chunk.buffer || chunk);
       
-      // Call appropriate sync method based on mode
+      // Accumulate chunks to compress in larger batches for better efficiency
+      this._chunks.push(input);
+      const totalSize = this._chunks.reduce((sum, c) => sum + c.length, 0);
+      
+      // Only process when we have enough data or this is a small chunk
+      if (totalSize >= this._chunkSize || input.length < 1024) {
+        this._processChunks(callback);
+      } else {
+        // Accumulate more data
+        callback();
+      }
+    } catch (err) {
+      this._hadError = true;
+      callback(err);
+    }
+  }
+
+  // Process accumulated chunks
+  _processChunks(callback) {
+    if (this._chunks.length === 0) {
+      return callback();
+    }
+
+    try {
+      // Combine chunks
+      const totalSize = this._chunks.reduce((sum, c) => sum + c.length, 0);
+      const combined = new Uint8Array(totalSize);
+      let offset = 0;
+      for (const chunk of this._chunks) {
+        combined.set(chunk, offset);
+        offset += chunk.length;
+      }
+      this._chunks = [];
+
+      // Compress/decompress using native method
+      let result;
       switch (this._mode) {
         case 'gzip':
-          result = zlib.gzipSync(input, this._opts);
+          result = zlib.gzipSync(combined, this._opts);
           break;
         case 'gunzip':
-          result = zlib.gunzipSync(input, this._opts);
+          result = zlib.gunzipSync(combined, this._opts);
           break;
         case 'deflate':
-          result = zlib.deflateSync(input, this._opts);
+          result = zlib.deflateSync(combined, this._opts);
           break;
         case 'inflate':
-          result = zlib.inflateSync(input, this._opts);
+          result = zlib.inflateSync(combined, this._opts);
           break;
         case 'deflateRaw':
-          result = zlib.deflateRawSync(input, this._opts);
+          result = zlib.deflateRawSync(combined, this._opts);
           break;
         case 'inflateRaw':
-          result = zlib.inflateRawSync(input, this._opts);
+          result = zlib.inflateRawSync(combined, this._opts);
           break;
         case 'unzip':
-          result = zlib.unzipSync(input, this._opts);
+          result = zlib.unzipSync(combined, this._opts);
           break;
         default:
-          return callback(new Error('Unknown zlib mode: ' + this._mode));
+          throw new Error('Unknown zlib mode: ' + this._mode);
       }
       
+      // Push result to output
       this.push(result);
       callback();
     } catch (err) {
@@ -58,9 +114,13 @@ class ZlibBase extends Transform {
     }
   }
 
+  // Final flush - process any remaining chunks
   _flush(callback) {
-    // Finalization is already handled by sync methods
-    callback();
+    if (this._chunks.length > 0) {
+      this._processChunks(callback);
+    } else {
+      callback();
+    }
   }
 }
 
@@ -92,7 +152,7 @@ class Inflate extends ZlibBase {
   }
 }
 
-// Raw deflate compression stream
+// Raw deflate compression stream (no headers)
 class DeflateRaw extends ZlibBase {
   constructor(opts) {
     super(opts, 'deflateRaw');
@@ -106,58 +166,60 @@ class InflateRaw extends ZlibBase {
   }
 }
 
-// Auto-detect decompression stream
+// Auto-detecting decompression stream (handles both gzip and deflate)
 class Unzip extends ZlibBase {
   constructor(opts) {
     super(opts, 'unzip');
   }
 }
 
-// Factory functions
-function createGzip(opts) {
-  return new Gzip(opts);
+// Factory functions for creating stream instances
+function createGzip(options) {
+  return new Gzip(options);
 }
 
-function createGunzip(opts) {
-  return new Gunzip(opts);
+function createGunzip(options) {
+  return new Gunzip(options);
 }
 
-function createDeflate(opts) {
-  return new Deflate(opts);
+function createDeflate(options) {
+  return new Deflate(options);
 }
 
-function createInflate(opts) {
-  return new Inflate(opts);
+function createInflate(options) {
+  return new Inflate(options);
 }
 
-function createDeflateRaw(opts) {
-  return new DeflateRaw(opts);
+function createDeflateRaw(options) {
+  return new DeflateRaw(options);
 }
 
-function createInflateRaw(opts) {
-  return new InflateRaw(opts);
+function createInflateRaw(options) {
+  return new InflateRaw(options);
 }
 
-function createUnzip(opts) {
-  return new Unzip(opts);
+function createUnzip(options) {
+  return new Unzip(options);
 }
 
-// Export stream classes and factory functions to the zlib module
-zlib.Gzip = Gzip;
-zlib.Gunzip = Gunzip;
-zlib.Deflate = Deflate;
-zlib.Inflate = Inflate;
-zlib.DeflateRaw = DeflateRaw;
-zlib.InflateRaw = InflateRaw;
-zlib.Unzip = Unzip;
-
-zlib.createGzip = createGzip;
-zlib.createGunzip = createGunzip;
-zlib.createDeflate = createDeflate;
-zlib.createInflate = createInflate;
-zlib.createDeflateRaw = createDeflateRaw;
-zlib.createInflateRaw = createInflateRaw;
-zlib.createUnzip = createUnzip;
-
-// Return the enhanced module
-module.exports = zlib;
+// Export all stream classes and factory functions
+module.exports = {
+  // Classes
+  Gzip,
+  Gunzip,
+  Deflate,
+  Inflate,
+  DeflateRaw,
+  InflateRaw,
+  Unzip,
+  ZlibBase,
+  
+  // Factory functions
+  createGzip,
+  createGunzip,
+  createDeflate,
+  createInflate,
+  createDeflateRaw,
+  createInflateRaw,
+  createUnzip
+};

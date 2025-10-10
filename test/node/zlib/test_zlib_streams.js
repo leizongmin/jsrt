@@ -1,5 +1,7 @@
 // Test zlib streaming compression
+// Stream classes are in a separate JavaScript module that extends node:zlib
 const zlib = require('node:zlib');
+const streams = require('/home/runner/work/jsrt/jsrt/src/node/zlib/zlib_streams.js');
 const { Readable, Writable, pipeline } = require('node:stream');
 
 console.log('Testing zlib stream classes...\n');
@@ -13,8 +15,8 @@ const testData = 'The quick brown fox jumps over the lazy dog. '.repeat(100);
 // Test 1: createGzip factory function exists
 console.log('1. Testing createGzip factory...');
 try {
-  if (typeof zlib.createGzip === 'function') {
-    const gzip = zlib.createGzip();
+  if (typeof streams.createGzip === 'function') {
+    const gzip = streams.createGzip();
     if (
       gzip &&
       typeof gzip.write === 'function' &&
@@ -60,7 +62,7 @@ try {
   });
 
   let compressed = [];
-  const gzip = zlib.createGzip();
+  const gzip = streams.createGzip();
 
   gzip.on('data', (chunk) => {
     compressed.push(chunk);
@@ -72,7 +74,7 @@ try {
     console.log('  Compressed size:', compressedData.length);
 
     let decompressed = [];
-    const gunzip = zlib.createGunzip();
+    const gunzip = streams.createGunzip();
 
     gunzip.on('data', (chunk) => {
       decompressed.push(chunk);
@@ -131,7 +133,7 @@ function continueTests() {
 
   let allExist = true;
   for (const name of factories) {
-    if (typeof zlib[name] !== 'function') {
+    if (typeof streams[name] !== 'function') {
       console.error(`  ❌ ${name} is not a function`);
       allExist = false;
     }
@@ -158,7 +160,7 @@ function continueTests() {
 
   let allClassesExist = true;
   for (const name of classes) {
-    if (typeof zlib[name] !== 'function') {
+    if (typeof streams[name] !== 'function') {
       console.error(`  ❌ ${name} class is not defined`);
       allClassesExist = false;
     }

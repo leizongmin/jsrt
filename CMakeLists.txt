@@ -122,7 +122,10 @@ set(ZLIB_LIB_FILES
 )
 add_library(zlib_static STATIC ${ZLIB_LIB_FILES})
 target_include_directories(zlib_static PUBLIC deps/zlib)
-target_compile_definitions(zlib_static PRIVATE _GNU_SOURCE)
+# Define _GNU_SOURCE for Linux glibc extensions
+# Define HAVE_UNISTD_H=1 to ensure zlib includes <unistd.h> for lseek() on POSIX systems
+# The zlib zconf.h checks "#if HAVE_UNISTD_H-0" so we need to set it to 1, not just define it
+target_compile_definitions(zlib_static PRIVATE _GNU_SOURCE HAVE_UNISTD_H=1)
 message(STATUS "zlib static library configured")
 
 # build qjs and qjsc, use flag -DBUILD_QJS=ON to enable

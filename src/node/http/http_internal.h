@@ -37,6 +37,24 @@ typedef struct {
   JSValue current_request;
   JSValue current_response;
   bool request_complete;
+
+  // Header accumulation state
+  char* current_header_field;
+  char* current_header_value;
+
+  // URL accumulation
+  char* url_buffer;
+  size_t url_buffer_size;
+  size_t url_buffer_capacity;
+
+  // Body accumulation
+  char* body_buffer;
+  size_t body_size;
+  size_t body_capacity;
+
+  // Keep-alive state
+  bool keep_alive;
+  bool should_close;
 } JSHttpConnection;
 
 // HTTP Server state
@@ -108,15 +126,24 @@ JSValue js_http_response_end(JSContext* ctx, JSValueConst this_val, int argc, JS
 JSValue js_http_response_set_header(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv);
 void js_http_response_finalizer(JSRuntime* rt, JSValue val);
 
-// Parser functions (from http_parser.c) - to be implemented
+// Parser functions (from http_parser.c) - Full llhttp callback suite
 int on_message_begin(llhttp_t* parser);
 int on_url(llhttp_t* parser, const char* at, size_t length);
+int on_status(llhttp_t* parser, const char* at, size_t length);
+int on_header_field(llhttp_t* parser, const char* at, size_t length);
+int on_header_value(llhttp_t* parser, const char* at, size_t length);
+int on_headers_complete(llhttp_t* parser);
+int on_body(llhttp_t* parser, const char* at, size_t length);
 int on_message_complete(llhttp_t* parser);
+int on_chunk_header(llhttp_t* parser);
+int on_chunk_complete(llhttp_t* parser);
 
 // Connection handling
 void js_http_connection_handler(JSContext* ctx, JSValue server, JSValue socket);
 JSValue js_http_net_connection_handler(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv);
 JSValue js_http_simple_data_handler(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv);
+JSValue js_http_llhttp_data_handler(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv);
+JSValue js_http_close_handler(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv);
 void parse_enhanced_http_request(JSContext* ctx, const char* data, char* method, char* url, char* version,
                                  JSValue request);
 

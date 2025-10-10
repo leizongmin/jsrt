@@ -54,11 +54,37 @@ JSValue js_http_response_write(JSContext* ctx, JSValueConst this_val, int argc, 
     if (!res->status_message)
       res->status_message = strdup("OK");
 
-    // Build status line
-    char status_line[2048];
-    char* server_header = jsrt_generate_user_agent(ctx);
-    int offset =
-        snprintf(status_line, sizeof(status_line), "HTTP/1.1 %d %s\r\n", res->status_code, res->status_message);
+    // CRITICAL FIX #1.3: Build headers with dynamic allocation to prevent buffer overflow
+    size_t buffer_capacity = 4096;
+    size_t buffer_size = 0;
+    char* header_buffer = malloc(buffer_capacity);
+    if (!header_buffer) {
+      return JS_ThrowOutOfMemory(ctx);
+    }
+
+    // Helper macro for safe append
+#define APPEND_HEADER(fmt, ...)                                                                            \
+  do {                                                                                                     \
+    int needed = snprintf(NULL, 0, fmt, __VA_ARGS__);                                                      \
+    if (needed < 0) {                                                                                      \
+      free(header_buffer);                                                                                 \
+      return JS_ThrowInternalError(ctx, "Header formatting error");                                        \
+    }                                                                                                      \
+    if (buffer_size + needed + 1 > buffer_capacity) {                                                      \
+      size_t new_capacity = (buffer_size + needed + 1) * 2;                                                \
+      char* new_buffer = realloc(header_buffer, new_capacity);                                             \
+      if (!new_buffer) {                                                                                   \
+        free(header_buffer);                                                                               \
+        return JS_ThrowOutOfMemory(ctx);                                                                   \
+      }                                                                                                    \
+      header_buffer = new_buffer;                                                                          \
+      buffer_capacity = new_capacity;                                                                      \
+    }                                                                                                      \
+    buffer_size += snprintf(header_buffer + buffer_size, buffer_capacity - buffer_size, fmt, __VA_ARGS__); \
+  } while (0)
+
+    // Status line
+    APPEND_HEADER("HTTP/1.1 %d %s\r\n", res->status_code, res->status_message);
 
     // Check if we need chunked encoding (no Content-Length set)
     JSValue content_length = JS_GetPropertyStr(ctx, res->headers, "content-length");
@@ -78,7 +104,7 @@ JSValue js_http_response_write(JSContext* ctx, JSValueConst this_val, int argc, 
         const char* key_str = JS_ToCString(ctx, key);
         const char* val_str = JS_ToCString(ctx, val);
 
-        if (key_str && val_str && offset < (int)sizeof(status_line) - 100) {
+        if (key_str && val_str) {
           // Capitalize header name (first letter + after hyphens)
           char header_name[256];
           size_t j = 0;
@@ -96,7 +122,7 @@ JSValue js_http_response_write(JSContext* ctx, JSValueConst this_val, int argc, 
           }
           header_name[j] = '\0';
 
-          offset += snprintf(status_line + offset, sizeof(status_line) - offset, "%s: %s\r\n", header_name, val_str);
+          APPEND_HEADER("%s: %s\r\n", header_name, val_str);
         }
 
         if (key_str)
@@ -110,27 +136,29 @@ JSValue js_http_response_write(JSContext* ctx, JSValueConst this_val, int argc, 
     }
 
     // Add chunked encoding header if needed
-    if (res->use_chunked && offset < (int)sizeof(status_line) - 50) {
-      offset += snprintf(status_line + offset, sizeof(status_line) - offset, "Transfer-Encoding: chunked\r\n");
+    if (res->use_chunked) {
+      APPEND_HEADER("%s", "Transfer-Encoding: chunked\r\n");
     }
 
     // Add Server header and finalize
-    if (offset < (int)sizeof(status_line) - 100) {
-      offset += snprintf(status_line + offset, sizeof(status_line) - offset, "Server: %s\r\n\r\n", server_header);
-    }
+    char* server_header = jsrt_generate_user_agent(ctx);
+    APPEND_HEADER("Server: %s\r\n\r\n", server_header);
     free(server_header);
+
+#undef APPEND_HEADER
 
     // Write headers to socket
     if (!JS_IsUndefined(res->socket)) {
       JSValue write_method = JS_GetPropertyStr(ctx, res->socket, "write");
       if (JS_IsFunction(ctx, write_method)) {
-        JSValue header_data = JS_NewString(ctx, status_line);
+        JSValue header_data = JS_NewStringLen(ctx, header_buffer, buffer_size);
         JS_Call(ctx, write_method, res->socket, 1, &header_data);
         JS_FreeValue(ctx, header_data);
       }
       JS_FreeValue(ctx, write_method);
     }
 
+    free(header_buffer);
     res->headers_sent = true;
   }
 

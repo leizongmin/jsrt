@@ -4,6 +4,66 @@
 // HTTP Parser implementation with full llhttp integration
 // Adapted from src/http/parser.c with node:http specific enhancements
 
+// CRITICAL FIX #1.5: Connection tracking for proper resource cleanup
+typedef struct ConnectionNode {
+  JSHttpConnection* conn;
+  struct ConnectionNode* next;
+} ConnectionNode;
+
+static ConnectionNode* g_active_connections = NULL;
+
+static void track_connection(JSHttpConnection* conn) {
+  ConnectionNode* node = malloc(sizeof(ConnectionNode));
+  if (node) {
+    node->conn = conn;
+    node->next = g_active_connections;
+    g_active_connections = node;
+  }
+}
+
+static void untrack_connection(JSHttpConnection* conn) {
+  ConnectionNode** ptr = &g_active_connections;
+  while (*ptr) {
+    if ((*ptr)->conn == conn) {
+      ConnectionNode* to_free = *ptr;
+      *ptr = (*ptr)->next;
+      free(to_free);
+      return;
+    }
+    ptr = &(*ptr)->next;
+  }
+}
+
+static void cleanup_connection(JSHttpConnection* conn) {
+  if (!conn)
+    return;
+
+  untrack_connection(conn);
+
+  // Free all connection resources
+  JS_FreeValue(conn->ctx, conn->server);
+  JS_FreeValue(conn->ctx, conn->socket);
+  if (!JS_IsUndefined(conn->current_request)) {
+    JS_FreeValue(conn->ctx, conn->current_request);
+  }
+  if (!JS_IsUndefined(conn->current_response)) {
+    JS_FreeValue(conn->ctx, conn->current_response);
+  }
+
+  free(conn->current_header_field);
+  free(conn->current_header_value);
+  free(conn->url_buffer);
+  free(conn->body_buffer);
+
+  if (conn->timeout_timer) {
+    uv_timer_stop(conn->timeout_timer);
+    // Timer will be freed by close callback (from Fix #1.1)
+    uv_close((uv_handle_t*)conn->timeout_timer, NULL);
+  }
+
+  free(conn);
+}
+
 // Utility: String duplication helpers
 static char* jsrt_strdup(const char* str) {
   if (!str)
@@ -524,8 +584,20 @@ JSValue js_http_simple_data_handler(JSContext* ctx, JSValueConst this_val, int a
 void js_http_connection_handler(JSContext* ctx, JSValue server, JSValue socket) {
   // Allocate connection state
   JSHttpConnection* conn = calloc(1, sizeof(JSHttpConnection));
-  if (!conn)
+  if (!conn) {
+    // CRITICAL FIX #1.5: Report error on allocation failure
+    JSValue emit = JS_GetPropertyStr(ctx, server, "emit");
+    if (JS_IsFunction(ctx, emit)) {
+      JSValue error = JS_NewError(ctx);
+      JS_SetPropertyStr(ctx, error, "message", JS_NewString(ctx, "Out of memory"));
+      JSValue args[] = {JS_NewString(ctx, "error"), error};
+      JS_Call(ctx, emit, server, 2, args);
+      JS_FreeValue(ctx, args[0]);
+      JS_FreeValue(ctx, args[1]);
+    }
+    JS_FreeValue(ctx, emit);
     return;
+  }
 
   conn->ctx = ctx;
   conn->server = JS_DupValue(ctx, server);
@@ -539,6 +611,9 @@ void js_http_connection_handler(JSContext* ctx, JSValue server, JSValue socket) 
   conn->timeout_ms = 0;
   conn->expect_continue = false;
   conn->is_upgrade = false;
+
+  // CRITICAL FIX #1.5: Track connection for cleanup
+  track_connection(conn);
 
   // Initialize llhttp parser
   llhttp_settings_init(&conn->settings);
@@ -565,6 +640,16 @@ void js_http_connection_handler(JSContext* ctx, JSValue server, JSValue socket) 
 
     JSValue args[] = {JS_NewString(ctx, "data"), data_handler};
     JSValue result = JS_Call(ctx, on_method, socket, 2, args);
+
+    // CRITICAL FIX #1.5: Check for error during setup
+    if (JS_IsException(result)) {
+      cleanup_connection(conn);
+      JS_FreeValue(ctx, result);
+      JS_FreeValue(ctx, args[0]);
+      JS_FreeValue(ctx, on_method);
+      return;
+    }
+
     JS_FreeValue(ctx, result);
     JS_FreeValue(ctx, args[0]);
   }
@@ -578,6 +663,16 @@ void js_http_connection_handler(JSContext* ctx, JSValue server, JSValue socket) 
 
     JSValue args[] = {JS_NewString(ctx, "close"), close_handler};
     JSValue result = JS_Call(ctx, on_close_method, socket, 2, args);
+
+    // CRITICAL FIX #1.5: Check for error during setup
+    if (JS_IsException(result)) {
+      cleanup_connection(conn);
+      JS_FreeValue(ctx, result);
+      JS_FreeValue(ctx, args[0]);
+      JS_FreeValue(ctx, on_close_method);
+      return;
+    }
+
     JS_FreeValue(ctx, result);
     JS_FreeValue(ctx, args[0]);
   }
@@ -628,6 +723,13 @@ JSValue js_http_llhttp_data_handler(JSContext* ctx, JSValueConst this_val, int a
     }
     JS_FreeValue(ctx, emit);
 
+    // CRITICAL FIX #1.2: Reset parser state for potential reuse
+    llhttp_init(&conn->parser, HTTP_REQUEST, &conn->settings);
+    conn->parser.data = conn;
+
+    // Mark connection for cleanup
+    conn->should_close = true;
+
     // Close connection on error
     JSValue end_method = JS_GetPropertyStr(ctx, conn->socket, "end");
     if (JS_IsFunction(ctx, end_method)) {
@@ -646,21 +748,8 @@ JSValue js_http_close_handler(JSContext* ctx, JSValueConst this_val, int argc, J
   if (!conn)
     return JS_UNDEFINED;
 
-  // Free all connection resources
-  JS_FreeValue(ctx, conn->server);
-  JS_FreeValue(ctx, conn->socket);
-  if (!JS_IsUndefined(conn->current_request)) {
-    JS_FreeValue(ctx, conn->current_request);
-  }
-  if (!JS_IsUndefined(conn->current_response)) {
-    JS_FreeValue(ctx, conn->current_response);
-  }
-
-  free(conn->current_header_field);
-  free(conn->current_header_value);
-  free(conn->url_buffer);
-  free(conn->body_buffer);
-  free(conn);
+  // CRITICAL FIX #1.5: Use centralized cleanup
+  cleanup_connection(conn);
 
   return JS_UNDEFINED;
 }

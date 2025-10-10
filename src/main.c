@@ -24,14 +24,23 @@ int main(int argc, char** argv) {
 
   // Handle explicit stdin flag
   if (argc == 2 && strcmp(argv[1], "-") == 0) {
-    ret = JSRT_CmdRunStdin(argc, argv);
+    ret = JSRT_CmdRunStdin(false, argc, argv);
     return ret;
   }
 
-  if (argc < 2) {
+  // Check for --compact-node flag
+  bool compact_node = false;
+  int script_arg_start = 1;
+  
+  if (argc >= 2 && strcmp(argv[1], "--compact-node") == 0) {
+    compact_node = true;
+    script_arg_start = 2;
+  }
+
+  if (argc < script_arg_start + 1) {
     // If no embedded bytecode and no arguments, check for piped stdin input
     if (!isatty(STDIN_FILENO)) {
-      ret = JSRT_CmdRunStdin(argc, argv);
+      ret = JSRT_CmdRunStdin(compact_node, argc, argv);
       return ret;
     }
 
@@ -39,7 +48,7 @@ int main(int argc, char** argv) {
     return JSRT_CmdRunREPL(argc, argv);
   }
 
-  const char* command = argv[1];
+  const char* command = argv[script_arg_start];
 
   // Handle special commands
   if (strcmp(command, "help") == 0 || strcmp(command, "--help") == 0 || strcmp(command, "-h") == 0) {
@@ -64,11 +73,11 @@ int main(int argc, char** argv) {
   }
 
   if (strcmp(command, "repl") == 0) {
-    return JSRT_CmdRunREPL(argc, argv);
+    return JSRT_CmdRunREPL(argc - script_arg_start, argv + script_arg_start);
   }
 
   // If no embedded bytecode, handle regular file execution
-  ret = JSRT_CmdRunFile(command, argc, argv);
+  ret = JSRT_CmdRunFile(command, compact_node, argc - script_arg_start, argv + script_arg_start);
 
   return ret;
 }
@@ -81,6 +90,7 @@ void PrintHelp(bool is_error) {
           "License:  MIT\n"
           "\n"
           "Usage: jsrt <filename> [args]            Run script file\n"
+          "       jsrt --compact-node <file> [args] Run with Node.js compact mode\n"
           "       jsrt <url> [args]                 Run script from URL\n"
           "       jsrt build <filename> [target]    Create self-contained binary file\n"
           "       jsrt repl                         Run REPL\n"
@@ -88,6 +98,12 @@ void PrintHelp(bool is_error) {
           "       jsrt help                         Print this help message\n"
           "       jsrt -                            Read JavaScript code from stdin\n"
           "       echo 'code' | jsrt                Pipe JavaScript code from stdin\n"
+          "\n"
+          "Node.js Compatibility:\n"
+          "  --compact-node                        Enable compact Node.js mode:\n"
+          "                                        - Load modules without 'node:' prefix\n"
+          "                                        - Provide __dirname and __filename\n"
+          "                                        - Expose global process object\n"
           "\n");
 }
 

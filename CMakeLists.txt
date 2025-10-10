@@ -804,8 +804,19 @@ foreach(test_file ${JSRT_TEST_JS_FILES})
     string(REPLACE "/" "_" test_name ${test_name})
     string(REPLACE "\\" "_" test_name ${test_name})
     
-    # Add test that runs jsrt on individual test file
-    add_test(NAME ${test_name} COMMAND jsrt ${test_file})
+    # Check if this is a compact-node test
+    if(test_file MATCHES "test/node/compact/test_compact_node_basic\\.js" OR
+       test_file MATCHES "test/node/compact/test_compact_node_esm\\.mjs")
+        # Add test with --compact-node flag for compact mode tests
+        add_test(NAME ${test_name} COMMAND jsrt --compact-node ${test_file})
+    elseif(test_file MATCHES "test/node/compact/test_compact_node_disabled\\.js")
+        # This test should run WITHOUT --compact-node flag
+        add_test(NAME ${test_name} COMMAND jsrt ${test_file})
+    else()
+        # Regular test without special flags
+        add_test(NAME ${test_name} COMMAND jsrt ${test_file})
+    endif()
+    
     set_tests_properties(${test_name} PROPERTIES
         WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
         OUTPUT_ON_FAILURE ON)

@@ -90,12 +90,17 @@ static JSRT_ReadFileResult download_url(const char* url) {
   return result;
 }
 
-int JSRT_CmdRunFile(const char* filename, int argc, char** argv) {
+int JSRT_CmdRunFile(const char* filename, bool compact_node, int argc, char** argv) {
   // Store command line arguments for process module
   jsrt_argc = argc;
   jsrt_argv = argv;
   int ret = 0;
   JSRT_Runtime* rt = JSRT_RuntimeNew();
+
+  // Enable compact node mode if requested
+  if (compact_node) {
+    JSRT_RuntimeSetCompactNodeMode(rt, true);
+  }
 
   JSRT_ReadFileResult file = JSRT_ReadFileResultDefault();
   JSRT_EvalResult res = JSRT_EvalResultDefault();
@@ -138,12 +143,17 @@ end:
   return ret;
 }
 
-int JSRT_CmdRunStdin(int argc, char** argv) {
+int JSRT_CmdRunStdin(bool compact_node, int argc, char** argv) {
   // Store command line arguments for process module
   jsrt_argc = argc;
   jsrt_argv = argv;
   int ret = 0;
   JSRT_Runtime* rt = JSRT_RuntimeNew();
+
+  // Enable compact node mode if requested
+  if (compact_node) {
+    JSRT_RuntimeSetCompactNodeMode(rt, true);
+  }
 
   JSRT_EvalResult res = JSRT_EvalResultDefault();
   JSRT_EvalResult res2 = JSRT_EvalResultDefault();

@@ -22,6 +22,7 @@ typedef struct {
   size_t exception_values_capacity;
 
   uv_loop_t* uv_loop;
+  bool compact_node_mode;
 } JSRT_Runtime;
 
 JSRT_Runtime* JSRT_RuntimeNew();
@@ -60,6 +61,8 @@ void JSRT_RuntimeFreeDisposeValues(JSRT_Runtime* rt);
 void JSRT_RuntimeAddExceptionValue(JSRT_Runtime* rt, JSValue e);
 void JSRT_RuntimeFreeExceptionValues(JSRT_Runtime* rt);
 bool JSRT_RuntimeProcessUnhandledExceptionValues(JSRT_Runtime* rt);
+
+void JSRT_RuntimeSetCompactNodeMode(JSRT_Runtime* rt, bool enabled);
 
 typedef struct {
   uint8_t* data;

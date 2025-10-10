@@ -97,6 +97,8 @@ JSRT_Runtime* JSRT_RuntimeNew() {
   uv_loop_init(rt->uv_loop);
   rt->uv_loop->data = rt;
 
+  rt->compact_node_mode = false;
+
   JSRT_RuntimeSetupStdConsole(rt);
   JSRT_RuntimeSetupStdTimer(rt);
   JSRT_RuntimeSetupStdEncoding(rt);
@@ -487,4 +489,8 @@ void JSRT_CompileResultFree(JSRT_CompileResult* result) {
     result->error = NULL;
   }
   result->size = 0;
+}
+void JSRT_RuntimeSetCompactNodeMode(JSRT_Runtime* rt, bool enabled) {
+  rt->compact_node_mode = enabled;
+  JSRT_Debug("Compact Node.js mode: %s", enabled ? "enabled" : "disabled");
 }

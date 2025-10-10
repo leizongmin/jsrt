@@ -140,11 +140,16 @@ void zlib_buffer_release(uint8_t* buffer, size_t size) {
     return;
   }
 
-  int pool_idx = find_pool_index(size);
+  // Check if size exactly matches one of the pooled sizes
+  BufferPool* pool = NULL;
+  for (int i = 0; i < BUFFER_POOL_SIZES; i++) {
+    if (size == buffer_sizes[i]) {
+      pool = &buffer_pools[i];
+      break;
+    }
+  }
 
-  if (pool_idx >= 0 && size == buffer_sizes[pool_idx]) {
-    BufferPool* pool = &buffer_pools[pool_idx];
-
+  if (pool) {
     pthread_mutex_lock(&pool->lock);
     if (pool->count < POOL_SIZE) {
       pool->buffers[pool->count++] = buffer;

@@ -1,4 +1,5 @@
 #include <string.h>
+#include "../../deps/quickjs/quickjs-libc.h"
 #include "../../util/debug.h"
 #include "../stream/stream_internal.h"
 #include "zlib_internal.h"
@@ -150,12 +151,18 @@ static JSValue zlib_stream_transform(JSContext* ctx, JSValueConst this_val, int 
       } else {
         JSValue args[] = {JS_NewString(ctx, "Invalid chunk type")};
         JSValue result = JS_Call(ctx, callback, JS_UNDEFINED, 1, args);
+        if (JS_IsException(result)) {
+          js_std_dump_error(ctx);
+        }
         JS_FreeValue(ctx, args[0]);
         return result;
       }
     } else {
       JSValue args[] = {JS_NewString(ctx, "Invalid chunk type")};
       JSValue result = JS_Call(ctx, callback, JS_UNDEFINED, 1, args);
+      if (JS_IsException(result)) {
+        js_std_dump_error(ctx);
+      }
       JS_FreeValue(ctx, args[0]);
       return result;
     }
@@ -169,6 +176,9 @@ static JSValue zlib_stream_transform(JSContext* ctx, JSValueConst this_val, int 
   if (JS_IsException(err)) {
     JSValue args[] = {err};
     JSValue result = JS_Call(ctx, callback, JS_UNDEFINED, 1, args);
+    if (JS_IsException(result)) {
+      js_std_dump_error(ctx);
+    }
     JS_FreeValue(ctx, err);
     return result;
   }
@@ -182,6 +192,9 @@ static JSValue zlib_stream_transform(JSContext* ctx, JSValueConst this_val, int 
     if (JS_IsFunction(ctx, push_fn)) {
       JSValue push_args[] = {output_buf};
       JSValue push_result = JS_Call(ctx, push_fn, this_val, 1, push_args);
+      if (JS_IsException(push_result)) {
+        js_std_dump_error(ctx);
+      }
       JS_FreeValue(ctx, push_result);
     }
     JS_FreeValue(ctx, push_fn);
@@ -192,6 +205,9 @@ static JSValue zlib_stream_transform(JSContext* ctx, JSValueConst this_val, int 
 
   // Call callback to signal completion
   JSValue result = JS_Call(ctx, callback, JS_UNDEFINED, 0, NULL);
+  if (JS_IsException(result)) {
+    js_std_dump_error(ctx);
+  }
   return result;
 }
 
@@ -216,6 +232,9 @@ static JSValue zlib_stream_flush(JSContext* ctx, JSValueConst this_val, int argc
   if (JS_IsException(err)) {
     JSValue args[] = {err};
     JSValue result = JS_Call(ctx, callback, JS_UNDEFINED, 1, args);
+    if (JS_IsException(result)) {
+      js_std_dump_error(ctx);
+    }
     JS_FreeValue(ctx, err);
     return result;
   }
@@ -229,6 +248,9 @@ static JSValue zlib_stream_flush(JSContext* ctx, JSValueConst this_val, int argc
     if (JS_IsFunction(ctx, push_fn)) {
       JSValue push_args[] = {output_buf};
       JSValue push_result = JS_Call(ctx, push_fn, this_val, 1, push_args);
+      if (JS_IsException(push_result)) {
+        js_std_dump_error(ctx);
+      }
       JS_FreeValue(ctx, push_result);
     }
     JS_FreeValue(ctx, push_fn);
@@ -242,6 +264,9 @@ static JSValue zlib_stream_flush(JSContext* ctx, JSValueConst this_val, int argc
   if (JS_IsFunction(ctx, push_fn)) {
     JSValue push_args[] = {JS_NULL};
     JSValue push_result = JS_Call(ctx, push_fn, this_val, 1, push_args);
+    if (JS_IsException(push_result)) {
+      js_std_dump_error(ctx);
+    }
     JS_FreeValue(ctx, push_result);
   }
   JS_FreeValue(ctx, push_fn);

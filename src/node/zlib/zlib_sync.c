@@ -118,7 +118,7 @@ JSValue zlib_inflate_sync(JSContext* ctx, const uint8_t* input, size_t input_len
 
     output_size += (chunk_size - zctx->strm.avail_out);
 
-  } while (ret != Z_STREAM_END && zctx->strm.avail_in > 0);
+  } while (ret != Z_STREAM_END);
 
   // Create result buffer - just return the ArrayBuffer wrapped as Uint8Array
   JSValue array_buffer = JS_NewArrayBufferCopy(ctx, output_buffer, output_size);

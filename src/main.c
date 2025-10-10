@@ -31,7 +31,7 @@ int main(int argc, char** argv) {
   // Check for --compact-node flag
   bool compact_node = false;
   int script_arg_start = 1;
-  
+
   if (argc >= 2 && strcmp(argv[1], "--compact-node") == 0) {
     compact_node = true;
     script_arg_start = 2;

@@ -69,6 +69,9 @@ const char* zlib_error_message(int err_code);
 void zlib_export_constants(JSContext* ctx, JSValue exports);
 void zlib_export_utilities(JSContext* ctx, JSValue exports);
 
+// Stream classes (zlib_streams.c)
+void zlib_export_streams(JSContext* ctx, JSValue exports);
+
 // Performance optimization - Object pooling (zlib_pool.c)
 ZlibContext* zlib_context_acquire(JSContext* ctx);
 void zlib_context_release(ZlibContext* zctx);

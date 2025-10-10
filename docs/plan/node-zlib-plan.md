@@ -551,33 +551,38 @@ zlib.gzip(input, (err, compressed) => {
 **Goal**: Implement Transform stream classes for streaming compression/decompression
 **Duration**: 4-5 days
 **Dependencies**: [D:2] Phase 2 complete, node:stream module
-**Status**: ✅ COMPLETED via JavaScript wrapper approach
+**Status**: ✅ COMPLETED via C implementation with Transform integration
 
 **Implementation Approach**:
-- ✅ Stream classes implemented in pure JavaScript (`src/node/zlib/zlib_streams.js`)
-- ✅ Extends Transform class from existing `node:stream` module (maximum code reuse)
-- ✅ Wraps native synchronous compression methods from Phase 1
+- ✅ Stream classes implemented in pure C (`src/node/zlib/zlib_streams.c`)
+- ✅ Dynamically extends Transform class from existing `node:stream` module
+- ✅ Uses incremental zlib compression/decompression for true streaming
 - ✅ All 7 stream classes implemented: Gzip, Gunzip, Deflate, Inflate, DeflateRaw, InflateRaw, Unzip
 - ✅ All 7 factory functions provided: createGzip, createGunzip, createDeflate, createInflate, createDeflateRaw, createInflateRaw, createUnzip
-- ✅ Follows Node.js architectural patterns (separation of concerns)
-- ✅ Simpler and more maintainable than complex C/JS integration
+- ✅ Proper resource management with finalizers
+- ✅ Integrates with object pooling for performance
 
 **Architectural Decision Rationale**:
-The JavaScript wrapper approach was chosen over a C-based incremental streaming implementation because:
-1. **Code Reuse**: Leverages existing, battle-tested Transform stream infrastructure
-2. **Simplicity**: Pure JavaScript is easier to debug, test, and maintain
-3. **Separation of Concerns**: JS handles stream interface, C handles compression logic
-4. **Compatibility**: Follows Node.js patterns where stream interfaces are often in JS
-5. **Maintainability**: Avoids complex C/JS object lifecycle management
+The C implementation with Transform integration approach was chosen because:
+1. **True Streaming**: Uses zlib's incremental deflate/inflate for chunk-by-chunk processing
+2. **Code Reuse**: Leverages existing Transform stream infrastructure from `src/node/stream/`
+3. **Performance**: C implementation for both compression logic and stream handling
+4. **Consistency**: All stream classes follow the same C pattern as other node:stream classes
+5. **Memory Efficiency**: Proper cleanup with finalizers, buffer pooling
 
 **Usage Example**:
 ```javascript
-const { createGzip, createGunzip } = require('/path/to/zlib_streams.js');
-const gzip = createGzip({ level: 9 });
+const zlib = require('node:zlib');
+const gzip = zlib.createGzip({ level: 9 });
 inputStream.pipe(gzip).pipe(outputStream);
 ```
 
-**Note**: Stream classes are in a separate module (`zlib_streams.js`) rather than embedded in the core `node:zlib` C module. This follows the principle of keeping JavaScript interfaces in JavaScript and C code focused on performance-critical compression logic.
+**Implementation Details**:
+- Creates Transform instances dynamically at runtime using JS constructor
+- Overrides `_transform()` and `_flush()` methods with C implementations
+- Manages zlib context lifecycle with proper initialization and cleanup
+- Uses buffer pooling from `zlib_pool.c` for efficiency
+- Supports all zlib options (level, windowBits, memLevel, strategy, etc.)
 
 #### Task 3.1: [S][R:HIGH][C:COMPLEX] Stream Infrastructure (5 tasks)
 **Duration**: 1.5 days

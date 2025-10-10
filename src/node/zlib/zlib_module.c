@@ -565,9 +565,8 @@ JSValue JSRT_InitNodeZlib(JSContext* ctx) {
   zlib_export_constants(ctx, exports);
   zlib_export_utilities(ctx, exports);
 
-  // Note: Stream classes should be added via a separate JavaScript module
-  // For now, we provide the core sync/async methods only
-  // Stream classes can be implemented in pure JavaScript that wraps these methods
+  // Export stream classes (C implementation)
+  zlib_export_streams(ctx, exports);
 
   return exports;
 }

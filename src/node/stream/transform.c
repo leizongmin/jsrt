@@ -77,6 +77,15 @@ JSValue js_transform_constructor(JSContext* ctx, JSValueConst new_target, int ar
   return obj;
 }
 
+// No-op callback function
+static JSValue js_transform_noop_callback(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
+  (void)ctx;
+  (void)this_val;
+  (void)argc;
+  (void)argv;
+  return JS_UNDEFINED;
+}
+
 // Transform.prototype._transform - default passthrough
 // Subclasses should override this
 static JSValue js_transform_default_transform(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
@@ -139,8 +148,14 @@ static JSValue js_transform_write(JSContext* ctx, JSValueConst this_val, int arg
   }
 
   // Create callback that will be passed to _transform
-  // For now, use the provided callback or a no-op
-  JSValue transform_callback = JS_IsFunction(ctx, callback) ? callback : JS_NewCFunction(ctx, NULL, "callback", 0);
+  // Use the provided callback or a no-op function
+  JSValue transform_callback;
+  if (JS_IsFunction(ctx, callback)) {
+    transform_callback = callback;
+  } else {
+    // Create a no-op callback function
+    transform_callback = JS_NewCFunction(ctx, js_transform_noop_callback, "callback", 0);
+  }
 
   // Call _transform(chunk, encoding, callback)
   JSValue transform_args[] = {chunk, encoding, transform_callback};

@@ -309,6 +309,22 @@ int on_headers_complete(llhttp_t* parser) {
       conn->should_close = !conn->keep_alive;
     }
     JS_FreeValue(ctx, conn_header);
+
+    // Check for Expect: 100-continue
+    JSValue expect_header = JS_GetPropertyStr(ctx, req->headers, "expect");
+    const char* expect_str = JS_ToCString(ctx, expect_header);
+    if (expect_str) {
+      conn->expect_continue = (strcasecmp(expect_str, "100-continue") == 0);
+      JS_FreeCString(ctx, expect_str);
+    } else {
+      conn->expect_continue = false;
+    }
+    JS_FreeValue(ctx, expect_header);
+
+    // Check for Upgrade header
+    JSValue upgrade_header = JS_GetPropertyStr(ctx, req->headers, "upgrade");
+    conn->is_upgrade = !JS_IsUndefined(upgrade_header);
+    JS_FreeValue(ctx, upgrade_header);
   }
 
   return 0;
@@ -340,11 +356,19 @@ int on_message_complete(llhttp_t* parser) {
     JS_SetPropertyStr(ctx, conn->current_request, "_body", body_str);
   }
 
-  // Emit 'request' event on server
+  // Determine which event to emit based on request type
+  const char* event_name = "request";
+  if (conn->is_upgrade) {
+    event_name = "upgrade";  // Upgrade request (e.g., WebSocket)
+  } else if (conn->expect_continue) {
+    event_name = "checkContinue";  // Expect: 100-continue
+  }
+
+  // Emit appropriate event on server
   JSValue emit = JS_GetPropertyStr(ctx, conn->server, "emit");
   if (JS_IsFunction(ctx, emit)) {
-    JSValue args[] = {JS_NewString(ctx, "request"), JS_DupValue(ctx, conn->current_request),
-                      JS_DupValue(ctx, conn->current_response)};
+    JSValue args[] = {JS_NewString(ctx, event_name), JS_DupValue(ctx, conn->current_request),
+                      JS_DupValue(ctx, conn->is_upgrade ? conn->socket : conn->current_response)};
     JSValue result = JS_Call(ctx, emit, conn->server, 3, args);
     JS_FreeValue(ctx, result);
     JS_FreeValue(ctx, args[0]);
@@ -511,6 +535,10 @@ void js_http_connection_handler(JSContext* ctx, JSValue server, JSValue socket) 
   conn->request_complete = false;
   conn->keep_alive = false;
   conn->should_close = false;
+  conn->timeout_timer = NULL;
+  conn->timeout_ms = 0;
+  conn->expect_continue = false;
+  conn->is_upgrade = false;
 
   // Initialize llhttp parser
   llhttp_settings_init(&conn->settings);

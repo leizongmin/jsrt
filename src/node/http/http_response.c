@@ -1,3 +1,4 @@
+#include <ctype.h>
 #include "../../util/user_agent.h"
 #include "http_internal.h"
 
@@ -41,19 +42,82 @@ JSValue js_http_response_write(JSContext* ctx, JSValueConst this_val, int argc, 
     return JS_ThrowTypeError(ctx, "Invalid response object");
   }
 
+  // Check if response is already finished
+  if (res->finished) {
+    return JS_ThrowTypeError(ctx, "Cannot write after end");
+  }
+
   if (!res->headers_sent) {
-    // Send headers first
+    // Send headers first (implicit writeHead)
     if (res->status_code == 0)
       res->status_code = 200;
     if (!res->status_message)
       res->status_message = strdup("OK");
 
-    char status_line[1024];
-    // Use dynamic user-agent for Server header
+    // Build status line
+    char status_line[2048];
     char* server_header = jsrt_generate_user_agent(ctx);
-    snprintf(status_line, sizeof(status_line),
-             "HTTP/1.1 %d %s\r\nContent-Type: text/plain\r\nConnection: close\r\nServer: %s\r\n\r\n", res->status_code,
-             res->status_message, server_header);
+    int offset =
+        snprintf(status_line, sizeof(status_line), "HTTP/1.1 %d %s\r\n", res->status_code, res->status_message);
+
+    // Check if we need chunked encoding (no Content-Length set)
+    JSValue content_length = JS_GetPropertyStr(ctx, res->headers, "content-length");
+    if (JS_IsUndefined(content_length)) {
+      res->use_chunked = true;
+    }
+    JS_FreeValue(ctx, content_length);
+
+    // Write custom headers
+    JSPropertyEnum* props;
+    uint32_t prop_count;
+    if (JS_GetOwnPropertyNames(ctx, &props, &prop_count, res->headers, JS_GPN_STRING_MASK) == 0) {
+      for (uint32_t i = 0; i < prop_count; i++) {
+        JSValue key = JS_AtomToString(ctx, props[i].atom);
+        JSValue val = JS_GetProperty(ctx, res->headers, props[i].atom);
+
+        const char* key_str = JS_ToCString(ctx, key);
+        const char* val_str = JS_ToCString(ctx, val);
+
+        if (key_str && val_str && offset < (int)sizeof(status_line) - 100) {
+          // Capitalize header name (first letter + after hyphens)
+          char header_name[256];
+          size_t j = 0;
+          bool capitalize = true;
+          while (key_str[j] && j < sizeof(header_name) - 1) {
+            if (capitalize) {
+              header_name[j] = toupper((unsigned char)key_str[j]);
+              capitalize = false;
+            } else {
+              header_name[j] = key_str[j];
+            }
+            if (key_str[j] == '-')
+              capitalize = true;
+            j++;
+          }
+          header_name[j] = '\0';
+
+          offset += snprintf(status_line + offset, sizeof(status_line) - offset, "%s: %s\r\n", header_name, val_str);
+        }
+
+        if (key_str)
+          JS_FreeCString(ctx, key_str);
+        if (val_str)
+          JS_FreeCString(ctx, val_str);
+        JS_FreeValue(ctx, key);
+        JS_FreeValue(ctx, val);
+      }
+      js_free(ctx, props);
+    }
+
+    // Add chunked encoding header if needed
+    if (res->use_chunked && offset < (int)sizeof(status_line) - 50) {
+      offset += snprintf(status_line + offset, sizeof(status_line) - offset, "Transfer-Encoding: chunked\r\n");
+    }
+
+    // Add Server header and finalize
+    if (offset < (int)sizeof(status_line) - 100) {
+      offset += snprintf(status_line + offset, sizeof(status_line) - offset, "Server: %s\r\n\r\n", server_header);
+    }
     free(server_header);
 
     // Write headers to socket
@@ -70,15 +134,37 @@ JSValue js_http_response_write(JSContext* ctx, JSValueConst this_val, int argc, 
     res->headers_sent = true;
   }
 
+  // Write body data
   if (argc > 0) {
     const char* data = JS_ToCString(ctx, argv[0]);
     if (data && !JS_IsUndefined(res->socket)) {
-      // Write data to socket
       JSValue write_method = JS_GetPropertyStr(ctx, res->socket, "write");
       if (JS_IsFunction(ctx, write_method)) {
-        JSValue body_data = JS_NewString(ctx, data);
-        JS_Call(ctx, write_method, res->socket, 1, &body_data);
-        JS_FreeValue(ctx, body_data);
+        if (res->use_chunked) {
+          // Write as chunked data: {size_hex}\r\n{data}\r\n
+          size_t data_len = strlen(data);
+          if (data_len > 0) {
+            char chunk_header[32];
+            snprintf(chunk_header, sizeof(chunk_header), "%zx\r\n", data_len);
+
+            JSValue chunk_start = JS_NewString(ctx, chunk_header);
+            JS_Call(ctx, write_method, res->socket, 1, &chunk_start);
+            JS_FreeValue(ctx, chunk_start);
+
+            JSValue body_data = JS_NewString(ctx, data);
+            JS_Call(ctx, write_method, res->socket, 1, &body_data);
+            JS_FreeValue(ctx, body_data);
+
+            JSValue chunk_end = JS_NewString(ctx, "\r\n");
+            JS_Call(ctx, write_method, res->socket, 1, &chunk_end);
+            JS_FreeValue(ctx, chunk_end);
+          }
+        } else {
+          // Write directly (with Content-Length)
+          JSValue body_data = JS_NewString(ctx, data);
+          JS_Call(ctx, write_method, res->socket, 1, &body_data);
+          JS_FreeValue(ctx, body_data);
+        }
       }
       JS_FreeValue(ctx, write_method);
       JS_FreeCString(ctx, data);
@@ -95,6 +181,11 @@ JSValue js_http_response_end(JSContext* ctx, JSValueConst this_val, int argc, JS
     return JS_ThrowTypeError(ctx, "Invalid response object");
   }
 
+  // Check if already finished
+  if (res->finished) {
+    return JS_ThrowTypeError(ctx, "Response already ended");
+  }
+
   if (argc > 0) {
     // Write final data
     js_http_response_write(ctx, this_val, argc, argv);
@@ -105,7 +196,32 @@ JSValue js_http_response_end(JSContext* ctx, JSValueConst this_val, int argc, JS
     js_http_response_write(ctx, this_val, 0, NULL);
   }
 
-  // End the response by closing the connection
+  // Send chunked terminator if using chunked encoding
+  if (res->use_chunked && !JS_IsUndefined(res->socket)) {
+    JSValue write_method = JS_GetPropertyStr(ctx, res->socket, "write");
+    if (JS_IsFunction(ctx, write_method)) {
+      JSValue terminator = JS_NewString(ctx, "0\r\n\r\n");
+      JS_Call(ctx, write_method, res->socket, 1, &terminator);
+      JS_FreeValue(ctx, terminator);
+    }
+    JS_FreeValue(ctx, write_method);
+  }
+
+  // Mark as finished
+  res->finished = true;
+
+  // Emit 'finish' event
+  JSValue emit = JS_GetPropertyStr(ctx, this_val, "emit");
+  if (JS_IsFunction(ctx, emit)) {
+    JSValue event_name = JS_NewString(ctx, "finish");
+    JSValue result = JS_Call(ctx, emit, this_val, 1, &event_name);
+    JS_FreeValue(ctx, result);
+    JS_FreeValue(ctx, event_name);
+  }
+  JS_FreeValue(ctx, emit);
+
+  // Close or keep-alive based on Connection header
+  // For now, always close (keep-alive will be enhanced in connection management)
   if (!JS_IsUndefined(res->socket)) {
     JSValue end_method = JS_GetPropertyStr(ctx, res->socket, "end");
     if (JS_IsFunction(ctx, end_method)) {
@@ -132,13 +248,124 @@ JSValue js_http_response_set_header(JSContext* ctx, JSValueConst this_val, int a
   const char* value = JS_ToCString(ctx, argv[1]);
 
   if (name && value) {
-    JS_SetPropertyStr(ctx, res->headers, name, JS_NewString(ctx, value));
+    // Store header with lowercase key for case-insensitive access
+    char* lower_name = malloc(strlen(name) + 1);
+    if (lower_name) {
+      for (size_t i = 0; name[i]; i++) {
+        lower_name[i] = tolower((unsigned char)name[i]);
+      }
+      lower_name[strlen(name)] = '\0';
+      JS_SetPropertyStr(ctx, res->headers, lower_name, JS_NewString(ctx, value));
+      free(lower_name);
+    }
   }
 
   if (name)
     JS_FreeCString(ctx, name);
   if (value)
     JS_FreeCString(ctx, value);
+
+  return JS_UNDEFINED;
+}
+
+// Response getHeader method
+JSValue js_http_response_get_header(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
+  JSHttpResponse* res = JS_GetOpaque(this_val, js_http_response_class_id);
+  if (!res) {
+    return JS_ThrowTypeError(ctx, "Invalid response object");
+  }
+
+  if (argc < 1) {
+    return JS_ThrowTypeError(ctx, "getHeader requires name");
+  }
+
+  const char* name = JS_ToCString(ctx, argv[0]);
+  if (!name) {
+    return JS_UNDEFINED;
+  }
+
+  // Convert to lowercase for case-insensitive lookup
+  char* lower_name = malloc(strlen(name) + 1);
+  JSValue result = JS_UNDEFINED;
+
+  if (lower_name) {
+    for (size_t i = 0; name[i]; i++) {
+      lower_name[i] = tolower((unsigned char)name[i]);
+    }
+    lower_name[strlen(name)] = '\0';
+
+    result = JS_GetPropertyStr(ctx, res->headers, lower_name);
+    free(lower_name);
+  }
+
+  JS_FreeCString(ctx, name);
+  return result;
+}
+
+// Response removeHeader method
+JSValue js_http_response_remove_header(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
+  JSHttpResponse* res = JS_GetOpaque(this_val, js_http_response_class_id);
+  if (!res || res->headers_sent) {
+    return JS_ThrowTypeError(ctx, "Headers already sent");
+  }
+
+  if (argc < 1) {
+    return JS_ThrowTypeError(ctx, "removeHeader requires name");
+  }
+
+  const char* name = JS_ToCString(ctx, argv[0]);
+  if (!name) {
+    return JS_UNDEFINED;
+  }
+
+  // Convert to lowercase for case-insensitive removal
+  char* lower_name = malloc(strlen(name) + 1);
+  if (lower_name) {
+    for (size_t i = 0; name[i]; i++) {
+      lower_name[i] = tolower((unsigned char)name[i]);
+    }
+    lower_name[strlen(name)] = '\0';
+
+    JSAtom atom = JS_NewAtom(ctx, lower_name);
+    JS_DeleteProperty(ctx, res->headers, atom, 0);
+    JS_FreeAtom(ctx, atom);
+    free(lower_name);
+  }
+
+  JS_FreeCString(ctx, name);
+  return JS_UNDEFINED;
+}
+
+// Response getHeaders method
+JSValue js_http_response_get_headers(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
+  JSHttpResponse* res = JS_GetOpaque(this_val, js_http_response_class_id);
+  if (!res) {
+    return JS_ThrowTypeError(ctx, "Invalid response object");
+  }
+
+  // Return a copy of the headers object
+  return JS_DupValue(ctx, res->headers);
+}
+
+// Response writeContinue method - sends 100 Continue
+JSValue js_http_response_write_continue(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
+  JSHttpResponse* res = JS_GetOpaque(this_val, js_http_response_class_id);
+  if (!res) {
+    return JS_ThrowTypeError(ctx, "Invalid response object");
+  }
+
+  // Send 100 Continue status line
+  const char* continue_response = "HTTP/1.1 100 Continue\r\n\r\n";
+
+  if (!JS_IsUndefined(res->socket)) {
+    JSValue write_method = JS_GetPropertyStr(ctx, res->socket, "write");
+    if (JS_IsFunction(ctx, write_method)) {
+      JSValue data = JS_NewString(ctx, continue_response);
+      JS_Call(ctx, write_method, res->socket, 1, &data);
+      JS_FreeValue(ctx, data);
+    }
+    JS_FreeValue(ctx, write_method);
+  }
 
   return JS_UNDEFINED;
 }
@@ -159,7 +386,9 @@ JSValue js_http_response_constructor(JSContext* ctx, JSValueConst new_target, in
   res->ctx = ctx;
   res->response_obj = JS_DupValue(ctx, obj);
   res->headers_sent = false;
+  res->finished = false;
   res->status_code = 0;
+  res->use_chunked = false;
   res->headers = JS_NewObject(ctx);
 
   JS_SetOpaque(obj, res);
@@ -169,6 +398,11 @@ JSValue js_http_response_constructor(JSContext* ctx, JSValueConst new_target, in
   JS_SetPropertyStr(ctx, obj, "write", JS_NewCFunction(ctx, js_http_response_write, "write", 1));
   JS_SetPropertyStr(ctx, obj, "end", JS_NewCFunction(ctx, js_http_response_end, "end", 1));
   JS_SetPropertyStr(ctx, obj, "setHeader", JS_NewCFunction(ctx, js_http_response_set_header, "setHeader", 2));
+  JS_SetPropertyStr(ctx, obj, "getHeader", JS_NewCFunction(ctx, js_http_response_get_header, "getHeader", 1));
+  JS_SetPropertyStr(ctx, obj, "removeHeader", JS_NewCFunction(ctx, js_http_response_remove_header, "removeHeader", 1));
+  JS_SetPropertyStr(ctx, obj, "getHeaders", JS_NewCFunction(ctx, js_http_response_get_headers, "getHeaders", 0));
+  JS_SetPropertyStr(ctx, obj, "writeContinue",
+                    JS_NewCFunction(ctx, js_http_response_write_continue, "writeContinue", 0));
 
   // Add properties
   JS_SetPropertyStr(ctx, obj, "statusCode", JS_NewInt32(ctx, 200));

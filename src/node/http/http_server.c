@@ -106,6 +106,39 @@ JSValue js_http_server_close(JSContext* ctx, JSValueConst this_val, int argc, JS
   return JS_UNDEFINED;
 }
 
+// Server setTimeout method
+JSValue js_http_server_set_timeout(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
+  JSHttpServer* server = JS_GetOpaque(this_val, js_http_server_class_id);
+  if (!server) {
+    return JS_ThrowTypeError(ctx, "Invalid server object");
+  }
+
+  if (argc > 0) {
+    int32_t timeout_ms;
+    if (JS_ToInt32(ctx, &timeout_ms, argv[0]) != 0) {
+      return JS_ThrowTypeError(ctx, "Invalid timeout value");
+    }
+    server->timeout_ms = timeout_ms >= 0 ? (uint32_t)timeout_ms : 0;
+  }
+
+  // Optional callback parameter (for compatibility)
+  if (argc > 1 && JS_IsFunction(ctx, argv[1])) {
+    // Register as 'timeout' event listener
+    JSValue on_method = JS_GetPropertyStr(ctx, this_val, "on");
+    if (JS_IsFunction(ctx, on_method)) {
+      JSValue args[] = {JS_NewString(ctx, "timeout"), JS_DupValue(ctx, argv[1])};
+      JSValue result = JS_Call(ctx, on_method, this_val, 2, args);
+      JS_FreeValue(ctx, result);
+      JS_FreeValue(ctx, args[0]);
+      JS_FreeValue(ctx, args[1]);
+    }
+    JS_FreeValue(ctx, on_method);
+  }
+
+  // Return server for chaining
+  return JS_DupValue(ctx, this_val);
+}
+
 // Server finalizer
 void js_http_server_finalizer(JSRuntime* rt, JSValue val) {
   JSHttpServer* server = JS_GetOpaque(val, js_http_server_class_id);
@@ -131,6 +164,7 @@ JSValue js_http_server_constructor(JSContext* ctx, JSValueConst new_target, int 
   server->ctx = ctx;
   server->server_obj = JS_DupValue(ctx, obj);
   server->destroyed = false;
+  server->timeout_ms = 0;  // No timeout by default
 
   // Create underlying net.Server
   JSValue net_module = JSRT_LoadNodeModuleCommonJS(ctx, "net");
@@ -156,6 +190,7 @@ JSValue js_http_server_constructor(JSContext* ctx, JSValueConst new_target, int 
   // Add HTTP server methods
   JS_SetPropertyStr(ctx, obj, "listen", JS_NewCFunction(ctx, js_http_server_listen, "listen", 3));
   JS_SetPropertyStr(ctx, obj, "close", JS_NewCFunction(ctx, js_http_server_close, "close", 0));
+  JS_SetPropertyStr(ctx, obj, "setTimeout", JS_NewCFunction(ctx, js_http_server_set_timeout, "setTimeout", 2));
 
   // Add EventEmitter functionality
   setup_event_emitter_inheritance(ctx, obj);

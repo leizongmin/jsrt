@@ -55,6 +55,14 @@ typedef struct {
   // Keep-alive state
   bool keep_alive;
   bool should_close;
+
+  // Timeout handling
+  uv_timer_t* timeout_timer;
+  uint32_t timeout_ms;
+
+  // Special request handling flags
+  bool expect_continue;  // Expect: 100-continue
+  bool is_upgrade;       // Upgrade request
 } JSHttpConnection;
 
 // HTTP Server state
@@ -63,6 +71,7 @@ typedef struct {
   JSValue server_obj;
   JSValue net_server;  // Underlying net.Server
   bool destroyed;
+  uint32_t timeout_ms;  // Default connection timeout (0 = no timeout)
 } JSHttpServer;
 
 // HTTP Request state (IncomingMessage)
@@ -82,9 +91,11 @@ typedef struct {
   JSValue response_obj;
   JSValue socket;
   bool headers_sent;
+  bool finished;  // end() has been called
   int status_code;
   char* status_message;
   JSValue headers;
+  bool use_chunked;  // Use chunked transfer encoding
 } JSHttpResponse;
 
 // HTTP handler data structure
@@ -112,6 +123,7 @@ void setup_event_emitter_inheritance(JSContext* ctx, JSValue obj);
 JSValue js_http_server_constructor(JSContext* ctx, JSValueConst new_target, int argc, JSValueConst* argv);
 JSValue js_http_server_listen(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv);
 JSValue js_http_server_close(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv);
+JSValue js_http_server_set_timeout(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv);
 void js_http_server_finalizer(JSRuntime* rt, JSValue val);
 
 // IncomingMessage methods (from http_incoming.c)
@@ -124,6 +136,10 @@ JSValue js_http_response_write_head(JSContext* ctx, JSValueConst this_val, int a
 JSValue js_http_response_write(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv);
 JSValue js_http_response_end(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv);
 JSValue js_http_response_set_header(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv);
+JSValue js_http_response_get_header(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv);
+JSValue js_http_response_remove_header(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv);
+JSValue js_http_response_get_headers(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv);
+JSValue js_http_response_write_continue(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv);
 void js_http_response_finalizer(JSRuntime* rt, JSValue val);
 
 // Parser functions (from http_parser.c) - Full llhttp callback suite

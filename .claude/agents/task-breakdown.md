@@ -114,47 +114,206 @@ The main plan document **MUST NOT exceed 2000 lines**. Use **sub-documents** for
 
 ### Template Structure (Minimal Example)
 
+**File Format Notes:**
+- Save as `.md` file for compatibility (e.g., `docs/plan/node-dgram-plan.md`)
+- Use Org-mode syntax within the file for task management features
+- Content is readable in any text editor, but Emacs users get full Org-mode functionality
+- GitHub and VS Code will display tables, lists, and formatting correctly
+
 **Main sections required:**
-```markdown
----
-Created: {ISO 8601 Timestamp}
-Last Updated: {ISO 8601 Timestamp}
-Status: 🟡 PLANNING | 🔵 IN_PROGRESS | 🟢 COMPLETED | 🔴 BLOCKED
-Overall Progress: 0/N tasks (0%)
----
+```org
+#+TITLE: Task Plan: {Task Name}
+#+AUTHOR: Claude AI Assistant
+#+DATE: {ISO 8601 Timestamp}
+#+STARTUP: overview indent
+#+TODO: TODO IN-PROGRESS BLOCKED | DONE CANCELLED
+#+PRIORITIES: A C B
 
-# Task Plan: {Task Name}
+* Task Metadata
+:PROPERTIES:
+:CREATED: {ISO 8601 Timestamp}
+:UPDATED: {ISO 8601 Timestamp}
+:STATUS: 🟡 PLANNING | 🔵 IN_PROGRESS | 🟢 COMPLETED | 🔴 BLOCKED
+:PROGRESS: 0/N
+:COMPLETION: 0%
+:END:
 
-## 📋 Task Analysis & Breakdown
+* 📋 Task Analysis & Breakdown
+
+### Org-mode Style Task Format
+Tasks follow Emacs Org-mode conventions for clarity and tool compatibility:
+
+**Status Keywords:**
+- `* TODO` - Task not yet started (pending)
+- `* IN-PROGRESS` - Currently working on this task
+- `* DONE` - Task completed successfully
+- `* BLOCKED` - Task blocked by dependencies or issues
+- `* CANCELLED` - Task no longer needed
+
+**Hierarchy Levels:**
+- `*` - L0/L1: Main task or epic phase
+- `**` - L2: User story or major feature
+- `***` - L3: Technical task
+- `****` - L4: Atomic operation
+
+**Metadata Markers:**
+- `[#A]`, `[#B]`, `[#C]` - Priority (A=High, B=Medium, C=Low)
+- `[P]`, `[S]`, `[PS]` - Execution mode (Parallel/Sequential/Parallel-Sequential)
+- `[D:TaskID]` - Hard dependency
+- `[R:LEVEL]` - Risk level (LOW/MED/HIGH)
+- `[C:LEVEL]` - Complexity (TRIVIAL/SIMPLE/MEDIUM/COMPLEX)
+- `:tag1:tag2:` - Custom tags at end of headline
+
+**Example Task Format:**
+```org
+* TODO [#A] Main Feature: Implement dgram module :feature:networking:
+:PROPERTIES:
+:CREATED: 2025-01-15T10:00:00Z
+:UPDATED: 2025-01-15T14:30:00Z
+:PROGRESS: 0/25
+:END:
+
+** TODO [#A] Phase 1: Setup & Research [S][R:LOW][C:SIMPLE] :research:
+:PROPERTIES:
+:CREATED: 2025-01-15T10:05:00Z
+:DEPS: None
+:END:
+
+*** IN-PROGRESS [#A] Task 1.1: Analyze existing net module [P][R:LOW][C:SIMPLE]
+:PROPERTIES:
+:CREATED: 2025-01-15T10:10:00Z
+:STARTED: 2025-01-15T10:15:00Z
+:DEPS: None
+:END:
+
+*** TODO [#B] Task 1.2: Research libuv UDP APIs [P][R:LOW][C:SIMPLE]
+:PROPERTIES:
+:CREATED: 2025-01-15T10:10:00Z
+:DEPS: None
+:END:
+
+** TODO [#A] Phase 2: Core Implementation [S][R:MED][C:COMPLEX][D:Phase1] :implementation:
+:PROPERTIES:
+:CREATED: 2025-01-15T10:05:00Z
+:DEPS: Phase1
+:END:
+
+*** TODO [#A] Task 2.1: Implement Socket class [S][R:MED][C:COMPLEX][D:1.1,1.2]
+:PROPERTIES:
+:CREATED: 2025-01-15T10:12:00Z
+:DEPS: 1.1,1.2
+:BLOCKED_BY: None
+:END:
+
+** DONE [#B] Phase 3: Testing [P][R:LOW][C:MEDIUM][D:Phase2] :testing:
+CLOSED: [2025-01-15T16:00:00Z]
+:PROPERTIES:
+:CREATED: 2025-01-15T10:05:00Z
+:COMPLETED: 2025-01-15T16:00:00Z
+:DEPS: Phase2
+:END:
+```
+
 ### L0 Main Task
 - Requirement: {Brief description}
 - Success Criteria: {Measurable outcomes}
 - Constraints: {Tech stack, patterns}
 
-### L1 Epic Phases
-1. [S][R:LOW][C:SIMPLE] Setup & Research
-2. [S][R:MED][C:COMPLEX] Core Implementation [D:1]
-3. [P][R:LOW][C:MEDIUM] Testing [D:2]
+### L1 Epic Phases (Org-mode Format)
+```org
+* TODO Phase 1: Setup & Research [S][R:LOW][C:SIMPLE]
+* TODO Phase 2: Core Implementation [S][R:MED][C:COMPLEX][D:Phase1]
+* TODO Phase 3: Testing [P][R:LOW][C:MEDIUM][D:Phase2]
+```
 
 ### L2+ Tasks
 {Hierarchical breakdown - see sub-documents if detailed}
 
-## 📝 Task Execution Tracker
-| ID | Level | Task | Mode | Status | Deps | Risk | Complexity |
-|----|-------|------|------|--------|------|------|------------|
-| 1 | L1 | Setup | [S] | ⏳ | None | LOW | SIMPLE |
-...
+** 📝 Task Execution (Org-mode Format)
 
-## 🚀 Execution Dashboard
-- Current Phase: {Phase name}
+*** TODO [#A] Phase 1: Setup & Research [S][R:LOW][C:SIMPLE] :research:
+:PROPERTIES:
+:ID: phase-1
+:CREATED: {timestamp}
+:DEPS: None
+:PROGRESS: 0/5
+:COMPLETION: 0%
+:END:
+
+**** TODO [#A] Task 1.1: Initial setup [P][R:LOW][C:SIMPLE]
+:PROPERTIES:
+:ID: 1.1
+:CREATED: {timestamp}
+:DEPS: None
+:END:
+
+**** TODO [#B] Task 1.2: Code analysis [P][R:LOW][C:SIMPLE]
+:PROPERTIES:
+:ID: 1.2
+:CREATED: {timestamp}
+:DEPS: None
+:END:
+
+*** TODO [#A] Phase 2: Core Implementation [S][R:MED][C:COMPLEX][D:phase-1] :implementation:
+:PROPERTIES:
+:ID: phase-2
+:CREATED: {timestamp}
+:DEPS: phase-1
+:PROGRESS: 0/10
+:COMPLETION: 0%
+:END:
+
+**** TODO [#A] Task 2.1: Main feature [S][R:MED][C:COMPLEX][D:1.1,1.2]
+:PROPERTIES:
+:ID: 2.1
+:CREATED: {timestamp}
+:DEPS: 1.1,1.2
+:END:
+
+*** TODO [#B] Phase 3: Testing [P][R:LOW][C:MEDIUM][D:phase-2] :testing:
+:PROPERTIES:
+:ID: phase-3
+:CREATED: {timestamp}
+:DEPS: phase-2
+:PROGRESS: 0/8
+:COMPLETION: 0%
+:END:
+
+** 🚀 Execution Dashboard
+:PROPERTIES:
+:CURRENT_PHASE: {Phase name}
+:PROGRESS: 0/N
+:COMPLETION: 0%
+:ACTIVE_TASK: {Current work}
+:UPDATED: {timestamp}
+:END:
+
+*** Current Status
+- Phase: {Phase name}
 - Progress: {N/M tasks} ({%})
-- Active Task: {Current work}
-- Next Tasks: {Upcoming work}
+- Active: {Current work}
 
-## 📜 History
-| Timestamp | Action | Details |
-|-----------|--------|---------|
-| ... | ... | ... |
+*** Next Up
+- [ ] {Task 1}
+- [ ] {Task 2}
+- [ ] {Task 3}
+
+** 📜 History & Updates
+:LOGBOOK:
+- State "IN-PROGRESS" from "TODO" [{timestamp}] \\
+  Started working on {task}
+- Note taken on [{timestamp}] \\
+  {Progress note or blocker details}
+- State "DONE" from "IN-PROGRESS" [{timestamp}] \\
+  Completed {task}
+:END:
+
+*** Recent Changes
+| Timestamp | Action | Task ID | Details |
+|-----------|--------|---------|---------|
+| {ISO8601} | Started | 1.1 | {details} |
+| {ISO8601} | Completed | 1.1 | {details} |
+| {ISO8601} | Blocked | 2.1 | {blocker details} |
 ```
 
 **Keep it concise** - Move detailed breakdowns to sub-documents when approaching 1500 lines
@@ -267,11 +426,17 @@ Track these outcomes:
 7. **Focus on dependencies**: Not time estimates (AI execution differs from human)
 8. **Validate continuously**: Check quality gates at each phase
 
-### Document Location
-- Save as `docs/plan/<feature-name>-plan.md` in project root or current working directory
-- Use Write tool to create the initial document
-- Use Edit/MultiEdit tools to update progress
-- Keep all sections updated throughout execution
+### Document Location & Format
+- **File naming**: Save as `docs/plan/<feature-name>-plan.md` in project root or current working directory
+- **File extension**: Use `.md` extension for maximum compatibility across tools
+- **Content format**: Use Org-mode syntax within `.md` files for rich task management
+- **Compatibility notes**:
+  - Org-mode syntax is readable as plain text in any editor
+  - GitHub, VS Code, and most tools can display the content correctly
+  - Emacs users can enable Org-mode for `.md` files to get full interactive features
+  - For Emacs users, add to your config: `(add-to-list 'auto-mode-alist '("docs/plan/.*\\.md\\'" . org-mode))`
+- **Tool usage**: Use Write tool to create the initial document, Edit/MultiEdit tools to update progress
+- **Update discipline**: Keep all sections updated throughout execution
 
 ### Document Quality Guidelines
 **MANDATORY: Maintain document clarity and efficiency**

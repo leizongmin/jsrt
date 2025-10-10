@@ -98,6 +98,36 @@ typedef struct {
   bool use_chunked;  // Use chunked transfer encoding
 } JSHttpResponse;
 
+// HTTP Client Request state (ClientRequest)
+typedef struct {
+  JSContext* ctx;
+  JSValue request_obj;
+  JSValue socket;
+  char* method;
+  char* host;
+  int port;
+  char* path;
+  char* protocol;  // "http:" or "https:"
+  JSValue headers;
+  JSValue options;  // Store original options
+  bool headers_sent;
+  bool finished;
+  bool aborted;
+  JSValue response_obj;  // IncomingMessage response
+  uint32_t timeout_ms;
+  uv_timer_t* timeout_timer;
+  bool timeout_timer_initialized;
+
+  // Connection state for response parsing
+  llhttp_t parser;
+  llhttp_settings_t settings;
+  char* current_header_field;
+  char* current_header_value;
+  char* body_buffer;
+  size_t body_size;
+  size_t body_capacity;
+} JSHTTPClientRequest;
+
 // HTTP handler data structure
 typedef struct {
   JSValue server;
@@ -170,6 +200,31 @@ void http_listen_timer_callback(uv_timer_t* timer);
 // Module functions (from http_module.c)
 JSValue js_http_create_server(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv);
 JSValue js_http_request(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv);
+JSValue js_http_get(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv);
 JSValue js_http_agent_constructor(JSContext* ctx, JSValueConst new_target, int argc, JSValueConst* argv);
+
+// ClientRequest methods (from http_client.c)
+JSValue js_http_client_request_constructor(JSContext* ctx, JSValueConst new_target, int argc, JSValueConst* argv);
+JSValue js_http_client_request_set_header(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv);
+JSValue js_http_client_request_get_header(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv);
+JSValue js_http_client_request_remove_header(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv);
+JSValue js_http_client_request_write(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv);
+JSValue js_http_client_request_end(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv);
+JSValue js_http_client_request_abort(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv);
+JSValue js_http_client_request_set_timeout(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv);
+JSValue js_http_client_request_set_no_delay(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv);
+JSValue js_http_client_request_set_socket_keep_alive(JSContext* ctx, JSValueConst this_val, int argc,
+                                                     JSValueConst* argv);
+JSValue js_http_client_request_flush_headers(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv);
+void js_http_client_request_finalizer(JSRuntime* rt, JSValue val);
+
+// Client response parsing (from http_client.c)
+int client_on_message_begin(llhttp_t* parser);
+int client_on_status(llhttp_t* parser, const char* at, size_t length);
+int client_on_header_field(llhttp_t* parser, const char* at, size_t length);
+int client_on_header_value(llhttp_t* parser, const char* at, size_t length);
+int client_on_headers_complete(llhttp_t* parser);
+int client_on_body(llhttp_t* parser, const char* at, size_t length);
+int client_on_message_complete(llhttp_t* parser);
 
 #endif  // JSRT_NODE_HTTP_INTERNAL_H

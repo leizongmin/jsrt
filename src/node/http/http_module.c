@@ -5,6 +5,7 @@ JSClassID js_http_server_class_id;
 JSClassID js_http_request_class_id;
 JSClassID js_http_response_class_id;
 JSClassID js_http_client_request_class_id;
+JSClassID js_http_agent_class_id;
 
 JSValue g_current_http_server;
 JSContext* g_current_http_server_ctx = NULL;
@@ -87,25 +88,365 @@ JSValue js_http_create_server(JSContext* ctx, JSValueConst this_val, int argc, J
   return server;
 }
 
-// HTTP request function (basic implementation)
-JSValue js_http_request(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
-  // Basic HTTP request implementation (mock for now)
-  JSValue client_req = js_http_request_constructor(ctx, JS_UNDEFINED, 0, NULL);
+// Helper to parse URL string into components
+static int parse_url_components(JSContext* ctx, const char* url_str, char** host, int* port, char** path,
+                                char** protocol) {
+  // Basic URL parsing: http://host:port/path
+  // For simplicity, only support http:// for now
+  const char* p = url_str;
 
-  if (argc > 0) {
-    // Parse URL/options
-    if (JS_IsString(argv[0])) {
-      const char* url = JS_ToCString(ctx, argv[0]);
-      if (url) {
-        JS_SetPropertyStr(ctx, client_req, "url", JS_NewString(ctx, url));
-        JS_FreeCString(ctx, url);
-      }
+  // Check protocol
+  if (strncmp(p, "http://", 7) == 0) {
+    *protocol = strdup("http:");
+    p += 7;
+    *port = 80;
+  } else if (strncmp(p, "https://", 8) == 0) {
+    *protocol = strdup("https:");
+    p += 8;
+    *port = 443;
+  } else {
+    // Assume http if no protocol
+    *protocol = strdup("http:");
+    *port = 80;
+  }
+
+  // Extract host and optional port
+  const char* path_start = strchr(p, '/');
+  const char* port_start = strchr(p, ':');
+
+  // Determine host length
+  size_t host_len;
+  if (port_start && (!path_start || port_start < path_start)) {
+    // Port specified
+    host_len = port_start - p;
+    port_start++;  // Skip ':'
+    *port = atoi(port_start);
+  } else if (path_start) {
+    host_len = path_start - p;
+  } else {
+    host_len = strlen(p);
+  }
+
+  *host = malloc(host_len + 1);
+  if (!*host) {
+    free(*protocol);
+    return -1;
+  }
+  memcpy(*host, p, host_len);
+  (*host)[host_len] = '\0';
+
+  // Extract path
+  if (path_start) {
+    *path = strdup(path_start);
+  } else {
+    *path = strdup("/");
+  }
+
+  return 0;
+}
+
+// Socket data handler for client response parsing
+static JSValue http_client_socket_data_handler(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
+  // Get the client request from the socket's opaque data
+  JSValue client_req_val = JS_GetPropertyStr(ctx, this_val, "_clientRequest");
+  if (JS_IsUndefined(client_req_val)) {
+    JS_FreeValue(ctx, client_req_val);
+    return JS_UNDEFINED;
+  }
+
+  JSHTTPClientRequest* client_req = JS_GetOpaque(client_req_val, js_http_client_request_class_id);
+  if (!client_req || argc < 1) {
+    JS_FreeValue(ctx, client_req_val);
+    return JS_UNDEFINED;
+  }
+
+  // Parse received data with llhttp
+  size_t data_len;
+  uint8_t* data = JS_GetArrayBuffer(ctx, &data_len, argv[0]);
+  if (data) {
+    llhttp_execute(&client_req->parser, (const char*)data, data_len);
+  } else {
+    // Try to get string data
+    const char* str_data = JS_ToCString(ctx, argv[0]);
+    if (str_data) {
+      llhttp_execute(&client_req->parser, str_data, strlen(str_data));
+      JS_FreeCString(ctx, str_data);
     }
   }
 
-  // Add client request methods
-  JS_SetPropertyStr(ctx, client_req, "write", JS_NewCFunction(ctx, NULL, "write", 1));
-  JS_SetPropertyStr(ctx, client_req, "end", JS_NewCFunction(ctx, NULL, "end", 1));
+  JS_FreeValue(ctx, client_req_val);
+  return JS_UNDEFINED;
+}
+
+// Socket connect handler for client requests
+static JSValue http_client_socket_connect_handler(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
+  JSValue client_req_val = JS_GetPropertyStr(ctx, this_val, "_clientRequest");
+  if (!JS_IsUndefined(client_req_val)) {
+    JSValue emit = JS_GetPropertyStr(ctx, client_req_val, "emit");
+    if (JS_IsFunction(ctx, emit)) {
+      JSValue args[] = {JS_NewString(ctx, "socket"), JS_DupValue(ctx, this_val)};
+      JSValue result = JS_Call(ctx, emit, client_req_val, 2, args);
+      JS_FreeValue(ctx, result);
+      JS_FreeValue(ctx, args[0]);
+      JS_FreeValue(ctx, args[1]);
+    }
+    JS_FreeValue(ctx, emit);
+  }
+  JS_FreeValue(ctx, client_req_val);
+  return JS_UNDEFINED;
+}
+
+// HTTP request function (full implementation)
+JSValue js_http_request(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
+  if (argc < 1) {
+    return JS_ThrowTypeError(ctx, "http.request requires URL or options");
+  }
+
+  // Create ClientRequest object
+  JSValue client_req = js_http_client_request_constructor(ctx, JS_UNDEFINED, 0, NULL);
+  if (JS_IsException(client_req)) {
+    return client_req;
+  }
+
+  JSHTTPClientRequest* req_data = JS_GetOpaque(client_req, js_http_client_request_class_id);
+  if (!req_data) {
+    JS_FreeValue(ctx, client_req);
+    return JS_ThrowTypeError(ctx, "Failed to create ClientRequest");
+  }
+
+  // Parse URL or options
+  JSValue options = JS_UNDEFINED;
+  if (JS_IsString(argv[0])) {
+    // URL string provided
+    const char* url_str = JS_ToCString(ctx, argv[0]);
+    if (url_str) {
+      // Store URL property on ClientRequest object
+      JS_SetPropertyStr(ctx, client_req, "url", JS_NewString(ctx, url_str));
+
+      char* host = NULL;
+      char* path = NULL;
+      char* protocol = NULL;
+      int port = 80;
+
+      if (parse_url_components(ctx, url_str, &host, &port, &path, &protocol) == 0) {
+        // Update client request with parsed values
+        free(req_data->host);
+        free(req_data->path);
+        free(req_data->protocol);
+        req_data->host = host;
+        req_data->port = port;
+        req_data->path = path;
+        req_data->protocol = protocol;
+      }
+      JS_FreeCString(ctx, url_str);
+    }
+
+    // Check for options in second argument
+    if (argc > 1 && JS_IsObject(argv[1])) {
+      options = JS_DupValue(ctx, argv[1]);
+    }
+  } else if (JS_IsObject(argv[0])) {
+    // Options object provided
+    options = JS_DupValue(ctx, argv[0]);
+
+    // Extract host
+    JSValue host_val = JS_GetPropertyStr(ctx, options, "host");
+    if (JS_IsString(host_val)) {
+      const char* host = JS_ToCString(ctx, host_val);
+      if (host) {
+        free(req_data->host);
+        req_data->host = strdup(host);
+        JS_FreeCString(ctx, host);
+      }
+    }
+    JS_FreeValue(ctx, host_val);
+
+    // Extract port
+    JSValue port_val = JS_GetPropertyStr(ctx, options, "port");
+    if (JS_IsNumber(port_val)) {
+      int32_t port;
+      JS_ToInt32(ctx, &port, port_val);
+      req_data->port = port;
+    }
+    JS_FreeValue(ctx, port_val);
+
+    // Extract path
+    JSValue path_val = JS_GetPropertyStr(ctx, options, "path");
+    if (JS_IsString(path_val)) {
+      const char* path = JS_ToCString(ctx, path_val);
+      if (path) {
+        free(req_data->path);
+        req_data->path = strdup(path);
+        JS_FreeCString(ctx, path);
+      }
+    }
+    JS_FreeValue(ctx, path_val);
+
+    // Extract method
+    JSValue method_val = JS_GetPropertyStr(ctx, options, "method");
+    if (JS_IsString(method_val)) {
+      const char* method = JS_ToCString(ctx, method_val);
+      if (method) {
+        free(req_data->method);
+        req_data->method = strdup(method);
+        JS_FreeCString(ctx, method);
+      }
+    }
+    JS_FreeValue(ctx, method_val);
+
+    // Extract headers
+    JSValue headers_val = JS_GetPropertyStr(ctx, options, "headers");
+    if (JS_IsObject(headers_val)) {
+      JSPropertyEnum* tab;
+      uint32_t len;
+      if (JS_GetOwnPropertyNames(ctx, &tab, &len, headers_val, JS_GPN_STRING_MASK) == 0) {
+        for (uint32_t i = 0; i < len; i++) {
+          JSValue key = JS_AtomToString(ctx, tab[i].atom);
+          JSValue value = JS_GetProperty(ctx, headers_val, tab[i].atom);
+
+          const char* key_str = JS_ToCString(ctx, key);
+          const char* value_str = JS_ToCString(ctx, value);
+
+          if (key_str && value_str) {
+            JS_SetPropertyStr(ctx, req_data->headers, key_str, JS_NewString(ctx, value_str));
+          }
+
+          if (key_str)
+            JS_FreeCString(ctx, key_str);
+          if (value_str)
+            JS_FreeCString(ctx, value_str);
+
+          JS_FreeValue(ctx, key);
+          JS_FreeValue(ctx, value);
+          JS_FreeAtom(ctx, tab[i].atom);
+        }
+        js_free(ctx, tab);
+      }
+    }
+    JS_FreeValue(ctx, headers_val);
+  }
+
+  // Set default headers
+  JSValue host_header = JS_GetPropertyStr(ctx, req_data->headers, "host");
+  if (JS_IsUndefined(host_header)) {
+    if (req_data->host) {
+      char host_header_val[512];
+      if (req_data->port == 80 || req_data->port == 443) {
+        snprintf(host_header_val, sizeof(host_header_val), "%s", req_data->host);
+      } else {
+        snprintf(host_header_val, sizeof(host_header_val), "%s:%d", req_data->host, req_data->port);
+      }
+      JS_SetPropertyStr(ctx, req_data->headers, "host", JS_NewString(ctx, host_header_val));
+    }
+  }
+  JS_FreeValue(ctx, host_header);
+
+  // Set Connection: close by default (no keep-alive for now)
+  JSValue connection_header = JS_GetPropertyStr(ctx, req_data->headers, "connection");
+  if (JS_IsUndefined(connection_header)) {
+    JS_SetPropertyStr(ctx, req_data->headers, "connection", JS_NewString(ctx, "close"));
+  }
+  JS_FreeValue(ctx, connection_header);
+
+  // Create TCP socket and connect
+  JSValue net_module = JSRT_LoadNodeModuleCommonJS(ctx, "net");
+  if (JS_IsException(net_module)) {
+    JS_FreeValue(ctx, client_req);
+    if (!JS_IsUndefined(options))
+      JS_FreeValue(ctx, options);
+    return net_module;
+  }
+
+  JSValue socket_constructor = JS_GetPropertyStr(ctx, net_module, "Socket");
+  JSValue socket = JS_CallConstructor(ctx, socket_constructor, 0, NULL);
+  JS_FreeValue(ctx, socket_constructor);
+  JS_FreeValue(ctx, net_module);
+
+  if (JS_IsException(socket)) {
+    JS_FreeValue(ctx, client_req);
+    if (!JS_IsUndefined(options))
+      JS_FreeValue(ctx, options);
+    return socket;
+  }
+
+  // Store socket in ClientRequest
+  req_data->socket = JS_DupValue(ctx, socket);
+
+  // Create IncomingMessage for response
+  req_data->response_obj = js_http_request_constructor(ctx, JS_UNDEFINED, 0, NULL);
+
+  // Set up socket event handlers
+  JSValue on_method = JS_GetPropertyStr(ctx, socket, "on");
+  if (JS_IsFunction(ctx, on_method)) {
+    // Store client request reference on socket for data handler
+    JS_SetPropertyStr(ctx, socket, "_clientRequest", JS_DupValue(ctx, client_req));
+
+    // on('data') - parse HTTP response
+    JSValue data_handler = JS_NewCFunction(ctx, http_client_socket_data_handler, "dataHandler", 1);
+    JSValue args[] = {JS_NewString(ctx, "data"), data_handler};
+    JSValue result = JS_Call(ctx, on_method, socket, 2, args);
+    JS_FreeValue(ctx, result);
+    JS_FreeValue(ctx, args[0]);
+    // data_handler is now owned by event system
+
+    // on('connect') - emit 'socket' event on request
+    JSValue connect_handler = JS_NewCFunction(ctx, http_client_socket_connect_handler, "connectHandler", 0);
+    JSValue connect_args[] = {JS_NewString(ctx, "connect"), connect_handler};
+    result = JS_Call(ctx, on_method, socket, 2, connect_args);
+    JS_FreeValue(ctx, result);
+    JS_FreeValue(ctx, connect_args[0]);
+  }
+  JS_FreeValue(ctx, on_method);
+
+  // Connect socket
+  JSValue connect_method = JS_GetPropertyStr(ctx, socket, "connect");
+  if (JS_IsFunction(ctx, connect_method)) {
+    JSValue connect_args[] = {JS_NewInt32(ctx, req_data->port),
+                              JS_NewString(ctx, req_data->host ? req_data->host : "localhost")};
+    JSValue result = JS_Call(ctx, connect_method, socket, 2, connect_args);
+    JS_FreeValue(ctx, result);
+    JS_FreeValue(ctx, connect_args[0]);
+    JS_FreeValue(ctx, connect_args[1]);
+  }
+  JS_FreeValue(ctx, connect_method);
+  JS_FreeValue(ctx, socket);
+
+  // Register callback if provided (last argument)
+  int callback_idx = argc - 1;
+  if (callback_idx >= 0 && JS_IsFunction(ctx, argv[callback_idx])) {
+    JSValue on_method = JS_GetPropertyStr(ctx, client_req, "on");
+    if (JS_IsFunction(ctx, on_method)) {
+      JSValue args[] = {JS_NewString(ctx, "response"), JS_DupValue(ctx, argv[callback_idx])};
+      JSValue result = JS_Call(ctx, on_method, client_req, 2, args);
+      JS_FreeValue(ctx, result);
+      JS_FreeValue(ctx, args[0]);
+      JS_FreeValue(ctx, args[1]);
+    }
+    JS_FreeValue(ctx, on_method);
+  }
+
+  if (!JS_IsUndefined(options)) {
+    JS_FreeValue(ctx, options);
+  }
+
+  return client_req;
+}
+
+// HTTP get function (convenience wrapper)
+JSValue js_http_get(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
+  // Call http.request() with method: 'GET'
+  JSValue client_req = js_http_request(ctx, this_val, argc, argv);
+  if (JS_IsException(client_req)) {
+    return client_req;
+  }
+
+  // Automatically call end()
+  JSValue end_method = JS_GetPropertyStr(ctx, client_req, "end");
+  if (JS_IsFunction(ctx, end_method)) {
+    JSValue result = JS_Call(ctx, end_method, client_req, 0, NULL);
+    JS_FreeValue(ctx, result);
+  }
+  JS_FreeValue(ctx, end_method);
 
   return client_req;
 }
@@ -155,6 +496,11 @@ static JSClassDef js_http_request_class = {
     .finalizer = js_http_request_finalizer,
 };
 
+static JSClassDef js_http_client_request_class = {
+    "ClientRequest",
+    .finalizer = js_http_client_request_finalizer,
+};
+
 // Module initialization
 JSValue JSRT_InitNodeHttp(JSContext* ctx) {
   JSValue http_module = JS_NewObject(ctx);
@@ -163,11 +509,13 @@ JSValue JSRT_InitNodeHttp(JSContext* ctx) {
   JS_NewClassID(&js_http_server_class_id);
   JS_NewClassID(&js_http_response_class_id);
   JS_NewClassID(&js_http_request_class_id);
+  JS_NewClassID(&js_http_client_request_class_id);
 
   // Create class definitions
   JS_NewClass(JS_GetRuntime(ctx), js_http_server_class_id, &js_http_server_class);
   JS_NewClass(JS_GetRuntime(ctx), js_http_response_class_id, &js_http_response_class);
   JS_NewClass(JS_GetRuntime(ctx), js_http_request_class_id, &js_http_request_class);
+  JS_NewClass(JS_GetRuntime(ctx), js_http_client_request_class_id, &js_http_client_request_class);
 
   // Create constructors
   JSValue server_ctor = JS_NewCFunction2(ctx, js_http_server_constructor, "Server", 0, JS_CFUNC_constructor, 0);
@@ -176,9 +524,14 @@ JSValue JSRT_InitNodeHttp(JSContext* ctx) {
   JSValue request_ctor =
       JS_NewCFunction2(ctx, js_http_request_constructor, "IncomingMessage", 0, JS_CFUNC_constructor, 0);
 
+  // Create constructors for client
+  JSValue client_request_ctor =
+      JS_NewCFunction2(ctx, js_http_client_request_constructor, "ClientRequest", 0, JS_CFUNC_constructor, 0);
+
   // Module functions
   JS_SetPropertyStr(ctx, http_module, "createServer", JS_NewCFunction(ctx, js_http_create_server, "createServer", 1));
-  JS_SetPropertyStr(ctx, http_module, "request", JS_NewCFunction(ctx, js_http_request, "request", 2));
+  JS_SetPropertyStr(ctx, http_module, "request", JS_NewCFunction(ctx, js_http_request, "request", 3));
+  JS_SetPropertyStr(ctx, http_module, "get", JS_NewCFunction(ctx, js_http_get, "get", 3));
 
   // HTTP Agent class with connection pooling
   JS_SetPropertyStr(ctx, http_module, "Agent",
@@ -188,6 +541,7 @@ JSValue JSRT_InitNodeHttp(JSContext* ctx) {
   JS_SetPropertyStr(ctx, http_module, "Server", server_ctor);
   JS_SetPropertyStr(ctx, http_module, "ServerResponse", response_ctor);
   JS_SetPropertyStr(ctx, http_module, "IncomingMessage", request_ctor);
+  JS_SetPropertyStr(ctx, http_module, "ClientRequest", client_request_ctor);
 
   // HTTP methods constants
   JS_SetPropertyStr(ctx, http_module, "METHODS", JS_NewArray(ctx));
@@ -229,9 +583,17 @@ int js_node_http_init(JSContext* ctx, JSModuleDef* m) {
   JS_SetModuleExport(ctx, m, "request", JS_DupValue(ctx, request));
   JS_FreeValue(ctx, request);
 
+  JSValue get = JS_GetPropertyStr(ctx, http_module, "get");
+  JS_SetModuleExport(ctx, m, "get", JS_DupValue(ctx, get));
+  JS_FreeValue(ctx, get);
+
   JSValue Agent = JS_GetPropertyStr(ctx, http_module, "Agent");
   JS_SetModuleExport(ctx, m, "Agent", JS_DupValue(ctx, Agent));
   JS_FreeValue(ctx, Agent);
+
+  JSValue ClientRequest = JS_GetPropertyStr(ctx, http_module, "ClientRequest");
+  JS_SetModuleExport(ctx, m, "ClientRequest", JS_DupValue(ctx, ClientRequest));
+  JS_FreeValue(ctx, ClientRequest);
 
   JSValue globalAgent = JS_GetPropertyStr(ctx, http_module, "globalAgent");
   JS_SetModuleExport(ctx, m, "globalAgent", JS_DupValue(ctx, globalAgent));

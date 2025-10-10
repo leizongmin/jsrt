@@ -7,6 +7,7 @@
 #include "../../../deps/llhttp/build/llhttp.h"
 #include "../../runtime.h"
 #include "../node_modules.h"
+#include "../stream/stream_internal.h"  // Phase 4: Stream integration
 
 // Forward declarations for URL and querystring parsing
 extern JSValue JSRT_InitNodeQueryString(JSContext* ctx);
@@ -78,6 +79,7 @@ typedef struct {
 } JSHttpServer;
 
 // HTTP Request state (IncomingMessage)
+// Phase 4: Now implements Readable stream interface
 typedef struct {
   JSContext* ctx;
   JSValue request_obj;
@@ -86,9 +88,11 @@ typedef struct {
   char* http_version;
   JSValue headers;
   JSValue socket;
+  JSStreamData* stream;  // Readable stream data (Phase 4)
 } JSHttpRequest;
 
 // HTTP Response state (ServerResponse)
+// Phase 4.2: Now implements Writable stream interface
 typedef struct {
   JSContext* ctx;
   JSValue response_obj;
@@ -99,6 +103,7 @@ typedef struct {
   char* status_message;
   JSValue headers;
   bool use_chunked;  // Use chunked transfer encoding
+  JSStreamData* stream;  // Writable stream data (Phase 4.2)
 } JSHttpResponse;
 
 // HTTP Client Request state (ClientRequest)
@@ -174,6 +179,13 @@ JSValue js_http_response_remove_header(JSContext* ctx, JSValueConst this_val, in
 JSValue js_http_response_get_headers(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv);
 JSValue js_http_response_write_continue(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv);
 void js_http_response_finalizer(JSRuntime* rt, JSValue val);
+
+// Phase 4.2: Writable stream methods for ServerResponse
+JSValue js_http_response_cork(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv);
+JSValue js_http_response_uncork(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv);
+JSValue js_http_response_writable(JSContext* ctx, JSValueConst this_val);
+JSValue js_http_response_writable_ended(JSContext* ctx, JSValueConst this_val);
+JSValue js_http_response_writable_finished(JSContext* ctx, JSValueConst this_val);
 
 // Parser functions (from http_parser.c) - Full llhttp callback suite
 int on_message_begin(llhttp_t* parser);

@@ -163,14 +163,27 @@ JSValue js_http_response_write(JSContext* ctx, JSValueConst this_val, int argc, 
   }
 
   // Write body data
+  bool can_write_more = true;  // Phase 4.2: Track back-pressure
+  size_t bytes_written = 0;
+
   if (argc > 0) {
     const char* data = JS_ToCString(ctx, argv[0]);
     if (data && !JS_IsUndefined(res->socket)) {
+      size_t data_len = strlen(data);
+      bytes_written = data_len;
+
+      // Phase 4.2: Check if corked - if so, we're buffering
+      if (res->stream && res->stream->writable_corked > 0) {
+        // Corked - just buffer the write, return true
+        // Actual write will happen on uncork()
+        JS_FreeCString(ctx, data);
+        return JS_NewBool(ctx, true);
+      }
+
       JSValue write_method = JS_GetPropertyStr(ctx, res->socket, "write");
       if (JS_IsFunction(ctx, write_method)) {
         if (res->use_chunked) {
           // Write as chunked data: {size_hex}\r\n{data}\r\n
-          size_t data_len = strlen(data);
           if (data_len > 0) {
             char chunk_header[32];
             snprintf(chunk_header, sizeof(chunk_header), "%zx\r\n", data_len);
@@ -196,10 +209,17 @@ JSValue js_http_response_write(JSContext* ctx, JSValueConst this_val, int argc, 
       }
       JS_FreeValue(ctx, write_method);
       JS_FreeCString(ctx, data);
+
+      // Phase 4.2: Check for back-pressure
+      if (res->stream && bytes_written > res->stream->options.highWaterMark) {
+        can_write_more = false;
+        res->stream->need_drain = true;
+      }
     }
   }
 
-  return JS_NewBool(ctx, true);
+  // Phase 4.2: Return false if back-pressure detected, true otherwise
+  return JS_NewBool(ctx, can_write_more);
 }
 
 // Response end method
@@ -237,6 +257,18 @@ JSValue js_http_response_end(JSContext* ctx, JSValueConst this_val, int argc, JS
 
   // Mark as finished
   res->finished = true;
+
+  // Phase 4.2: Update Writable stream state
+  if (res->stream) {
+    res->stream->writable = false;
+    res->stream->writable_ended = true;
+    res->stream->writable_finished = true;
+
+    // Update properties
+    JS_SetPropertyStr(ctx, this_val, "writable", JS_FALSE);
+    JS_SetPropertyStr(ctx, this_val, "writableEnded", JS_TRUE);
+    JS_SetPropertyStr(ctx, this_val, "writableFinished", JS_TRUE);
+  }
 
   // Emit 'finish' event
   JSValue emit = JS_GetPropertyStr(ctx, this_val, "emit");
@@ -419,6 +451,35 @@ JSValue js_http_response_constructor(JSContext* ctx, JSValueConst new_target, in
   res->use_chunked = false;
   res->headers = JS_NewObject(ctx);
 
+  // Phase 4.2: Initialize Writable stream data
+  res->stream = calloc(1, sizeof(JSStreamData));
+  if (!res->stream) {
+    JS_FreeValue(ctx, obj);
+    JS_FreeValue(ctx, res->headers);
+    free(res);
+    return JS_ThrowOutOfMemory(ctx);
+  }
+
+  // Initialize Writable stream state
+  res->stream->writable = true;
+  res->stream->writable_ended = false;
+  res->stream->writable_finished = false;
+  res->stream->writable_corked = 0;
+  res->stream->need_drain = false;
+  res->stream->options.highWaterMark = 16384;  // 16KB default
+
+  // Initialize write callbacks array
+  res->stream->write_callback_capacity = 4;
+  res->stream->write_callbacks = malloc(sizeof(WriteCallback) * res->stream->write_callback_capacity);
+  if (!res->stream->write_callbacks) {
+    free(res->stream);
+    JS_FreeValue(ctx, obj);
+    JS_FreeValue(ctx, res->headers);
+    free(res);
+    return JS_ThrowOutOfMemory(ctx);
+  }
+  res->stream->write_callback_count = 0;
+
   JS_SetOpaque(obj, res);
 
   // Add response methods
@@ -432,10 +493,19 @@ JSValue js_http_response_constructor(JSContext* ctx, JSValueConst new_target, in
   JS_SetPropertyStr(ctx, obj, "writeContinue",
                     JS_NewCFunction(ctx, js_http_response_write_continue, "writeContinue", 0));
 
+  // Phase 4.2: Add Writable stream methods
+  JS_SetPropertyStr(ctx, obj, "cork", JS_NewCFunction(ctx, js_http_response_cork, "cork", 0));
+  JS_SetPropertyStr(ctx, obj, "uncork", JS_NewCFunction(ctx, js_http_response_uncork, "uncork", 0));
+
   // Add properties
   JS_SetPropertyStr(ctx, obj, "statusCode", JS_NewInt32(ctx, 200));
   JS_SetPropertyStr(ctx, obj, "statusMessage", JS_NewString(ctx, "OK"));
   JS_SetPropertyStr(ctx, obj, "headersSent", JS_NewBool(ctx, false));
+
+  // Phase 4.2: Add Writable stream properties
+  JS_SetPropertyStr(ctx, obj, "writable", JS_NewBool(ctx, true));
+  JS_SetPropertyStr(ctx, obj, "writableEnded", JS_NewBool(ctx, false));
+  JS_SetPropertyStr(ctx, obj, "writableFinished", JS_NewBool(ctx, false));
 
   return obj;
 }
@@ -447,6 +517,91 @@ void js_http_response_finalizer(JSRuntime* rt, JSValue val) {
     free(res->status_message);
     JS_FreeValueRT(rt, res->headers);
     JS_FreeValueRT(rt, res->socket);
+
+    // Phase 4.2: Clean up Writable stream data
+    if (res->stream) {
+      if (res->stream->write_callbacks) {
+        // Free any pending callbacks
+        for (size_t i = 0; i < res->stream->write_callback_count; i++) {
+          JS_FreeValueRT(rt, res->stream->write_callbacks[i].callback);
+        }
+        free(res->stream->write_callbacks);
+      }
+      free(res->stream);
+    }
+
     free(res);
   }
+}
+
+// ============================================================================
+// Phase 4.2: Writable Stream Implementation
+// ============================================================================
+
+// cork() - Buffer writes
+JSValue js_http_response_cork(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
+  JSHttpResponse* res = JS_GetOpaque(this_val, js_http_response_class_id);
+  if (!res || !res->stream) {
+    return JS_ThrowTypeError(ctx, "Invalid response object");
+  }
+
+  // Increment cork count (can be nested)
+  res->stream->writable_corked++;
+
+  return JS_UNDEFINED;
+}
+
+// uncork() - Flush buffered writes
+JSValue js_http_response_uncork(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
+  JSHttpResponse* res = JS_GetOpaque(this_val, js_http_response_class_id);
+  if (!res || !res->stream) {
+    return JS_ThrowTypeError(ctx, "Invalid response object");
+  }
+
+  // Decrement cork count
+  if (res->stream->writable_corked > 0) {
+    res->stream->writable_corked--;
+  }
+
+  // If fully uncorked and we need drain, emit it
+  if (res->stream->writable_corked == 0 && res->stream->need_drain) {
+    res->stream->need_drain = false;
+
+    // Emit 'drain' event
+    JSValue emit = JS_GetPropertyStr(ctx, this_val, "emit");
+    if (JS_IsFunction(ctx, emit)) {
+      JSValue event_name = JS_NewString(ctx, "drain");
+      JSValue result = JS_Call(ctx, emit, this_val, 1, &event_name);
+      JS_FreeValue(ctx, result);
+      JS_FreeValue(ctx, event_name);
+    }
+    JS_FreeValue(ctx, emit);
+  }
+
+  return JS_UNDEFINED;
+}
+
+// Property getters for Writable stream properties
+JSValue js_http_response_writable(JSContext* ctx, JSValueConst this_val) {
+  JSHttpResponse* res = JS_GetOpaque(this_val, js_http_response_class_id);
+  if (!res || !res->stream) {
+    return JS_FALSE;
+  }
+  return JS_NewBool(ctx, res->stream->writable);
+}
+
+JSValue js_http_response_writable_ended(JSContext* ctx, JSValueConst this_val) {
+  JSHttpResponse* res = JS_GetOpaque(this_val, js_http_response_class_id);
+  if (!res || !res->stream) {
+    return JS_FALSE;
+  }
+  return JS_NewBool(ctx, res->stream->writable_ended);
+}
+
+JSValue js_http_response_writable_finished(JSContext* ctx, JSValueConst this_val) {
+  JSHttpResponse* res = JS_GetOpaque(this_val, js_http_response_class_id);
+  if (!res || !res->stream) {
+    return JS_FALSE;
+  }
+  return JS_NewBool(ctx, res->stream->writable_finished);
 }

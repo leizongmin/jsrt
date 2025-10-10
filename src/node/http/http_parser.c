@@ -1,4 +1,5 @@
 #include <ctype.h>
+#include "http_incoming.h"
 #include "http_internal.h"
 
 // HTTP Parser implementation with full llhttp integration
@@ -394,12 +395,15 @@ int on_headers_complete(llhttp_t* parser) {
 int on_body(llhttp_t* parser, const char* at, size_t length) {
   JSHttpConnection* conn = (JSHttpConnection*)parser->data;
 
-  // Accumulate body data
+  // Phase 4: Stream data to IncomingMessage instead of buffering
+  if (!JS_IsUndefined(conn->current_request)) {
+    js_http_incoming_push_data(conn->ctx, conn->current_request, at, length);
+  }
+
+  // Also keep accumulating for backwards compatibility (_body property)
   if (buffer_append(&conn->body_buffer, &conn->body_size, &conn->body_capacity, at, length) != 0) {
     return -1;
   }
-
-  // TODO Phase 4: Emit 'data' events for streaming instead of buffering
 
   return 0;
 }
@@ -409,11 +413,15 @@ int on_message_complete(llhttp_t* parser) {
   JSHttpConnection* conn = (JSHttpConnection*)parser->data;
   JSContext* ctx = conn->ctx;
 
-  // Set body on request if any
+  // Set body on request if any (backwards compatibility)
   if (conn->body_buffer && conn->body_size > 0) {
-    // Store body as internal property for now (Phase 4 will make it a stream)
     JSValue body_str = JS_NewStringLen(ctx, conn->body_buffer, conn->body_size);
     JS_SetPropertyStr(ctx, conn->current_request, "_body", body_str);
+  }
+
+  // Phase 4: Signal end of stream to IncomingMessage
+  if (!JS_IsUndefined(conn->current_request)) {
+    js_http_incoming_end(ctx, conn->current_request);
   }
 
   // Determine which event to emit based on request type

@@ -618,6 +618,16 @@ char* JSRT_ModuleNormalize(JSContext* ctx, const char* module_base_name, const c
   if (strncmp(module_name, "node:", 5) == 0) {
     return strdup(module_name);
   }
+
+  // Compact Node mode: check bare name as node module for ES modules
+  JSRT_Runtime* rt = (JSRT_Runtime*)opaque;
+  if (rt && rt->compact_node_mode && !is_absolute_path(module_name) && !is_relative_path(module_name) &&
+      JSRT_IsNodeModule(module_name)) {
+    JSRT_Debug("Compact Node mode (ESM): resolving '%s' as 'node:%s'", module_name, module_name);
+    char* prefixed = malloc(strlen(module_name) + 6);
+    sprintf(prefixed, "node:%s", module_name);
+    return prefixed;
+  }
 #endif
 
   // Handle package imports (starting with #)
@@ -941,6 +951,17 @@ static JSValue js_require(JSContext* ctx, JSValueConst this_val, int argc, JSVal
     const char* node_module_name = module_name + 5;
     JS_FreeCString(ctx, module_name);
     JSValue result = JSRT_LoadNodeModuleCommonJS(ctx, node_module_name);
+    free(esm_context_path);
+    return result;
+  }
+
+  // Compact Node mode: try bare name as node module
+  JSRT_Runtime* rt = (JSRT_Runtime*)JS_GetContextOpaque(ctx);
+  if (rt && rt->compact_node_mode && !is_relative_path(module_name) && !is_absolute_path(module_name) &&
+      JSRT_IsNodeModule(module_name)) {
+    JSRT_Debug("Compact Node mode: resolving '%s' as 'node:%s'", module_name, module_name);
+    JS_FreeCString(ctx, module_name);
+    JSValue result = JSRT_LoadNodeModuleCommonJS(ctx, module_name);
     free(esm_context_path);
     return result;
   }

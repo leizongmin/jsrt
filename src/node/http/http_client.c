@@ -632,15 +632,24 @@ JSValue js_http_client_request_flush_headers(JSContext* ctx, JSValueConst this_v
   return JS_UNDEFINED;
 }
 
+// Timer close callback - called asynchronously by libuv
+static void http_timer_close_callback(uv_handle_t* handle) {
+  if (handle) {
+    free(handle);
+  }
+}
+
 // Finalizer
 void js_http_client_request_finalizer(JSRuntime* rt, JSValue val) {
   JSHTTPClientRequest* client_req = JS_GetOpaque(val, js_http_client_request_class_id);
   if (client_req) {
-    // Free timer
+    // Free timer with proper async handling
+    // CRITICAL FIX #1.1: uv_close() is async, must not free() immediately
     if (client_req->timeout_timer_initialized && client_req->timeout_timer) {
       uv_timer_stop(client_req->timeout_timer);
-      uv_close((uv_handle_t*)client_req->timeout_timer, NULL);
-      free(client_req->timeout_timer);
+      uv_close((uv_handle_t*)client_req->timeout_timer, http_timer_close_callback);
+      client_req->timeout_timer = NULL;  // Prevent double-free
+      client_req->timeout_timer_initialized = false;
     }
 
     // Free strings

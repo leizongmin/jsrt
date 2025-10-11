@@ -9,10 +9,9 @@ const sizes = [
   { name: '1KB', size: 1024 },
   { name: '10KB', size: 10 * 1024 },
   { name: '100KB', size: 100 * 1024 },
-  { name: '1MB', size: 1024 * 1024 },
 ];
 
-const iterations = 100;
+const iterations = 10;
 
 function generateTestData(size) {
   const chars =

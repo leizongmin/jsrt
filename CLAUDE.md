@@ -5,6 +5,7 @@
 **jsrt** is a lightweight JavaScript runtime written in C, designed for minimal resource footprint while providing essential JavaScript execution capabilities.
 
 ### Core Technologies
+
 - **QuickJS**: JavaScript engine for parsing and executing JS code
 - **libuv**: Asynchronous I/O operations and event loop management
 - **Custom Stdlib**: Minimal standard library implementations
@@ -29,11 +30,13 @@ make format     # Format all code (MANDATORY before commit)
 ## AI Assistant Core Rules
 
 ### Three Core Principles
+
 1. **Understanding First**: Read code > Guess interfaces | Confirm > Assume
 2. **Quality Assurance**: Test > Commit | Reuse > Innovate
 3. **Honest Collaboration**: Admit ignorance > Pretend knowledge | Human decisions > AI autonomy
 
 ### Critical Development Rules
+
 - **MANDATORY**: Run baseline tests before modifications
 - **MANDATORY**: Make minimal, targeted changes only
 - **MANDATORY**: Test immediately after each change
@@ -42,7 +45,9 @@ make format     # Format all code (MANDATORY before commit)
 - **NEVER**: Claim improvement without concrete evidence
 
 ### Verification Checklist
+
 Must complete after every modification:
+
 ```bash
 □ make format    # Code formatting
 □ make test      # Unit tests (100% pass rate)
@@ -53,14 +58,14 @@ Must complete after every modification:
 
 Project uses specialized agents for different tasks. See `.claude/AGENTS_SUMMARY.md` for complete guide.
 
-| Agent | Purpose | Key Commands |
-|-------|---------|--------------|
-| **jsrt-developer** | Feature development | `make format && make test && make wpt` |
-| **jsrt-tester** | Testing & debugging | `make test`, `make wpt`, ASAN analysis |
-| **jsrt-compliance** | Standards compliance | WPT/WinterCG validation |
-| **jsrt-code-reviewer** | Code quality | Security, memory, standards review |
-| **jsrt-cross-platform** | Platform support | Windows/Linux/macOS compatibility |
-| **jsrt-formatter** | Code formatting | `make format` enforcement |
+| Agent                   | Purpose              | Key Commands                           |
+| ----------------------- | -------------------- | -------------------------------------- |
+| **jsrt-developer**      | Feature development  | `make format && make test && make wpt` |
+| **jsrt-tester**         | Testing & debugging  | `make test`, `make wpt`, ASAN analysis |
+| **jsrt-compliance**     | Standards compliance | WPT/WinterCG validation                |
+| **jsrt-code-reviewer**  | Code quality         | Security, memory, standards review     |
+| **jsrt-cross-platform** | Platform support     | Windows/Linux/macOS compatibility      |
+| **jsrt-formatter**      | Code formatting      | `make format` enforcement              |
 
 ## Project Structure
 
@@ -107,6 +112,7 @@ jsrt/
 ## Essential Commands
 
 ### Build Commands
+
 ```bash
 make            # Release build (optimized)
 make jsrt_g     # Debug build with symbols
@@ -116,6 +122,7 @@ make format     # Format C/JS code (MANDATORY)
 ```
 
 ### Test Commands
+
 ```bash
 make test                          # Unit tests (MUST PASS)
 make test N=dir                    # Test specific directory (test/dir)
@@ -132,6 +139,7 @@ timeout 20 ./bin/jsrt test/file.js # Test individual file with 20s timeout
 ```
 
 ### Debug Commands
+
 ```bash
 # Memory debugging
 ./bin/jsrt_m script.js                      # Run with AddressSanitizer
@@ -149,14 +157,15 @@ SHOW_ALL_FAILURES=1 make wpt N=console > target/tmp/debug.log 2>&1
 
 ## File Organization Rules
 
-| File Type | Location | Purpose |
-|-----------|----------|---------|
-| **Permanent tests** | `test/` | Committed test cases |
+| File Type           | Location      | Purpose                   |
+| ------------------- | ------------- | ------------------------- |
+| **Permanent tests** | `test/`       | Committed test cases      |
 | **Temporary tests** | `target/tmp/` | Debug files (git ignored) |
-| **Examples** | `examples/` | Demo scripts |
-| **Modules** | `src/std/` | Standard library |
+| **Examples**        | `examples/`   | Demo scripts              |
+| **Modules**         | `src/std/`    | Standard library          |
 
 ### Code Organization Guidelines
+
 - **Test files**: Keep test output minimal - only print on failures or warnings
 - **Source files**: If a single file exceeds 500 lines, refactor into multiple files within a subdirectory
 
@@ -181,12 +190,14 @@ make clean && make  # Verify release build
 ```
 
 ## Memory Management Rules
+
 - Every `malloc` needs corresponding `free`
 - Use QuickJS functions: `js_malloc`, `js_free`
 - Handle JS values: `JS_FreeValue` for temporaries
 - Check all allocation returns
 
 ## Error Handling Pattern
+
 ```c
 JSValue result = some_operation(ctx);
 if (JS_IsException(result)) {
@@ -210,12 +221,14 @@ JSRT_Debug("Processing request from %s:%d", host, port);
 ```
 
 **How it works:**
+
 - `JSRT_Debug` is only active when building with `make jsrt_g` (DEBUG flag enabled)
 - Outputs to stderr with green color formatting
 - Automatically includes file name and line number
 - In release builds, `JSRT_Debug` calls are compiled out (no overhead)
 
 **Usage:**
+
 ```bash
 make jsrt_g                 # Build with debug logging enabled
 ./bin/jsrt_g script.js      # Run and see debug output
@@ -224,6 +237,7 @@ make jsrt_g                 # Build with debug logging enabled
 ## Documentation References
 
 Detailed documentation in `.claude/docs/`:
+
 - `platform.md` - Cross-platform development
 - `testing.md` - Complete testing guide
 - `wpt.md` - Web Platform Tests guide
@@ -240,4 +254,5 @@ Detailed documentation in `.claude/docs/`:
 - **Local Settings**: `.claude/settings.local.json`
 
 ---
+
 **Remember**: Always use appropriate agents for specific tasks. When in doubt, consult `.claude/AGENTS_SUMMARY.md` for agent selection guidance.

@@ -119,11 +119,17 @@ void js_server_finalizer(JSRuntime* rt, JSValue val) {
       uv_timer_stop(server->callback_timer);
     }
 
-    // Only free callback if we're NOT in the timer callback
-    // (timer callback will free it when done)
-    if (!server->in_callback && !JS_IsUndefined(server->listen_callback)) {
-      JS_FreeValueRT(rt, server->listen_callback);
-      server->listen_callback = JS_UNDEFINED;
+    // Only free callbacks if we're NOT in a callback
+    // (callbacks will free themselves when done)
+    if (!server->in_callback) {
+      if (!JS_IsUndefined(server->listen_callback)) {
+        JS_FreeValueRT(rt, server->listen_callback);
+        server->listen_callback = JS_UNDEFINED;
+      }
+      if (!JS_IsUndefined(server->close_callback)) {
+        JS_FreeValueRT(rt, server->close_callback);
+        server->close_callback = JS_UNDEFINED;
+      }
     }
 
     // Close timer only if it was initialized

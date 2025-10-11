@@ -126,18 +126,16 @@ JSValue js_server_listen(JSContext* ctx, JSValueConst this_val, int argc, JSValu
   return this_val;
 }
 
-JSValue js_server_close(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
-  JSNetServer* server = JS_GetOpaque(this_val, js_server_class_id);
-  if (!server || server->destroyed) {
-    return JS_UNDEFINED;
+// Close callback - called after server handle is closed
+void on_server_close_complete(uv_handle_t* handle) {
+  JSNetServer* server = (JSNetServer*)handle->data;
+  if (!server || !server->ctx) {
+    return;
   }
 
-  // Don't manually close the handle here - let the finalizer handle cleanup
-  // This avoids double-close issues and use-after-free bugs
-  server->destroyed = true;
-  server->listening = false;
+  JSContext* ctx = server->ctx;
 
-  // Emit 'close' event immediately (user-initiated close)
+  // Emit 'close' event
   JSValue emit = JS_GetPropertyStr(ctx, server->server_obj, "emit");
   if (JS_IsFunction(ctx, emit)) {
     JSValue args[] = {JS_NewString(ctx, "close")};
@@ -145,6 +143,65 @@ JSValue js_server_close(JSContext* ctx, JSValueConst this_val, int argc, JSValue
     JS_FreeValue(ctx, args[0]);
   }
   JS_FreeValue(ctx, emit);
+
+  // Call user's close callback if provided
+  if (!JS_IsUndefined(server->close_callback)) {
+    JSValue result = JS_Call(ctx, server->close_callback, JS_UNDEFINED, 0, NULL);
+    if (JS_IsException(result)) {
+      JSValue exception = JS_GetException(ctx);
+      JS_FreeValue(ctx, exception);
+    }
+    JS_FreeValue(ctx, result);
+
+    // Clean up callback
+    JS_FreeValue(ctx, server->close_callback);
+    server->close_callback = JS_UNDEFINED;
+  }
+}
+
+JSValue js_server_close(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
+  JSNetServer* server = JS_GetOpaque(this_val, js_server_class_id);
+  if (!server || server->destroyed) {
+    // Already closed - call callback immediately if provided
+    if (argc > 0 && JS_IsFunction(ctx, argv[0])) {
+      JSValue result = JS_Call(ctx, argv[0], JS_UNDEFINED, 0, NULL);
+      JS_FreeValue(ctx, result);
+    }
+    return JS_UNDEFINED;
+  }
+
+  // Store callback if provided
+  if (argc > 0 && JS_IsFunction(ctx, argv[0])) {
+    server->close_callback = JS_DupValue(ctx, argv[0]);
+  }
+
+  // Mark as destroyed and stop listening
+  server->destroyed = true;
+  bool was_listening = server->listening;
+  server->listening = false;
+
+  // Close the libuv handle only if server was listening (handle initialized)
+  // If listen() was never called, emit events immediately
+  if (was_listening && !uv_is_closing((uv_handle_t*)&server->handle)) {
+    uv_close((uv_handle_t*)&server->handle, on_server_close_complete);
+  } else {
+    // Server was never listening, emit close event and call callback immediately
+    JSValue emit = JS_GetPropertyStr(ctx, server->server_obj, "emit");
+    if (JS_IsFunction(ctx, emit)) {
+      JSValue args[] = {JS_NewString(ctx, "close")};
+      JS_Call(ctx, emit, server->server_obj, 1, args);
+      JS_FreeValue(ctx, args[0]);
+    }
+    JS_FreeValue(ctx, emit);
+
+    // Call callback immediately
+    if (!JS_IsUndefined(server->close_callback)) {
+      JSValue result = JS_Call(ctx, server->close_callback, JS_UNDEFINED, 0, NULL);
+      JS_FreeValue(ctx, result);
+      JS_FreeValue(ctx, server->close_callback);
+      server->close_callback = JS_UNDEFINED;
+    }
+  }
 
   return JS_UNDEFINED;
 }
@@ -261,6 +318,7 @@ JSValue js_server_constructor(JSContext* ctx, JSValueConst new_target, int argc,
   server->listening = false;
   server->destroyed = false;
   server->listen_callback = JS_UNDEFINED;
+  server->close_callback = JS_UNDEFINED;
   server->timer_initialized = false;
   server->callback_timer = NULL;
 

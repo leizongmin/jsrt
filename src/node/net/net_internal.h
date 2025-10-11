@@ -58,6 +58,7 @@ typedef struct {
   char* host;
   int port;
   JSValue listen_callback;     // Store callback for async execution
+  JSValue close_callback;      // Store callback for close() method
   uv_timer_t* callback_timer;  // Allocated pointer instead of embedded handle
 } JSNetServer;
 

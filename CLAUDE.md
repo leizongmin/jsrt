@@ -6,7 +6,7 @@
 
 ### Core Technologies
 - **QuickJS**: JavaScript engine for parsing and executing JS code
-- **libuv**: Asynchronous I/O operations and event loop management  
+- **libuv**: Asynchronous I/O operations and event loop management
 - **Custom Stdlib**: Minimal standard library implementations
 
 ## Quick Start
@@ -30,7 +30,7 @@ make format     # Format all code (MANDATORY before commit)
 
 ### Three Core Principles
 1. **Understanding First**: Read code > Guess interfaces | Confirm > Assume
-2. **Quality Assurance**: Test > Commit | Reuse > Innovate  
+2. **Quality Assurance**: Test > Commit | Reuse > Innovate
 3. **Honest Collaboration**: Admit ignorance > Pretend knowledge | Human decisions > AI autonomy
 
 ### Critical Development Rules
@@ -69,17 +69,38 @@ jsrt/
 ├── src/                    # Core runtime source
 │   ├── main.c             # Entry point
 │   ├── jsrt.c/h           # Core runtime & API
-│   ├── runtime.c          # Environment setup
-│   ├── std/               # Standard library modules
-│   └── util/              # Utility functions
+│   ├── runtime.c/h        # Runtime environment setup
+│   ├── repl.c/h           # REPL implementation
+│   ├── build.c/h          # Build utilities
+│   ├── node/              # Node.js-compatible modules (fs, http, net, dns, etc.)
+│   ├── std/               # Standard library modules (console, timers, etc.)
+│   ├── util/              # Utility functions (debug.h, etc.)
+│   ├── crypto/            # Cryptographic functions
+│   ├── http/              # HTTP implementation
+│   ├── url/               # URL parsing
+│   └── wasm/              # WebAssembly support
 ├── test/                   # Test suite (test_*.js)
+├── wpt/                    # Web Platform Tests
 ├── deps/                   # Dependencies (DO NOT MODIFY)
 ├── examples/              # Example JavaScript files
+├── docs/                   # Project documentation
+├── scripts/               # Build and utility scripts
+├── bin/                    # Binary executables (symlinks to target/)
+│   ├── jsrt -> ../target/release/jsrt      # Release build
+│   ├── jsrt_g -> ../target/debug/jsrt      # Debug build
+│   ├── jsrt_m -> ../target/asan/jsrt       # AddressSanitizer build
+│   ├── jsrt_s -> ../target/release/jsrt_s  # Static release
+│   └── jsrt_static -> ../target/static/jsrt # Static build
+├── build/                  # CMake build directory
 ├── .claude/               # AI assistant configuration
 │   ├── agents/            # Specialized agent definitions
 │   ├── docs/              # Detailed documentation
 │   └── AGENTS_SUMMARY.md  # Agent usage guide
 └── target/                # Build outputs
+    ├── release/           # Release builds
+    ├── debug/             # Debug builds
+    ├── asan/              # AddressSanitizer builds
+    ├── static/            # Static builds
     └── tmp/               # Temporary test files (git ignored)
 ```
 
@@ -97,17 +118,29 @@ make format     # Format C/JS code (MANDATORY)
 ### Test Commands
 ```bash
 make test                          # Unit tests (MUST PASS)
-make wpt                          # All WPT tests (MUST PASS)
-make wpt N=url                    # Specific WPT category
+make test N=dir                    # Test specific directory (test/dir)
+                                   # Useful for focused testing on a specific module
+                                   # Avoids interference from other issues and improves efficiency
+make wpt                           # All WPT tests (MUST PASS)
+make wpt N=url                     # Specific WPT category
 SHOW_ALL_FAILURES=1 make wpt N=url # Debug mode
-MAX_FAILURES=10 make wpt          # Limit failures shown
+MAX_FAILURES=10 make wpt           # Limit failures shown
+
+# Single file testing with timeout
+timeout 20 ./bin/jsrt test/file.js # Test individual file with 20s timeout
+                                   # Prevents hanging when code has infinite loops or deadlocks
 ```
 
 ### Debug Commands
 ```bash
 # Memory debugging
-./target/debug/jsrt_m script.js
-ASAN_OPTIONS=detect_leaks=1 ./target/debug/jsrt_m script.js
+./bin/jsrt_m script.js                      # Run with AddressSanitizer
+ASAN_OPTIONS=detect_leaks=1 ./bin/jsrt_m script.js  # Enable leak detection
+
+# Debug logging with JSRT_Debug macro
+make jsrt_g                 # Build debug version with DEBUG flag enabled
+./bin/jsrt_g script.js      # Run with debug logging output
+# JSRT_Debug prints to stderr with green color, showing file:line info
 
 # WPT debugging
 mkdir -p target/tmp
@@ -162,6 +195,30 @@ if (JS_IsException(result)) {
 }
 // Use result...
 JS_FreeValue(ctx, result);
+```
+
+## Debug Logging
+
+Use the `JSRT_Debug` macro for adding debug logging to the codebase:
+
+```c
+#include "util/debug.h"
+
+// Add debug logging in your code
+JSRT_Debug("Variable value: %d", some_value);
+JSRT_Debug("Processing request from %s:%d", host, port);
+```
+
+**How it works:**
+- `JSRT_Debug` is only active when building with `make jsrt_g` (DEBUG flag enabled)
+- Outputs to stderr with green color formatting
+- Automatically includes file name and line number
+- In release builds, `JSRT_Debug` calls are compiled out (no overhead)
+
+**Usage:**
+```bash
+make jsrt_g                 # Build with debug logging enabled
+./bin/jsrt_g script.js      # Run and see debug output
 ```
 
 ## Documentation References

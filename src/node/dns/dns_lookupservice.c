@@ -48,12 +48,20 @@ static JSValue dns_lookupservice_impl(JSContext* ctx, JSValueConst this_val, int
   req->ctx = ctx;
   req->use_promise = use_promise;
   req->address = js_strdup(ctx, address);
+  if (!req->address) {
+    if (!use_promise) {
+      JS_FreeValue(ctx, callback);
+    }
+    js_free(ctx, req);
+    JS_FreeCString(ctx, address);
+    return JS_EXCEPTION;
+  }
   req->port = port;
   req->req.data = req;
 
+  JSValue promise = JS_UNDEFINED;
   if (use_promise) {
-    // Create promise
-    JSValue promise = JS_NewPromiseCapability(ctx, req->promise_funcs);
+    promise = JS_NewPromiseCapability(ctx, req->promise_funcs);
     if (JS_IsException(promise)) {
       js_free(ctx, req->address);
       js_free(ctx, req);
@@ -61,8 +69,6 @@ static JSValue dns_lookupservice_impl(JSContext* ctx, JSValueConst this_val, int
       return promise;
     }
     req->callback = JS_UNDEFINED;
-    req->promise_funcs[0] = JS_DupValue(ctx, req->promise_funcs[0]);
-    req->promise_funcs[1] = JS_DupValue(ctx, req->promise_funcs[1]);
   } else {
     req->callback = callback;
   }
@@ -133,11 +139,10 @@ static JSValue dns_lookupservice_impl(JSContext* ctx, JSValueConst this_val, int
       JS_Call(ctx, req->promise_funcs[1], JS_UNDEFINED, 1, args);
       JS_FreeValue(ctx, req->promise_funcs[0]);
       JS_FreeValue(ctx, req->promise_funcs[1]);
-      JSValue promise_copy = JS_DupValue(ctx, req->promise_funcs[1]);
       JS_FreeValue(ctx, error);
       js_free(ctx, req->address);
       js_free(ctx, req);
-      return promise_copy;
+      return promise;
     } else {
       JSValue args[] = {error};
       JS_Call(ctx, req->callback, JS_UNDEFINED, 1, args);
@@ -151,10 +156,6 @@ static JSValue dns_lookupservice_impl(JSContext* ctx, JSValueConst this_val, int
 
   // Success - operation is in progress
   if (use_promise) {
-    JSValue promise_funcs_copy[2];
-    promise_funcs_copy[0] = req->promise_funcs[0];
-    promise_funcs_copy[1] = req->promise_funcs[1];
-    JSValue promise = JS_NewPromiseCapability(ctx, promise_funcs_copy);
     return promise;
   } else {
     return JS_UNDEFINED;

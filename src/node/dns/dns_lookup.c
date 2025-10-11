@@ -92,6 +92,14 @@ static JSValue dns_lookup_impl(JSContext* ctx, JSValueConst this_val, int argc, 
   req->hints_flags = hints_flags;
   req->verbatim = verbatim;
   req->hostname = js_strdup(ctx, hostname);
+  if (!req->hostname) {
+    if (!use_promise) {
+      JS_FreeValue(ctx, callback);
+    }
+    js_free(ctx, req);
+    JS_FreeCString(ctx, hostname);
+    return JS_EXCEPTION;
+  }
   req->req.data = req;
 
   JSValue promise = JS_UNDEFINED;
@@ -105,8 +113,6 @@ static JSValue dns_lookup_impl(JSContext* ctx, JSValueConst this_val, int argc, 
       return promise;
     }
     req->callback = JS_UNDEFINED;
-    req->promise_funcs[0] = JS_DupValue(ctx, req->promise_funcs[0]);
-    req->promise_funcs[1] = JS_DupValue(ctx, req->promise_funcs[1]);
   } else {
     req->callback = callback;
   }
@@ -142,7 +148,7 @@ static JSValue dns_lookup_impl(JSContext* ctx, JSValueConst this_val, int argc, 
   }
 
   // Start async DNS lookup
-  int r = uv_getaddrinfo(rt->uv_loop, &req->req, on_getaddrinfo_callback, hostname, NULL, &hints);
+  int r = uv_getaddrinfo(rt->uv_loop, &req->req, on_getaddrinfo_callback, req->hostname, NULL, &hints);
 
   JS_FreeCString(ctx, hostname);
 

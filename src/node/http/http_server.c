@@ -127,6 +127,25 @@ JSValue js_http_server_close(JSContext* ctx, JSValueConst this_val, int argc, JS
   return JS_UNDEFINED;
 }
 
+// Server address method - delegates to net.Server
+JSValue js_http_server_address(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
+  JSHttpServer* server = JS_GetOpaque(this_val, js_http_server_class_id);
+  if (!server) {
+    return JS_NULL;
+  }
+
+  // Call net.Server's address() method
+  JSValue address_method = JS_GetPropertyStr(ctx, server->net_server, "address");
+  if (JS_IsFunction(ctx, address_method)) {
+    JSValue result = JS_Call(ctx, address_method, server->net_server, 0, NULL);
+    JS_FreeValue(ctx, address_method);
+    return result;
+  }
+
+  JS_FreeValue(ctx, address_method);
+  return JS_NULL;
+}
+
 // Server setTimeout method
 JSValue js_http_server_set_timeout(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
   JSHttpServer* server = JS_GetOpaque(this_val, js_http_server_class_id);
@@ -219,6 +238,7 @@ JSValue js_http_server_constructor(JSContext* ctx, JSValueConst new_target, int 
   // Add HTTP server methods
   JS_SetPropertyStr(ctx, obj, "listen", JS_NewCFunction(ctx, js_http_server_listen, "listen", 3));
   JS_SetPropertyStr(ctx, obj, "close", JS_NewCFunction(ctx, js_http_server_close, "close", 0));
+  JS_SetPropertyStr(ctx, obj, "address", JS_NewCFunction(ctx, js_http_server_address, "address", 0));
   JS_SetPropertyStr(ctx, obj, "setTimeout", JS_NewCFunction(ctx, js_http_server_set_timeout, "setTimeout", 2));
 
   // Add EventEmitter functionality

@@ -290,32 +290,29 @@ JSRT_EvalResult JSRT_RuntimeAwaitEvalResult(JSRT_Runtime* rt, JSRT_EvalResult* r
   JSRT_EvalResult new_result = JSRT_EvalResultDefault();
   new_result.rt = rt;
 
-  // Skip Promise waiting entirely for now - just run the event loops
-  // and return the original result to avoid blocking
-  JSRT_Debug("await eval result: skipping Promise state checks to avoid blocking");
+  // Process ONLY immediate pending JS jobs, no event loop processing
+  // This prevents hanging when server.listen() creates libuv handles
+  // The main event loop in JSRT_RuntimeRun will handle ALL async operations
+  JSRT_Debug("await eval result: processing immediate pending JS jobs only");
 
-  // Run event loops to process any pending operations
-  // Give more cycles for server setup and don't break too early
-  for (int i = 0; i < 50; i++) {
-    int uv_ret = uv_run(rt->uv_loop, UV_RUN_NOWAIT);
-    bool has_js_jobs = JS_IsJobPending(rt->rt);
+  // Process pending JS jobs (e.g., module initialization, synchronous promises)
+  for (int i = 0; i < 3; i++) {
+    if (!JS_IsJobPending(rt->rt)) {
+      JSRT_Debug("No more pending jobs after %d cycles", i);
+      break;
+    }
+
     bool js_ret = JSRT_RuntimeRunTicket(rt);
-    JSRT_Debug("await eval result: cycle %d, uv_ret=%d, js_ret=%d", i, uv_ret, js_ret);
+    JSRT_Debug("await eval result: cycle %d, js_ret=%d", i, js_ret);
 
     if (!js_ret) {
       JSRT_Debug("JavaScript execution failed");
       break;
     }
-
-    // Only break if we've had several cycles with no work
-    // This gives time for async operations like server.listen() to set up
-    if (uv_ret == 0 && !JS_IsJobPending(rt->rt)) {
-      if (i > 5) {  // Allow at least a few cycles for setup
-        JSRT_Debug("No more pending work after %d cycles, breaking", i);
-        break;
-      }
-    }
   }
+
+  // Do NOT run uv_run here - it causes hanging when server.listen() is called
+  // console.log and other I/O will be flushed by JSRT_RuntimeRun
 
   // Just return the original value without checking Promise state
   new_result.value = res->value;

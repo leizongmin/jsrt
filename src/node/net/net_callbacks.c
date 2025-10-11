@@ -291,6 +291,10 @@ void on_connect(uv_connect_t* req, int status) {
     conn->connected = true;
     conn->connecting = false;
 
+    // CRITICAL FIX: Start reading from the socket to enable data events
+    // Without this, socket.write() sends data but we never receive responses!
+    uv_read_start((uv_stream_t*)&conn->handle, on_socket_alloc, on_socket_read);
+
     // Emit 'connect' event
     JSValue emit = JS_GetPropertyStr(ctx, conn->socket_obj, "emit");
     if (JS_IsFunction(ctx, emit)) {
@@ -388,14 +392,14 @@ void on_listen_callback_timer(uv_timer_t* timer) {
 }
 
 void on_socket_write_complete(uv_write_t* req, int status) {
+  // Get the connection from the stream BEFORE freeing req
+  JSNetConnection* conn = (JSNetConnection*)req->handle->data;
+
   // Free the write request
   if (req->data) {
     free(req->data);  // Free the copied buffer
   }
   free(req);
-
-  // Get the connection from the stream
-  JSNetConnection* conn = (JSNetConnection*)req->handle->data;
   if (!conn || !conn->ctx || conn->destroyed) {
     return;
   }

@@ -178,26 +178,31 @@ static void jsrt_console_output(JSContext* ctx, int argc, JSValueConst* argv, FI
 
 static JSValue jsrt_console_log(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
   jsrt_console_output(ctx, argc, argv, stdout, NULL, NULL, NULL);
+  fflush(stdout);  // Ensure output appears immediately
   return JS_UNDEFINED;
 }
 
 static JSValue jsrt_console_error(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
   jsrt_console_output(ctx, argc, argv, stderr, JSRT_ColorizeFontRed, JSRT_ColorizeClear, NULL);
+  fflush(stderr);  // Ensure output appears immediately
   return JS_UNDEFINED;
 }
 
 static JSValue jsrt_console_warn(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
   jsrt_console_output(ctx, argc, argv, stderr, JSRT_ColorizeFontYellow, JSRT_ColorizeClear, NULL);
+  fflush(stderr);  // Ensure output appears immediately
   return JS_UNDEFINED;
 }
 
 static JSValue jsrt_console_info(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
   jsrt_console_output(ctx, argc, argv, stdout, JSRT_ColorizeFontBlue, JSRT_ColorizeClear, NULL);
+  fflush(stdout);  // Ensure output appears immediately
   return JS_UNDEFINED;
 }
 
 static JSValue jsrt_console_debug(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
   jsrt_console_output(ctx, argc, argv, stdout, JSRT_ColorizeFontBlack, JSRT_ColorizeClear, NULL);
+  fflush(stdout);  // Ensure output appears immediately
   return JS_UNDEFINED;
 }
 

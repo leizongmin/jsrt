@@ -3,15 +3,34 @@ const net = require('node:net');
 
 let testsPassed = 0;
 let testsFailed = 0;
+let pendingTests = 0;
 
 function test(name, fn) {
-  try {
-    fn();
-    testsPassed++;
-  } catch (e) {
-    console.log(`FAIL: ${name}`);
-    console.log(`  ${e.message}`);
-    testsFailed++;
+  if (fn.length === 0) {
+    // Synchronous test
+    try {
+      fn();
+      testsPassed++;
+    } catch (e) {
+      console.log(`FAIL: ${name}`);
+      console.log(`  ${e.message}`);
+      testsFailed++;
+    }
+  } else {
+    // Asynchronous test - has done callback
+    pendingTests++;
+    try {
+      fn(() => {
+        // done callback
+        testsPassed++;
+        pendingTests--;
+      });
+    } catch (e) {
+      console.log(`FAIL: ${name}`);
+      console.log(`  ${e.message}`);
+      testsFailed++;
+      pendingTests--;
+    }
   }
 }
 
@@ -59,8 +78,8 @@ test('Socket properties during connection', () => {
 
   console.log('✓ Socket properties correct during connection');
 
-  // Clean up - destroy socket
-  setTimeout(() => socket.destroy(), 50);
+  // Clean up - destroy socket immediately
+  socket.destroy();
 });
 
 // Test 3: Socket address properties after connection
@@ -86,7 +105,9 @@ test('Socket address/port properties after connection', (done) => {
     );
 
     socket.end();
-    server.close();
+    server.close(() => {
+      done();
+    });
   });
 
   server.listen(0, 'localhost', () => {
@@ -147,7 +168,9 @@ test('bytesRead and bytesWritten tracking', (done) => {
         );
         console.log(`✓ Server sent ${socket.bytesWritten} bytes`);
         socket.end();
-        server.close();
+        server.close(() => {
+          done();
+        });
       }, 10);
     });
   });
@@ -197,7 +220,9 @@ test('bufferSize property', (done) => {
         console.log(`✓ Client bufferSize: ${bufferSize} bytes`);
 
         client.end();
-        server.close();
+        server.close(() => {
+          done();
+        });
       }, 10);
     });
   });
@@ -219,9 +244,15 @@ test('destroyed property after destroy()', () => {
 });
 
 // Give async tests time to complete
-setTimeout(() => {
-  console.log(`\nTest Results: ${testsPassed} passed, ${testsFailed} failed`);
-  if (testsFailed > 0) {
-    process.exit(1);
+function checkTestsComplete() {
+  if (pendingTests === 0) {
+    console.log(`\nTest Results: ${testsPassed} passed, ${testsFailed} failed`);
+    if (testsFailed > 0) {
+      process.exit(1);
+    }
+  } else {
+    setTimeout(checkTestsComplete, 100);
   }
-}, 1000);
+}
+
+setTimeout(checkTestsComplete, 100);

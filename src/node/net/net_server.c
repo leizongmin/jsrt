@@ -18,7 +18,8 @@ JSValue js_server_listen(JSContext* ctx, JSValueConst this_val, int argc, JSValu
   }
 
   const char* host = "0.0.0.0";
-  if (argc > 1 && !JS_IsUndefined(argv[1])) {
+  // Only treat argv[1] as host if it's NOT a function (could be callback)
+  if (argc > 1 && !JS_IsUndefined(argv[1]) && !JS_IsFunction(ctx, argv[1])) {
     host = JS_ToCString(ctx, argv[1]);
   }
 
@@ -27,7 +28,7 @@ JSValue js_server_listen(JSContext* ctx, JSValueConst this_val, int argc, JSValu
   free(server->host);
   server->host = strdup(host);
 
-  if (argc > 1 && !JS_IsUndefined(argv[1])) {
+  if (argc > 1 && !JS_IsUndefined(argv[1]) && !JS_IsFunction(ctx, argv[1])) {
     JS_FreeCString(ctx, host);
   }
 
@@ -90,13 +91,22 @@ JSValue js_server_listen(JSContext* ctx, JSValueConst this_val, int argc, JSValu
   }
   JS_FreeValue(ctx, emit);
 
-  // Schedule callback for async execution if provided
+  // Find the callback parameter - can be at different positions
+  // listen(port, callback) - callback is argv[1]
+  // listen(port, host, callback) - callback is argv[2]
+  JSValue callback = JS_UNDEFINED;
   if (argc > 2 && JS_IsFunction(ctx, argv[2])) {
+    callback = argv[2];
+  } else if (argc > 1 && JS_IsFunction(ctx, argv[1])) {
+    callback = argv[1];
+  }
+
+  // Schedule callback for async execution if provided
+  if (!JS_IsUndefined(callback)) {
     // Store callback for async execution
-    server->listen_callback = JS_DupValue(ctx, argv[2]);
+    server->listen_callback = JS_DupValue(ctx, callback);
 
     // Allocate and initialize timer for next tick callback execution
-    JSRT_Runtime* rt = JS_GetContextOpaque(ctx);
     server->callback_timer = (uv_timer_t*)malloc(sizeof(uv_timer_t));
     if (!server->callback_timer) {
       JS_FreeValue(ctx, server->listen_callback);
@@ -266,6 +276,19 @@ JSValue js_server_constructor(JSContext* ctx, JSValueConst new_target, int argc,
 
   // Add EventEmitter functionality
   add_event_emitter_methods(ctx, obj);
+
+  // Handle connection listener if provided (Node.js: createServer(connectionListener))
+  if (argc > 0 && JS_IsFunction(ctx, argv[0])) {
+    JSValue on_method = JS_GetPropertyStr(ctx, obj, "on");
+    if (JS_IsFunction(ctx, on_method)) {
+      JSValue args[] = {JS_NewString(ctx, "connection"), JS_DupValue(ctx, argv[0])};
+      JSValue result = JS_Call(ctx, on_method, obj, 2, args);
+      JS_FreeValue(ctx, result);
+      JS_FreeValue(ctx, args[0]);
+      JS_FreeValue(ctx, args[1]);
+    }
+    JS_FreeValue(ctx, on_method);
+  }
 
   return obj;
 }

@@ -1,3 +1,4 @@
+#include "http_client.h"
 #include "http_internal.h"
 
 // Global variables
@@ -182,6 +183,17 @@ static JSValue http_client_socket_data_handler(JSContext* ctx, JSValueConst this
 static JSValue http_client_socket_connect_handler(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
   JSValue client_req_val = JS_GetPropertyStr(ctx, this_val, "_clientRequest");
   if (!JS_IsUndefined(client_req_val)) {
+    // CRITICAL FIX: Send pending headers FIRST, before emitting 'socket' event
+    // The socket is already connected at this point (ready event just fired)
+    // If end() was called before socket connected, headers are pending
+    JSHTTPClientRequest* client_req = JS_GetOpaque(client_req_val, js_http_client_request_class_id);
+    if (client_req && client_req->finished && !client_req->headers_sent) {
+      // Headers were not sent because socket wasn't connected
+      // Send them now before user code sees the socket
+      send_headers(client_req);
+    }
+
+    // Now emit 'socket' event on ClientRequest
     JSValue emit = JS_GetPropertyStr(ctx, client_req_val, "emit");
     if (JS_IsFunction(ctx, emit)) {
       JSValue args[] = {JS_NewString(ctx, "socket"), JS_DupValue(ctx, this_val)};
@@ -389,9 +401,9 @@ JSValue js_http_request(JSContext* ctx, JSValueConst this_val, int argc, JSValue
     JS_FreeValue(ctx, args[0]);
     // data_handler is now owned by event system
 
-    // on('connect') - emit 'socket' event on request
+    // on('ready') - emit 'socket' event on request (socket emits 'ready' not 'connect')
     JSValue connect_handler = JS_NewCFunction(ctx, http_client_socket_connect_handler, "connectHandler", 0);
-    JSValue connect_args[] = {JS_NewString(ctx, "connect"), connect_handler};
+    JSValue connect_args[] = {JS_NewString(ctx, "ready"), connect_handler};
     result = JS_Call(ctx, on_method, socket, 2, connect_args);
     JS_FreeValue(ctx, result);
     JS_FreeValue(ctx, connect_args[0]);

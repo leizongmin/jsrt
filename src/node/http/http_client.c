@@ -330,7 +330,7 @@ JSValue js_http_client_request_remove_header(JSContext* ctx, JSValueConst this_v
 }
 
 // Helper to send request line and headers
-static void send_headers(JSHTTPClientRequest* client_req) {
+void send_headers(JSHTTPClientRequest* client_req) {
   if (client_req->headers_sent || !client_req->ctx) {
     return;
   }

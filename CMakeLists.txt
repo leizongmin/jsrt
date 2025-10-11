@@ -793,6 +793,18 @@ target_link_libraries(jsrt ${JSRT_LINK_LIBS})
 
 # build jsrt tests using individual jsrt runs
 enable_testing()
+
+# Test timeout configuration (default: 20 seconds)
+# Can be overridden with: make test TIMEOUT=30
+if(NOT DEFINED TEST_TIMEOUT)
+    if(DEFINED ENV{TEST_TIMEOUT})
+        set(TEST_TIMEOUT $ENV{TEST_TIMEOUT})
+    else()
+        set(TEST_TIMEOUT 20)
+    endif()
+endif()
+message(STATUS "Test timeout: ${TEST_TIMEOUT} seconds")
+
 # testing js files - include both .js and .mjs files
 file(GLOB_RECURSE JSRT_TEST_JS_FILES "test/test_*.js" "test/test_*.mjs")
 
@@ -819,5 +831,6 @@ foreach(test_file ${JSRT_TEST_JS_FILES})
     
     set_tests_properties(${test_name} PROPERTIES
         WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
-        OUTPUT_ON_FAILURE ON)
+        OUTPUT_ON_FAILURE ON
+        TIMEOUT ${TEST_TIMEOUT})
 endforeach()

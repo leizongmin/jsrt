@@ -163,33 +163,33 @@ prettier: npm-install
 
 .PHONY: test
 test: jsrt npm-install
-	cd target/release && ctest --verbose $(if $(N),-R "test_$(subst /,_,$(N))")
+	cd target/release && $(if $(TIMEOUT),TEST_TIMEOUT=$(TIMEOUT)) cmake -DTEST_TIMEOUT=$(if $(TIMEOUT),$(TIMEOUT),20) $(CURDIR) && ctest --verbose $(if $(N),-R "test_$(subst /,_,$(N))")
 
 # Fast parallel test execution (4 jobs)
 .PHONY: test-fast
 test-fast: jsrt
-	cd target/release && ctest --verbose --parallel 4 $(if $(N),-R "test_$(subst /,_,$(N))")
+	cd target/release && cmake -DTEST_TIMEOUT=$(if $(TIMEOUT),$(TIMEOUT),20) $(CURDIR) && ctest --verbose --parallel 4 $(if $(N),-R "test_$(subst /,_,$(N))")
 
 # Quick test - only essential tests without network dependencies
 .PHONY: test-quick
 test-quick: jsrt
-	cd target/release && ctest --verbose -R "test_(assert|base64|console|timer|http_llhttp_fast)"
+	cd target/release && cmake -DTEST_TIMEOUT=$(if $(TIMEOUT),$(TIMEOUT),20) $(CURDIR) && ctest --verbose -R "test_(assert|base64|console|timer|http_llhttp_fast)"
 
 .PHONY: test_g
 test_g: jsrt_g
-	cd target/debug && ctest --verbose $(if $(N),-R "test_$(subst /,_,$(N))")
+	cd target/debug && cmake -DTEST_TIMEOUT=$(if $(TIMEOUT),$(TIMEOUT),20) $(CURDIR) && ctest --verbose $(if $(N),-R "test_$(subst /,_,$(N))")
 
 .PHONY: test_m
 test_m: jsrt_m
-	cd target/asan && ctest --verbose $(if $(N),-R "test_$(subst /,_,$(N))")
+	cd target/asan && cmake -DTEST_TIMEOUT=$(if $(TIMEOUT),$(TIMEOUT),20) $(CURDIR) && ctest --verbose $(if $(N),-R "test_$(subst /,_,$(N))")
 
 .PHONY: test_cov
 test_cov: jsrt_cov
-	cd target/coverage && ctest --verbose $(if $(N),-R "test_$(subst /,_,$(N))")
+	cd target/coverage && cmake -DTEST_TIMEOUT=$(if $(TIMEOUT),$(TIMEOUT),20) $(CURDIR) && ctest --verbose $(if $(N),-R "test_$(subst /,_,$(N))")
 
 .PHONY: test_static
 test_static: jsrt_static npm-install
-	cd target/static && ctest --verbose $(if $(N),-R "test_$(subst /,_,$(N))")
+	cd target/static && cmake -DTEST_TIMEOUT=$(if $(TIMEOUT),$(TIMEOUT),20) $(CURDIR) && ctest --verbose $(if $(N),-R "test_$(subst /,_,$(N))")
 
 .PHONY: coverage
 coverage: test_cov
@@ -364,6 +364,8 @@ help:
 	@echo "Test Options (use with make test/test_g/test_m/test_cov/test_static):"
 	@echo "  N=path             - Run specific test(s) by path"
 	@echo "                       Examples: N=node/stream, N=assert, N=node/stream/writable"
+	@echo "  TIMEOUT=seconds    - Set timeout for each test (default: 20)"
+	@echo "                       Examples: make test TIMEOUT=30, make test_g TIMEOUT=10"
 	@echo ""
 	@echo "WPT Options (use with make wpt/wpt_g/wpt_static):"
 	@echo "  N=category         - Run specific test category"

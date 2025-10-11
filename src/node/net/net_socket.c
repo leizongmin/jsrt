@@ -26,7 +26,19 @@ JSValue js_socket_connect(JSContext* ctx, JSValueConst this_val, int argc, JSVal
   conn->port = port;
   free(conn->host);
   conn->host = strdup(host);
+  if (!conn->host) {
+    JS_FreeCString(ctx, host);
+    return JS_ThrowOutOfMemory(ctx);
+  }
   JS_FreeCString(ctx, host);
+
+  // Map common host aliases to concrete addresses for immediate resolution
+  const char* connect_host = conn->host;
+  if (strcmp(conn->host, "localhost") == 0) {
+    connect_host = "127.0.0.1";
+  } else if (strcmp(conn->host, "ip6-localhost") == 0) {
+    connect_host = "::1";
+  }
 
   // Initialize TCP handle with the correct event loop
   JSRT_Runtime* rt = JS_GetContextOpaque(ctx);
@@ -45,14 +57,14 @@ JSValue js_socket_connect(JSContext* ctx, JSValueConst this_val, int argc, JSVal
 
   // Try IPv4 first
   struct sockaddr_in addr4;
-  if (uv_ip4_addr(conn->host, conn->port, &addr4) == 0) {
+  if (uv_ip4_addr(connect_host, conn->port, &addr4) == 0) {
     // IPv4 address
     memcpy(&addr_storage, &addr4, sizeof(addr4));
     result = uv_tcp_connect(&conn->connect_req, &conn->handle, addr, on_connect);
   } else {
     // Try IPv6
     struct sockaddr_in6 addr6;
-    if (uv_ip6_addr(conn->host, conn->port, &addr6) == 0) {
+    if (uv_ip6_addr(connect_host, conn->port, &addr6) == 0) {
       // IPv6 address
       memcpy(&addr_storage, &addr6, sizeof(addr6));
       result = uv_tcp_connect(&conn->connect_req, &conn->handle, addr, on_connect);
@@ -65,7 +77,7 @@ JSValue js_socket_connect(JSContext* ctx, JSValueConst this_val, int argc, JSVal
       hints.ai_protocol = IPPROTO_TCP;
 
       conn->getaddrinfo_req.data = conn;
-      result = uv_getaddrinfo(rt->uv_loop, &conn->getaddrinfo_req, on_getaddrinfo, conn->host, NULL, &hints);
+      result = uv_getaddrinfo(rt->uv_loop, &conn->getaddrinfo_req, on_getaddrinfo, connect_host, NULL, &hints);
 
       if (result < 0) {
         conn->connecting = false;

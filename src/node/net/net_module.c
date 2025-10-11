@@ -84,6 +84,66 @@ JSValue js_net_connect(JSContext* ctx, JSValueConst this_val, int argc, JSValueC
   }
 
   JS_FreeValue(ctx, result);
+
+  // Support optional connect listener (matches Node.js behaviour)
+  int callback_index = -1;
+  for (int i = argc - 1; i >= 0; i--) {
+    if (JS_IsFunction(ctx, argv[i])) {
+      callback_index = i;
+      break;
+    }
+  }
+
+  if (callback_index != -1) {
+    JSValue once_method = JS_GetPropertyStr(ctx, socket, "once");
+    bool listener_attached = false;
+
+    if (JS_IsFunction(ctx, once_method)) {
+      JSValue event_name = JS_NewString(ctx, "connect");
+      if (!JS_IsException(event_name)) {
+        JSValue listener = JS_DupValue(ctx, argv[callback_index]);
+        JSValue args[] = {event_name, listener};
+        JSValue attach_result = JS_Call(ctx, once_method, socket, 2, args);
+        if (!JS_IsException(attach_result)) {
+          listener_attached = true;
+        } else {
+          JSValue exception = JS_GetException(ctx);
+          JS_FreeValue(ctx, exception);
+        }
+        JS_FreeValue(ctx, attach_result);
+        JS_FreeValue(ctx, args[1]);
+        JS_FreeValue(ctx, args[0]);
+      } else {
+        JSValue exception = JS_GetException(ctx);
+        JS_FreeValue(ctx, exception);
+      }
+    }
+    JS_FreeValue(ctx, once_method);
+
+    if (!listener_attached) {
+      JSValue on_method = JS_GetPropertyStr(ctx, socket, "on");
+      if (JS_IsFunction(ctx, on_method)) {
+        JSValue event_name = JS_NewString(ctx, "connect");
+        if (!JS_IsException(event_name)) {
+          JSValue listener = JS_DupValue(ctx, argv[callback_index]);
+          JSValue args[] = {event_name, listener};
+          JSValue attach_result = JS_Call(ctx, on_method, socket, 2, args);
+          if (JS_IsException(attach_result)) {
+            JSValue exception = JS_GetException(ctx);
+            JS_FreeValue(ctx, exception);
+          }
+          JS_FreeValue(ctx, attach_result);
+          JS_FreeValue(ctx, args[1]);
+          JS_FreeValue(ctx, args[0]);
+        } else {
+          JSValue exception = JS_GetException(ctx);
+          JS_FreeValue(ctx, exception);
+        }
+      }
+      JS_FreeValue(ctx, on_method);
+    }
+  }
+
   return socket;
 }
 

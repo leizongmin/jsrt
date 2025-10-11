@@ -22,7 +22,10 @@ console.log('  Platform:', platform);
 
 assert(typeof path.join === 'function', 'path.join should be a function');
 const joined = path.join('a', 'b', 'c');
-assert(joined.includes('a') && joined.includes('b') && joined.includes('c'), 'path.join should work');
+assert(
+  joined.includes('a') && joined.includes('b') && joined.includes('c'),
+  'path.join should work'
+);
 console.log('  Joined path:', joined);
 
 // Test 3: Mixed usage - both prefixed and unprefixed
@@ -35,13 +38,22 @@ assert(typeof pathWithPrefix === 'object', 'node:path should work');
 
 // Test 4: Verify they're the same module (caching works)
 console.log('\nTest 4: Module caching works correctly');
-assert(os === osWithPrefix, 'require("os") should return same object as require("node:os")');
-assert(path === pathWithPrefix, 'require("path") should return same object as require("node:path")');
+assert(
+  os === osWithPrefix,
+  'require("os") should return same object as require("node:os")'
+);
+assert(
+  path === pathWithPrefix,
+  'require("path") should return same object as require("node:path")'
+);
 
 // Test 5: Global process object
 console.log('\nTest 5: Global process object is available');
 assert(typeof process !== 'undefined', 'process should be globally available');
-assert(typeof process.platform === 'string', 'process.platform should be a string');
+assert(
+  typeof process.platform === 'string',
+  'process.platform should be a string'
+);
 assert(typeof process.pid === 'number', 'process.pid should be a number');
 console.log('  Process PID:', process.pid);
 console.log('  Process platform:', process.platform);
@@ -50,7 +62,10 @@ console.log('  Process platform:', process.platform);
 console.log('\nTest 6: Submodules work correctly');
 try {
   const streamPromises = require('stream/promises');
-  assert(typeof streamPromises === 'object', 'stream/promises should be loaded');
+  assert(
+    typeof streamPromises === 'object',
+    'stream/promises should be loaded'
+  );
   console.log('  stream/promises loaded successfully');
 } catch (e) {
   console.log('  stream/promises not yet implemented (expected)');

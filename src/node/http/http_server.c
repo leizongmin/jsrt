@@ -5,8 +5,9 @@
 // Server class implementation
 // This file contains the HTTP Server class constructor, methods, and finalizer
 
-// Async listen cleanup
-void http_listen_async_cleanup(JSHttpListenAsync* async_op) {
+// Timer close callback - called when timer handle is safely closed
+static void http_listen_timer_close_cb(uv_handle_t* handle) {
+  JSHttpListenAsync* async_op = (JSHttpListenAsync*)handle->data;
   if (async_op) {
     if (async_op->ctx) {
       JS_FreeValue(async_op->ctx, async_op->http_server);
@@ -20,8 +21,17 @@ void http_listen_async_cleanup(JSHttpListenAsync* async_op) {
         free(async_op->argv_copy);
       }
     }
-    uv_timer_stop(&async_op->timer);
+    // Now it's safe to free the async_op structure
     free(async_op);
+  }
+}
+
+// Async listen cleanup - properly close timer before freeing
+void http_listen_async_cleanup(JSHttpListenAsync* async_op) {
+  if (async_op) {
+    // CRITICAL FIX #1.1: Must use uv_close() instead of just uv_timer_stop()
+    // uv_close() is async, so actual cleanup happens in close callback
+    uv_close((uv_handle_t*)&async_op->timer, http_listen_timer_close_cb);
   }
 }
 
@@ -53,39 +63,50 @@ JSValue js_http_server_listen(JSContext* ctx, JSValueConst this_val, int argc, J
     return JS_ThrowTypeError(ctx, "Invalid server object");
   }
 
-  // Create async operation to prevent blocking
-  JSHttpListenAsync* async_op = calloc(1, sizeof(JSHttpListenAsync));
-  if (!async_op) {
-    return JS_ThrowOutOfMemory(ctx);
-  }
+  // Parse arguments to match Node.js http.Server.listen() overloads:
+  // listen(port[, host][, backlog][, callback])
+  // listen(port[, callback])
+  // The callback can be at any position after port
 
-  // Store operation data
-  async_op->ctx = ctx;
-  async_op->http_server = JS_DupValue(ctx, this_val);
-  async_op->net_server = JS_DupValue(ctx, server->net_server);
-  async_op->argc = argc;
+  JSValue net_args[3] = {JS_UNDEFINED, JS_UNDEFINED, JS_UNDEFINED};  // port, host, callback
+  int net_argc = 0;
 
-  // Copy arguments to avoid stack reference issues
   if (argc > 0) {
-    async_op->argv_copy = malloc(sizeof(JSValue) * argc);
-    if (!async_op->argv_copy) {
-      http_listen_async_cleanup(async_op);
-      return JS_ThrowOutOfMemory(ctx);
-    }
-    for (int i = 0; i < argc; i++) {
-      async_op->argv_copy[i] = JS_DupValue(ctx, argv[i]);
+    net_args[0] = argv[0];  // port
+    net_argc = 1;
+
+    // Check remaining arguments for host (string) and callback (function)
+    for (int i = 1; i < argc && i < 3; i++) {
+      if (JS_IsFunction(ctx, argv[i])) {
+        // Found callback - always goes to position 2 (third arg)
+        net_args[2] = argv[i];
+        net_argc = 3;
+      } else if (JS_IsString(argv[i]) && JS_IsUndefined(net_args[1])) {
+        // Found host string - goes to position 1 (second arg)
+        net_args[1] = argv[i];
+        if (net_argc < 2)
+          net_argc = 2;
+      }
     }
   }
 
-  // Initialize timer for immediate async execution (next tick)
-  JSRT_Runtime* rt = JS_GetContextOpaque(ctx);
-  uv_timer_init(rt->uv_loop, &async_op->timer);
-  async_op->timer.data = async_op;
+  // Call net.Server.listen with properly arranged arguments
+  JSValue listen_method = JS_GetPropertyStr(ctx, server->net_server, "listen");
+  if (JS_IsFunction(ctx, listen_method)) {
+    JSValue result = JS_Call(ctx, listen_method, server->net_server, net_argc, net_args);
+    JS_FreeValue(ctx, listen_method);
 
-  // Start timer with 0 delay for next tick execution
-  uv_timer_start(&async_op->timer, http_listen_timer_callback, 0, 0);
+    // Check for errors
+    if (JS_IsException(result)) {
+      return result;
+    }
+    JS_FreeValue(ctx, result);
+  } else {
+    JS_FreeValue(ctx, listen_method);
+    return JS_ThrowTypeError(ctx, "net.Server.listen is not a function");
+  }
 
-  // Return the server object immediately for chaining (like Node.js does)
+  // Return the HTTP server object for chaining (like Node.js does)
   return JS_DupValue(ctx, this_val);
 }
 

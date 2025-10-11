@@ -32,7 +32,7 @@ try {
   const currentDir = process.cwd();
   console.log('Current directory contents:');
   const files = fs.readdirSync(currentDir);
-  files.slice(0, 10).forEach(file => {
+  files.slice(0, 10).forEach((file) => {
     const stats = fs.statSync(path.join(currentDir, file));
     const type = stats.isDirectory() ? '[DIR]' : '[FILE]';
     console.log(`  ${type} ${file}`);
@@ -45,4 +45,6 @@ try {
 }
 
 console.log('\n✅ Example completed successfully!');
-console.log('This script ran with Node.js-compatible code using --compact-node flag');
+console.log(
+  'This script ran with Node.js-compatible code using --compact-node flag'
+);

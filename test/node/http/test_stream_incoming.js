@@ -41,15 +41,24 @@ asyncTest('IncomingMessage has all Readable stream methods', async () => {
     // Check that all required methods exist
     assert(typeof req.pause === 'function', 'pause() should be a function');
     assert(typeof req.resume === 'function', 'resume() should be a function');
-    assert(typeof req.isPaused === 'function', 'isPaused() should be a function');
+    assert(
+      typeof req.isPaused === 'function',
+      'isPaused() should be a function'
+    );
     assert(typeof req.pipe === 'function', 'pipe() should be a function');
     assert(typeof req.unpipe === 'function', 'unpipe() should be a function');
     assert(typeof req.read === 'function', 'read() should be a function');
-    assert(typeof req.setEncoding === 'function', 'setEncoding() should be a function');
+    assert(
+      typeof req.setEncoding === 'function',
+      'setEncoding() should be a function'
+    );
 
     // Check properties
     assert(typeof req.readable === 'boolean', 'readable should be a boolean');
-    assert(typeof req.readableEnded === 'boolean', 'readableEnded should be a boolean');
+    assert(
+      typeof req.readableEnded === 'boolean',
+      'readableEnded should be a boolean'
+    );
 
     res.writeHead(200);
     res.end('OK');
@@ -59,10 +68,12 @@ asyncTest('IncomingMessage has all Readable stream methods', async () => {
   await new Promise((resolve, reject) => {
     server.listen(0, () => {
       const port = server.address().port;
-      http.get(`http://127.0.0.1:${port}/`, (res) => {
-        res.on('end', resolve);
-        res.resume();
-      }).on('error', reject);
+      http
+        .get(`http://127.0.0.1:${port}/`, (res) => {
+          res.on('end', resolve);
+          res.resume();
+        })
+        .on('error', reject);
     });
   });
 });
@@ -85,21 +96,29 @@ asyncTest('IncomingMessage emits data and end events', async () => {
   await new Promise((resolve, reject) => {
     server.listen(0, () => {
       const port = server.address().port;
-      http.get(`http://127.0.0.1:${port}/`, (res) => {
-        res.on('data', (chunk) => {
-          dataEventCount++;
-          dataReceived += chunk.toString();
-        });
+      http
+        .get(`http://127.0.0.1:${port}/`, (res) => {
+          res.on('data', (chunk) => {
+            dataEventCount++;
+            dataReceived += chunk.toString();
+          });
 
-        res.on('end', () => {
-          endEventFired = true;
-          assert(dataEventCount > 0, 'Should receive at least one data event');
-          assert(dataReceived === testData, `Expected "${testData}", got "${dataReceived}"`);
-          assert(endEventFired, 'end event should be fired');
-          server.close();
-          resolve();
-        });
-      }).on('error', reject);
+          res.on('end', () => {
+            endEventFired = true;
+            assert(
+              dataEventCount > 0,
+              'Should receive at least one data event'
+            );
+            assert(
+              dataReceived === testData,
+              `Expected "${testData}", got "${dataReceived}"`
+            );
+            assert(endEventFired, 'end event should be fired');
+            server.close();
+            resolve();
+          });
+        })
+        .on('error', reject);
     });
   });
 });
@@ -120,29 +139,34 @@ asyncTest('pause() and resume() control data flow', async () => {
   await new Promise((resolve, reject) => {
     server.listen(0, () => {
       const port = server.address().port;
-      http.get(`http://127.0.0.1:${port}/`, (res) => {
-        // Initially should not be paused
-        assert(!res.isPaused(), 'Stream should not be paused initially');
+      http
+        .get(`http://127.0.0.1:${port}/`, (res) => {
+          // Initially should not be paused
+          assert(!res.isPaused(), 'Stream should not be paused initially');
 
-        // Pause the stream
-        res.pause();
-        assert(res.isPaused(), 'Stream should be paused after pause()');
-        pausedWhileReceiving = true;
+          // Pause the stream
+          res.pause();
+          assert(res.isPaused(), 'Stream should be paused after pause()');
+          pausedWhileReceiving = true;
 
-        // Resume after a short delay
-        setTimeout(() => {
-          res.resume();
-          assert(!res.isPaused(), 'Stream should not be paused after resume()');
-        }, 100);
+          // Resume after a short delay
+          setTimeout(() => {
+            res.resume();
+            assert(
+              !res.isPaused(),
+              'Stream should not be paused after resume()'
+            );
+          }, 100);
 
-        res.on('end', () => {
-          assert(pausedWhileReceiving, 'Should have paused during reception');
-          server.close();
-          resolve();
-        });
+          res.on('end', () => {
+            assert(pausedWhileReceiving, 'Should have paused during reception');
+            server.close();
+            resolve();
+          });
 
-        res.on('data', () => {}); // Consume data
-      }).on('error', reject);
+          res.on('data', () => {}); // Consume data
+        })
+        .on('error', reject);
     });
   });
 });
@@ -162,24 +186,26 @@ asyncTest('read() method returns chunks or null', async () => {
   await new Promise((resolve, reject) => {
     server.listen(0, () => {
       const port = server.address().port;
-      http.get(`http://127.0.0.1:${port}/`, (res) => {
-        let chunks = [];
+      http
+        .get(`http://127.0.0.1:${port}/`, (res) => {
+          let chunks = [];
 
-        res.on('readable', () => {
-          let chunk;
-          while ((chunk = res.read()) !== null) {
-            chunks.push(chunk);
-          }
-        });
+          res.on('readable', () => {
+            let chunk;
+            while ((chunk = res.read()) !== null) {
+              chunks.push(chunk);
+            }
+          });
 
-        res.on('end', () => {
-          const received = chunks.join('');
-          // Note: In basic implementation, data might be in _body
-          // We just check that read() doesn't crash
-          server.close();
-          resolve();
-        });
-      }).on('error', reject);
+          res.on('end', () => {
+            const received = chunks.join('');
+            // Note: In basic implementation, data might be in _body
+            // We just check that read() doesn't crash
+            server.close();
+            resolve();
+          });
+        })
+        .on('error', reject);
     });
   });
 });
@@ -199,20 +225,22 @@ asyncTest('setEncoding() does not crash', async () => {
   await new Promise((resolve, reject) => {
     server.listen(0, () => {
       const port = server.address().port;
-      http.get(`http://127.0.0.1:${port}/`, (res) => {
-        // Should not crash when calling setEncoding
-        res.setEncoding('utf8');
+      http
+        .get(`http://127.0.0.1:${port}/`, (res) => {
+          // Should not crash when calling setEncoding
+          res.setEncoding('utf8');
 
-        let data = '';
-        res.on('data', (chunk) => {
-          data += chunk;
-        });
+          let data = '';
+          res.on('data', (chunk) => {
+            data += chunk;
+          });
 
-        res.on('end', () => {
-          server.close();
-          resolve();
-        });
-      }).on('error', reject);
+          res.on('end', () => {
+            server.close();
+            resolve();
+          });
+        })
+        .on('error', reject);
     });
   });
 });
@@ -232,28 +260,38 @@ asyncTest('pipe() can pipe to a writable stream', async () => {
   await new Promise((resolve, reject) => {
     server.listen(0, () => {
       const port = server.address().port;
-      http.get(`http://127.0.0.1:${port}/`, (res) => {
-        // Create a simple writable stream
-        const chunks = [];
-        const writable = {
-          write(chunk) {
-            chunks.push(chunk);
-            return true;
-          },
-          end() {
-            const received = chunks.join('');
-            server.close();
-            resolve();
-          },
-          on() { return this; },
-          once() { return this; },
-          emit() { return this; },
-          removeListener() { return this; }
-        };
+      http
+        .get(`http://127.0.0.1:${port}/`, (res) => {
+          // Create a simple writable stream
+          const chunks = [];
+          const writable = {
+            write(chunk) {
+              chunks.push(chunk);
+              return true;
+            },
+            end() {
+              const received = chunks.join('');
+              server.close();
+              resolve();
+            },
+            on() {
+              return this;
+            },
+            once() {
+              return this;
+            },
+            emit() {
+              return this;
+            },
+            removeListener() {
+              return this;
+            },
+          };
 
-        // Pipe should not crash
-        res.pipe(writable);
-      }).on('error', reject);
+          // Pipe should not crash
+          res.pipe(writable);
+        })
+        .on('error', reject);
     });
   });
 });
@@ -271,28 +309,40 @@ asyncTest('unpipe() removes pipe destination', async () => {
   await new Promise((resolve, reject) => {
     server.listen(0, () => {
       const port = server.address().port;
-      http.get(`http://127.0.0.1:${port}/`, (res) => {
-        const writable = {
-          write() { return true; },
-          end() {},
-          on() { return this; },
-          once() { return this; },
-          emit() { return this; },
-          removeListener() { return this; }
-        };
+      http
+        .get(`http://127.0.0.1:${port}/`, (res) => {
+          const writable = {
+            write() {
+              return true;
+            },
+            end() {},
+            on() {
+              return this;
+            },
+            once() {
+              return this;
+            },
+            emit() {
+              return this;
+            },
+            removeListener() {
+              return this;
+            },
+          };
 
-        // Pipe and then unpipe should not crash
-        res.pipe(writable);
-        res.unpipe(writable);
-        res.unpipe(); // Should handle unpipe all
+          // Pipe and then unpipe should not crash
+          res.pipe(writable);
+          res.unpipe(writable);
+          res.unpipe(); // Should handle unpipe all
 
-        res.on('end', () => {
-          server.close();
-          resolve();
-        });
+          res.on('end', () => {
+            server.close();
+            resolve();
+          });
 
-        res.resume(); // Consume data
-      }).on('error', reject);
+          res.resume(); // Consume data
+        })
+        .on('error', reject);
     });
   });
 });
@@ -314,16 +364,21 @@ asyncTest('Multiple concurrent requests work correctly', async () => {
 
       const makeRequest = (path) => {
         return new Promise((resolveReq, rejectReq) => {
-          http.get(`http://127.0.0.1:${port}${path}`, (res) => {
-            let data = '';
-            res.on('data', (chunk) => {
-              data += chunk.toString();
-            });
-            res.on('end', () => {
-              assert(data.includes(path), `Response should include path ${path}`);
-              resolveReq();
-            });
-          }).on('error', rejectReq);
+          http
+            .get(`http://127.0.0.1:${port}${path}`, (res) => {
+              let data = '';
+              res.on('data', (chunk) => {
+                data += chunk.toString();
+              });
+              res.on('end', () => {
+                assert(
+                  data.includes(path),
+                  `Response should include path ${path}`
+                );
+                resolveReq();
+              });
+            })
+            .on('error', rejectReq);
         });
       };
 
@@ -333,11 +388,13 @@ asyncTest('Multiple concurrent requests work correctly', async () => {
         makeRequest('/req2'),
         makeRequest('/req3'),
         makeRequest('/req4'),
-        makeRequest('/req5')
-      ]).then(() => {
-        server.close();
-        resolve();
-      }).catch(reject);
+        makeRequest('/req5'),
+      ])
+        .then(() => {
+          server.close();
+          resolve();
+        })
+        .catch(reject);
     });
   });
 });
@@ -365,23 +422,29 @@ asyncTest('IncomingMessage receives POST body data', async () => {
   await new Promise((resolve, reject) => {
     server.listen(0, () => {
       const port = server.address().port;
-      const req = http.request({
-        hostname: '127.0.0.1',
-        port: port,
-        path: '/',
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/x-www-form-urlencoded',
-          'Content-Length': postData.length
+      const req = http.request(
+        {
+          hostname: '127.0.0.1',
+          port: port,
+          path: '/',
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/x-www-form-urlencoded',
+            'Content-Length': postData.length,
+          },
+        },
+        (res) => {
+          res.on('end', () => {
+            assert(
+              receivedBody === postData,
+              `Expected "${postData}", got "${receivedBody}"`
+            );
+            server.close();
+            resolve();
+          });
+          res.resume();
         }
-      }, (res) => {
-        res.on('end', () => {
-          assert(receivedBody === postData, `Expected "${postData}", got "${receivedBody}"`);
-          server.close();
-          resolve();
-        });
-        res.resume();
-      });
+      );
 
       req.on('error', reject);
       req.write(postData);
@@ -400,7 +463,10 @@ asyncTest('Stream properties have correct values', async () => {
     assert(req.readableEnded === false, 'Request should not be ended yet');
 
     req.on('end', () => {
-      assert(req.readableEnded === true, 'Request should be ended after end event');
+      assert(
+        req.readableEnded === true,
+        'Request should be ended after end event'
+      );
     });
 
     res.writeHead(200);
@@ -410,17 +476,22 @@ asyncTest('Stream properties have correct values', async () => {
   await new Promise((resolve, reject) => {
     server.listen(0, () => {
       const port = server.address().port;
-      http.get(`http://127.0.0.1:${port}/`, (res) => {
-        assert(res.readable === true, 'Response should be readable');
+      http
+        .get(`http://127.0.0.1:${port}/`, (res) => {
+          assert(res.readable === true, 'Response should be readable');
 
-        res.on('end', () => {
-          assert(res.readableEnded === true, 'Response should be ended after end event');
-          server.close();
-          resolve();
-        });
+          res.on('end', () => {
+            assert(
+              res.readableEnded === true,
+              'Response should be ended after end event'
+            );
+            server.close();
+            resolve();
+          });
 
-        res.resume();
-      }).on('error', reject);
+          res.resume();
+        })
+        .on('error', reject);
     });
   });
 });

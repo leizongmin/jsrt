@@ -46,8 +46,14 @@ asyncTest('ServerResponse has Writable stream methods', async () => {
 
     // Check properties
     assert(typeof res.writable === 'boolean', 'writable should be a boolean');
-    assert(typeof res.writableEnded === 'boolean', 'writableEnded should be a boolean');
-    assert(typeof res.writableFinished === 'boolean', 'writableFinished should be a boolean');
+    assert(
+      typeof res.writableEnded === 'boolean',
+      'writableEnded should be a boolean'
+    );
+    assert(
+      typeof res.writableFinished === 'boolean',
+      'writableFinished should be a boolean'
+    );
 
     res.writeHead(200);
     res.end('OK');
@@ -57,10 +63,12 @@ asyncTest('ServerResponse has Writable stream methods', async () => {
   await new Promise((resolve, reject) => {
     server.listen(0, () => {
       const port = server.address().port;
-      http.get(`http://127.0.0.1:${port}/`, (res) => {
-        res.on('end', resolve);
-        res.resume();
-      }).on('error', reject);
+      http
+        .get(`http://127.0.0.1:${port}/`, (res) => {
+          res.on('end', resolve);
+          res.resume();
+        })
+        .on('error', reject);
     });
   });
 });
@@ -89,14 +97,19 @@ asyncTest('cork() and uncork() buffer writes', async () => {
   await new Promise((resolve, reject) => {
     server.listen(0, () => {
       const port = server.address().port;
-      http.get(`http://127.0.0.1:${port}/`, (res) => {
-        let data = '';
-        res.on('data', chunk => data += chunk.toString());
-        res.on('end', () => {
-          assert(data === 'Hello World!', `Expected "Hello World!", got "${data}"`);
-          resolve();
-        });
-      }).on('error', reject);
+      http
+        .get(`http://127.0.0.1:${port}/`, (res) => {
+          let data = '';
+          res.on('data', (chunk) => (data += chunk.toString()));
+          res.on('end', () => {
+            assert(
+              data === 'Hello World!',
+              `Expected "Hello World!", got "${data}"`
+            );
+            resolve();
+          });
+        })
+        .on('error', reject);
     });
   });
 });
@@ -111,7 +124,7 @@ asyncTest('Nested cork() and uncork() work correctly', async () => {
 
     res.cork();
     res.write('A');
-    res.cork();  // Nested cork
+    res.cork(); // Nested cork
     res.write('B');
     res.uncork(); // First uncork (still corked)
     res.write('C');
@@ -124,14 +137,16 @@ asyncTest('Nested cork() and uncork() work correctly', async () => {
   await new Promise((resolve, reject) => {
     server.listen(0, () => {
       const port = server.address().port;
-      http.get(`http://127.0.0.1:${port}/`, (res) => {
-        let data = '';
-        res.on('data', chunk => data += chunk.toString());
-        res.on('end', () => {
-          assert(data === 'ABCD', `Expected "ABCD", got "${data}"`);
-          resolve();
-        });
-      }).on('error', reject);
+      http
+        .get(`http://127.0.0.1:${port}/`, (res) => {
+          let data = '';
+          res.on('data', (chunk) => (data += chunk.toString()));
+          res.on('end', () => {
+            assert(data === 'ABCD', `Expected "ABCD", got "${data}"`);
+            resolve();
+          });
+        })
+        .on('error', reject);
     });
   });
 });
@@ -156,15 +171,20 @@ asyncTest('write() returns false on back-pressure', async () => {
   await new Promise((resolve, reject) => {
     server.listen(0, () => {
       const port = server.address().port;
-      http.get(`http://127.0.0.1:${port}/`, (res) => {
-        res.on('end', () => {
-          assert(typeof writeResult === 'boolean', 'write() should return boolean');
-          // Small writes should return true
-          assert(writeResult === true, 'Small write should return true');
-          resolve();
-        });
-        res.resume();
-      }).on('error', reject);
+      http
+        .get(`http://127.0.0.1:${port}/`, (res) => {
+          res.on('end', () => {
+            assert(
+              typeof writeResult === 'boolean',
+              'write() should return boolean'
+            );
+            // Small writes should return true
+            assert(writeResult === true, 'Small write should return true');
+            resolve();
+          });
+          res.resume();
+        })
+        .on('error', reject);
     });
   });
 });
@@ -182,7 +202,7 @@ asyncTest('Writable properties transition on end()', async () => {
     propsBeforeEnd = {
       writable: res.writable,
       writableEnded: res.writableEnded,
-      writableFinished: res.writableFinished
+      writableFinished: res.writableFinished,
     };
 
     res.writeHead(200);
@@ -192,7 +212,7 @@ asyncTest('Writable properties transition on end()', async () => {
     propsAfterEnd = {
       writable: res.writable,
       writableEnded: res.writableEnded,
-      writableFinished: res.writableFinished
+      writableFinished: res.writableFinished,
     };
 
     server.close();
@@ -201,22 +221,42 @@ asyncTest('Writable properties transition on end()', async () => {
   await new Promise((resolve, reject) => {
     server.listen(0, () => {
       const port = server.address().port;
-      http.get(`http://127.0.0.1:${port}/`, (res) => {
-        res.on('end', () => {
-          // Before end: writable=true, ended=false, finished=false
-          assert(propsBeforeEnd.writable === true, 'Should be writable before end');
-          assert(propsBeforeEnd.writableEnded === false, 'Should not be ended before end');
-          assert(propsBeforeEnd.writableFinished === false, 'Should not be finished before end');
+      http
+        .get(`http://127.0.0.1:${port}/`, (res) => {
+          res.on('end', () => {
+            // Before end: writable=true, ended=false, finished=false
+            assert(
+              propsBeforeEnd.writable === true,
+              'Should be writable before end'
+            );
+            assert(
+              propsBeforeEnd.writableEnded === false,
+              'Should not be ended before end'
+            );
+            assert(
+              propsBeforeEnd.writableFinished === false,
+              'Should not be finished before end'
+            );
 
-          // After end: writable=false, ended=true, finished=true
-          assert(propsAfterEnd.writable === false, 'Should not be writable after end');
-          assert(propsAfterEnd.writableEnded === true, 'Should be ended after end');
-          assert(propsAfterEnd.writableFinished === true, 'Should be finished after end');
+            // After end: writable=false, ended=true, finished=true
+            assert(
+              propsAfterEnd.writable === false,
+              'Should not be writable after end'
+            );
+            assert(
+              propsAfterEnd.writableEnded === true,
+              'Should be ended after end'
+            );
+            assert(
+              propsAfterEnd.writableFinished === true,
+              'Should be finished after end'
+            );
 
-          resolve();
-        });
-        res.resume();
-      }).on('error', reject);
+            resolve();
+          });
+          res.resume();
+        })
+        .on('error', reject);
     });
   });
 });
@@ -240,14 +280,19 @@ asyncTest('Multiple write() calls stream correctly', async () => {
   await new Promise((resolve, reject) => {
     server.listen(0, () => {
       const port = server.address().port;
-      http.get(`http://127.0.0.1:${port}/`, (res) => {
-        let data = '';
-        res.on('data', chunk => data += chunk.toString());
-        res.on('end', () => {
-          assert(data === 'Line 1\nLine 2\nLine 3\nLine 4', `Unexpected data: ${data}`);
-          resolve();
-        });
-      }).on('error', reject);
+      http
+        .get(`http://127.0.0.1:${port}/`, (res) => {
+          let data = '';
+          res.on('data', (chunk) => (data += chunk.toString()));
+          res.on('end', () => {
+            assert(
+              data === 'Line 1\nLine 2\nLine 3\nLine 4',
+              `Unexpected data: ${data}`
+            );
+            resolve();
+          });
+        })
+        .on('error', reject);
     });
   });
 });
@@ -272,15 +317,17 @@ asyncTest('finish event is emitted on end()', async () => {
   await new Promise((resolve, reject) => {
     server.listen(0, () => {
       const port = server.address().port;
-      http.get(`http://127.0.0.1:${port}/`, (res) => {
-        res.on('end', () => {
-          setTimeout(() => {
-            assert(finishEmitted === true, 'finish event should be emitted');
-            resolve();
-          }, 50);
-        });
-        res.resume();
-      }).on('error', reject);
+      http
+        .get(`http://127.0.0.1:${port}/`, (res) => {
+          res.on('end', () => {
+            setTimeout(() => {
+              assert(finishEmitted === true, 'finish event should be emitted');
+              resolve();
+            }, 50);
+          });
+          res.resume();
+        })
+        .on('error', reject);
     });
   });
 });
@@ -308,13 +355,18 @@ asyncTest('Cannot write after end()', async () => {
   await new Promise((resolve, reject) => {
     server.listen(0, () => {
       const port = server.address().port;
-      http.get(`http://127.0.0.1:${port}/`, (res) => {
-        res.on('end', () => {
-          assert(errorThrown === true, 'Should throw error when writing after end');
-          resolve();
-        });
-        res.resume();
-      }).on('error', reject);
+      http
+        .get(`http://127.0.0.1:${port}/`, (res) => {
+          res.on('end', () => {
+            assert(
+              errorThrown === true,
+              'Should throw error when writing after end'
+            );
+            resolve();
+          });
+          res.resume();
+        })
+        .on('error', reject);
     });
   });
 });

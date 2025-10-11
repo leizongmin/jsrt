@@ -103,6 +103,7 @@ static JSValue js_node_cipher_update(JSContext* ctx, JSValueConst this_val, int 
     for (int i = 0; i < output_len; i++) {
       sprintf(hex + i * 2, "%02x", output[i]);
     }
+    hex[output_len * 2] = '\0';  // Null-terminate the hex string
     js_result = JS_NewString(ctx, hex);
     js_free(ctx, hex);
     js_free(ctx, output);
@@ -212,6 +213,7 @@ static JSValue js_node_cipher_final(JSContext* ctx, JSValueConst this_val, int a
     for (int i = 0; i < output_len; i++) {
       sprintf(hex + i * 2, "%02x", output[i]);
     }
+    hex[output_len * 2] = '\0';  // Null-terminate the hex string
     js_result = JS_NewString(ctx, hex);
     js_free(ctx, hex);
     js_free(ctx, output);

@@ -576,8 +576,8 @@ static char* try_extensions(const char* base_path) {
   return NULL;
 }
 
-char* JSRT_ModuleNormalize(JSContext* ctx, const char* module_base_name, const char* module_name, void* opaque) {
-  JSRT_Debug("JSRT_ModuleNormalize: module_name='%s', module_base_name='%s'", module_name,
+char* JSRT_StdModuleNormalize(JSContext* ctx, const char* module_base_name, const char* module_name, void* opaque) {
+  JSRT_Debug("JSRT_StdModuleNormalize: module_name='%s', module_base_name='%s'", module_name,
              module_base_name ? module_base_name : "null");
 
   // Handle HTTP/HTTPS URLs - validate and return as-is if valid
@@ -669,8 +669,8 @@ char* JSRT_ModuleNormalize(JSContext* ctx, const char* module_base_name, const c
   return normalized_final;
 }
 
-JSModuleDef* JSRT_ModuleLoader(JSContext* ctx, const char* module_name, void* opaque) {
-  JSRT_Debug("JSRT_ModuleLoader: loading ES module '%s'", module_name);
+JSModuleDef* JSRT_StdModuleLoader(JSContext* ctx, const char* module_name, void* opaque) {
+  JSRT_Debug("JSRT_StdModuleLoader: loading ES module '%s'", module_name);
 
   // Handle jsrt: modules
   if (strncmp(module_name, "jsrt:", 5) == 0) {
@@ -738,7 +738,7 @@ JSModuleDef* JSRT_ModuleLoader(JSContext* ctx, const char* module_name, void* op
 
   JSModuleDef* m;
   if (is_commonjs) {
-    JSRT_Debug("JSRT_ModuleLoader: detected CommonJS module, wrapping as ES module for '%s'", module_name);
+    JSRT_Debug("JSRT_StdModuleLoader: detected CommonJS module, wrapping as ES module for '%s'", module_name);
 
     // Create a synthetic ES module
     char* wrapper_code;
@@ -797,7 +797,7 @@ JSModuleDef* JSRT_ModuleLoader(JSContext* ctx, const char* module_name, void* op
     free(wrapper_code);
 
     if (JS_IsException(func_val)) {
-      JSRT_Debug("JSRT_ModuleLoader: failed to compile CommonJS wrapper for '%s'", module_name);
+      JSRT_Debug("JSRT_StdModuleLoader: failed to compile CommonJS wrapper for '%s'", module_name);
       JSRT_ReadFileResultFree(&file_result);
       return NULL;
     }
@@ -811,7 +811,7 @@ JSModuleDef* JSRT_ModuleLoader(JSContext* ctx, const char* module_name, void* op
         JS_Eval(ctx, file_result.data, file_result.size, module_name, JS_EVAL_TYPE_MODULE | JS_EVAL_FLAG_COMPILE_ONLY);
 
     if (JS_IsException(func_val)) {
-      JSRT_Debug("JSRT_ModuleLoader: failed to compile ES module '%s'", module_name);
+      JSRT_Debug("JSRT_StdModuleLoader: failed to compile ES module '%s'", module_name);
       JSRT_ReadFileResultFree(&file_result);
       return NULL;
     }
@@ -849,7 +849,7 @@ JSModuleDef* JSRT_ModuleLoader(JSContext* ctx, const char* module_name, void* op
     JS_FreeValue(ctx, meta_obj);
   }
 
-  JSRT_Debug("JSRT_ModuleLoader: successfully loaded ES module '%s'", module_name);
+  JSRT_Debug("JSRT_StdModuleLoader: successfully loaded ES module '%s'", module_name);
   return m;
 }
 
@@ -1123,7 +1123,7 @@ static JSValue js_require(JSContext* ctx, JSValueConst this_val, int argc, JSVal
 
 void JSRT_StdModuleInit(JSRT_Runtime* rt) {
   JSRT_Debug("JSRT_StdModuleInit: initializing ES module loader");
-  JS_SetModuleLoaderFunc(rt->rt, JSRT_ModuleNormalize, JSRT_ModuleLoader, rt);
+  JS_SetModuleLoaderFunc(rt->rt, JSRT_StdModuleNormalize, JSRT_StdModuleLoader, rt);
 }
 
 void JSRT_StdCommonJSInit(JSRT_Runtime* rt) {

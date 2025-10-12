@@ -38,6 +38,11 @@
 #include "util/jsutils.h"
 #include "util/path.h"
 
+// New module system
+#include "module/core/module_context.h"
+#include "module/core/module_loader.h"
+#include "module/protocols/protocol_registry.h"
+
 static void JSRT_RuntimeCloseWalkCallback(uv_handle_t* handle, void* arg) {
   if (!uv_is_closing(handle)) {
     uv_close(handle, NULL);
@@ -98,6 +103,15 @@ JSRT_Runtime* JSRT_RuntimeNew() {
   rt->uv_loop->data = rt;
 
   rt->compact_node_mode = false;
+
+  // Initialize protocol registry for new module system
+  jsrt_init_protocol_handlers();
+
+  // Create and initialize new module loader
+  rt->module_loader = jsrt_module_loader_create(rt->ctx);
+  if (!rt->module_loader) {
+    JSRT_Debug("Failed to create module loader");
+  }
 
   JSRT_RuntimeSetupStdConsole(rt);
   JSRT_RuntimeSetupStdTimer(rt);
@@ -180,8 +194,17 @@ void JSRT_RuntimeFree(JSRT_Runtime* rt) {
   JSRT_RuntimeFreeDisposeValues(rt);
   JSRT_RuntimeFreeExceptionValues(rt);
 
-  // Cleanup module system
+  // Cleanup old module system (still needed for compatibility)
   JSRT_StdModuleCleanup(rt->ctx);
+
+  // Cleanup new module loader
+  if (rt->module_loader) {
+    jsrt_module_loader_free(rt->module_loader);
+    rt->module_loader = NULL;
+  }
+
+  // Cleanup protocol registry
+  jsrt_cleanup_protocol_handlers();
 
   // Cleanup FFI module
   JSRT_RuntimeCleanupStdFFI(rt->ctx);

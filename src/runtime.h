@@ -8,6 +8,9 @@
 #include "util/debug.h"
 #include "util/list.h"
 
+// Forward declaration for module loader
+typedef struct JSRT_ModuleLoader JSRT_ModuleLoader;
+
 typedef struct {
   JSRuntime* rt;
   JSContext* ctx;
@@ -23,6 +26,9 @@ typedef struct {
 
   uv_loop_t* uv_loop;
   bool compact_node_mode;
+
+  // Module loader (new unified system)
+  JSRT_ModuleLoader* module_loader;
 } JSRT_Runtime;
 
 JSRT_Runtime* JSRT_RuntimeNew();

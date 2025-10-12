@@ -5,6 +5,49 @@
 #+TODO: TODO IN-PROGRESS BLOCKED | DONE CANCELLED
 #+PRIORITIES: A C B
 
+* 📝 Status Update Guidelines
+
+**IMPORTANT**: This plan uses three-level status tracking to ensure documentation consistency.
+
+** Three-Level Status Tracking System
+
+When marking work as complete, you MUST update ALL THREE LEVELS:
+
+1. **Phase Level** (e.g., "Phase 2: Path Resolution System")
+   - Update phase header: TODO → DONE
+   - Add COMPLETED timestamp to PROPERTIES block
+   - Verify PROGRESS field matches actual completion (e.g., "6/6")
+   - Update COMPLETION field to 100%
+
+2. **Task Level** (e.g., "Task 2.1: Extract path utilities")
+   - Update ALL task headers within that phase: TODO → DONE
+   - Add COMPLETED timestamps to each task's PROPERTIES block
+   - Update ESTIMATE vs ACTUAL time if tracking
+
+3. **Subtask Level** (checkbox items under each task)
+   - Check ALL subtask boxes within those tasks: [ ] → [X]
+   - Verify no unchecked items remain in completed phases
+
+** Verification Checklist
+
+Before marking a phase as DONE, verify:
+- [ ] Phase header status is DONE
+- [ ] Phase COMPLETED timestamp is added
+- [ ] Phase PROGRESS matches task count
+- [ ] ALL Task headers in phase are DONE
+- [ ] ALL Task COMPLETED timestamps are added
+- [ ] ALL Subtask checkboxes are checked [X]
+- [ ] Visual scan confirms no TODO/[ ] items remain
+
+** Common Mistake
+
+❌ **Wrong**: Only updating Phase status while forgetting Tasks and Subtasks
+✅ **Correct**: Systematically updating all three levels
+
+This creates documentation inconsistency where phases show 100% complete but individual tasks still show TODO status.
+
+---
+
 * Task Metadata
 :PROPERTIES:
 :CREATED: 2025-10-12T00:00:00Z

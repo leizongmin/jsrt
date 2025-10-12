@@ -11,6 +11,7 @@ Planning Requirements:
 - Ensure code formatting: make format
 - Verify build integrity: make clean && make
 - Save the plan document to docs/plan/ directory with appropriate naming (e.g., node-MODULE-plan.md)
+- **Include a "Status Update Guidelines" section at the top of the plan document** explaining the three-level status tracking system (Phase → Task → Subtasks) and how to update all levels consistently
 
 Additional requirements: $2
 

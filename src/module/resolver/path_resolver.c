@@ -43,7 +43,7 @@ char* jsrt_try_extensions(const char* base_path) {
     if (!full_path)
       continue;
 
-    sprintf(full_path, "%s%s", base_path, ext);
+    snprintf(full_path, total_len, "%s%s", base_path, ext);
 
     if (file_exists(full_path)) {
       MODULE_DEBUG_RESOLVER("Found file with extension '%s': %s", ext, full_path);

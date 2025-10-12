@@ -202,13 +202,7 @@ JSValue jsrt_load_commonjs_module(JSContext* ctx, JSRT_ModuleLoader* loader, con
     return JS_EXCEPTION;
   }
 
-  // Set module properties
-  JS_SetPropertyStr(ctx, module, "exports", JS_DupValue(ctx, exports));
-  JS_SetPropertyStr(ctx, module, "id", JS_NewString(ctx, resolved_path));
-  JS_SetPropertyStr(ctx, module, "filename", JS_NewString(ctx, resolved_path));
-  JS_SetPropertyStr(ctx, module, "loaded", JS_NewBool(ctx, false));
-
-  // Create wrapper code
+  // Create wrapper code before setting properties (to avoid leaks if wrapper creation fails)
   char* wrapper_code = create_wrapper_code(file_result.data, resolved_path);
   JSRT_ReadFileResultFree(&file_result);
 
@@ -217,6 +211,18 @@ JSValue jsrt_load_commonjs_module(JSContext* ctx, JSRT_ModuleLoader* loader, con
     JS_FreeValue(ctx, exports);
     jsrt_pop_loading_commonjs(loader);
     return jsrt_module_throw_error(ctx, JSRT_MODULE_INTERNAL_ERROR, "Failed to create wrapper code");
+  }
+
+  // Set module properties (check for exceptions)
+  if (JS_SetPropertyStr(ctx, module, "exports", JS_DupValue(ctx, exports)) < 0 ||
+      JS_SetPropertyStr(ctx, module, "id", JS_NewString(ctx, resolved_path)) < 0 ||
+      JS_SetPropertyStr(ctx, module, "filename", JS_NewString(ctx, resolved_path)) < 0 ||
+      JS_SetPropertyStr(ctx, module, "loaded", JS_NewBool(ctx, false)) < 0) {
+    free(wrapper_code);
+    JS_FreeValue(ctx, module);
+    JS_FreeValue(ctx, exports);
+    jsrt_pop_loading_commonjs(loader);
+    return JS_EXCEPTION;
   }
 
   // Compile wrapper function

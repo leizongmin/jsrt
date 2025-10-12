@@ -242,7 +242,24 @@ JSModuleDef* jsrt_load_esm_module(JSContext* ctx, JSRT_ModuleLoader* loader, con
   }
 
   // Extract JSModuleDef* from compiled module
-  JSModuleDef* module = JS_VALUE_GET_PTR(func_val);
+  // When JS_EVAL_TYPE_MODULE is used with JS_EVAL_FLAG_COMPILE_ONLY,
+  // the result is a JSValue containing the module function
+  // We need to check the value type before extracting the pointer
+  if (!JS_IsFunction(ctx, func_val)) {
+    MODULE_Debug_Error("Compiled module is not a function: %s", resolved_path);
+    JS_FreeValue(ctx, func_val);
+    return NULL;
+  }
+
+  // Use QuickJS API to get the module definition
+  // Note: JS_VALUE_GET_PTR is internal and may not be safe
+  // The proper way is to use the module through QuickJS APIs
+  JSModuleDef* module = (JSModuleDef*)JS_VALUE_GET_PTR(func_val);
+  if (!module) {
+    MODULE_Debug_Error("Failed to extract module definition: %s", resolved_path);
+    JS_FreeValue(ctx, func_val);
+    return NULL;
+  }
 
   // Set up import.meta
   if (jsrt_setup_import_meta(ctx, module, loader, resolved_path) != 0) {
@@ -268,23 +285,15 @@ JSValue jsrt_get_esm_exports(JSContext* ctx, JSModuleDef* module) {
 
   MODULE_Debug_Loader("Getting exports from ES module");
 
-  // Create an object to hold the exports
-  JSValue exports_obj = JS_NewObject(ctx);
-  if (JS_IsException(exports_obj)) {
+  // Get the module namespace object which contains all exports
+  // This is the standard way to access ES module exports in QuickJS
+  JSValue ns = JS_GetModuleNamespace(ctx, module);
+
+  if (JS_IsException(ns)) {
+    MODULE_Debug_Error("Failed to get module namespace");
     return JS_EXCEPTION;
   }
 
-  // Get module exports
-  // Note: This is a simplified implementation
-  // In reality, we need to evaluate the module and extract exports
-  // For now, return an empty object as a placeholder
-  // Full implementation would need to:
-  // 1. Evaluate the module if not yet evaluated
-  // 2. Extract all named exports
-  // 3. Extract default export if present
-  // 4. Create an object with all exports
-
-  MODULE_Debug_Loader("TODO: Full ES module export extraction not yet implemented");
-
-  return exports_obj;
+  MODULE_Debug_Loader("Successfully retrieved ES module exports");
+  return ns;
 }

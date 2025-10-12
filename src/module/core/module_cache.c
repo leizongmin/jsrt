@@ -45,6 +45,19 @@ JSRT_ModuleCache* jsrt_module_cache_create(JSContext* ctx, size_t capacity) {
     return NULL;
   }
 
+// Validate capacity is reasonable and won't cause overflow
+#define MAX_CACHE_CAPACITY 100000
+  if (capacity > MAX_CACHE_CAPACITY) {
+    MODULE_Debug_Error("Cache capacity too large: %zu (max: %d)", capacity, MAX_CACHE_CAPACITY);
+    return NULL;
+  }
+
+  // Check for integer overflow in bucket allocation
+  if (capacity > SIZE_MAX / sizeof(JSRT_ModuleCacheEntry*)) {
+    MODULE_Debug_Error("Cache capacity would cause integer overflow: %zu", capacity);
+    return NULL;
+  }
+
   MODULE_Debug_Cache("Creating module cache with capacity %zu", capacity);
 
   // Allocate cache structure
@@ -60,7 +73,7 @@ JSRT_ModuleCache* jsrt_module_cache_create(JSContext* ctx, size_t capacity) {
   cache->capacity = capacity;
   cache->max_size = capacity;  // Allow up to capacity entries
 
-  // Allocate buckets
+  // Allocate buckets (overflow check already done above)
   size_t buckets_size = capacity * sizeof(JSRT_ModuleCacheEntry*);
   cache->buckets = (JSRT_ModuleCacheEntry**)js_malloc(ctx, buckets_size);
   if (!cache->buckets) {

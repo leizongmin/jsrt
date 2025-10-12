@@ -29,7 +29,7 @@ static int hex_to_int(char c) {
  * URL decode a string in place
  *
  * Converts %XX sequences to their character equivalents.
- * Returns the new length of the string.
+ * Returns the new length of the string, or 0 on error (e.g., NULL byte in URL).
  */
 static size_t url_decode(char* str) {
   if (!str)
@@ -44,7 +44,13 @@ static size_t url_decode(char* str) {
       int lo = hex_to_int(src[2]);
 
       if (hi >= 0 && lo >= 0) {
-        *dst++ = (char)((hi << 4) | lo);
+        char decoded = (char)((hi << 4) | lo);
+        // Reject NULL bytes in URLs - security risk for path truncation
+        if (decoded == '\0') {
+          MODULE_Debug_Error("URL contains NULL byte (%00) - rejecting for security");
+          return 0;
+        }
+        *dst++ = decoded;
         src += 3;
         continue;
       }
@@ -99,9 +105,17 @@ static char* parse_file_url(const char* url) {
     return NULL;
   }
 
-  // Copy and decode URL
-  strcpy(path, path_start);
-  url_decode(path);
+  // Copy and decode URL using strncpy for safety
+  strncpy(path, path_start, path_len);
+  path[path_len] = '\0';  // Ensure NULL termination
+
+  // Decode URL and check for errors (e.g., NULL bytes)
+  if (url_decode(path) == 0 && path[0] != '\0') {
+    // url_decode returns 0 on error (but also returns 0 for empty string, so check)
+    MODULE_Debug_Error("URL decoding failed (possible security issue): %s", url);
+    free(path);
+    return NULL;
+  }
 
   MODULE_Debug_Protocol("Parsed file URL: %s -> %s", url, path);
 

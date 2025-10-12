@@ -113,12 +113,12 @@ char* jsrt_path_join(const char* dir, const char* file) {
   if (!result)
     return NULL;
 
-  // Build the joined path
-  strcpy(result, dir);
+  // Build the joined path using snprintf for safety
   if (!has_trailing_sep) {
-    strcat(result, PLATFORM_PATH_SEPARATOR_STR);
+    snprintf(result, total_len, "%s%s%s", dir, PLATFORM_PATH_SEPARATOR_STR, file);
+  } else {
+    snprintf(result, total_len, "%s%s", dir, file);
   }
-  strcat(result, file);
 
   // Normalize the result
   char* normalized = jsrt_normalize_path(result);
@@ -165,8 +165,9 @@ char* jsrt_resolve_relative_path(const char* base_path, const char* relative_pat
   // Handle ./ and ../ prefixes
   const char* clean_relative = relative_path;
   char* current_base = base_dir;
+  int depth = 0;
 
-  // Skip leading "./" or "../" sequences
+  // Skip leading "./" or "../" sequences with depth limit
   while (clean_relative[0] == '.') {
     if (jsrt_is_path_separator(clean_relative[1])) {
       // Skip "./"
@@ -174,6 +175,12 @@ char* jsrt_resolve_relative_path(const char* base_path, const char* relative_pat
       MODULE_DEBUG_RESOLVER("Skipped './' prefix, now at '%s'", clean_relative);
     } else if (clean_relative[1] == '.' && jsrt_is_path_separator(clean_relative[2])) {
       // Handle "../" - go up one level
+      if (++depth > 100) {  // MAX_PATH_DEPTH
+        MODULE_DEBUG_RESOLVER("Path depth exceeded: %d", depth);
+        free(current_base);
+        return NULL;
+      }
+
       char* parent_dir = jsrt_get_parent_directory(current_base);
       free(current_base);
       if (!parent_dir)

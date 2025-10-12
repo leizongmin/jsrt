@@ -281,9 +281,10 @@ char* jsrt_resolve_npm_module(JSContext* ctx, const char* module_name, const cha
   // If there's a subpath, try to resolve it
   if (subpath) {
     // First try exports field
-    char* subpath_with_dot = (char*)malloc(strlen(subpath) + 3);  // "./" + subpath + \0
+    size_t subpath_len = strlen(subpath) + 3;  // "./" + subpath + \0
+    char* subpath_with_dot = (char*)malloc(subpath_len);
     if (subpath_with_dot) {
-      sprintf(subpath_with_dot, "./%s", subpath);
+      snprintf(subpath_with_dot, subpath_len, "./%s", subpath);
       result = jsrt_resolve_package_exports(ctx, package_dir, subpath_with_dot, is_esm);
       free(subpath_with_dot);
     }

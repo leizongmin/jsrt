@@ -100,6 +100,14 @@ JSRT_ModuleSpecifier* jsrt_parse_specifier(const char* specifier) {
     return NULL;
   }
 
+// Validate specifier length to prevent DoS attacks
+#define MAX_SPECIFIER_LENGTH 4096
+  size_t len = strlen(specifier);
+  if (len > MAX_SPECIFIER_LENGTH) {
+    MODULE_DEBUG_RESOLVER("Specifier too long: %zu bytes (max: %d)", len, MAX_SPECIFIER_LENGTH);
+    return NULL;
+  }
+
   MODULE_DEBUG_RESOLVER("Parsing specifier: '%s'", specifier);
 
   JSRT_ModuleSpecifier* spec = (JSRT_ModuleSpecifier*)calloc(1, sizeof(JSRT_ModuleSpecifier));

@@ -1,3 +1,6 @@
+#include <stdint.h>
+#include "../../util/debug.h"
+#include "../net/net_internal.h"
 #include "http_client.h"
 #include "http_internal.h"
 
@@ -62,27 +65,16 @@ JSValue js_http_create_server(JSContext* ctx, JSValueConst this_val, int argc, J
   if (http_server) {
     JSValue net_on_method = JS_GetPropertyStr(ctx, http_server->net_server, "on");
     if (JS_IsFunction(ctx, net_on_method)) {
-      // CRITICAL FIX #1.4: Use wrapper to store server reference instead of global variable
-      // Create wrapper that holds server reference
-      JSHttpConnectionHandlerWrapper* wrapper = malloc(sizeof(JSHttpConnectionHandlerWrapper));
-      if (wrapper) {
-        wrapper->ctx = ctx;
-        wrapper->server = JS_DupValue(ctx, server);
+      JSValue handler_data = JS_DupValue(ctx, server);
+      JSValue connection_handler = JS_NewCFunctionData(ctx, js_http_net_connection_handler, 1, 0, 1, &handler_data);
+      JS_FreeValue(ctx, handler_data);
 
-        // Store wrapper in server for cleanup
-        http_server->conn_wrapper = wrapper;
-
-        // Create connection handler with wrapper as opaque data
-        JSValue connection_handler = JS_NewCFunction(ctx, js_http_net_connection_handler, "connectionHandler", 1);
-        JS_SetOpaque(connection_handler, wrapper);
-
-        JSValue args[] = {JS_NewString(ctx, "connection"), connection_handler};
-        JSValue result = JS_Call(ctx, net_on_method, http_server->net_server, 2, args);
-        JS_FreeValue(ctx, result);
-        JS_FreeValue(ctx, args[0]);
-        // DO NOT free connection_handler (args[1]) - it needs to persist for event callbacks
-        // The event system will manage its lifecycle
-      }
+      JSValue args[] = {JS_NewString(ctx, "connection"), connection_handler};
+      JSValue result = JS_Call(ctx, net_on_method, http_server->net_server, 2, args);
+      JS_FreeValue(ctx, result);
+      JS_FreeValue(ctx, args[0]);
+      // DO NOT free connection_handler (args[1]) - it needs to persist for event callbacks
+      // The event system will manage its lifecycle
     }
     JS_FreeValue(ctx, net_on_method);
   }
@@ -147,19 +139,23 @@ static int parse_url_components(JSContext* ctx, const char* url_str, char** host
 }
 
 // Socket data handler for client response parsing
-static JSValue http_client_socket_data_handler(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
-  // Get the client request from the socket's opaque data
-  JSValue client_req_val = JS_GetPropertyStr(ctx, this_val, "_clientRequest");
-  if (JS_IsUndefined(client_req_val)) {
-    JS_FreeValue(ctx, client_req_val);
+static JSValue http_client_socket_data_handler(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv,
+                                               int magic, JSValueConst* func_data) {
+  if (argc < 1 || !func_data) {
     return JS_UNDEFINED;
   }
 
-  JSHTTPClientRequest* client_req = JS_GetOpaque(client_req_val, js_http_client_request_class_id);
-  if (!client_req || argc < 1) {
-    JS_FreeValue(ctx, client_req_val);
+  int64_t raw_ptr = 0;
+  if (JS_ToInt64(ctx, &raw_ptr, func_data[0])) {
     return JS_UNDEFINED;
   }
+
+  JSHTTPClientRequest* client_req = (JSHTTPClientRequest*)(uintptr_t)raw_ptr;
+  if (!client_req) {
+    return JS_UNDEFINED;
+  }
+
+  JSRT_Debug_Truncated("[debug] client handler req=%p argc=%d\n", client_req, argc);
 
   // Parse received data with llhttp
   size_t data_len;
@@ -175,7 +171,6 @@ static JSValue http_client_socket_data_handler(JSContext* ctx, JSValueConst this
     }
   }
 
-  JS_FreeValue(ctx, client_req_val);
   return JS_UNDEFINED;
 }
 
@@ -225,6 +220,7 @@ JSValue js_http_request(JSContext* ctx, JSValueConst this_val, int argc, JSValue
     JS_FreeValue(ctx, client_req);
     return JS_ThrowTypeError(ctx, "Failed to create ClientRequest");
   }
+  JSRT_Debug_Truncated("[debug] new ClientRequest %p\n", req_data);
 
   // Parse URL or options
   JSValue options = JS_UNDEFINED;
@@ -383,6 +379,14 @@ JSValue js_http_request(JSContext* ctx, JSValueConst this_val, int argc, JSValue
 
   // Store socket in ClientRequest
   req_data->socket = JS_DupValue(ctx, socket);
+  JSNetConnection* socket_conn = JS_GetOpaque(socket, js_socket_class_id);
+  if (socket_conn) {
+    socket_conn->is_http_client = true;
+    if (!JS_IsUndefined(socket_conn->client_request_obj)) {
+      JS_FreeValue(ctx, socket_conn->client_request_obj);
+    }
+    socket_conn->client_request_obj = JS_DupValue(ctx, client_req);
+  }
 
   // Create IncomingMessage for response
   req_data->response_obj = js_http_request_constructor(ctx, JS_UNDEFINED, 0, NULL);
@@ -394,9 +398,18 @@ JSValue js_http_request(JSContext* ctx, JSValueConst this_val, int argc, JSValue
     JS_SetPropertyStr(ctx, socket, "_clientRequest", JS_DupValue(ctx, client_req));
 
     // on('data') - parse HTTP response
-    JSValue data_handler = JS_NewCFunction(ctx, http_client_socket_data_handler, "dataHandler", 1);
+    JSValue handler_data = JS_NewInt64(ctx, (int64_t)(uintptr_t)req_data);
+    JSValue data_handler = JS_NewCFunctionData(ctx, http_client_socket_data_handler, 1, 0, 1, &handler_data);
+    JS_FreeValue(ctx, handler_data);
     JSValue args[] = {JS_NewString(ctx, "data"), data_handler};
     JSValue result = JS_Call(ctx, on_method, socket, 2, args);
+    if (JS_IsException(result)) {
+      JSValue exception = JS_GetException(ctx);
+      const char* err = JS_ToCString(ctx, exception);
+      JSRT_Debug_Truncated("[debug] failed to attach data handler: %s\n", err ? err : "<unknown>");
+      JS_FreeCString(ctx, err);
+      JS_FreeValue(ctx, exception);
+    }
     JS_FreeValue(ctx, result);
     JS_FreeValue(ctx, args[0]);
     // data_handler is now owned by event system

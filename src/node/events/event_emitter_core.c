@@ -1,3 +1,4 @@
+#include "../../util/debug.h"
 #include "events_internal.h"
 
 // EventEmitter.prototype.on(event, listener)
@@ -155,6 +156,7 @@ JSValue js_event_emitter_emit(JSContext* ctx, JSValueConst this_val, int argc, J
             current_once_wrapper = listener;
           }
 
+          JSRT_Debug_Truncated("[debug] emitting listener for event %s with %d args\n", event_name, listener_argc);
           JSValue result = JS_Call(ctx, listener, this_val, listener_argc, listener_args);
 
           if (is_once_wrapper) {

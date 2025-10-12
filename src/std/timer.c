@@ -169,7 +169,18 @@ void jsrt_on_timer_callback(uv_timer_t* uv_timer) {
   }
   JSRT_RuntimeFreeValue(timer->rt, ret);
 
-  if (!timer->is_interval) {
+  // Drain any microtasks scheduled during the timer callback to ensure
+  // Promise reactions and nextTick handlers run before the event loop continues.
+  if (timer->rt) {
+    JSRuntime* qjs_runtime = JS_GetRuntime(timer->rt->ctx);
+    while (JS_IsJobPending(qjs_runtime)) {
+      if (!JSRT_RuntimeRunTicket(timer->rt)) {
+        break;
+      }
+    }
+  }
+
+  if (!timer->is_interval && !uv_is_closing((uv_handle_t*)&timer->uv_timer)) {
     jsrt_timer_free(timer);
   }
 }

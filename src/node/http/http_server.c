@@ -1,4 +1,5 @@
 #include "../../url/url.h"
+#include "../../util/debug.h"
 #include "../../util/user_agent.h"
 #include "http_internal.h"
 
@@ -117,10 +118,43 @@ JSValue js_http_server_close(JSContext* ctx, JSValueConst this_val, int argc, JS
     return JS_UNDEFINED;
   }
 
+  JSRT_Debug_Truncated("[debug] http_server_close called argc=%d destroyed=%d\n", argc, server->destroyed);
+  fflush(stderr);
+
   if (!server->destroyed) {
-    JSValue close_method = JS_GetPropertyStr(ctx, server->net_server, "close");
-    JS_Call(ctx, close_method, server->net_server, argc, argv);
-    JS_FreeValue(ctx, close_method);
+    // Check if server is actually listening before trying to close
+    JSValue listening = JS_GetPropertyStr(ctx, server->net_server, "listening");
+    bool is_listening = JS_ToBool(ctx, listening);
+    JS_FreeValue(ctx, listening);
+
+    if (is_listening) {
+      // Server is listening, call close() which will emit 'close' event
+      JSValue close_method = JS_GetPropertyStr(ctx, server->net_server, "close");
+      JSValue result = JS_Call(ctx, close_method, server->net_server, argc, argv);
+      JS_FreeValue(ctx, result);
+      JS_FreeValue(ctx, close_method);
+      JSRT_Debug_Truncated("[debug] http_server_close forwarded to net.Server.close\n");
+      fflush(stderr);
+    } else {
+      // Server was never started, immediately call callback if provided
+      if (argc > 0 && JS_IsFunction(ctx, argv[0])) {
+        JSValue result = JS_Call(ctx, argv[0], this_val, 0, NULL);
+        JS_FreeValue(ctx, result);
+      }
+
+      // Emit 'close' event asynchronously
+      JSValue emit = JS_GetPropertyStr(ctx, this_val, "emit");
+      if (JS_IsFunction(ctx, emit)) {
+        JSValue event_name = JS_NewString(ctx, "close");
+        JSValue result = JS_Call(ctx, emit, this_val, 1, &event_name);
+        JS_FreeValue(ctx, result);
+        JS_FreeValue(ctx, event_name);
+      }
+      JS_FreeValue(ctx, emit);
+      JSRT_Debug_Truncated("[debug] http_server_close emitted close immediately (not listening)\n");
+      fflush(stderr);
+    }
+
     server->destroyed = true;
   }
 
@@ -183,13 +217,6 @@ JSValue js_http_server_set_timeout(JSContext* ctx, JSValueConst this_val, int ar
 void js_http_server_finalizer(JSRuntime* rt, JSValue val) {
   JSHttpServer* server = JS_GetOpaque(val, js_http_server_class_id);
   if (server) {
-    // CRITICAL FIX #1.4: Clean up connection handler wrapper
-    if (server->conn_wrapper) {
-      JS_FreeValueRT(rt, server->conn_wrapper->server);
-      free(server->conn_wrapper);
-      server->conn_wrapper = NULL;
-    }
-
     JS_FreeValueRT(rt, server->net_server);
     free(server);
   }
@@ -211,8 +238,7 @@ JSValue js_http_server_constructor(JSContext* ctx, JSValueConst new_target, int 
   server->ctx = ctx;
   server->server_obj = JS_DupValue(ctx, obj);
   server->destroyed = false;
-  server->timeout_ms = 0;       // No timeout by default
-  server->conn_wrapper = NULL;  // CRITICAL FIX #1.4: Initialize wrapper pointer
+  server->timeout_ms = 0;  // No timeout by default
 
   // Create underlying net.Server
   JSValue net_module = JSRT_LoadNodeModuleCommonJS(ctx, "net");

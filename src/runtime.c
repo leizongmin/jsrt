@@ -11,6 +11,9 @@
 
 #include "crypto/crypto.h"
 #include "http/fetch.h"
+#include "module/core/module_context.h"
+#include "module/core/module_loader.h"
+#include "module/protocols/protocol_registry.h"
 #include "node/net/net_internal.h"
 #include "node/process/process.h"
 #include "node/process/process_node.h"
@@ -38,10 +41,7 @@
 #include "util/jsutils.h"
 #include "util/path.h"
 
-// New module system
-#include "module/core/module_context.h"
-#include "module/core/module_loader.h"
-#include "module/protocols/protocol_registry.h"
+static void jsrt_debug_dump_handles(uv_loop_t* loop);
 
 static void JSRT_RuntimeCloseWalkCallback(uv_handle_t* handle, void* arg) {
   if (!uv_is_closing(handle)) {
@@ -377,7 +377,11 @@ bool JSRT_RuntimeRun(JSRT_Runtime* rt) {
     }
 
     if (uv_loop_alive(rt->uv_loop)) {
-      // JSRT_Debug("runtime run loop: async tasks are not completed, counter=%d", counter);
+      if (counter % 10 == 0) {
+        fprintf(stderr, "[debug] uv_loop still alive counter=%llu\n", (unsigned long long)counter);
+        uv_print_active_handles(rt->uv_loop, stderr);
+        fflush(stderr);
+      }
       // If we used DEFAULT mode and there are still active handles,
       // it means we processed some events, continue the loop
       continue;
@@ -513,4 +517,16 @@ void JSRT_CompileResultFree(JSRT_CompileResult* result) {
 void JSRT_RuntimeSetCompactNodeMode(JSRT_Runtime* rt, bool enabled) {
   rt->compact_node_mode = enabled;
   JSRT_Debug("Compact Node.js mode: %s", enabled ? "enabled" : "disabled");
+}
+
+static void jsrt_debug_handle_walker(uv_handle_t* handle, void* arg) {
+  FILE* out = (FILE*)arg;
+  const char* type_name = uv_handle_type_name(handle->type);
+  fprintf(out, "[debug] active handle type=%s ref=%d closing=%d\n", type_name ? type_name : "unknown",
+          uv_has_ref(handle), uv_is_closing(handle));
+}
+
+static void jsrt_debug_dump_handles(uv_loop_t* loop) {
+  uv_walk(loop, jsrt_debug_handle_walker, stderr);
+  fflush(stderr);
 }

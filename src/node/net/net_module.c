@@ -229,6 +229,7 @@ JSValue JSRT_InitNodeNet(JSContext* ctx) {
   // Module functions
   JS_SetPropertyStr(ctx, net_module, "createServer", JS_NewCFunction(ctx, js_net_create_server, "createServer", 1));
   JS_SetPropertyStr(ctx, net_module, "connect", JS_NewCFunction(ctx, js_net_connect, "connect", 2));
+  JS_SetPropertyStr(ctx, net_module, "createConnection", JS_NewCFunction(ctx, js_net_connect, "createConnection", 2));
 
   // IP utility functions
   JS_SetPropertyStr(ctx, net_module, "isIP", JS_NewCFunction(ctx, js_net_is_ip, "isIP", 1));
@@ -254,6 +255,10 @@ int js_node_net_init(JSContext* ctx, JSModuleDef* m) {
   JSValue connect = JS_GetPropertyStr(ctx, net_module, "connect");
   JS_SetModuleExport(ctx, m, "connect", JS_DupValue(ctx, connect));
   JS_FreeValue(ctx, connect);
+
+  JSValue createConnection = JS_GetPropertyStr(ctx, net_module, "createConnection");
+  JS_SetModuleExport(ctx, m, "createConnection", JS_DupValue(ctx, createConnection));
+  JS_FreeValue(ctx, createConnection);
 
   JSValue Socket = JS_GetPropertyStr(ctx, net_module, "Socket");
   JS_SetModuleExport(ctx, m, "Socket", JS_DupValue(ctx, Socket));

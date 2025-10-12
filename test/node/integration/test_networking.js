@@ -120,3 +120,6 @@ console.log('\nFeatures working:');
 // console.log('  ✅ Consistent API with Node.js networking modules');
 
 console.log('\nReady for Phase 5: Advanced modules (fs, stream, crypto)');
+
+// Note: HTTP request object keeps event loop alive, need explicit exit
+process.exit(0);

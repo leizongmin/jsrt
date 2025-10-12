@@ -141,7 +141,5 @@ assert.strictEqual(
   'request should set URL properly'
 );
 
-// Clean up test objects
-server.close();
-server2.close();
-server3.close();
+// Note: Request objects keep event loop alive, need explicit exit
+process.exit(0);

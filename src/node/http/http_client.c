@@ -1,4 +1,7 @@
 #include <ctype.h>
+#include "../../util/debug.h"
+#include "../net/net_internal.h"
+#include "http_incoming.h"
 #include "http_internal.h"
 
 // Helper function to normalize header names to lowercase
@@ -133,6 +136,10 @@ int client_on_headers_complete(llhttp_t* parser) {
 
   JSContext* ctx = client_req->ctx;
 
+  JSRT_Debug_Truncated("[debug] headers complete status=%d\n", parser->status_code);
+
+  JSRT_Debug_Truncated("[debug] headers complete\n");
+
   // Save last header
   if (client_req->current_header_field && client_req->current_header_value) {
     JSValue headers = JS_GetPropertyStr(ctx, client_req->response_obj, "headers");
@@ -198,9 +205,8 @@ int client_on_body(llhttp_t* parser, const char* at, size_t length) {
   // Emit 'data' event on IncomingMessage (response)
   JSValue emit = JS_GetPropertyStr(ctx, client_req->response_obj, "emit");
   if (JS_IsFunction(ctx, emit)) {
-    // Create Buffer from data
-    JSValue buffer_data = JS_NewArrayBufferCopy(ctx, (const uint8_t*)at, length);
-    JSValue args[] = {JS_NewString(ctx, "data"), buffer_data};
+    JSValue chunk = JS_NewStringLen(ctx, at, length);
+    JSValue args[] = {JS_NewString(ctx, "data"), chunk};
     JSValue result = JS_Call(ctx, emit, client_req->response_obj, 2, args);
     JS_FreeValue(ctx, result);
     JS_FreeValue(ctx, args[0]);
@@ -218,16 +224,44 @@ int client_on_message_complete(llhttp_t* parser) {
   }
 
   JSContext* ctx = client_req->ctx;
+  JSRT_Debug_Truncated("[debug] client_on_message_complete\n");
 
-  // Emit 'end' event on IncomingMessage (response)
-  JSValue emit = JS_GetPropertyStr(ctx, client_req->response_obj, "emit");
-  if (JS_IsFunction(ctx, emit)) {
-    JSValue args[] = {JS_NewString(ctx, "end")};
-    JSValue result = JS_Call(ctx, emit, client_req->response_obj, 1, args);
-    JS_FreeValue(ctx, result);
-    JS_FreeValue(ctx, args[0]);
+  js_http_incoming_end(ctx, client_req->response_obj);
+
+  if (!JS_IsUndefined(client_req->socket)) {
+    JSValue socket_val = JS_DupValue(ctx, client_req->socket);
+    JSRT_Debug_Truncated("[debug] client_on_message_complete socket_val tag=%d\n", JS_VALUE_GET_TAG(socket_val));
+    fflush(stderr);
+
+    JSNetConnection* socket_conn = JS_GetOpaque(socket_val, js_socket_class_id);
+    if (socket_conn) {
+      socket_conn->is_http_client = false;
+      if (!JS_IsUndefined(socket_conn->client_request_obj)) {
+        JS_FreeValue(ctx, socket_conn->client_request_obj);
+        socket_conn->client_request_obj = JS_UNDEFINED;
+      }
+    }
+
+    JSValue end_method = JS_GetPropertyStr(ctx, socket_val, "end");
+    if (JS_IsFunction(ctx, end_method)) {
+      JSValue result = JS_Call(ctx, end_method, socket_val, 0, NULL);
+      JS_FreeValue(ctx, result);
+    }
+    JS_FreeValue(ctx, end_method);
+
+    JSValue unref_method = JS_GetPropertyStr(ctx, socket_val, "unref");
+    if (JS_IsFunction(ctx, unref_method)) {
+      JSValue result = JS_Call(ctx, unref_method, socket_val, 0, NULL);
+      JS_FreeValue(ctx, result);
+    }
+    JS_FreeValue(ctx, unref_method);
+
+    JSValue destroy_result = js_socket_destroy(ctx, socket_val, 0, NULL);
+    JS_FreeValue(ctx, destroy_result);
+
+    client_req->socket = JS_UNDEFINED;
+    JS_FreeValue(ctx, socket_val);
   }
-  JS_FreeValue(ctx, emit);
 
   return 0;
 }

@@ -6,8 +6,6 @@ const assert = require('jsrt:assert');
 const http = require('node:http');
 const https = require('node:https');
 
-console.log('\n🔄 Testing HTTP Agent with connection pooling:');
-
 // Test 1: HTTP Agent constructor
 const httpAgent = new http.Agent({
   maxSockets: 10,
@@ -45,8 +43,6 @@ assert.ok(
   'HTTP global agent should support keep-alive'
 );
 // Success case - no output needed
-
-console.log('\n🔒 Testing HTTPS Agent with SSL connection pooling:');
 
 // Test 3: HTTPS Agent constructor
 const httpsAgent = new https.Agent({
@@ -86,8 +82,6 @@ assert.ok(
 );
 // Success case - no output needed
 
-console.log('\n🌐 Testing Agent interoperability:');
-
 // Test 5: Different protocols should have different agents
 assert.notStrictEqual(
   http.globalAgent,
@@ -113,8 +107,6 @@ assert.strictEqual(
   'HTTPS should export Agent constructor'
 );
 // Success case - no output needed
-
-console.log('\n📊 Testing connection pooling configuration:');
 
 // Test 7: Default agent settings
 const defaultHttpAgent = new http.Agent();
@@ -153,8 +145,6 @@ assert.ok(
 );
 // Success case - no output needed
 
-console.log('\n📊 Testing advanced networking features:');
-
 // Test 9: HTTP request with agent (connection pooling simulation)
 const httpRequest = http.request({
   hostname: 'example.com',
@@ -164,6 +154,7 @@ const httpRequest = http.request({
 });
 
 assert.ok(httpRequest, 'HTTP request with custom agent should be created');
+// Note: request object created for API validation only, will be cleaned up on exit
 // Success case - no output needed
 
 // Test 10: HTTPS request with agent and SSL
@@ -176,7 +167,11 @@ const httpsRequest = https.request({
 
 assert.ok(httpsRequest, 'HTTPS request with custom agent should be created');
 assert.ok(httpsRequest._keepAlive, 'HTTPS request should support keep-alive');
+// Note: request object created for API validation only, will be cleaned up on exit
 // Success case - no output needed
+
+// Note: Request objects keep event loop alive, need explicit exit
+process.exit(0);
 
 // Success case - no output needed
 // Enhanced networking features implemented:

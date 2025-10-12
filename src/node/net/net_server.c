@@ -184,6 +184,7 @@ JSValue js_server_close(JSContext* ctx, JSValueConst this_val, int argc, JSValue
   // If listen() was never called, emit events immediately
   if (was_listening && !uv_is_closing((uv_handle_t*)&server->handle)) {
     uv_close((uv_handle_t*)&server->handle, on_server_close_complete);
+    uv_unref((uv_handle_t*)&server->handle);
   } else {
     // Server was never listening, emit close event and call callback immediately
     JSValue emit = JS_GetPropertyStr(ctx, server->server_obj, "emit");

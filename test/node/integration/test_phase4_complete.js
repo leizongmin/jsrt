@@ -192,3 +192,6 @@ console.log('\nFeatures working across all modules:');
 
 console.log('\n📊 Phase 4 - Networking Modules: COMPLETED');
 console.log('Ready for Phase 5 or production use!');
+
+// Note: HTTP request and DNS promise objects keep event loop alive, need explicit exit
+process.exit(0);

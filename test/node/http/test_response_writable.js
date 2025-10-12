@@ -375,12 +375,11 @@ asyncTest('Cannot write after end()', async () => {
 // Run all tests
 // =============================================================================
 
-console.log('Running ServerResponse Writable stream tests...\n');
-
 // Wait for all async tests to complete
 setTimeout(() => {
-  console.log(`\n${testsPassed}/${testsRun} tests passed`);
   if (testsPassed !== testsRun) {
+    console.log(`✗ ${testsRun - testsPassed} test(s) failed`);
     process.exit(1);
   }
-}, 3000);
+  process.exit(0);
+}, 2000);

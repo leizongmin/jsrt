@@ -14,7 +14,8 @@ void parse_enhanced_http_request(JSContext* ctx, const char* data, char* method,
 
 // Connection handling
 void js_http_connection_handler(JSContext* ctx, JSValue server, JSValue socket);
-JSValue js_http_net_connection_handler(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv);
+JSValue js_http_net_connection_handler(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv, int magic,
+                                       JSValueConst* func_data);
 JSValue js_http_simple_data_handler(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv);
 
 #endif  // JSRT_NODE_HTTP_PARSER_H

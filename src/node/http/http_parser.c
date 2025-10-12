@@ -1,4 +1,5 @@
 #include <ctype.h>
+#include <stdint.h>
 #include "http_incoming.h"
 #include "http_internal.h"
 
@@ -388,6 +389,34 @@ int on_headers_complete(llhttp_t* parser) {
     JS_FreeValue(ctx, upgrade_header);
   }
 
+  if (!conn->request_emitted) {
+    const char* event_name = "request";
+    JSValue target = JS_DupValue(ctx, conn->current_response);
+
+    if (conn->is_upgrade) {
+      event_name = "upgrade";
+      JS_FreeValue(ctx, target);
+      target = JS_DupValue(ctx, conn->socket);
+    } else if (conn->expect_continue) {
+      event_name = "checkContinue";
+    }
+
+    JSValue emit = JS_GetPropertyStr(ctx, conn->server, "emit");
+    if (JS_IsFunction(ctx, emit)) {
+      JSValue args[] = {JS_NewString(ctx, event_name), JS_DupValue(ctx, conn->current_request), target};
+      JSValue result = JS_Call(ctx, emit, conn->server, 3, args);
+      JS_FreeValue(ctx, result);
+      JS_FreeValue(ctx, args[0]);
+      JS_FreeValue(ctx, args[1]);
+      JS_FreeValue(ctx, args[2]);
+    } else {
+      JS_FreeValue(ctx, target);
+    }
+    JS_FreeValue(ctx, emit);
+
+    conn->request_emitted = true;
+  }
+
   return 0;
 }
 
@@ -424,26 +453,21 @@ int on_message_complete(llhttp_t* parser) {
     js_http_incoming_end(ctx, conn->current_request);
   }
 
-  // Determine which event to emit based on request type
-  const char* event_name = "request";
-  if (conn->is_upgrade) {
-    event_name = "upgrade";  // Upgrade request (e.g., WebSocket)
-  } else if (conn->expect_continue) {
-    event_name = "checkContinue";  // Expect: 100-continue
+  if (!conn->request_emitted) {
+    const char* event_name = conn->is_upgrade ? "upgrade" : (conn->expect_continue ? "checkContinue" : "request");
+    JSValue emit = JS_GetPropertyStr(ctx, conn->server, "emit");
+    if (JS_IsFunction(ctx, emit)) {
+      JSValue target = conn->is_upgrade ? JS_DupValue(ctx, conn->socket) : JS_DupValue(ctx, conn->current_response);
+      JSValue args[] = {JS_NewString(ctx, event_name), JS_DupValue(ctx, conn->current_request), target};
+      JSValue result = JS_Call(ctx, emit, conn->server, 3, args);
+      JS_FreeValue(ctx, result);
+      JS_FreeValue(ctx, args[0]);
+      JS_FreeValue(ctx, args[1]);
+      JS_FreeValue(ctx, args[2]);
+    }
+    JS_FreeValue(ctx, emit);
+    conn->request_emitted = true;
   }
-
-  // Emit appropriate event on server
-  JSValue emit = JS_GetPropertyStr(ctx, conn->server, "emit");
-  if (JS_IsFunction(ctx, emit)) {
-    JSValue args[] = {JS_NewString(ctx, event_name), JS_DupValue(ctx, conn->current_request),
-                      JS_DupValue(ctx, conn->is_upgrade ? conn->socket : conn->current_response)};
-    JSValue result = JS_Call(ctx, emit, conn->server, 3, args);
-    JS_FreeValue(ctx, result);
-    JS_FreeValue(ctx, args[0]);
-    JS_FreeValue(ctx, args[1]);
-    JS_FreeValue(ctx, args[2]);
-  }
-  JS_FreeValue(ctx, emit);
 
   conn->request_complete = true;
 
@@ -619,6 +643,7 @@ void js_http_connection_handler(JSContext* ctx, JSValue server, JSValue socket) 
   conn->timeout_ms = 0;
   conn->expect_continue = false;
   conn->is_upgrade = false;
+  conn->request_emitted = false;
 
   // CRITICAL FIX #1.5: Track connection for cleanup
   track_connection(conn);
@@ -643,8 +668,9 @@ void js_http_connection_handler(JSContext* ctx, JSValue server, JSValue socket) 
   JSValue on_method = JS_GetPropertyStr(ctx, socket, "on");
   if (JS_IsFunction(ctx, on_method)) {
     // Create data handler that parses with llhttp
-    JSValue data_handler = JS_NewCFunction(ctx, js_http_llhttp_data_handler, "httpLLHttpDataHandler", 1);
-    JS_SetOpaque(data_handler, conn);
+    JSValue handler_data = JS_NewInt64(ctx, (int64_t)(uintptr_t)conn);
+    JSValue data_handler = JS_NewCFunctionData(ctx, js_http_llhttp_data_handler, 1, 0, 1, &handler_data);
+    JS_FreeValue(ctx, handler_data);
 
     JSValue args[] = {JS_NewString(ctx, "data"), data_handler};
     JSValue result = JS_Call(ctx, on_method, socket, 2, args);
@@ -666,8 +692,9 @@ void js_http_connection_handler(JSContext* ctx, JSValue server, JSValue socket) 
   // Set up socket 'close' listener for cleanup
   JSValue on_close_method = JS_GetPropertyStr(ctx, socket, "on");
   if (JS_IsFunction(ctx, on_close_method)) {
-    JSValue close_handler = JS_NewCFunction(ctx, js_http_close_handler, "httpCloseHandler", 0);
-    JS_SetOpaque(close_handler, conn);
+    JSValue handler_data = JS_NewInt64(ctx, (int64_t)(uintptr_t)conn);
+    JSValue close_handler = JS_NewCFunctionData(ctx, js_http_close_handler, 0, 0, 1, &handler_data);
+    JS_FreeValue(ctx, handler_data);
 
     JSValue args[] = {JS_NewString(ctx, "close"), close_handler};
     JSValue result = JS_Call(ctx, on_close_method, socket, 2, args);
@@ -688,11 +715,17 @@ void js_http_connection_handler(JSContext* ctx, JSValue server, JSValue socket) 
 }
 
 // llhttp data handler - parses incoming socket data
-JSValue js_http_llhttp_data_handler(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
-  if (argc < 1)
+JSValue js_http_llhttp_data_handler(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv, int magic,
+                                    JSValueConst* func_data) {
+  if (argc < 1 || !func_data)
     return JS_UNDEFINED;
 
-  JSHttpConnection* conn = JS_GetOpaque(this_val, 0);
+  int64_t raw_ptr = 0;
+  if (JS_ToInt64(ctx, &raw_ptr, func_data[0])) {
+    return JS_UNDEFINED;
+  }
+
+  JSHttpConnection* conn = (JSHttpConnection*)(uintptr_t)raw_ptr;
   if (!conn)
     return JS_UNDEFINED;
 
@@ -751,8 +784,17 @@ JSValue js_http_llhttp_data_handler(JSContext* ctx, JSValueConst this_val, int a
 }
 
 // Socket close handler - cleanup connection state
-JSValue js_http_close_handler(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
-  JSHttpConnection* conn = JS_GetOpaque(this_val, 0);
+JSValue js_http_close_handler(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv, int magic,
+                              JSValueConst* func_data) {
+  if (!func_data)
+    return JS_UNDEFINED;
+
+  int64_t raw_ptr = 0;
+  if (JS_ToInt64(ctx, &raw_ptr, func_data[0])) {
+    return JS_UNDEFINED;
+  }
+
+  JSHttpConnection* conn = (JSHttpConnection*)(uintptr_t)raw_ptr;
   if (!conn)
     return JS_UNDEFINED;
 
@@ -763,13 +805,14 @@ JSValue js_http_close_handler(JSContext* ctx, JSValueConst this_val, int argc, J
 }
 
 // C function wrapper for connection handling
-JSValue js_http_net_connection_handler(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
-  if (argc > 0) {
-    // CRITICAL FIX #1.4: Extract server from wrapper instead of global variable
-    JSHttpConnectionHandlerWrapper* wrapper = JS_GetOpaque(this_val, 0);
-    if (wrapper && wrapper->ctx == ctx) {
-      js_http_connection_handler(ctx, wrapper->server, argv[0]);
+JSValue js_http_net_connection_handler(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv, int magic,
+                                       JSValueConst* func_data) {
+  if (argc > 0 && func_data) {
+    JSValue server = JS_DupValue(ctx, func_data[0]);
+    if (!JS_IsException(server)) {
+      js_http_connection_handler(ctx, server, argv[0]);
     }
+    JS_FreeValue(ctx, server);
   }
   return JS_UNDEFINED;
 }

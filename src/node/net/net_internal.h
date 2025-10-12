@@ -15,12 +15,19 @@ extern JSClassID js_socket_class_id;
 #define NET_TYPE_SOCKET 0x534F434B  // 'SOCK' in hex
 #define NET_TYPE_SERVER 0x53525652  // 'SRVR' in hex
 
+typedef struct JSPendingWrite {
+  char* data;
+  size_t len;
+  struct JSPendingWrite* next;
+} JSPendingWrite;
+
 // Connection state
 typedef struct {
   uint32_t type_tag;  // Must be first field for cleanup callback
   JSContext* ctx;
   JSValue server_obj;
   JSValue socket_obj;
+  JSValue client_request_obj;
   uv_tcp_t handle;
   uv_connect_t connect_req;
   uv_shutdown_t shutdown_req;
@@ -42,6 +49,10 @@ typedef struct {
   bool had_error;        // Track error state for close event
   char* encoding;        // Encoding for data events ('utf8', 'hex', 'base64', etc.)
   bool allow_half_open;  // Allow half-open TCP connections
+  bool end_after_connect;
+  bool is_http_client;
+  JSPendingWrite* pending_writes_head;
+  JSPendingWrite* pending_writes_tail;
 } JSNetConnection;
 
 // Server state
@@ -129,5 +140,11 @@ void js_server_finalizer(JSRuntime* rt, JSValue val);
 // Module functions (from net_module.c)
 JSValue js_net_create_server(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv);
 JSValue js_net_connect(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv);
+
+// Pending write helpers (from net_socket.c)
+bool js_net_connection_queue_write(JSNetConnection* conn, const char* data, size_t len);
+JSPendingWrite* js_net_connection_detach_pending_writes(JSNetConnection* conn);
+void js_net_connection_free_pending_list(JSPendingWrite* head);
+void js_net_connection_clear_pending_writes(JSNetConnection* conn);
 
 #endif  // JSRT_NODE_NET_INTERNAL_H

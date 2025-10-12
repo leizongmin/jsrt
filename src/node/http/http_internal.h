@@ -23,13 +23,6 @@ extern JSClassID js_http_client_request_class_id;
 #define HTTP_TYPE_REQUEST 0x48545251   // 'HTRQ' in hex
 #define HTTP_TYPE_RESPONSE 0x48545250  // 'HTRP' in hex
 
-// CRITICAL FIX #1.4: Connection handler wrapper to avoid global server state
-// This wrapper stores the server reference with the connection handler function
-typedef struct {
-  JSContext* ctx;
-  JSValue server;
-} JSHttpConnectionHandlerWrapper;
-
 // HTTP Connection state for parsing
 typedef struct {
   JSContext* ctx;
@@ -66,6 +59,7 @@ typedef struct {
   // Special request handling flags
   bool expect_continue;  // Expect: 100-continue
   bool is_upgrade;       // Upgrade request
+  bool request_emitted;  // Track if request event already emitted
 } JSHttpConnection;
 
 // HTTP Server state
@@ -74,8 +68,7 @@ typedef struct {
   JSValue server_obj;
   JSValue net_server;  // Underlying net.Server
   bool destroyed;
-  uint32_t timeout_ms;                           // Default connection timeout (0 = no timeout)
-  JSHttpConnectionHandlerWrapper* conn_wrapper;  // CRITICAL FIX #1.4: Store wrapper for cleanup
+  uint32_t timeout_ms;  // Default connection timeout (0 = no timeout)
 } JSHttpServer;
 
 // HTTP Request state (IncomingMessage)
@@ -201,10 +194,13 @@ int on_chunk_complete(llhttp_t* parser);
 
 // Connection handling
 void js_http_connection_handler(JSContext* ctx, JSValue server, JSValue socket);
-JSValue js_http_net_connection_handler(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv);
+JSValue js_http_net_connection_handler(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv, int magic,
+                                       JSValueConst* func_data);
 JSValue js_http_simple_data_handler(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv);
-JSValue js_http_llhttp_data_handler(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv);
-JSValue js_http_close_handler(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv);
+JSValue js_http_llhttp_data_handler(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv, int magic,
+                                    JSValueConst* func_data);
+JSValue js_http_close_handler(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv, int magic,
+                              JSValueConst* func_data);
 void parse_enhanced_http_request(JSContext* ctx, const char* data, char* method, char* url, char* version,
                                  JSValue request);
 

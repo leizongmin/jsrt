@@ -1,4 +1,5 @@
 #include <ctype.h>
+#include "../../util/debug.h"
 #include "../../util/user_agent.h"
 #include "http_internal.h"
 
@@ -33,6 +34,94 @@ JSValue js_http_response_write_head(JSContext* ctx, JSValueConst this_val, int a
   }
 
   return JS_UNDEFINED;
+}
+
+static int http_response_buffer_chunk(JSContext* ctx, JSStreamData* stream, JSValue chunk) {
+  if (!stream) {
+    JS_FreeValue(ctx, chunk);
+    return -1;
+  }
+
+  if (stream->buffer_size >= stream->buffer_capacity) {
+    size_t new_capacity = stream->buffer_capacity == 0 ? 8 : stream->buffer_capacity * 2;
+    JSValue* new_buffer = realloc(stream->buffered_data, sizeof(JSValue) * new_capacity);
+    if (!new_buffer) {
+      JS_FreeValue(ctx, chunk);
+      return -1;
+    }
+    stream->buffered_data = new_buffer;
+    stream->buffer_capacity = new_capacity;
+  }
+
+  stream->buffered_data[stream->buffer_size++] = chunk;
+  return 0;
+}
+
+static void http_response_write_to_socket(JSHttpResponse* res, const char* data, size_t data_len) {
+  if (!res || data_len == 0 || JS_IsUndefined(res->socket)) {
+    return;
+  }
+
+  JSContext* ctx = res->ctx;
+  JSValue write_method = JS_GetPropertyStr(ctx, res->socket, "write");
+  if (JS_IsFunction(ctx, write_method)) {
+    if (res->use_chunked) {
+      if (data_len > 0) {
+        char chunk_header[32];
+        snprintf(chunk_header, sizeof(chunk_header), "%zx\r\n", data_len);
+
+        JSValue chunk_start = JS_NewString(ctx, chunk_header);
+        JS_Call(ctx, write_method, res->socket, 1, &chunk_start);
+        JS_FreeValue(ctx, chunk_start);
+
+        JSValue body_data = JS_NewStringLen(ctx, data, data_len);
+        JS_Call(ctx, write_method, res->socket, 1, &body_data);
+        JS_FreeValue(ctx, body_data);
+
+        JSValue chunk_end = JS_NewString(ctx, "\r\n");
+        JS_Call(ctx, write_method, res->socket, 1, &chunk_end);
+        JS_FreeValue(ctx, chunk_end);
+      }
+    } else {
+      JSValue body_data = JS_NewStringLen(ctx, data, data_len);
+      JS_Call(ctx, write_method, res->socket, 1, &body_data);
+      JS_FreeValue(ctx, body_data);
+    }
+  }
+  JS_FreeValue(ctx, write_method);
+}
+
+static void http_response_update_backpressure(JSHttpResponse* res, size_t bytes_written, bool* can_write_more) {
+  if (!res || !res->stream) {
+    return;
+  }
+
+  if (bytes_written > (size_t)res->stream->options.highWaterMark) {
+    res->stream->need_drain = true;
+    if (can_write_more) {
+      *can_write_more = false;
+    }
+  }
+}
+
+static void http_response_flush_buffer(JSHttpResponse* res) {
+  if (!res || !res->stream || res->stream->buffer_size == 0) {
+    return;
+  }
+
+  JSContext* ctx = res->ctx;
+  for (size_t i = 0; i < res->stream->buffer_size; i++) {
+    JSValue chunk_val = res->stream->buffered_data[i];
+    const char* data = JS_ToCString(ctx, chunk_val);
+    if (data) {
+      size_t data_len = strlen(data);
+      http_response_write_to_socket(res, data, data_len);
+      http_response_update_backpressure(res, data_len, NULL);
+      JS_FreeCString(ctx, data);
+    }
+    JS_FreeValue(ctx, chunk_val);
+  }
+  res->stream->buffer_size = 0;
 }
 
 // Response write method
@@ -172,49 +261,26 @@ JSValue js_http_response_write(JSContext* ctx, JSValueConst this_val, int argc, 
       size_t data_len = strlen(data);
       bytes_written = data_len;
 
-      // Phase 4.2: Check if corked - if so, we're buffering
+      // Phase 4.2: Check if corked - if so, buffer and return
       if (res->stream && res->stream->writable_corked > 0) {
-        // Corked - just buffer the write, return true
-        // Actual write will happen on uncork()
+        JSValue chunk_value = JS_NewStringLen(ctx, data, data_len);
+        if (JS_IsException(chunk_value)) {
+          JS_FreeCString(ctx, data);
+          return JS_EXCEPTION;
+        }
+        if (http_response_buffer_chunk(ctx, res->stream, chunk_value) < 0) {
+          JS_FreeCString(ctx, data);
+          return JS_ThrowOutOfMemory(ctx);
+        }
         JS_FreeCString(ctx, data);
         return JS_NewBool(ctx, true);
       }
 
-      JSValue write_method = JS_GetPropertyStr(ctx, res->socket, "write");
-      if (JS_IsFunction(ctx, write_method)) {
-        if (res->use_chunked) {
-          // Write as chunked data: {size_hex}\r\n{data}\r\n
-          if (data_len > 0) {
-            char chunk_header[32];
-            snprintf(chunk_header, sizeof(chunk_header), "%zx\r\n", data_len);
-
-            JSValue chunk_start = JS_NewString(ctx, chunk_header);
-            JS_Call(ctx, write_method, res->socket, 1, &chunk_start);
-            JS_FreeValue(ctx, chunk_start);
-
-            JSValue body_data = JS_NewString(ctx, data);
-            JS_Call(ctx, write_method, res->socket, 1, &body_data);
-            JS_FreeValue(ctx, body_data);
-
-            JSValue chunk_end = JS_NewString(ctx, "\r\n");
-            JS_Call(ctx, write_method, res->socket, 1, &chunk_end);
-            JS_FreeValue(ctx, chunk_end);
-          }
-        } else {
-          // Write directly (with Content-Length)
-          JSValue body_data = JS_NewString(ctx, data);
-          JS_Call(ctx, write_method, res->socket, 1, &body_data);
-          JS_FreeValue(ctx, body_data);
-        }
-      }
-      JS_FreeValue(ctx, write_method);
+      http_response_write_to_socket(res, data, data_len);
       JS_FreeCString(ctx, data);
 
       // Phase 4.2: Check for back-pressure
-      if (res->stream && bytes_written > res->stream->options.highWaterMark) {
-        can_write_more = false;
-        res->stream->need_drain = true;
-      }
+      http_response_update_backpressure(res, bytes_written, &can_write_more);
     }
   }
 
@@ -242,6 +308,11 @@ JSValue js_http_response_end(JSContext* ctx, JSValueConst this_val, int argc, JS
   // Ensure headers are sent even for empty response
   if (!res->headers_sent) {
     js_http_response_write(ctx, this_val, 0, NULL);
+  }
+
+  if (res->stream) {
+    res->stream->writable_corked = 0;
+    http_response_flush_buffer(res);
   }
 
   // Send chunked terminator if using chunked encoding
@@ -283,11 +354,26 @@ JSValue js_http_response_end(JSContext* ctx, JSValueConst this_val, int argc, JS
   // Close or keep-alive based on Connection header
   // For now, always close (keep-alive will be enhanced in connection management)
   if (!JS_IsUndefined(res->socket)) {
-    JSValue end_method = JS_GetPropertyStr(ctx, res->socket, "end");
+    JSValue socket_val = JS_DupValue(ctx, res->socket);
+
+    JSValue end_method = JS_GetPropertyStr(ctx, socket_val, "end");
     if (JS_IsFunction(ctx, end_method)) {
-      JS_Call(ctx, end_method, res->socket, 0, NULL);
+      JSRT_Debug_Truncated("[debug] server calling socket.end\n");
+      JSValue result = JS_Call(ctx, end_method, socket_val, 0, NULL);
+      JS_FreeValue(ctx, result);
     }
     JS_FreeValue(ctx, end_method);
+
+    JSValue unref_method = JS_GetPropertyStr(ctx, socket_val, "unref");
+    if (JS_IsFunction(ctx, unref_method)) {
+      JSRT_Debug_Truncated("[debug] server calling socket.unref\n");
+      JSValue result = JS_Call(ctx, unref_method, socket_val, 0, NULL);
+      JS_FreeValue(ctx, result);
+    }
+    JS_FreeValue(ctx, unref_method);
+
+    res->socket = JS_UNDEFINED;
+    JS_FreeValue(ctx, socket_val);
   }
 
   return JS_UNDEFINED;
@@ -507,6 +593,8 @@ JSValue js_http_response_constructor(JSContext* ctx, JSValueConst new_target, in
   JS_SetPropertyStr(ctx, obj, "writableEnded", JS_NewBool(ctx, false));
   JS_SetPropertyStr(ctx, obj, "writableFinished", JS_NewBool(ctx, false));
 
+  setup_event_emitter_inheritance(ctx, obj);
+
   return obj;
 }
 
@@ -561,6 +649,10 @@ JSValue js_http_response_uncork(JSContext* ctx, JSValueConst this_val, int argc,
   // Decrement cork count
   if (res->stream->writable_corked > 0) {
     res->stream->writable_corked--;
+  }
+
+  if (res->stream->writable_corked == 0) {
+    http_response_flush_buffer(res);
   }
 
   // If fully uncorked and we need drain, emit it

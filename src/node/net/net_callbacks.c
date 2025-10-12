@@ -1,3 +1,4 @@
+#include "../../../src/util/debug.h"
 #include "net_internal.h"
 
 // DNS resolution callback - called after uv_getaddrinfo completes
@@ -19,6 +20,7 @@ void on_getaddrinfo(uv_getaddrinfo_t* req, int status, struct addrinfo* res) {
     // DNS lookup failed - emit error event
     conn->connecting = false;
     conn->had_error = true;
+    js_net_connection_clear_pending_writes(conn);
 
     if (!JS_IsUndefined(conn->socket_obj)) {
       JSValue error = JS_NewError(ctx);
@@ -70,6 +72,7 @@ void on_getaddrinfo(uv_getaddrinfo_t* req, int status, struct addrinfo* res) {
       // Connection failed - emit error
       conn->connecting = false;
       conn->had_error = true;
+      js_net_connection_clear_pending_writes(conn);
 
       if (!JS_IsUndefined(conn->socket_obj)) {
         JSValue error = JS_NewError(ctx);
@@ -130,10 +133,13 @@ void on_socket_read(uv_stream_t* stream, ssize_t nread, const uv_buf_t* buf) {
     goto cleanup;
   }
 
+  JSContext* ctx = conn->ctx;
+  bool is_http_client = conn->is_http_client;
+  JSRT_Debug_Truncated("[debug] on_socket_read nread=%zd connected=%d connecting=%d http_client=%d\n", nread,
+                       conn->connected, conn->connecting, is_http_client);
+
   // Mark that we're in a callback to prevent finalization
   conn->in_callback = true;
-
-  JSContext* ctx = conn->ctx;
 
   // Check if socket object is still valid (not freed by GC)
   if (JS_IsUndefined(conn->socket_obj) || JS_IsNull(conn->socket_obj)) {
@@ -198,6 +204,13 @@ void on_socket_read(uv_stream_t* stream, ssize_t nread, const uv_buf_t* buf) {
       JSValue data = JS_NewStringLen(ctx, buf->base, nread);
       JSValue args[] = {JS_NewString(ctx, "data"), data};
       JSValue result = JS_Call(ctx, emit, conn->socket_obj, 2, args);
+      if (JS_IsException(result)) {
+        JSValue exception = JS_GetException(ctx);
+        const char* err_str = JS_ToCString(ctx, exception);
+        JSRT_Debug_Truncated("[debug] emit(data) exception: %s\n", err_str);
+        JS_FreeCString(ctx, err_str);
+        JS_FreeValue(ctx, exception);
+      }
       JS_FreeValue(ctx, result);
       JS_FreeValue(ctx, args[0]);
       JS_FreeValue(ctx, args[1]);
@@ -291,9 +304,70 @@ void on_connect(uv_connect_t* req, int status) {
     conn->connected = true;
     conn->connecting = false;
 
-    // CRITICAL FIX: Start reading from the socket to enable data events
-    // Without this, socket.write() sends data but we never receive responses!
+    // Start reading from the socket to enable data events
     uv_read_start((uv_stream_t*)&conn->handle, on_socket_alloc, on_socket_read);
+
+    // Flush any pending writes queued before the connection completed
+    JSPendingWrite* pending = js_net_connection_detach_pending_writes(conn);
+    bool flush_failed = false;
+    int flush_error_code = 0;
+    const char* flush_error_message = NULL;
+
+    while (pending) {
+      JSPendingWrite* next = pending->next;
+      uv_write_t* write_req = malloc(sizeof(uv_write_t));
+      if (!write_req) {
+        flush_failed = true;
+        flush_error_code = UV_ENOMEM;
+        flush_error_message = uv_strerror(UV_ENOMEM);
+        if (pending->data) {
+          free(pending->data);
+        }
+      } else {
+        write_req->data = pending->data;
+        uv_buf_t buf = uv_buf_init(pending->data, (unsigned int)pending->len);
+        int write_result = uv_write(write_req, (uv_stream_t*)&conn->handle, &buf, 1, on_socket_write_complete);
+        if (write_result < 0) {
+          flush_failed = true;
+          flush_error_code = write_result;
+          flush_error_message = uv_strerror(write_result);
+          free(pending->data);
+          free(write_req);
+        } else {
+          conn->bytes_written += pending->len;
+        }
+      }
+
+      free(pending);
+      pending = next;
+
+      if (flush_failed) {
+        js_net_connection_free_pending_list(pending);
+        pending = NULL;
+      }
+    }
+
+    if (flush_failed) {
+      conn->had_error = true;
+      if (!JS_IsUndefined(conn->socket_obj)) {
+        JSValue emit_err = JS_GetPropertyStr(ctx, conn->socket_obj, "emit");
+        if (JS_IsFunction(ctx, emit_err)) {
+          JSValue error = JS_NewError(ctx);
+          if (flush_error_message) {
+            JS_SetPropertyStr(ctx, error, "message", JS_NewString(ctx, flush_error_message));
+          }
+          if (flush_error_code != 0) {
+            JS_SetPropertyStr(ctx, error, "code", JS_NewString(ctx, uv_err_name(flush_error_code)));
+          }
+
+          JSValue args[] = {JS_NewString(ctx, "error"), error};
+          JS_Call(ctx, emit_err, conn->socket_obj, 2, args);
+          JS_FreeValue(ctx, args[0]);
+          JS_FreeValue(ctx, args[1]);
+        }
+        JS_FreeValue(ctx, emit_err);
+      }
+    }
 
     // Emit 'connect' event
     JSValue emit = JS_GetPropertyStr(ctx, conn->socket_obj, "emit");
@@ -312,9 +386,18 @@ void on_connect(uv_connect_t* req, int status) {
       JS_FreeValue(ctx, args[0]);
     }
     JS_FreeValue(ctx, emit);
+
+    if (conn->end_after_connect) {
+      conn->shutdown_req.data = conn;
+      uv_shutdown(&conn->shutdown_req, (uv_stream_t*)&conn->handle, NULL);
+      conn->connected = false;
+      conn->end_after_connect = false;
+    }
   } else {
     conn->connecting = false;
     conn->had_error = true;
+    conn->end_after_connect = false;
+    js_net_connection_clear_pending_writes(conn);
 
     // Emit 'error' event
     JSValue emit = JS_GetPropertyStr(ctx, conn->socket_obj, "emit");

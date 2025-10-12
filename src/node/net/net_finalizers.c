@@ -43,6 +43,10 @@ void js_socket_finalizer(JSRuntime* rt, JSValue val) {
 
   // Mark socket object as invalid to prevent use-after-free in callbacks
   conn->socket_obj = JS_UNDEFINED;
+  if (!JS_IsUndefined(conn->client_request_obj)) {
+    JS_FreeValueRT(rt, conn->client_request_obj);
+    conn->client_request_obj = JS_UNDEFINED;
+  }
 
   // Close timeout timer if it's initialized
   if (conn->timeout_timer_initialized && conn->timeout_timer) {
@@ -59,6 +63,9 @@ void js_socket_finalizer(JSRuntime* rt, JSValue val) {
     free(conn->encoding);
     conn->encoding = NULL;
   }
+
+  // Free any queued pending writes
+  js_net_connection_clear_pending_writes(conn);
 
   // Close socket handle - callback will free the struct
   if (!uv_is_closing((uv_handle_t*)&conn->handle)) {

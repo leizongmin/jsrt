@@ -1,3 +1,4 @@
+#include "../../runtime.h"
 #include "../stream/stream_internal.h"
 #include "http_internal.h"
 
@@ -60,7 +61,7 @@ JSValue js_http_request_constructor(JSContext* ctx, JSValueConst new_target, int
   }
 
   // Initialize Readable-specific state
-  req->stream->flowing = false;  // Start in paused mode
+  req->stream->flowing = true;  // Start in flowing mode
   req->stream->reading = false;
   req->stream->ended_emitted = false;
   req->stream->readable_emitted = false;
@@ -553,6 +554,16 @@ void js_http_incoming_end(JSContext* ctx, JSValue incoming_msg) {
           JS_FreeValue(ctx, result);
         }
         JS_FreeValue(ctx, end_method);
+      }
+    }
+  }
+
+  JSRT_Runtime* runtime = JS_GetContextOpaque(ctx);
+  if (runtime) {
+    JSRuntime* qjs_runtime = JS_GetRuntime(ctx);
+    while (JS_IsJobPending(qjs_runtime)) {
+      if (!JSRT_RuntimeRunTicket(runtime)) {
+        break;
       }
     }
   }

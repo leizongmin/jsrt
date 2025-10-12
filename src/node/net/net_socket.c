@@ -1,4 +1,77 @@
+#include "../../util/debug.h"
 #include "net_internal.h"
+
+bool js_net_connection_queue_write(JSNetConnection* conn, const char* data, size_t len) {
+  if (!conn || data == NULL) {
+    return false;
+  }
+
+  // Allocate node for pending write
+  JSPendingWrite* item = malloc(sizeof(JSPendingWrite));
+  if (!item) {
+    return false;
+  }
+
+  // Ensure we always allocate at least one byte to avoid malloc(0)
+  size_t alloc_len = len > 0 ? len : 1;
+  char* copy = malloc(alloc_len);
+  if (!copy) {
+    free(item);
+    return false;
+  }
+
+  if (len > 0) {
+    memcpy(copy, data, len);
+  } else {
+    copy[0] = '\0';
+  }
+
+  item->data = copy;
+  item->len = len;
+  item->next = NULL;
+
+  if (!conn->pending_writes_head) {
+    conn->pending_writes_head = item;
+    conn->pending_writes_tail = item;
+  } else {
+    conn->pending_writes_tail->next = item;
+    conn->pending_writes_tail = item;
+  }
+
+  return true;
+}
+
+JSPendingWrite* js_net_connection_detach_pending_writes(JSNetConnection* conn) {
+  if (!conn) {
+    return NULL;
+  }
+
+  JSPendingWrite* head = conn->pending_writes_head;
+  conn->pending_writes_head = NULL;
+  conn->pending_writes_tail = NULL;
+  return head;
+}
+
+void js_net_connection_free_pending_list(JSPendingWrite* head) {
+  JSPendingWrite* current = head;
+  while (current) {
+    JSPendingWrite* next = current->next;
+    if (current->data) {
+      free(current->data);
+    }
+    free(current);
+    current = next;
+  }
+}
+
+void js_net_connection_clear_pending_writes(JSNetConnection* conn) {
+  if (!conn) {
+    return;
+  }
+
+  JSPendingWrite* head = js_net_connection_detach_pending_writes(conn);
+  js_net_connection_free_pending_list(head);
+}
 
 // Socket methods
 JSValue js_socket_connect(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
@@ -48,6 +121,11 @@ JSValue js_socket_connect(JSContext* ctx, JSValueConst this_val, int argc, JSVal
 
   // Set connecting state
   conn->connecting = true;
+  conn->connected = false;
+  conn->end_after_connect = false;
+
+  // Clear any pending data from previous attempts
+  js_net_connection_clear_pending_writes(conn);
 
   // Resolve address and connect
   // Try IPv4 first, then IPv6, then use DNS resolution for hostnames
@@ -82,6 +160,7 @@ JSValue js_socket_connect(JSContext* ctx, JSValueConst this_val, int argc, JSVal
       if (result < 0) {
         conn->connecting = false;
         // Free resources before error return
+        js_net_connection_clear_pending_writes(conn);
         char* error_host = conn->host;
         conn->host = NULL;
         JSValue error = JS_ThrowInternalError(ctx, "DNS lookup failed for %s: %s", error_host, uv_strerror(result));
@@ -102,6 +181,7 @@ JSValue js_socket_connect(JSContext* ctx, JSValueConst this_val, int argc, JSVal
   if (result < 0) {
     conn->connecting = false;
     // Free resources before error return
+    js_net_connection_clear_pending_writes(conn);
     if (conn->host) {
       free(conn->host);
       conn->host = NULL;
@@ -119,8 +199,8 @@ JSValue js_socket_connect(JSContext* ctx, JSValueConst this_val, int argc, JSVal
 
 JSValue js_socket_write(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
   JSNetConnection* conn = JS_GetOpaque(this_val, js_socket_class_id);
-  if (!conn || conn->destroyed || !conn->connected) {
-    return JS_ThrowTypeError(ctx, "Socket is not connected");
+  if (!conn || conn->destroyed) {
+    return JS_ThrowTypeError(ctx, "Socket is destroyed");
   }
 
   if (argc < 1) {
@@ -134,14 +214,31 @@ JSValue js_socket_write(JSContext* ctx, JSValueConst this_val, int argc, JSValue
   }
 
   size_t len = strlen(data);
+  size_t alloc_len = len > 0 ? len : 1;
+
+  if (!conn->connected) {
+    if (conn->connecting) {
+      bool queued = js_net_connection_queue_write(conn, data, len);
+      JS_FreeCString(ctx, data);
+      if (!queued) {
+        return JS_ThrowOutOfMemory(ctx);
+      }
+      return JS_NewBool(ctx, true);
+    }
+
+    JS_FreeCString(ctx, data);
+    return JS_ThrowTypeError(ctx, "Socket is not connected");
+  }
 
   // Allocate buffer that will persist during async write
-  char* buffer = malloc(len);
+  char* buffer = malloc(alloc_len);
   if (!buffer) {
     JS_FreeCString(ctx, data);
     return JS_ThrowOutOfMemory(ctx);
   }
-  memcpy(buffer, data, len);
+  if (len > 0) {
+    memcpy(buffer, data, len);
+  }
   JS_FreeCString(ctx, data);
 
   // Create write request
@@ -155,6 +252,8 @@ JSValue js_socket_write(JSContext* ctx, JSValueConst this_val, int argc, JSValue
   uv_buf_t buf = uv_buf_init(buffer, len);
 
   // Perform async write
+  JSRT_Debug_Truncated("[debug] socket write len=%zu connected=%d connecting=%d\n", len, conn->connected,
+                       conn->connecting);
   int result = uv_write(write_req, (uv_stream_t*)&conn->handle, &buf, 1, on_socket_write_complete);
 
   if (result < 0) {
@@ -180,6 +279,8 @@ JSValue js_socket_end(JSContext* ctx, JSValueConst this_val, int argc, JSValueCo
     conn->shutdown_req.data = conn;
     uv_shutdown(&conn->shutdown_req, (uv_stream_t*)&conn->handle, NULL);
     conn->connected = false;
+  } else if (conn->connecting) {
+    conn->end_after_connect = true;
   }
 
   return JS_UNDEFINED;
@@ -188,13 +289,27 @@ JSValue js_socket_end(JSContext* ctx, JSValueConst this_val, int argc, JSValueCo
 JSValue js_socket_destroy(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
   JSNetConnection* conn = JS_GetOpaque(this_val, js_socket_class_id);
   if (!conn || conn->destroyed) {
+    JSRT_Debug_Truncated("[debug] js_socket_destroy skipped conn=%p destroyed=%d\n", conn, conn ? conn->destroyed : -1);
     return JS_UNDEFINED;
   }
 
-  // Don't manually close the handle here - let the finalizer handle cleanup
-  // This avoids double-close issues and use-after-free bugs
+  JSRT_Debug_Truncated("[debug] js_socket_destroy conn=%p\n", conn);
   conn->destroyed = true;
   conn->connected = false;
+  conn->connecting = false;
+  conn->end_after_connect = false;
+
+  // Drop any queued writes
+  js_net_connection_clear_pending_writes(conn);
+
+  // Close the underlying handle if still active
+  if (!uv_is_closing((uv_handle_t*)&conn->handle)) {
+    if (conn->close_count == 0) {
+      conn->close_count = 1;
+    }
+    conn->handle.data = conn;
+    uv_close((uv_handle_t*)&conn->handle, socket_close_callback);
+  }
 
   // Emit 'close' event immediately (user-initiated destroy)
   JSValue emit = JS_GetPropertyStr(ctx, conn->socket_obj, "emit");
@@ -362,7 +477,7 @@ JSValue js_socket_ref(JSContext* ctx, JSValueConst this_val, int argc, JSValueCo
     return this_val;
   }
 
-  if (conn->connected) {
+  if (!uv_is_closing((uv_handle_t*)&conn->handle)) {
     uv_ref((uv_handle_t*)&conn->handle);
   }
 
@@ -375,7 +490,7 @@ JSValue js_socket_unref(JSContext* ctx, JSValueConst this_val, int argc, JSValue
     return this_val;
   }
 
-  if (conn->connected) {
+  if (!uv_is_closing((uv_handle_t*)&conn->handle)) {
     uv_unref((uv_handle_t*)&conn->handle);
   }
 
@@ -435,10 +550,12 @@ JSValue js_socket_constructor(JSContext* ctx, JSValueConst new_target, int argc,
     JS_FreeValue(ctx, obj);
     return JS_ThrowOutOfMemory(ctx);
   }
+  JSRT_Debug_Truncated("[debug] new net.Socket conn=%p\n", conn);
 
   conn->type_tag = NET_TYPE_SOCKET;  // Set type tag for cleanup callback
   conn->ctx = ctx;
   conn->socket_obj = JS_DupValue(ctx, obj);
+  conn->client_request_obj = JS_UNDEFINED;
   conn->connected = false;
   conn->destroyed = false;
   conn->connecting = false;
@@ -454,6 +571,10 @@ JSValue js_socket_constructor(JSContext* ctx, JSValueConst new_target, int argc,
   conn->bytes_read = 0;
   conn->bytes_written = 0;
   conn->had_error = false;
+  conn->end_after_connect = false;
+  conn->is_http_client = false;
+  conn->pending_writes_head = NULL;
+  conn->pending_writes_tail = NULL;
 
   // Parse constructor options if provided
   if (argc > 0 && JS_IsObject(argv[0])) {

@@ -500,12 +500,11 @@ asyncTest('Stream properties have correct values', async () => {
 // Run all tests
 // =============================================================================
 
-console.log('Running IncomingMessage Readable stream tests...\n');
-
 // Wait for all async tests to complete
 setTimeout(() => {
-  console.log(`\n${testsPassed}/${testsRun} tests passed`);
   if (testsPassed !== testsRun) {
+    console.log(`✗ ${testsRun - testsPassed} test(s) failed`);
     process.exit(1);
   }
-}, 5000); // Give tests time to complete
+  process.exit(0);
+}, 3000); // Give tests time to complete

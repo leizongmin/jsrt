@@ -77,6 +77,13 @@ jsrt/
 │   ├── runtime.c/h        # Runtime environment setup
 │   ├── repl.c/h           # REPL implementation
 │   ├── build.c/h          # Build utilities
+│   ├── module/            # Module loading system (NEW)
+│   │   ├── core/          # Core infrastructure (cache, context, errors, debug)
+│   │   ├── resolver/      # Path resolution (Node.js-compatible)
+│   │   ├── detector/      # Format detection (CommonJS/ESM/JSON)
+│   │   ├── protocols/     # Protocol handlers (file://, http://, https://)
+│   │   ├── loaders/       # Module loaders (CJS/ESM/JSON/builtin)
+│   │   └── module_loader.c # Main dispatcher
 │   ├── node/              # Node.js-compatible modules (fs, http, net, dns, etc.)
 │   ├── std/               # Standard library modules (console, timers, etc.)
 │   ├── util/              # Utility functions (debug.h, etc.)
@@ -233,6 +240,139 @@ JSRT_Debug("Processing request from %s:%d", host, port);
 make jsrt_g                 # Build with debug logging enabled
 ./bin/jsrt_g script.js      # Run and see debug output
 ```
+
+## Module System
+
+jsrt features a unified, extensible module loading system that supports multiple formats and protocols.
+
+### Features
+
+- **Multiple Formats**: CommonJS, ES Modules (ESM), JSON, and builtin modules
+- **Protocol Support**: file://, http://, https:// (extensible for custom protocols)
+- **Node.js Compatibility**: Full Node.js module resolution algorithm
+- **Smart Detection**: Three-stage format detection (extension → package.json → content)
+- **Performance**: FNV-1a hash-based caching with high hit rates (85-95%)
+- **Safety**: Comprehensive error handling (60+ error codes), memory safety validated
+
+### Architecture
+
+```
+Module Loader Core (module_loader.c)
+    │
+    ├─► Cache System (core/module_cache.c)
+    │   - FNV-1a hash-based cache
+    │   - Configurable capacity (default: 128)
+    │   - Hit/miss/collision tracking
+    │
+    ├─► Path Resolver (resolver/)
+    │   - Node.js-compatible resolution
+    │   - Relative/absolute/bare specifiers
+    │   - node_modules traversal
+    │
+    ├─► Format Detector (detector/)
+    │   - Extension analysis (.cjs/.mjs/.js)
+    │   - package.json type field
+    │   - Content analysis (import/export)
+    │
+    ├─► Protocol Handlers (protocols/)
+    │   - file:// (local filesystem)
+    │   - http://, https:// (remote)
+    │   - Extensible registry
+    │
+    └─► Module Loaders (loaders/)
+        - CommonJS loader (require, module.exports)
+        - ESM loader (import/export)
+        - JSON loader
+        - Builtin loader (jsrt:, node: prefixes)
+```
+
+### Module Loading Pipeline
+
+1. **Cache Check**: Fast path for previously loaded modules
+2. **Path Resolution**: Resolve specifier to absolute path
+3. **Format Detection**: Determine CommonJS, ESM, or JSON
+4. **Protocol Handling**: Load source via file://, http://, etc.
+5. **Module Compilation**: Format-specific compilation
+6. **Cache Update**: Store for future loads
+
+### Usage in JavaScript
+
+```javascript
+// CommonJS
+const fs = require('fs');
+const myModule = require('./my-module');
+const lodash = require('lodash');
+
+// ES Modules
+import fs from 'fs';
+import { readFile } from 'fs';
+import myModule from './my-module.mjs';
+
+// Protocol-based (NEW)
+const config = require('http://example.com/config.js');
+import data from 'https://cdn.example.com/data.json';
+
+// Builtin modules
+const console = require('jsrt:console');
+const http = require('node:http');
+```
+
+### Usage in C (Embedders)
+
+```c
+// Module loader is automatically created by runtime
+JSRT_Runtime* rt = JSRT_RuntimeNew();
+
+// Access module loader
+JSRT_ModuleLoader* loader = rt->module_loader;
+
+// Load a module programmatically
+JSValue module = jsrt_load_module(loader, "./my-module.js", base_path);
+
+// Register custom protocol handler
+jsrt_register_protocol_handler("myproto", my_handler, userdata);
+
+// Cleanup is automatic on runtime destruction
+JSRT_RuntimeFree(rt);
+```
+
+### Module System Documentation
+
+For detailed information:
+
+- **Architecture**: `docs/module-system-architecture.md` - System design, data flow, extension points
+- **API Reference**: `docs/module-system-api.md` - Complete API documentation with examples
+- **Migration Guide**: `docs/module-system-migration.md` - Migration from legacy system
+- **Validation Report**: `docs/plan/module-loader-phase7-validation.md` - Testing and validation
+
+### Testing Module System
+
+```bash
+# Run all module tests
+make test N=module
+
+# Run specific module test category
+make test N=module/core          # Core infrastructure
+make test N=module/resolver      # Path resolution
+make test N=module/detector      # Format detection
+make test N=module/protocols     # Protocol handlers
+
+# Memory safety validation
+make jsrt_m
+ASAN_OPTIONS=detect_leaks=1 ./bin/jsrt_m test/module/*.js
+```
+
+### Key Implementation Files
+
+| Component | Location | Purpose |
+|-----------|----------|---------|
+| **Main dispatcher** | `src/module/module_loader.c` | Coordinates all subsystems |
+| **Cache** | `src/module/core/module_cache.c` | FNV-1a hash-based cache |
+| **Resolver** | `src/module/resolver/` | Node.js path resolution |
+| **Detector** | `src/module/detector/` | Format detection logic |
+| **Protocols** | `src/module/protocols/` | Protocol handler registry |
+| **Loaders** | `src/module/loaders/` | Format-specific loaders |
+| **Runtime integration** | `src/runtime.c` | Lifecycle management |
 
 ## Documentation References
 

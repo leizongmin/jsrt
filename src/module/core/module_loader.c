@@ -2,13 +2,18 @@
  * Module Loader Core Implementation
  *
  * This is the main entry point for the module loading system.
- * Currently implements basic structure with cache integration.
- * Phase 2+ will add resolver, detector, and protocol handlers.
+ * Integrates all phases: cache, resolver, detector, protocols, and loaders.
  */
 
 #include "module_loader.h"
 #include <stdlib.h>
 #include <string.h>
+#include "../detector/format_detector.h"
+#include "../loaders/builtin_loader.h"
+#include "../loaders/commonjs_loader.h"
+#include "../loaders/esm_loader.h"
+#include "../protocols/protocol_dispatcher.h"
+#include "../resolver/path_resolver.h"
 #include "../util/module_debug.h"
 #include "../util/module_errors.h"
 #include "module_cache.h"
@@ -44,14 +49,14 @@ static char* normalize_specifier(const char* specifier, const char* base_path) {
 }
 
 /**
- * Load module (placeholder implementation)
+ * Load module - Full implementation integrating all phases
  *
- * This is a minimal implementation that demonstrates the structure.
- * Future phases will implement:
- * - Phase 2: Resolver integration
- * - Phase 3: Type detection
- * - Phase 4: Protocol handlers (file, http, data, builtin)
- * - Phase 5: Format loaders (ESM, CommonJS, JSON, WASM)
+ * Complete pipeline:
+ * - Phase 1: Cache check
+ * - Phase 2: Path resolution
+ * - Phase 3: Format detection
+ * - Phase 4: Protocol handling
+ * - Phase 5: Format loading (ESM, CommonJS, builtin)
  */
 JSValue jsrt_load_module(JSRT_ModuleLoader* loader, const char* specifier, const char* base_path) {
   if (!loader) {
@@ -68,58 +73,95 @@ JSValue jsrt_load_module(JSRT_ModuleLoader* loader, const char* specifier, const
 
   loader->loads_total++;
 
-  // Step 1: Normalize specifier for cache key
-  char* cache_key = normalize_specifier(specifier, base_path);
-  if (!cache_key) {
-    loader->loads_failed++;
-    return jsrt_module_throw_error(loader->ctx, JSRT_MODULE_INTERNAL_ERROR, "Failed to normalize module specifier");
+  // Step 1: Check if it's a builtin module (jsrt: or node:)
+  if (jsrt_is_builtin_specifier(specifier)) {
+    MODULE_Debug_Loader("Detected builtin module specifier");
+    JSValue result = jsrt_load_builtin_module(loader->ctx, loader, specifier);
+    if (JS_IsException(result)) {
+      loader->loads_failed++;
+    } else {
+      loader->loads_success++;
+    }
+    return result;
   }
 
-  MODULE_Debug_Cache("Cache key: %s", cache_key);
+  // Step 2: Resolve module specifier to absolute path/URL
+  JSRT_ResolvedPath* resolved = jsrt_resolve_path(loader->ctx, specifier, base_path);
+  if (!resolved) {
+    loader->loads_failed++;
+    return jsrt_module_throw_error(loader->ctx, JSRT_MODULE_NOT_FOUND, "Cannot resolve module specifier: %s",
+                                   specifier);
+  }
 
-  // Step 2: Check cache if enabled
+  MODULE_Debug_Loader("Resolved to: %s (protocol: %s)", resolved->resolved_path,
+                      resolved->protocol ? resolved->protocol : "file");
+
+  // Step 3: Check cache with resolved path
   if (loader->enable_cache && loader->cache) {
-    JSValue cached = jsrt_module_cache_get(loader->cache, cache_key);
+    JSValue cached = jsrt_module_cache_get(loader->cache, resolved->resolved_path);
     if (!JS_IsUndefined(cached)) {
-      MODULE_Debug_Loader("Cache HIT for: %s", cache_key);
+      MODULE_Debug_Loader("Cache HIT for: %s", resolved->resolved_path);
       loader->cache_hits++;
       loader->loads_success++;
-      free(cache_key);
+      jsrt_resolved_path_free(resolved);
       return cached;  // jsrt_module_cache_get already duplicated the value
     }
 
-    MODULE_Debug_Loader("Cache MISS for: %s", cache_key);
+    MODULE_Debug_Loader("Cache MISS for: %s", resolved->resolved_path);
     loader->cache_misses++;
   }
 
-  // Step 3: Resolve module specifier to absolute path/URL
-  // TODO Phase 2: Call resolver component
-  MODULE_Debug_Loader("TODO: Resolve specifier (Phase 2)");
-  const char* resolved_path = specifier;  // Placeholder
+  // Step 4: Detect module format
+  JSRT_ModuleFormat format = jsrt_detect_module_format(loader->ctx, resolved->resolved_path, NULL, 0);
+  MODULE_Debug_Loader("Detected format: %s", jsrt_module_format_to_string(format));
 
-  // Step 4: Detect module type
-  // TODO Phase 3: Call detector component
-  MODULE_Debug_Loader("TODO: Detect module type (Phase 3)");
-  // ModuleType type = UNKNOWN;  // Placeholder
+  // Step 5: Load module based on format
+  JSValue result = JS_UNDEFINED;
 
-  // Step 5: Select protocol handler
-  // TODO Phase 4: Select handler based on resolved_path protocol
-  MODULE_Debug_Loader("TODO: Select protocol handler (Phase 4)");
+  switch (format) {
+    case JSRT_MODULE_FORMAT_COMMONJS:
+      MODULE_Debug_Loader("Loading as CommonJS module");
+      result = jsrt_load_commonjs_module(loader->ctx, loader, resolved->resolved_path, specifier);
+      break;
 
-  // Step 6: Load module content
-  // TODO Phase 4: Call protocol handler to load content
-  MODULE_Debug_Loader("TODO: Load module content (Phase 4)");
+    case JSRT_MODULE_FORMAT_ESM:
+      MODULE_Debug_Loader("Loading as ES module");
+      // For ES modules, we need to return the module's exports as a value
+      // This is a temporary wrapper - full ESM support needs QuickJS integration
+      {
+        JSModuleDef* esm_module = jsrt_load_esm_module(loader->ctx, loader, resolved->resolved_path, specifier);
+        if (esm_module) {
+          // Get exports from the module
+          result = jsrt_get_esm_exports(loader->ctx, esm_module);
+        } else {
+          result = JS_EXCEPTION;
+        }
+      }
+      break;
 
-  // Step 7: Parse and execute module
-  // TODO Phase 5: Call format loader (ESM, CommonJS, JSON, WASM)
-  MODULE_Debug_Loader("TODO: Parse and execute module (Phase 5)");
+    case JSRT_MODULE_FORMAT_JSON:
+      MODULE_Debug_Loader("Loading as JSON module");
+      // TODO: Implement JSON loader
+      result = jsrt_module_throw_error(loader->ctx, JSRT_MODULE_LOAD_FAILED, "JSON modules not yet implemented");
+      break;
 
-  // For now, return an error indicating the feature is not yet implemented
-  free(cache_key);
-  loader->loads_failed++;
+    case JSRT_MODULE_FORMAT_UNKNOWN:
+    default:
+      MODULE_Debug_Loader("Unknown module format, defaulting to CommonJS");
+      // Default to CommonJS for backward compatibility
+      result = jsrt_load_commonjs_module(loader->ctx, loader, resolved->resolved_path, specifier);
+      break;
+  }
 
-  return jsrt_module_throw_error(loader->ctx, JSRT_MODULE_LOAD_FAILED,
-                                 "Module loading not fully implemented yet (Phase 1 complete, Phases 2-5 pending)");
+  jsrt_resolved_path_free(resolved);
+
+  if (JS_IsException(result)) {
+    loader->loads_failed++;
+  } else {
+    loader->loads_success++;
+  }
+
+  return result;
 }
 
 /**

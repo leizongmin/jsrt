@@ -88,10 +88,15 @@ JSRT_ReadFileResult jsrt_load_content_by_protocol(const char* url) {
 
   // Extract protocol
   char* protocol = jsrt_extract_protocol(url);
+
+  // If no protocol, default to "file" for regular file paths
   if (!protocol) {
-    MODULE_Debug_Error("Failed to extract protocol from URL: %s", url);
-    result.error = JSRT_READ_FILE_ERROR_FILE_NOT_FOUND;
-    return result;
+    MODULE_Debug_Protocol("No protocol found, defaulting to file:// handler for: %s", url);
+    protocol = strdup("file");
+    if (!protocol) {
+      result.error = JSRT_READ_FILE_ERROR_READ_ERROR;
+      return result;
+    }
   }
 
   // Get handler for protocol

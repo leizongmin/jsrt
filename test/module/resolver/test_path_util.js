@@ -23,7 +23,7 @@ try {
 // Test 2: Relative path from absolute
 try {
   const wrapper = require(
-    process.cwd() + '/test/module/resolver/test_path_util_wrapper.js'
+    process.cwd() + '/test/module/resolver/path_util_wrapper.js'
   );
   assert.strictEqual(
     wrapper.relativeValue,

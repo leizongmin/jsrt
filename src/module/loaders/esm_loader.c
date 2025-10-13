@@ -105,7 +105,7 @@ static JSValue js_import_meta_resolve(JSContext* ctx, JSValueConst this_val, int
   JSRT_ModuleLoader* loader = (JSRT_ModuleLoader*)loader_ptr;
   (void)loader;  // Use loader if needed
 
-  MODULE_Debug_Loader("import.meta.resolve('%s') from: %s", specifier, module_path);
+  MODULE_DEBUG_LOADER("import.meta.resolve('%s') from: %s", specifier, module_path);
 
   // Resolve the specifier using path resolver
   JSRT_ResolvedPath* resolved = jsrt_resolve_path(ctx, specifier, module_path);
@@ -164,12 +164,12 @@ int jsrt_setup_import_meta(JSContext* ctx, JSModuleDef* module, JSRT_ModuleLoade
     return -1;
   }
 
-  MODULE_Debug_Loader("Setting up import.meta for: %s", resolved_path);
+  MODULE_DEBUG_LOADER("Setting up import.meta for: %s", resolved_path);
 
   // Get import.meta object
   JSValue meta_obj = JS_GetImportMeta(ctx, module);
   if (JS_IsUndefined(meta_obj)) {
-    MODULE_Debug_Error("Failed to get import.meta object");
+    MODULE_DEBUG_ERROR("Failed to get import.meta object");
     return -1;
   }
 
@@ -201,7 +201,7 @@ int jsrt_setup_import_meta(JSContext* ctx, JSModuleDef* module, JSRT_ModuleLoade
 
   JS_FreeValue(ctx, meta_obj);
 
-  MODULE_Debug_Loader("import.meta setup complete for: %s", resolved_path);
+  MODULE_DEBUG_LOADER("import.meta setup complete for: %s", resolved_path);
   return 0;
 }
 
@@ -211,11 +211,11 @@ int jsrt_setup_import_meta(JSContext* ctx, JSModuleDef* module, JSRT_ModuleLoade
 JSModuleDef* jsrt_load_esm_module(JSContext* ctx, JSRT_ModuleLoader* loader, const char* resolved_path,
                                   const char* specifier) {
   if (!ctx || !loader || !resolved_path) {
-    MODULE_Debug_Error("Invalid arguments to jsrt_load_esm_module");
+    MODULE_DEBUG_ERROR("Invalid arguments to jsrt_load_esm_module");
     return NULL;
   }
 
-  MODULE_Debug_Loader("=== Loading ES module: %s ===", resolved_path);
+  MODULE_DEBUG_LOADER("=== Loading ES module: %s ===", resolved_path);
 
   // Note: ES modules are cached by QuickJS itself via JSModuleDef*
   // We don't need to duplicate that caching here
@@ -228,7 +228,7 @@ JSModuleDef* jsrt_load_esm_module(JSContext* ctx, JSRT_ModuleLoader* loader, con
     return NULL;
   }
 
-  MODULE_Debug_Loader("Loaded content for %s (%zu bytes)", resolved_path, file_result.size);
+  MODULE_DEBUG_LOADER("Loaded content for %s (%zu bytes)", resolved_path, file_result.size);
 
   // Compile as ES module
   JSValue func_val =
@@ -237,7 +237,7 @@ JSModuleDef* jsrt_load_esm_module(JSContext* ctx, JSRT_ModuleLoader* loader, con
   JSRT_ReadFileResultFree(&file_result);
 
   if (JS_IsException(func_val)) {
-    MODULE_Debug_Error("Failed to compile ES module: %s", resolved_path);
+    MODULE_DEBUG_ERROR("Failed to compile ES module: %s", resolved_path);
     return NULL;
   }
 
@@ -246,7 +246,7 @@ JSModuleDef* jsrt_load_esm_module(JSContext* ctx, JSRT_ModuleLoader* loader, con
   // the result is a JSValue containing the module function
   // We need to check the value type before extracting the pointer
   if (!JS_IsFunction(ctx, func_val)) {
-    MODULE_Debug_Error("Compiled module is not a function: %s", resolved_path);
+    MODULE_DEBUG_ERROR("Compiled module is not a function: %s", resolved_path);
     JS_FreeValue(ctx, func_val);
     return NULL;
   }
@@ -256,14 +256,14 @@ JSModuleDef* jsrt_load_esm_module(JSContext* ctx, JSRT_ModuleLoader* loader, con
   // The proper way is to use the module through QuickJS APIs
   JSModuleDef* module = (JSModuleDef*)JS_VALUE_GET_PTR(func_val);
   if (!module) {
-    MODULE_Debug_Error("Failed to extract module definition: %s", resolved_path);
+    MODULE_DEBUG_ERROR("Failed to extract module definition: %s", resolved_path);
     JS_FreeValue(ctx, func_val);
     return NULL;
   }
 
   // Set up import.meta
   if (jsrt_setup_import_meta(ctx, module, loader, resolved_path) != 0) {
-    MODULE_Debug_Error("Failed to setup import.meta for: %s", resolved_path);
+    MODULE_DEBUG_ERROR("Failed to setup import.meta for: %s", resolved_path);
     JS_FreeValue(ctx, func_val);
     return NULL;
   }
@@ -271,7 +271,7 @@ JSModuleDef* jsrt_load_esm_module(JSContext* ctx, JSRT_ModuleLoader* loader, con
   // Don't free func_val here - QuickJS owns the module now
   // The module is registered in QuickJS's internal module system
 
-  MODULE_Debug_Loader("Successfully loaded ES module: %s", resolved_path);
+  MODULE_DEBUG_LOADER("Successfully loaded ES module: %s", resolved_path);
   return module;
 }
 
@@ -283,17 +283,17 @@ JSValue jsrt_get_esm_exports(JSContext* ctx, JSModuleDef* module) {
     return JS_EXCEPTION;
   }
 
-  MODULE_Debug_Loader("Getting exports from ES module");
+  MODULE_DEBUG_LOADER("Getting exports from ES module");
 
   // Get the module namespace object which contains all exports
   // This is the standard way to access ES module exports in QuickJS
   JSValue ns = JS_GetModuleNamespace(ctx, module);
 
   if (JS_IsException(ns)) {
-    MODULE_Debug_Error("Failed to get module namespace");
+    MODULE_DEBUG_ERROR("Failed to get module namespace");
     return JS_EXCEPTION;
   }
 
-  MODULE_Debug_Loader("Successfully retrieved ES module exports");
+  MODULE_DEBUG_LOADER("Successfully retrieved ES module exports");
   return ns;
 }

@@ -47,11 +47,11 @@ static struct {
  */
 void jsrt_init_protocol_handlers(void) {
   if (g_protocol_registry.initialized) {
-    MODULE_Debug_Protocol("Protocol registry already initialized");
+    MODULE_DEBUG_PROTOCOL("Protocol registry already initialized");
     return;
   }
 
-  MODULE_Debug_Protocol("Initializing protocol registry");
+  MODULE_DEBUG_PROTOCOL("Initializing protocol registry");
 
   // Clear all entries
   memset(&g_protocol_registry, 0, sizeof(g_protocol_registry));
@@ -61,7 +61,7 @@ void jsrt_init_protocol_handlers(void) {
 
   g_protocol_registry.initialized = true;
 
-  MODULE_Debug_Protocol("Protocol registry initialized successfully");
+  MODULE_DEBUG_PROTOCOL("Protocol registry initialized successfully");
 }
 
 /**
@@ -72,14 +72,14 @@ void jsrt_cleanup_protocol_handlers(void) {
     return;
   }
 
-  MODULE_Debug_Protocol("Cleaning up protocol registry");
+  MODULE_DEBUG_PROTOCOL("Cleaning up protocol registry");
 
   // Cleanup all registered handlers
   for (size_t i = 0; i < MAX_PROTOCOLS; i++) {
     if (g_protocol_registry.entries[i].in_use) {
       ProtocolRegistryEntry* entry = &g_protocol_registry.entries[i];
 
-      MODULE_Debug_Protocol("Cleaning up protocol handler: %s", entry->protocol_name);
+      MODULE_DEBUG_PROTOCOL("Cleaning up protocol handler: %s", entry->protocol_name);
 
       // Call cleanup function if provided
       if (entry->handler.cleanup) {
@@ -99,7 +99,7 @@ void jsrt_cleanup_protocol_handlers(void) {
   // Destroy mutex
   MUTEX_DESTROY(g_protocol_registry.lock);
 
-  MODULE_Debug_Protocol("Protocol registry cleaned up");
+  MODULE_DEBUG_PROTOCOL("Protocol registry cleaned up");
 }
 
 /**
@@ -136,12 +136,12 @@ static ProtocolRegistryEntry* find_free_entry(void) {
  */
 bool jsrt_register_protocol_handler(const char* protocol, const JSRT_ProtocolHandler* handler) {
   if (!g_protocol_registry.initialized) {
-    MODULE_Debug_Error("Protocol registry not initialized");
+    MODULE_DEBUG_ERROR("Protocol registry not initialized");
     return false;
   }
 
   if (!protocol || !handler || !handler->load) {
-    MODULE_Debug_Error("Invalid arguments to jsrt_register_protocol_handler");
+    MODULE_DEBUG_ERROR("Invalid arguments to jsrt_register_protocol_handler");
     return false;
   }
 
@@ -150,7 +150,7 @@ bool jsrt_register_protocol_handler(const char* protocol, const JSRT_ProtocolHan
   // Check if protocol already registered
   if (find_entry(protocol)) {
     MUTEX_UNLOCK(g_protocol_registry.lock);
-    MODULE_Debug_Error("Protocol '%s' already registered", protocol);
+    MODULE_DEBUG_ERROR("Protocol '%s' already registered", protocol);
     return false;
   }
 
@@ -158,7 +158,7 @@ bool jsrt_register_protocol_handler(const char* protocol, const JSRT_ProtocolHan
   ProtocolRegistryEntry* entry = find_free_entry();
   if (!entry) {
     MUTEX_UNLOCK(g_protocol_registry.lock);
-    MODULE_Debug_Error("Protocol registry full (max %d protocols)", MAX_PROTOCOLS);
+    MODULE_DEBUG_ERROR("Protocol registry full (max %d protocols)", MAX_PROTOCOLS);
     return false;
   }
 
@@ -166,7 +166,7 @@ bool jsrt_register_protocol_handler(const char* protocol, const JSRT_ProtocolHan
   entry->protocol_name = strdup(protocol);
   if (!entry->protocol_name) {
     MUTEX_UNLOCK(g_protocol_registry.lock);
-    MODULE_Debug_Error("Failed to allocate memory for protocol name");
+    MODULE_DEBUG_ERROR("Failed to allocate memory for protocol name");
     return false;
   }
 
@@ -178,7 +178,7 @@ bool jsrt_register_protocol_handler(const char* protocol, const JSRT_ProtocolHan
 
   MUTEX_UNLOCK(g_protocol_registry.lock);
 
-  MODULE_Debug_Protocol("Registered protocol handler: %s (total: %zu)", protocol, g_protocol_registry.count);
+  MODULE_DEBUG_PROTOCOL("Registered protocol handler: %s (total: %zu)", protocol, g_protocol_registry.count);
 
   return true;
 }
@@ -188,7 +188,7 @@ bool jsrt_register_protocol_handler(const char* protocol, const JSRT_ProtocolHan
  */
 const JSRT_ProtocolHandler* jsrt_get_protocol_handler(const char* protocol) {
   if (!g_protocol_registry.initialized) {
-    MODULE_Debug_Error("Protocol registry not initialized");
+    MODULE_DEBUG_ERROR("Protocol registry not initialized");
     return NULL;
   }
 
@@ -202,10 +202,10 @@ const JSRT_ProtocolHandler* jsrt_get_protocol_handler(const char* protocol) {
   const JSRT_ProtocolHandler* result = NULL;
 
   if (entry) {
-    MODULE_Debug_Protocol("Found handler for protocol: %s", protocol);
+    MODULE_DEBUG_PROTOCOL("Found handler for protocol: %s", protocol);
     result = &entry->handler;
   } else {
-    MODULE_Debug_Protocol("No handler found for protocol: %s", protocol);
+    MODULE_DEBUG_PROTOCOL("No handler found for protocol: %s", protocol);
   }
 
   MUTEX_UNLOCK(g_protocol_registry.lock);
@@ -218,7 +218,7 @@ const JSRT_ProtocolHandler* jsrt_get_protocol_handler(const char* protocol) {
  */
 bool jsrt_unregister_protocol_handler(const char* protocol) {
   if (!g_protocol_registry.initialized) {
-    MODULE_Debug_Error("Protocol registry not initialized");
+    MODULE_DEBUG_ERROR("Protocol registry not initialized");
     return false;
   }
 
@@ -231,11 +231,11 @@ bool jsrt_unregister_protocol_handler(const char* protocol) {
   ProtocolRegistryEntry* entry = find_entry(protocol);
   if (!entry) {
     MUTEX_UNLOCK(g_protocol_registry.lock);
-    MODULE_Debug_Protocol("Protocol '%s' not registered", protocol);
+    MODULE_DEBUG_PROTOCOL("Protocol '%s' not registered", protocol);
     return false;
   }
 
-  MODULE_Debug_Protocol("Unregistering protocol handler: %s", protocol);
+  MODULE_DEBUG_PROTOCOL("Unregistering protocol handler: %s", protocol);
 
   // Call cleanup function if provided
   if (entry->handler.cleanup) {
@@ -250,7 +250,7 @@ bool jsrt_unregister_protocol_handler(const char* protocol) {
 
   MUTEX_UNLOCK(g_protocol_registry.lock);
 
-  MODULE_Debug_Protocol("Unregistered protocol handler: %s (remaining: %zu)", protocol, g_protocol_registry.count);
+  MODULE_DEBUG_PROTOCOL("Unregistered protocol handler: %s (remaining: %zu)", protocol, g_protocol_registry.count);
 
   return true;
 }

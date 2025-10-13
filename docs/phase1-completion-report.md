@@ -77,13 +77,13 @@ Phase 1 of the module loader refactoring has been successfully completed. All co
   - Color-coded output for different subsystems
   - Used throughout all Phase 1 implementations
 - **Macros**:
-  - `MODULE_Debug()` - General module debug (green)
-  - `MODULE_Debug_Resolver()` - Resolver-specific (cyan)
-  - `MODULE_Debug_Loader()` - Loader-specific (blue)
-  - `MODULE_Debug_Cache()` - Cache-specific (yellow)
-  - `MODULE_Debug_Detector()` - Detector-specific (magenta)
-  - `MODULE_Debug_Protocol()` - Protocol-specific (light blue)
-  - `MODULE_Debug_Error()` - Error/warning (red)
+  - `MODULE_DEBUG()` - General module debug (green)
+  - `MODULE_DEBUG_RESOLVER()` - Resolver-specific (cyan)
+  - `MODULE_DEBUG_LOADER()` - Loader-specific (blue)
+  - `MODULE_DEBUG_CACHE()` - Cache-specific (yellow)
+  - `MODULE_DEBUG_DETECTOR()` - Detector-specific (magenta)
+  - `MODULE_DEBUG_PROTOCOL()` - Protocol-specific (light blue)
+  - `MODULE_DEBUG_ERROR()` - Error/warning (red)
 
 #### Task 1.5: Module Loader Core ✅
 - **Files**: `module_loader.h` (77 lines), `module_loader.c` (235 lines)

@@ -47,7 +47,7 @@ static size_t url_decode(char* str) {
         char decoded = (char)((hi << 4) | lo);
         // Reject NULL bytes in URLs - security risk for path truncation
         if (decoded == '\0') {
-          MODULE_Debug_Error("URL contains NULL byte (%00) - rejecting for security");
+          MODULE_DEBUG_ERROR("URL contains NULL byte (%00) - rejecting for security");
           return 0;
         }
         *dst++ = decoded;
@@ -76,13 +76,13 @@ static size_t url_decode(char* str) {
  */
 static char* parse_file_url(const char* url) {
   if (!url) {
-    MODULE_Debug_Error("NULL URL provided to parse_file_url");
+    MODULE_DEBUG_ERROR("NULL URL provided to parse_file_url");
     return NULL;
   }
 
   // Check for file:// prefix
   if (strncmp(url, "file://", 7) != 0) {
-    MODULE_Debug_Error("Invalid file URL (missing file:// prefix): %s", url);
+    MODULE_DEBUG_ERROR("Invalid file URL (missing file:// prefix): %s", url);
     return NULL;
   }
 
@@ -101,7 +101,7 @@ static char* parse_file_url(const char* url) {
   size_t path_len = strlen(path_start);
   char* path = malloc(path_len + 1);
   if (!path) {
-    MODULE_Debug_Error("Failed to allocate memory for file path");
+    MODULE_DEBUG_ERROR("Failed to allocate memory for file path");
     return NULL;
   }
 
@@ -112,12 +112,12 @@ static char* parse_file_url(const char* url) {
   // Decode URL and check for errors (e.g., NULL bytes)
   if (url_decode(path) == 0 && path[0] != '\0') {
     // url_decode returns 0 on error (but also returns 0 for empty string, so check)
-    MODULE_Debug_Error("URL decoding failed (possible security issue): %s", url);
+    MODULE_DEBUG_ERROR("URL decoding failed (possible security issue): %s", url);
     free(path);
     return NULL;
   }
 
-  MODULE_Debug_Protocol("Parsed file URL: %s -> %s", url, path);
+  MODULE_DEBUG_PROTOCOL("Parsed file URL: %s -> %s", url, path);
 
   return path;
 }
@@ -128,7 +128,7 @@ static char* parse_file_url(const char* url) {
 JSRT_ReadFileResult jsrt_file_handler_load(const char* url, void* user_data) {
   (void)user_data;  // Unused
 
-  MODULE_Debug_Protocol("Loading from file URL: %s", url);
+  MODULE_DEBUG_PROTOCOL("Loading from file URL: %s", url);
 
   JSRT_ReadFileResult result = JSRT_ReadFileResultDefault();
 
@@ -136,7 +136,7 @@ JSRT_ReadFileResult jsrt_file_handler_load(const char* url, void* user_data) {
   char* path = parse_file_url(url);
   if (!path) {
     result.error = JSRT_READ_FILE_ERROR_FILE_NOT_FOUND;
-    MODULE_Debug_Error("Failed to parse file URL: %s", url);
+    MODULE_DEBUG_ERROR("Failed to parse file URL: %s", url);
     return result;
   }
 
@@ -144,10 +144,10 @@ JSRT_ReadFileResult jsrt_file_handler_load(const char* url, void* user_data) {
   result = JSRT_ReadFile(path);
 
   if (result.error != JSRT_READ_FILE_OK) {
-    MODULE_Debug_Error("Failed to read file from URL %s (path: %s): %s", url, path,
+    MODULE_DEBUG_ERROR("Failed to read file from URL %s (path: %s): %s", url, path,
                        JSRT_ReadFileErrorToString(result.error));
   } else {
-    MODULE_Debug_Protocol("Successfully loaded file from URL: %s (%zu bytes)", url, result.size);
+    MODULE_DEBUG_PROTOCOL("Successfully loaded file from URL: %s (%zu bytes)", url, result.size);
   }
 
   free(path);
@@ -158,23 +158,23 @@ JSRT_ReadFileResult jsrt_file_handler_load(const char* url, void* user_data) {
  * Initialize file protocol handler
  */
 void jsrt_file_handler_init(void) {
-  MODULE_Debug_Protocol("Initializing file:// protocol handler");
+  MODULE_DEBUG_PROTOCOL("Initializing file:// protocol handler");
 
   JSRT_ProtocolHandler handler = {
       .protocol_name = "file", .load = jsrt_file_handler_load, .cleanup = NULL, .user_data = NULL};
 
   if (!jsrt_register_protocol_handler("file", &handler)) {
-    MODULE_Debug_Error("Failed to register file:// protocol handler");
+    MODULE_DEBUG_ERROR("Failed to register file:// protocol handler");
     return;
   }
 
-  MODULE_Debug_Protocol("file:// protocol handler registered successfully");
+  MODULE_DEBUG_PROTOCOL("file:// protocol handler registered successfully");
 }
 
 /**
  * Cleanup file protocol handler
  */
 void jsrt_file_handler_cleanup(void) {
-  MODULE_Debug_Protocol("Cleaning up file:// protocol handler");
+  MODULE_DEBUG_PROTOCOL("Cleaning up file:// protocol handler");
   jsrt_unregister_protocol_handler("file");
 }

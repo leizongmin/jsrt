@@ -43,41 +43,41 @@ static const char* get_file_extension(const char* path) {
  */
 JSRT_ModuleFormat jsrt_detect_format_by_extension(const char* path) {
   if (!path) {
-    MODULE_Debug_Detector("Path is NULL");
+    MODULE_DEBUG_DETECTOR("Path is NULL");
     return JSRT_MODULE_FORMAT_UNKNOWN;
   }
 
   const char* ext = get_file_extension(path);
   if (!ext) {
-    MODULE_Debug_Detector("No extension found in path: %s", path);
+    MODULE_DEBUG_DETECTOR("No extension found in path: %s", path);
     return JSRT_MODULE_FORMAT_UNKNOWN;
   }
 
-  MODULE_Debug_Detector("Extension detected: %s for path: %s", ext, path);
+  MODULE_DEBUG_DETECTOR("Extension detected: %s for path: %s", ext, path);
 
   // Check known extensions
   if (strcmp(ext, ".cjs") == 0) {
-    MODULE_Debug_Detector("Format: CommonJS (.cjs)");
+    MODULE_DEBUG_DETECTOR("Format: CommonJS (.cjs)");
     return JSRT_MODULE_FORMAT_COMMONJS;
   }
 
   if (strcmp(ext, ".mjs") == 0) {
-    MODULE_Debug_Detector("Format: ESM (.mjs)");
+    MODULE_DEBUG_DETECTOR("Format: ESM (.mjs)");
     return JSRT_MODULE_FORMAT_ESM;
   }
 
   if (strcmp(ext, ".json") == 0) {
-    MODULE_Debug_Detector("Format: JSON (.json)");
+    MODULE_DEBUG_DETECTOR("Format: JSON (.json)");
     return JSRT_MODULE_FORMAT_JSON;
   }
 
   if (strcmp(ext, ".js") == 0) {
-    MODULE_Debug_Detector("Format: Unknown (.js - needs further detection)");
+    MODULE_DEBUG_DETECTOR("Format: Unknown (.js - needs further detection)");
     return JSRT_MODULE_FORMAT_UNKNOWN;
   }
 
   // Unknown extension
-  MODULE_Debug_Detector("Format: Unknown (unrecognized extension: %s)", ext);
+  MODULE_DEBUG_DETECTOR("Format: Unknown (unrecognized extension: %s)", ext);
   return JSRT_MODULE_FORMAT_UNKNOWN;
 }
 
@@ -127,25 +127,25 @@ static char* get_directory_path(const char* path) {
  */
 JSRT_ModuleFormat jsrt_detect_format_by_package(JSContext* ctx, const char* path) {
   if (!ctx || !path) {
-    MODULE_Debug_Detector("Invalid arguments (ctx=%p, path=%p)", ctx, path);
+    MODULE_DEBUG_DETECTOR("Invalid arguments (ctx=%p, path=%p)", ctx, path);
     return JSRT_MODULE_FORMAT_UNKNOWN;
   }
 
   // Get directory path
   char* dir_path = get_directory_path(path);
   if (!dir_path) {
-    MODULE_Debug_Detector("Failed to get directory path for: %s", path);
+    MODULE_DEBUG_DETECTOR("Failed to get directory path for: %s", path);
     return JSRT_MODULE_FORMAT_UNKNOWN;
   }
 
-  MODULE_Debug_Detector("Looking for package.json from: %s", dir_path);
+  MODULE_DEBUG_DETECTOR("Looking for package.json from: %s", dir_path);
 
   // Parse package.json (walks up tree automatically)
   JSRT_PackageJson* pkg = jsrt_parse_package_json(ctx, dir_path);
   free(dir_path);
 
   if (!pkg) {
-    MODULE_Debug_Detector("No package.json found for: %s", path);
+    MODULE_DEBUG_DETECTOR("No package.json found for: %s", path);
     return JSRT_MODULE_FORMAT_UNKNOWN;
   }
 
@@ -154,16 +154,16 @@ JSRT_ModuleFormat jsrt_detect_format_by_package(JSContext* ctx, const char* path
 
   if (pkg->type) {
     if (strcmp(pkg->type, "module") == 0) {
-      MODULE_Debug_Detector("package.json type: module -> ESM");
+      MODULE_DEBUG_DETECTOR("package.json type: module -> ESM");
       format = JSRT_MODULE_FORMAT_ESM;
     } else if (strcmp(pkg->type, "commonjs") == 0) {
-      MODULE_Debug_Detector("package.json type: commonjs -> CommonJS");
+      MODULE_DEBUG_DETECTOR("package.json type: commonjs -> CommonJS");
       format = JSRT_MODULE_FORMAT_COMMONJS;
     } else {
-      MODULE_Debug_Detector("package.json type: unknown value '%s'", pkg->type);
+      MODULE_DEBUG_DETECTOR("package.json type: unknown value '%s'", pkg->type);
     }
   } else {
-    MODULE_Debug_Detector("package.json has no type field");
+    MODULE_DEBUG_DETECTOR("package.json has no type field");
   }
 
   jsrt_package_json_free(pkg);
@@ -176,11 +176,11 @@ JSRT_ModuleFormat jsrt_detect_format_by_package(JSContext* ctx, const char* path
 JSRT_ModuleFormat jsrt_detect_module_format(JSContext* ctx, const char* path, const char* content,
                                             size_t content_length) {
   if (!path) {
-    MODULE_Debug_Error("Path is NULL");
+    MODULE_DEBUG_ERROR("Path is NULL");
     return JSRT_MODULE_FORMAT_UNKNOWN;
   }
 
-  MODULE_Debug_Detector("Detecting format for: %s", path);
+  MODULE_DEBUG_DETECTOR("Detecting format for: %s", path);
 
   // Step 1: Check file extension first
   JSRT_ModuleFormat ext_format = jsrt_detect_format_by_extension(path);
@@ -188,7 +188,7 @@ JSRT_ModuleFormat jsrt_detect_module_format(JSContext* ctx, const char* path, co
   // If extension is definitive (.cjs, .mjs, .json), return immediately
   if (ext_format == JSRT_MODULE_FORMAT_COMMONJS || ext_format == JSRT_MODULE_FORMAT_ESM ||
       ext_format == JSRT_MODULE_FORMAT_JSON) {
-    MODULE_Debug_Detector("Definitive format from extension: %s", jsrt_module_format_to_string(ext_format));
+    MODULE_DEBUG_DETECTOR("Definitive format from extension: %s", jsrt_module_format_to_string(ext_format));
     return ext_format;
   }
 
@@ -196,7 +196,7 @@ JSRT_ModuleFormat jsrt_detect_module_format(JSContext* ctx, const char* path, co
   if (ctx) {
     JSRT_ModuleFormat pkg_format = jsrt_detect_format_by_package(ctx, path);
     if (pkg_format != JSRT_MODULE_FORMAT_UNKNOWN) {
-      MODULE_Debug_Detector("Format from package.json: %s", jsrt_module_format_to_string(pkg_format));
+      MODULE_DEBUG_DETECTOR("Format from package.json: %s", jsrt_module_format_to_string(pkg_format));
       return pkg_format;
     }
   }
@@ -205,13 +205,13 @@ JSRT_ModuleFormat jsrt_detect_module_format(JSContext* ctx, const char* path, co
   if (content && content_length > 0) {
     JSRT_ModuleFormat content_format = jsrt_analyze_content_format(content, content_length);
     if (content_format != JSRT_MODULE_FORMAT_UNKNOWN) {
-      MODULE_Debug_Detector("Format from content analysis: %s", jsrt_module_format_to_string(content_format));
+      MODULE_DEBUG_DETECTOR("Format from content analysis: %s", jsrt_module_format_to_string(content_format));
       return content_format;
     }
   }
 
   // Step 4: Default to CommonJS (Node.js behavior for .js files)
-  MODULE_Debug_Detector("No format detected, defaulting to CommonJS");
+  MODULE_DEBUG_DETECTOR("No format detected, defaulting to CommonJS");
   return JSRT_MODULE_FORMAT_COMMONJS;
 }
 

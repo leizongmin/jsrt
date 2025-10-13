@@ -38,13 +38,13 @@ static char* clean_js_content(const char* source, size_t source_len, size_t* cle
       (unsigned char)start[2] == 0xBF) {
     start += 3;
     len -= 3;
-    MODULE_Debug_Protocol("Removed UTF-8 BOM from content");
+    MODULE_DEBUG_PROTOCOL("Removed UTF-8 BOM from content");
   }
 
   // Allocate cleaned content buffer
   char* cleaned = malloc(len + 1);
   if (!cleaned) {
-    MODULE_Debug_Error("Failed to allocate memory for cleaned content");
+    MODULE_DEBUG_ERROR("Failed to allocate memory for cleaned content");
     *cleaned_len = 0;
     return NULL;
   }
@@ -74,7 +74,7 @@ static char* clean_js_content(const char* source, size_t source_len, size_t* cle
   cleaned[write_pos] = '\0';
   *cleaned_len = write_pos;
 
-  MODULE_Debug_Protocol("Cleaned content: %zu bytes -> %zu bytes", source_len, write_pos);
+  MODULE_DEBUG_PROTOCOL("Cleaned content: %zu bytes -> %zu bytes", source_len, write_pos);
 
   return cleaned;
 }
@@ -85,12 +85,12 @@ static char* clean_js_content(const char* source, size_t source_len, size_t* cle
 JSRT_ReadFileResult jsrt_http_handler_load(const char* url, void* user_data) {
   (void)user_data;  // Unused
 
-  MODULE_Debug_Protocol("Loading from HTTP URL: %s", url);
+  MODULE_DEBUG_PROTOCOL("Loading from HTTP URL: %s", url);
 
   JSRT_ReadFileResult result = JSRT_ReadFileResultDefault();
 
   if (!url) {
-    MODULE_Debug_Error("NULL URL provided to HTTP handler");
+    MODULE_DEBUG_ERROR("NULL URL provided to HTTP handler");
     result.error = JSRT_READ_FILE_ERROR_READ_ERROR;
     return result;
   }
@@ -112,17 +112,17 @@ JSRT_ReadFileResult jsrt_http_handler_load(const char* url, void* user_data) {
       default:
         break;
     }
-    MODULE_Debug_Error("HTTP security validation failed for %s: %s", url, error_msg);
+    MODULE_DEBUG_ERROR("HTTP security validation failed for %s: %s", url, error_msg);
     result.error = JSRT_READ_FILE_ERROR_READ_ERROR;
     return result;
   }
 
   // Download content
-  MODULE_Debug_Protocol("Downloading from %s", url);
+  MODULE_DEBUG_PROTOCOL("Downloading from %s", url);
   JSRT_HttpResponse response = JSRT_HttpGetWithOptions(url, "jsrt/1.0", 30000);
 
   if (response.error != JSRT_HTTP_OK || response.status != 200) {
-    MODULE_Debug_Error("HTTP request failed for %s: error=%d, status=%d", url, response.error, response.status);
+    MODULE_DEBUG_ERROR("HTTP request failed for %s: error=%d, status=%d", url, response.error, response.status);
     JSRT_HttpResponseFree(&response);
     result.error = JSRT_READ_FILE_ERROR_READ_ERROR;
     return result;
@@ -138,7 +138,7 @@ JSRT_ReadFileResult jsrt_http_handler_load(const char* url, void* user_data) {
     } else if (content_result == JSRT_HTTP_SECURITY_CONTENT_TYPE_INVALID) {
       error_msg = "Invalid content type";
     }
-    MODULE_Debug_Error("HTTP content validation failed for %s: %s", url, error_msg);
+    MODULE_DEBUG_ERROR("HTTP content validation failed for %s: %s", url, error_msg);
     JSRT_HttpResponseFree(&response);
     result.error = JSRT_READ_FILE_ERROR_READ_ERROR;
     return result;
@@ -151,7 +151,7 @@ JSRT_ReadFileResult jsrt_http_handler_load(const char* url, void* user_data) {
   JSRT_HttpResponseFree(&response);
 
   if (!cleaned_content) {
-    MODULE_Debug_Error("Failed to clean HTTP content from %s", url);
+    MODULE_DEBUG_ERROR("Failed to clean HTTP content from %s", url);
     result.error = JSRT_READ_FILE_ERROR_OUT_OF_MEMORY;
     return result;
   }
@@ -161,7 +161,7 @@ JSRT_ReadFileResult jsrt_http_handler_load(const char* url, void* user_data) {
   result.data = cleaned_content;
   result.size = cleaned_len;
 
-  MODULE_Debug_Protocol("Successfully loaded HTTP content from %s (%zu bytes)", url, cleaned_len);
+  MODULE_DEBUG_PROTOCOL("Successfully loaded HTTP content from %s (%zu bytes)", url, cleaned_len);
 
   return result;
 }
@@ -170,16 +170,16 @@ JSRT_ReadFileResult jsrt_http_handler_load(const char* url, void* user_data) {
  * Initialize HTTP/HTTPS protocol handlers
  */
 void jsrt_http_handler_init(void) {
-  MODULE_Debug_Protocol("Initializing HTTP/HTTPS protocol handlers");
+  MODULE_DEBUG_PROTOCOL("Initializing HTTP/HTTPS protocol handlers");
 
   // Register http:// handler
   JSRT_ProtocolHandler http_handler = {
       .protocol_name = "http", .load = jsrt_http_handler_load, .cleanup = NULL, .user_data = NULL};
 
   if (!jsrt_register_protocol_handler("http", &http_handler)) {
-    MODULE_Debug_Error("Failed to register http:// protocol handler");
+    MODULE_DEBUG_ERROR("Failed to register http:// protocol handler");
   } else {
-    MODULE_Debug_Protocol("http:// protocol handler registered successfully");
+    MODULE_DEBUG_PROTOCOL("http:// protocol handler registered successfully");
   }
 
   // Register https:// handler (uses same load function)
@@ -187,9 +187,9 @@ void jsrt_http_handler_init(void) {
       .protocol_name = "https", .load = jsrt_http_handler_load, .cleanup = NULL, .user_data = NULL};
 
   if (!jsrt_register_protocol_handler("https", &https_handler)) {
-    MODULE_Debug_Error("Failed to register https:// protocol handler");
+    MODULE_DEBUG_ERROR("Failed to register https:// protocol handler");
   } else {
-    MODULE_Debug_Protocol("https:// protocol handler registered successfully");
+    MODULE_DEBUG_PROTOCOL("https:// protocol handler registered successfully");
   }
 }
 
@@ -197,7 +197,7 @@ void jsrt_http_handler_init(void) {
  * Cleanup HTTP/HTTPS protocol handlers
  */
 void jsrt_http_handler_cleanup(void) {
-  MODULE_Debug_Protocol("Cleaning up HTTP/HTTPS protocol handlers");
+  MODULE_DEBUG_PROTOCOL("Cleaning up HTTP/HTTPS protocol handlers");
   jsrt_unregister_protocol_handler("http");
   jsrt_unregister_protocol_handler("https");
 }

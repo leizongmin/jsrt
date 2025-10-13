@@ -41,29 +41,29 @@ static uint64_t get_timestamp(void) {
  */
 JSRT_ModuleCache* jsrt_module_cache_create(JSContext* ctx, size_t capacity) {
   if (!ctx || capacity == 0) {
-    MODULE_Debug_Error("Invalid arguments to jsrt_module_cache_create");
+    MODULE_DEBUG_ERROR("Invalid arguments to jsrt_module_cache_create");
     return NULL;
   }
 
 // Validate capacity is reasonable and won't cause overflow
 #define MAX_CACHE_CAPACITY 100000
   if (capacity > MAX_CACHE_CAPACITY) {
-    MODULE_Debug_Error("Cache capacity too large: %zu (max: %d)", capacity, MAX_CACHE_CAPACITY);
+    MODULE_DEBUG_ERROR("Cache capacity too large: %zu (max: %d)", capacity, MAX_CACHE_CAPACITY);
     return NULL;
   }
 
   // Check for integer overflow in bucket allocation
   if (capacity > SIZE_MAX / sizeof(JSRT_ModuleCacheEntry*)) {
-    MODULE_Debug_Error("Cache capacity would cause integer overflow: %zu", capacity);
+    MODULE_DEBUG_ERROR("Cache capacity would cause integer overflow: %zu", capacity);
     return NULL;
   }
 
-  MODULE_Debug_Cache("Creating module cache with capacity %zu", capacity);
+  MODULE_DEBUG_CACHE("Creating module cache with capacity %zu", capacity);
 
   // Allocate cache structure
   JSRT_ModuleCache* cache = (JSRT_ModuleCache*)js_malloc(ctx, sizeof(JSRT_ModuleCache));
   if (!cache) {
-    MODULE_Debug_Error("Failed to allocate cache: out of memory");
+    MODULE_DEBUG_ERROR("Failed to allocate cache: out of memory");
     return NULL;
   }
 
@@ -77,7 +77,7 @@ JSRT_ModuleCache* jsrt_module_cache_create(JSContext* ctx, size_t capacity) {
   size_t buckets_size = capacity * sizeof(JSRT_ModuleCacheEntry*);
   cache->buckets = (JSRT_ModuleCacheEntry**)js_malloc(ctx, buckets_size);
   if (!cache->buckets) {
-    MODULE_Debug_Error("Failed to allocate cache buckets: out of memory");
+    MODULE_DEBUG_ERROR("Failed to allocate cache buckets: out of memory");
     js_free(ctx, cache);
     return NULL;
   }
@@ -92,7 +92,7 @@ JSRT_ModuleCache* jsrt_module_cache_create(JSContext* ctx, size_t capacity) {
   // Initialize memory tracking
   cache->memory_used = sizeof(JSRT_ModuleCache) + buckets_size;
 
-  MODULE_Debug_Cache("Cache created successfully: %p (capacity: %zu)", (void*)cache, capacity);
+  MODULE_DEBUG_CACHE("Cache created successfully: %p (capacity: %zu)", (void*)cache, capacity);
 
   return cache;
 }
@@ -128,11 +128,11 @@ static JSRT_ModuleCacheEntry* find_entry(JSRT_ModuleCache* cache, const char* ke
  */
 JSValue jsrt_module_cache_get(JSRT_ModuleCache* cache, const char* key) {
   if (!cache || !key) {
-    MODULE_Debug_Error("Invalid arguments to jsrt_module_cache_get");
+    MODULE_DEBUG_ERROR("Invalid arguments to jsrt_module_cache_get");
     return JS_UNDEFINED;
   }
 
-  MODULE_Debug_Cache("Cache lookup: %s", key);
+  MODULE_DEBUG_CACHE("Cache lookup: %s", key);
 
   JSRT_ModuleCacheEntry* entry = find_entry(cache, key, NULL);
   if (entry) {
@@ -140,12 +140,12 @@ JSValue jsrt_module_cache_get(JSRT_ModuleCache* cache, const char* key) {
     entry->access_count++;
     entry->last_access = get_timestamp();
 
-    MODULE_Debug_Cache("Cache HIT: %s (access_count: %llu)", key, (unsigned long long)entry->access_count);
+    MODULE_DEBUG_CACHE("Cache HIT: %s (access_count: %llu)", key, (unsigned long long)entry->access_count);
     return JS_DupValue(cache->ctx, entry->exports);
   }
 
   cache->misses++;
-  MODULE_Debug_Cache("Cache MISS: %s", key);
+  MODULE_DEBUG_CACHE("Cache MISS: %s", key);
   return JS_UNDEFINED;
 }
 
@@ -154,22 +154,22 @@ JSValue jsrt_module_cache_get(JSRT_ModuleCache* cache, const char* key) {
  */
 int jsrt_module_cache_put(JSRT_ModuleCache* cache, const char* key, JSValue exports) {
   if (!cache || !key) {
-    MODULE_Debug_Error("Invalid arguments to jsrt_module_cache_put");
+    MODULE_DEBUG_ERROR("Invalid arguments to jsrt_module_cache_put");
     return -1;
   }
 
   if (JS_IsUndefined(exports)) {
-    MODULE_Debug_Error("Cannot cache undefined exports for: %s", key);
+    MODULE_DEBUG_ERROR("Cannot cache undefined exports for: %s", key);
     return -1;
   }
 
-  MODULE_Debug_Cache("Cache put: %s", key);
+  MODULE_DEBUG_CACHE("Cache put: %s", key);
 
   // Check if entry already exists
   size_t bucket_idx;
   JSRT_ModuleCacheEntry* existing = find_entry(cache, key, &bucket_idx);
   if (existing) {
-    MODULE_Debug_Cache("Updating existing cache entry: %s", key);
+    MODULE_DEBUG_CACHE("Updating existing cache entry: %s", key);
     // Free old value and replace with new one
     JS_FreeValue(cache->ctx, existing->exports);
     existing->exports = JS_DupValue(cache->ctx, exports);
@@ -181,7 +181,7 @@ int jsrt_module_cache_put(JSRT_ModuleCache* cache, const char* key, JSValue expo
 
   // Check if cache is full
   if (cache->size >= cache->max_size) {
-    MODULE_Debug_Error("Cache is full (size: %zu, max: %zu)", cache->size, cache->max_size);
+    MODULE_DEBUG_ERROR("Cache is full (size: %zu, max: %zu)", cache->size, cache->max_size);
     // TODO: Implement LRU eviction policy in future phases
     return -1;
   }
@@ -189,7 +189,7 @@ int jsrt_module_cache_put(JSRT_ModuleCache* cache, const char* key, JSValue expo
   // Create new entry
   JSRT_ModuleCacheEntry* entry = (JSRT_ModuleCacheEntry*)js_malloc(cache->ctx, sizeof(JSRT_ModuleCacheEntry));
   if (!entry) {
-    MODULE_Debug_Error("Failed to allocate cache entry: out of memory");
+    MODULE_DEBUG_ERROR("Failed to allocate cache entry: out of memory");
     return -1;
   }
 
@@ -197,7 +197,7 @@ int jsrt_module_cache_put(JSRT_ModuleCache* cache, const char* key, JSValue expo
   size_t key_len = strlen(key) + 1;
   entry->key = (char*)js_malloc(cache->ctx, key_len);
   if (!entry->key) {
-    MODULE_Debug_Error("Failed to allocate key string: out of memory");
+    MODULE_DEBUG_ERROR("Failed to allocate key string: out of memory");
     js_free(cache->ctx, entry);
     return -1;
   }
@@ -215,7 +215,7 @@ int jsrt_module_cache_put(JSRT_ModuleCache* cache, const char* key, JSValue expo
 
   if (cache->buckets[bucket_idx] != NULL) {
     cache->collisions++;
-    MODULE_Debug_Cache("Hash collision in bucket %zu", bucket_idx);
+    MODULE_DEBUG_CACHE("Hash collision in bucket %zu", bucket_idx);
   }
 
   entry->next = cache->buckets[bucket_idx];
@@ -224,7 +224,7 @@ int jsrt_module_cache_put(JSRT_ModuleCache* cache, const char* key, JSValue expo
   cache->size++;
   cache->memory_used += sizeof(JSRT_ModuleCacheEntry) + key_len;
 
-  MODULE_Debug_Cache("Cache entry added: %s (size: %zu/%zu)", key, cache->size, cache->max_size);
+  MODULE_DEBUG_CACHE("Cache entry added: %s (size: %zu/%zu)", key, cache->size, cache->max_size);
 
   return 0;
 }
@@ -245,11 +245,11 @@ int jsrt_module_cache_has(JSRT_ModuleCache* cache, const char* key) {
  */
 int jsrt_module_cache_remove(JSRT_ModuleCache* cache, const char* key) {
   if (!cache || !key) {
-    MODULE_Debug_Error("Invalid arguments to jsrt_module_cache_remove");
+    MODULE_DEBUG_ERROR("Invalid arguments to jsrt_module_cache_remove");
     return -1;
   }
 
-  MODULE_Debug_Cache("Cache remove: %s", key);
+  MODULE_DEBUG_CACHE("Cache remove: %s", key);
 
   uint64_t hash = hash_string(key);
   size_t bucket_idx = hash % cache->capacity;
@@ -275,7 +275,7 @@ int jsrt_module_cache_remove(JSRT_ModuleCache* cache, const char* key) {
       cache->size--;
       cache->memory_used -= sizeof(JSRT_ModuleCacheEntry) + key_len;
 
-      MODULE_Debug_Cache("Cache entry removed: %s (size: %zu)", key, cache->size);
+      MODULE_DEBUG_CACHE("Cache entry removed: %s (size: %zu)", key, cache->size);
       return 0;
     }
 
@@ -283,7 +283,7 @@ int jsrt_module_cache_remove(JSRT_ModuleCache* cache, const char* key) {
     entry = entry->next;
   }
 
-  MODULE_Debug_Cache("Cache entry not found: %s", key);
+  MODULE_DEBUG_CACHE("Cache entry not found: %s", key);
   return -1;
 }
 
@@ -295,7 +295,7 @@ void jsrt_module_cache_clear(JSRT_ModuleCache* cache) {
     return;
   }
 
-  MODULE_Debug_Cache("Clearing cache (current size: %zu)", cache->size);
+  MODULE_DEBUG_CACHE("Clearing cache (current size: %zu)", cache->size);
 
   for (size_t i = 0; i < cache->capacity; i++) {
     JSRT_ModuleCacheEntry* entry = cache->buckets[i];
@@ -315,7 +315,7 @@ void jsrt_module_cache_clear(JSRT_ModuleCache* cache) {
   cache->size = 0;
   cache->memory_used = sizeof(JSRT_ModuleCache) + (cache->capacity * sizeof(JSRT_ModuleCacheEntry*));
 
-  MODULE_Debug_Cache("Cache cleared successfully");
+  MODULE_DEBUG_CACHE("Cache cleared successfully");
 }
 
 /**
@@ -326,12 +326,12 @@ void jsrt_module_cache_free(JSRT_ModuleCache* cache) {
     return;
   }
 
-  MODULE_Debug_Cache("Freeing cache: %p", (void*)cache);
-  MODULE_Debug_Cache("  - Total entries: %zu", cache->size);
-  MODULE_Debug_Cache("  - Hits: %llu", (unsigned long long)cache->hits);
-  MODULE_Debug_Cache("  - Misses: %llu", (unsigned long long)cache->misses);
-  MODULE_Debug_Cache("  - Collisions: %llu", (unsigned long long)cache->collisions);
-  MODULE_Debug_Cache("  - Memory used: %zu bytes", cache->memory_used);
+  MODULE_DEBUG_CACHE("Freeing cache: %p", (void*)cache);
+  MODULE_DEBUG_CACHE("  - Total entries: %zu", cache->size);
+  MODULE_DEBUG_CACHE("  - Hits: %llu", (unsigned long long)cache->hits);
+  MODULE_DEBUG_CACHE("  - Misses: %llu", (unsigned long long)cache->misses);
+  MODULE_DEBUG_CACHE("  - Collisions: %llu", (unsigned long long)cache->collisions);
+  MODULE_DEBUG_CACHE("  - Memory used: %zu bytes", cache->memory_used);
 
   JSContext* ctx = cache->ctx;
 
@@ -346,7 +346,7 @@ void jsrt_module_cache_free(JSRT_ModuleCache* cache) {
   // Free cache structure
   js_free(ctx, cache);
 
-  MODULE_Debug_Cache("Cache freed successfully");
+  MODULE_DEBUG_CACHE("Cache freed successfully");
 }
 
 /**
@@ -376,7 +376,7 @@ void jsrt_module_cache_reset_stats(JSRT_ModuleCache* cache) {
     return;
   }
 
-  MODULE_Debug_Cache("Resetting cache statistics");
+  MODULE_DEBUG_CACHE("Resetting cache statistics");
 
   cache->hits = 0;
   cache->misses = 0;

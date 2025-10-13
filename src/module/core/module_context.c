@@ -14,16 +14,16 @@
  */
 JSRT_ModuleLoader* jsrt_module_loader_create(JSContext* ctx) {
   if (!ctx) {
-    MODULE_Debug_Error("Cannot create module loader: NULL context");
+    MODULE_DEBUG_ERROR("Cannot create module loader: NULL context");
     return NULL;
   }
 
-  MODULE_Debug("Creating module loader for context %p", (void*)ctx);
+  MODULE_DEBUG("Creating module loader for context %p", (void*)ctx);
 
   // Allocate loader structure
   JSRT_ModuleLoader* loader = (JSRT_ModuleLoader*)js_malloc(ctx, sizeof(JSRT_ModuleLoader));
   if (!loader) {
-    MODULE_Debug_Error("Failed to allocate module loader: out of memory");
+    MODULE_DEBUG_ERROR("Failed to allocate module loader: out of memory");
     return NULL;
   }
 
@@ -34,7 +34,7 @@ JSRT_ModuleLoader* jsrt_module_loader_create(JSContext* ctx) {
   // Create cache (will be implemented in Task 1.2)
   loader->cache = jsrt_module_cache_create(ctx, 1000);  // Default capacity: 1000
   if (!loader->cache) {
-    MODULE_Debug_Error("Failed to create module cache");
+    MODULE_DEBUG_ERROR("Failed to create module cache");
     js_free(ctx, loader);
     return NULL;
   }
@@ -55,11 +55,11 @@ JSRT_ModuleLoader* jsrt_module_loader_create(JSContext* ctx) {
   // Initialize memory tracking
   loader->memory_used = sizeof(JSRT_ModuleLoader);
 
-  MODULE_Debug("Module loader created successfully at %p", (void*)loader);
-  MODULE_Debug("  - Cache enabled: %d", loader->enable_cache);
-  MODULE_Debug("  - HTTP imports: %d", loader->enable_http_imports);
-  MODULE_Debug("  - Node.js compat: %d", loader->enable_node_compat);
-  MODULE_Debug("  - Max cache size: %d", loader->max_cache_size);
+  MODULE_DEBUG("Module loader created successfully at %p", (void*)loader);
+  MODULE_DEBUG("  - Cache enabled: %d", loader->enable_cache);
+  MODULE_DEBUG("  - HTTP imports: %d", loader->enable_http_imports);
+  MODULE_DEBUG("  - Node.js compat: %d", loader->enable_node_compat);
+  MODULE_DEBUG("  - Max cache size: %d", loader->max_cache_size);
 
   return loader;
 }
@@ -72,13 +72,13 @@ void jsrt_module_loader_free(JSRT_ModuleLoader* loader) {
     return;
   }
 
-  MODULE_Debug("Freeing module loader at %p", (void*)loader);
-  MODULE_Debug("  - Total loads: %llu", (unsigned long long)loader->loads_total);
-  MODULE_Debug("  - Successful loads: %llu", (unsigned long long)loader->loads_success);
-  MODULE_Debug("  - Failed loads: %llu", (unsigned long long)loader->loads_failed);
-  MODULE_Debug("  - Cache hits: %llu", (unsigned long long)loader->cache_hits);
-  MODULE_Debug("  - Cache misses: %llu", (unsigned long long)loader->cache_misses);
-  MODULE_Debug("  - Memory used: %zu bytes", loader->memory_used);
+  MODULE_DEBUG("Freeing module loader at %p", (void*)loader);
+  MODULE_DEBUG("  - Total loads: %llu", (unsigned long long)loader->loads_total);
+  MODULE_DEBUG("  - Successful loads: %llu", (unsigned long long)loader->loads_success);
+  MODULE_DEBUG("  - Failed loads: %llu", (unsigned long long)loader->loads_failed);
+  MODULE_DEBUG("  - Cache hits: %llu", (unsigned long long)loader->cache_hits);
+  MODULE_DEBUG("  - Cache misses: %llu", (unsigned long long)loader->cache_misses);
+  MODULE_DEBUG("  - Memory used: %zu bytes", loader->memory_used);
 
   JSContext* ctx = loader->ctx;
 
@@ -101,7 +101,7 @@ void jsrt_module_loader_free(JSRT_ModuleLoader* loader) {
   // Free the loader itself
   js_free(ctx, loader);
 
-  MODULE_Debug("Module loader freed successfully");
+  MODULE_DEBUG("Module loader freed successfully");
 }
 
 /**
@@ -126,7 +126,7 @@ JSRT_ModuleLoader* jsrt_module_loader_get(JSContext* ctx) {
   // 3. Store in a property of the global object
   //
   // For now, returning NULL as placeholder
-  MODULE_Debug("Getting module loader for context %p (not yet implemented)", (void*)ctx);
+  MODULE_DEBUG("Getting module loader for context %p (not yet implemented)", (void*)ctx);
   return NULL;
 }
 
@@ -139,7 +139,7 @@ void jsrt_module_loader_set(JSContext* ctx, JSRT_ModuleLoader* loader) {
   }
 
   // TODO: Implement proper storage mechanism (see jsrt_module_loader_get)
-  MODULE_Debug("Setting module loader %p for context %p (not yet implemented)", (void*)loader, (void*)ctx);
+  MODULE_DEBUG("Setting module loader %p for context %p (not yet implemented)", (void*)loader, (void*)ctx);
 }
 
 /**
@@ -150,7 +150,7 @@ void jsrt_module_loader_reset_stats(JSRT_ModuleLoader* loader) {
     return;
   }
 
-  MODULE_Debug("Resetting module loader statistics");
+  MODULE_DEBUG("Resetting module loader statistics");
 
   loader->loads_total = 0;
   loader->loads_success = 0;
@@ -158,5 +158,5 @@ void jsrt_module_loader_reset_stats(JSRT_ModuleLoader* loader) {
   loader->cache_hits = 0;
   loader->cache_misses = 0;
 
-  MODULE_Debug("Statistics reset complete");
+  MODULE_DEBUG("Statistics reset complete");
 }

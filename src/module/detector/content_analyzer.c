@@ -212,11 +212,11 @@ static bool match_keyword(LexerState* state, const char* keyword) {
  */
 JSRT_ModuleFormat jsrt_analyze_content_format(const char* content, size_t length) {
   if (!content || length == 0) {
-    MODULE_Debug_Detector("No content to analyze");
+    MODULE_DEBUG_DETECTOR("No content to analyze");
     return JSRT_MODULE_FORMAT_UNKNOWN;
   }
 
-  MODULE_Debug_Detector("Analyzing content (%zu bytes)", length);
+  MODULE_DEBUG_DETECTOR("Analyzing content (%zu bytes)", length);
 
   // Initialize lexer state
   LexerState state = {
@@ -239,13 +239,13 @@ JSRT_ModuleFormat jsrt_analyze_content_format(const char* content, size_t length
 
     // Check for ESM keywords: import, export
     if (match_keyword(&state, "import")) {
-      MODULE_Debug_Detector("Found 'import' keyword");
+      MODULE_DEBUG_DETECTOR("Found 'import' keyword");
       state.has_esm_pattern = true;
       continue;
     }
 
     if (match_keyword(&state, "export")) {
-      MODULE_Debug_Detector("Found 'export' keyword");
+      MODULE_DEBUG_DETECTOR("Found 'export' keyword");
       state.has_esm_pattern = true;
       continue;
     }
@@ -254,7 +254,7 @@ JSRT_ModuleFormat jsrt_analyze_content_format(const char* content, size_t length
     if (match_keyword(&state, "require")) {
       skip_whitespace_and_comments(&state);
       if (peek(&state) == '(') {
-        MODULE_Debug_Detector("Found 'require(' pattern");
+        MODULE_DEBUG_DETECTOR("Found 'require(' pattern");
         state.has_cjs_pattern = true;
       }
       continue;
@@ -265,7 +265,7 @@ JSRT_ModuleFormat jsrt_analyze_content_format(const char* content, size_t length
       if (peek(&state) == '.') {
         advance(&state);  // skip .
         if (match_keyword(&state, "exports")) {
-          MODULE_Debug_Detector("Found 'module.exports' pattern");
+          MODULE_DEBUG_DETECTOR("Found 'module.exports' pattern");
           state.has_cjs_pattern = true;
         }
       }
@@ -275,7 +275,7 @@ JSRT_ModuleFormat jsrt_analyze_content_format(const char* content, size_t length
     if (match_keyword(&state, "exports")) {
       skip_whitespace_and_comments(&state);
       if (peek(&state) == '.') {
-        MODULE_Debug_Detector("Found 'exports.' pattern");
+        MODULE_DEBUG_DETECTOR("Found 'exports.' pattern");
         state.has_cjs_pattern = true;
       }
       continue;
@@ -288,15 +288,15 @@ JSRT_ModuleFormat jsrt_analyze_content_format(const char* content, size_t length
   // Determine format based on patterns found
   // Prefer ESM if both patterns detected (modern code often has both)
   if (state.has_esm_pattern) {
-    MODULE_Debug_Detector("Content analysis result: ESM (import/export found)");
+    MODULE_DEBUG_DETECTOR("Content analysis result: ESM (import/export found)");
     return JSRT_MODULE_FORMAT_ESM;
   }
 
   if (state.has_cjs_pattern) {
-    MODULE_Debug_Detector("Content analysis result: CommonJS (require/module.exports found)");
+    MODULE_DEBUG_DETECTOR("Content analysis result: CommonJS (require/module.exports found)");
     return JSRT_MODULE_FORMAT_COMMONJS;
   }
 
-  MODULE_Debug_Detector("Content analysis result: Unknown (no patterns found)");
+  MODULE_DEBUG_DETECTOR("Content analysis result: Unknown (no patterns found)");
   return JSRT_MODULE_FORMAT_UNKNOWN;
 }

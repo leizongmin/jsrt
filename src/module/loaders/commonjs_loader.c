@@ -43,7 +43,7 @@ int jsrt_push_loading_commonjs(JSRT_ModuleLoader* loader, const char* resolved_p
   (void)loader;  // Currently using global stack
 
   if (loading_stack.count >= MAX_LOADING_DEPTH) {
-    MODULE_Debug_Error("Module loading stack overflow (depth > %d)", MAX_LOADING_DEPTH);
+    MODULE_DEBUG_ERROR("Module loading stack overflow (depth > %d)", MAX_LOADING_DEPTH);
     return -1;
   }
 
@@ -53,7 +53,7 @@ int jsrt_push_loading_commonjs(JSRT_ModuleLoader* loader, const char* resolved_p
   }
 
   loading_stack.count++;
-  MODULE_Debug_Loader("Pushed to loading stack: %s (depth: %d)", resolved_path, loading_stack.count);
+  MODULE_DEBUG_LOADER("Pushed to loading stack: %s (depth: %d)", resolved_path, loading_stack.count);
   return 0;
 }
 
@@ -64,13 +64,13 @@ int jsrt_pop_loading_commonjs(JSRT_ModuleLoader* loader) {
   (void)loader;  // Currently using global stack
 
   if (loading_stack.count <= 0) {
-    MODULE_Debug_Error("Module loading stack underflow");
+    MODULE_DEBUG_ERROR("Module loading stack underflow");
     return -1;
   }
 
   loading_stack.count--;
   if (loading_stack.paths[loading_stack.count]) {
-    MODULE_Debug_Loader("Popped from loading stack: %s (depth: %d)", loading_stack.paths[loading_stack.count],
+    MODULE_DEBUG_LOADER("Popped from loading stack: %s (depth: %d)", loading_stack.paths[loading_stack.count],
                         loading_stack.count);
     free(loading_stack.paths[loading_stack.count]);
     loading_stack.paths[loading_stack.count] = NULL;
@@ -148,24 +148,24 @@ static char* create_wrapper_code(const char* content, const char* resolved_path)
 JSValue jsrt_load_commonjs_module(JSContext* ctx, JSRT_ModuleLoader* loader, const char* resolved_path,
                                   const char* specifier) {
   if (!ctx || !loader || !resolved_path) {
-    MODULE_Debug_Error("Invalid arguments to jsrt_load_commonjs_module");
+    MODULE_DEBUG_ERROR("Invalid arguments to jsrt_load_commonjs_module");
     return JS_EXCEPTION;
   }
 
-  MODULE_Debug_Loader("=== Loading CommonJS module: %s ===", resolved_path);
+  MODULE_DEBUG_LOADER("=== Loading CommonJS module: %s ===", resolved_path);
 
   // Check cache first
   if (loader->enable_cache && loader->cache) {
     JSValue cached = jsrt_module_cache_get(loader->cache, resolved_path);
     if (!JS_IsUndefined(cached)) {
-      MODULE_Debug_Loader("Cache HIT for CommonJS module: %s", resolved_path);
+      MODULE_DEBUG_LOADER("Cache HIT for CommonJS module: %s", resolved_path);
       return cached;
     }
   }
 
   // Check for circular dependency
   if (jsrt_is_loading_commonjs(loader, resolved_path)) {
-    MODULE_Debug_Error("Circular dependency detected: %s", resolved_path);
+    MODULE_DEBUG_ERROR("Circular dependency detected: %s", resolved_path);
     return jsrt_module_throw_error(ctx, JSRT_MODULE_CIRCULAR_DEPENDENCY, "Circular dependency detected for module: %s",
                                    resolved_path);
   }
@@ -184,7 +184,7 @@ JSValue jsrt_load_commonjs_module(JSContext* ctx, JSRT_ModuleLoader* loader, con
                                    JSRT_ReadFileErrorToString(file_result.error));
   }
 
-  MODULE_Debug_Loader("Loaded content for %s (%zu bytes)", resolved_path, file_result.size);
+  MODULE_DEBUG_LOADER("Loaded content for %s (%zu bytes)", resolved_path, file_result.size);
 
   // Create module and exports objects
   JSValue module = JS_NewObject(ctx);
@@ -299,7 +299,7 @@ JSValue jsrt_load_commonjs_module(JSContext* ctx, JSRT_ModuleLoader* loader, con
     jsrt_module_cache_put(loader->cache, resolved_path, module_exports);
   }
 
-  MODULE_Debug_Loader("Successfully loaded CommonJS module: %s", resolved_path);
+  MODULE_DEBUG_LOADER("Successfully loaded CommonJS module: %s", resolved_path);
   return module_exports;
 }
 
@@ -339,7 +339,7 @@ static JSValue js_commonjs_require(JSContext* ctx, JSValueConst this_val, int ar
 
   JSRT_ModuleLoader* loader = (JSRT_ModuleLoader*)loader_ptr;
 
-  MODULE_Debug_Loader("require('%s') from module: %s", specifier, module_path);
+  MODULE_DEBUG_LOADER("require('%s') from module: %s", specifier, module_path);
 
   // Load the module (this will handle resolution, detection, and loading)
   JSValue result = jsrt_load_module(loader, specifier, module_path);

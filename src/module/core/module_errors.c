@@ -26,7 +26,7 @@
  */
 JSValue jsrt_module_throw_error(JSContext* ctx, JSRT_ModuleError error_code, const char* message, ...) {
   if (!ctx) {
-    MODULE_Debug_Error("Cannot throw error: NULL context");
+    MODULE_DEBUG_ERROR("Cannot throw error: NULL context");
     return JS_EXCEPTION;
   }
 
@@ -42,7 +42,7 @@ JSValue jsrt_module_throw_error(JSContext* ctx, JSRT_ModuleError error_code, con
     snprintf(error_msg, sizeof(error_msg), "%s", jsrt_module_error_to_string(error_code));
   }
 
-  MODULE_Debug_Error("Throwing error: [%d] %s", error_code, error_msg);
+  MODULE_DEBUG_ERROR("Throwing error: [%d] %s", error_code, error_msg);
 
   // Create JavaScript Error object
   JSValue error = JS_NewError(ctx);
@@ -130,7 +130,7 @@ JSRT_ModuleErrorInfo jsrt_module_error_create_fmt(JSRT_ModuleError code, const c
  */
 JSValue jsrt_module_error_to_js(JSContext* ctx, const JSRT_ModuleErrorInfo* info) {
   if (!ctx || !info) {
-    MODULE_Debug_Error("Invalid arguments to jsrt_module_error_to_js");
+    MODULE_DEBUG_ERROR("Invalid arguments to jsrt_module_error_to_js");
     return JS_EXCEPTION;
   }
 
@@ -194,19 +194,19 @@ JSValue jsrt_module_error_to_js(JSContext* ctx, const JSRT_ModuleErrorInfo* info
  */
 JSValue jsrt_module_throw_error_info(JSContext* ctx, const JSRT_ModuleErrorInfo* info) {
   if (!ctx || !info) {
-    MODULE_Debug_Error("Invalid arguments to jsrt_module_throw_error_info");
+    MODULE_DEBUG_ERROR("Invalid arguments to jsrt_module_throw_error_info");
     return JS_EXCEPTION;
   }
 
-  MODULE_Debug_Error("Throwing error from info: [%d] %s", info->code, info->message ? info->message : "");
+  MODULE_DEBUG_ERROR("Throwing error from info: [%d] %s", info->code, info->message ? info->message : "");
   if (info->module_specifier) {
-    MODULE_Debug_Error("  - Specifier: %s", info->module_specifier);
+    MODULE_DEBUG_ERROR("  - Specifier: %s", info->module_specifier);
   }
   if (info->referrer) {
-    MODULE_Debug_Error("  - Referrer: %s", info->referrer);
+    MODULE_DEBUG_ERROR("  - Referrer: %s", info->referrer);
   }
   if (info->resolved_path) {
-    MODULE_Debug_Error("  - Resolved path: %s", info->resolved_path);
+    MODULE_DEBUG_ERROR("  - Resolved path: %s", info->resolved_path);
   }
 
   JSValue error = jsrt_module_error_to_js(ctx, info);

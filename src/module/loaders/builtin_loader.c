@@ -70,7 +70,7 @@ char* jsrt_extract_builtin_name(const char* specifier) {
  * Load jsrt: module
  */
 static JSValue load_jsrt_module(JSContext* ctx, const char* module_name) {
-  MODULE_Debug_Loader("Loading jsrt module: %s", module_name);
+  MODULE_DEBUG_LOADER("Loading jsrt module: %s", module_name);
 
   if (strcmp(module_name, "assert") == 0) {
     return JSRT_CreateAssertModule(ctx);
@@ -92,7 +92,7 @@ static JSValue load_jsrt_module(JSContext* ctx, const char* module_name) {
  */
 static JSValue load_node_module(JSContext* ctx, const char* module_name) {
 #ifdef JSRT_NODE_COMPAT
-  MODULE_Debug_Loader("Loading node module: %s", module_name);
+  MODULE_DEBUG_LOADER("Loading node module: %s", module_name);
 
   // Check if it's a valid Node.js module
   if (!JSRT_IsNodeModule(module_name)) {
@@ -113,17 +113,17 @@ static JSValue load_node_module(JSContext* ctx, const char* module_name) {
  */
 JSValue jsrt_load_builtin_module(JSContext* ctx, JSRT_ModuleLoader* loader, const char* specifier) {
   if (!ctx || !loader || !specifier) {
-    MODULE_Debug_Error("Invalid arguments to jsrt_load_builtin_module");
+    MODULE_DEBUG_ERROR("Invalid arguments to jsrt_load_builtin_module");
     return JS_EXCEPTION;
   }
 
-  MODULE_Debug_Loader("=== Loading builtin module: %s ===", specifier);
+  MODULE_DEBUG_LOADER("=== Loading builtin module: %s ===", specifier);
 
   // Check cache first
   if (loader->enable_cache && loader->cache) {
     JSValue cached = jsrt_module_cache_get(loader->cache, specifier);
     if (!JS_IsUndefined(cached)) {
-      MODULE_Debug_Loader("Cache HIT for builtin module: %s", specifier);
+      MODULE_DEBUG_LOADER("Cache HIT for builtin module: %s", specifier);
       return cached;
     }
   }
@@ -140,7 +140,7 @@ JSValue jsrt_load_builtin_module(JSContext* ctx, JSRT_ModuleLoader* loader, cons
                                    specifier);
   }
 
-  MODULE_Debug_Loader("Protocol: %s, Module: %s", protocol, module_name);
+  MODULE_DEBUG_LOADER("Protocol: %s, Module: %s", protocol, module_name);
 
   // Load the appropriate builtin
   JSValue result = JS_UNDEFINED;
@@ -165,6 +165,6 @@ JSValue jsrt_load_builtin_module(JSContext* ctx, JSRT_ModuleLoader* loader, cons
     jsrt_module_cache_put(loader->cache, specifier, result);
   }
 
-  MODULE_Debug_Loader("Successfully loaded builtin module: %s", specifier);
+  MODULE_DEBUG_LOADER("Successfully loaded builtin module: %s", specifier);
   return result;
 }

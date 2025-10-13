@@ -316,8 +316,7 @@ Results:
 ### Compiler Warnings
 ```
 Build Type: Debug (make jsrt_g)
-Warnings: 5 (all in Phase 2 resolver - macro case issue)
-  - MODULE_DEBUG_RESOLVER vs MODULE_Debug_Resolver
+Warnings: 5 (all in Phase 2 resolver - macro case issue, now resolved by standardizing on `MODULE_DEBUG_*`)
 
 Action: Accept warnings (non-critical, macros work correctly)
 ```

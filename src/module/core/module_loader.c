@@ -35,16 +35,16 @@ static char* normalize_specifier(const char* specifier, const char* base_path) {
 
   // For now, just duplicate the specifier
   // TODO Phase 2: Implement proper resolution with resolver component
-  MODULE_Debug_Loader("Normalizing specifier: %s (base: %s)", specifier, base_path ? base_path : "(none)");
+  MODULE_DEBUG_LOADER("Normalizing specifier: %s (base: %s)", specifier, base_path ? base_path : "(none)");
 
   // Simple implementation: just use specifier as-is
   char* normalized = strdup(specifier);
   if (!normalized) {
-    MODULE_Debug_Error("Failed to allocate normalized specifier");
+    MODULE_DEBUG_ERROR("Failed to allocate normalized specifier");
     return NULL;
   }
 
-  MODULE_Debug_Loader("Normalized to: %s", normalized);
+  MODULE_DEBUG_LOADER("Normalized to: %s", normalized);
   return normalized;
 }
 
@@ -60,22 +60,22 @@ static char* normalize_specifier(const char* specifier, const char* base_path) {
  */
 JSValue jsrt_load_module(JSRT_ModuleLoader* loader, const char* specifier, const char* base_path) {
   if (!loader) {
-    MODULE_Debug_Error("Cannot load module: NULL loader");
+    MODULE_DEBUG_ERROR("Cannot load module: NULL loader");
     return JS_EXCEPTION;
   }
 
   if (!specifier) {
-    MODULE_Debug_Error("Cannot load module: NULL specifier");
+    MODULE_DEBUG_ERROR("Cannot load module: NULL specifier");
     return jsrt_module_throw_error(loader->ctx, JSRT_MODULE_INVALID_SPECIFIER, "Module specifier cannot be NULL");
   }
 
-  MODULE_Debug_Loader("=== Load module: %s (base: %s) ===", specifier, base_path ? base_path : "(none)");
+  MODULE_DEBUG_LOADER("=== Load module: %s (base: %s) ===", specifier, base_path ? base_path : "(none)");
 
   loader->loads_total++;
 
   // Step 1: Check if it's a builtin module (jsrt: or node:)
   if (jsrt_is_builtin_specifier(specifier)) {
-    MODULE_Debug_Loader("Detected builtin module specifier");
+    MODULE_DEBUG_LOADER("Detected builtin module specifier");
     JSValue result = jsrt_load_builtin_module(loader->ctx, loader, specifier);
     if (JS_IsException(result)) {
       loader->loads_failed++;
@@ -93,39 +93,39 @@ JSValue jsrt_load_module(JSRT_ModuleLoader* loader, const char* specifier, const
                                    specifier);
   }
 
-  MODULE_Debug_Loader("Resolved to: %s (protocol: %s)", resolved->resolved_path,
+  MODULE_DEBUG_LOADER("Resolved to: %s (protocol: %s)", resolved->resolved_path,
                       resolved->protocol ? resolved->protocol : "file");
 
   // Step 3: Check cache with resolved path
   if (loader->enable_cache && loader->cache) {
     JSValue cached = jsrt_module_cache_get(loader->cache, resolved->resolved_path);
     if (!JS_IsUndefined(cached)) {
-      MODULE_Debug_Loader("Cache HIT for: %s", resolved->resolved_path);
+      MODULE_DEBUG_LOADER("Cache HIT for: %s", resolved->resolved_path);
       loader->cache_hits++;
       loader->loads_success++;
       jsrt_resolved_path_free(resolved);
       return cached;  // jsrt_module_cache_get already duplicated the value
     }
 
-    MODULE_Debug_Loader("Cache MISS for: %s", resolved->resolved_path);
+    MODULE_DEBUG_LOADER("Cache MISS for: %s", resolved->resolved_path);
     loader->cache_misses++;
   }
 
   // Step 4: Detect module format
   JSRT_ModuleFormat format = jsrt_detect_module_format(loader->ctx, resolved->resolved_path, NULL, 0);
-  MODULE_Debug_Loader("Detected format: %s", jsrt_module_format_to_string(format));
+  MODULE_DEBUG_LOADER("Detected format: %s", jsrt_module_format_to_string(format));
 
   // Step 5: Load module based on format
   JSValue result = JS_UNDEFINED;
 
   switch (format) {
     case JSRT_MODULE_FORMAT_COMMONJS:
-      MODULE_Debug_Loader("Loading as CommonJS module");
+      MODULE_DEBUG_LOADER("Loading as CommonJS module");
       result = jsrt_load_commonjs_module(loader->ctx, loader, resolved->resolved_path, specifier);
       break;
 
     case JSRT_MODULE_FORMAT_ESM:
-      MODULE_Debug_Loader("Loading as ES module");
+      MODULE_DEBUG_LOADER("Loading as ES module");
       // For ES modules, we need to return the module's exports as a value
       // This is a temporary wrapper - full ESM support needs QuickJS integration
       {
@@ -140,14 +140,14 @@ JSValue jsrt_load_module(JSRT_ModuleLoader* loader, const char* specifier, const
       break;
 
     case JSRT_MODULE_FORMAT_JSON:
-      MODULE_Debug_Loader("Loading as JSON module");
+      MODULE_DEBUG_LOADER("Loading as JSON module");
       // TODO: Implement JSON loader
       result = jsrt_module_throw_error(loader->ctx, JSRT_MODULE_LOAD_FAILED, "JSON modules not yet implemented");
       break;
 
     case JSRT_MODULE_FORMAT_UNKNOWN:
     default:
-      MODULE_Debug_Loader("Unknown module format, defaulting to CommonJS");
+      MODULE_DEBUG_LOADER("Unknown module format, defaulting to CommonJS");
       // Default to CommonJS for backward compatibility
       result = jsrt_load_commonjs_module(loader->ctx, loader, resolved->resolved_path, specifier);
       break;
@@ -169,7 +169,7 @@ JSValue jsrt_load_module(JSRT_ModuleLoader* loader, const char* specifier, const
  */
 JSValue jsrt_load_module_ctx(JSContext* ctx, const char* specifier, const char* base_path) {
   if (!ctx) {
-    MODULE_Debug_Error("Cannot load module: NULL context");
+    MODULE_DEBUG_ERROR("Cannot load module: NULL context");
     return JS_EXCEPTION;
   }
 
@@ -179,7 +179,7 @@ JSValue jsrt_load_module_ctx(JSContext* ctx, const char* specifier, const char* 
   // If no loader, create a temporary one
   int temporary_loader = 0;
   if (!loader) {
-    MODULE_Debug_Loader("No loader found on context, creating temporary loader");
+    MODULE_DEBUG_LOADER("No loader found on context, creating temporary loader");
     loader = jsrt_module_loader_create(ctx);
     if (!loader) {
       return jsrt_module_throw_error(ctx, JSRT_MODULE_INTERNAL_ERROR, "Failed to create module loader");
@@ -192,7 +192,7 @@ JSValue jsrt_load_module_ctx(JSContext* ctx, const char* specifier, const char* 
 
   // Clean up temporary loader
   if (temporary_loader) {
-    MODULE_Debug_Loader("Cleaning up temporary loader");
+    MODULE_DEBUG_LOADER("Cleaning up temporary loader");
     jsrt_module_loader_free(loader);
   }
 
@@ -204,22 +204,22 @@ JSValue jsrt_load_module_ctx(JSContext* ctx, const char* specifier, const char* 
  */
 int jsrt_preload_module(JSRT_ModuleLoader* loader, const char* specifier, const char* base_path) {
   if (!loader || !specifier) {
-    MODULE_Debug_Error("Invalid arguments to jsrt_preload_module");
+    MODULE_DEBUG_ERROR("Invalid arguments to jsrt_preload_module");
     return -1;
   }
 
-  MODULE_Debug_Loader("Preloading module: %s", specifier);
+  MODULE_DEBUG_LOADER("Preloading module: %s", specifier);
 
   JSValue result = jsrt_load_module(loader, specifier, base_path);
   if (JS_IsException(result)) {
-    MODULE_Debug_Error("Failed to preload module: %s", specifier);
+    MODULE_DEBUG_ERROR("Failed to preload module: %s", specifier);
     return -1;
   }
 
   // Free the result since we don't need it
   JS_FreeValue(loader->ctx, result);
 
-  MODULE_Debug_Loader("Module preloaded successfully: %s", specifier);
+  MODULE_DEBUG_LOADER("Module preloaded successfully: %s", specifier);
   return 0;
 }
 
@@ -228,16 +228,16 @@ int jsrt_preload_module(JSRT_ModuleLoader* loader, const char* specifier, const 
  */
 int jsrt_invalidate_module(JSRT_ModuleLoader* loader, const char* specifier) {
   if (!loader || !specifier) {
-    MODULE_Debug_Error("Invalid arguments to jsrt_invalidate_module");
+    MODULE_DEBUG_ERROR("Invalid arguments to jsrt_invalidate_module");
     return -1;
   }
 
   if (!loader->cache) {
-    MODULE_Debug_Error("No cache available");
+    MODULE_DEBUG_ERROR("No cache available");
     return -1;
   }
 
-  MODULE_Debug_Loader("Invalidating module: %s", specifier);
+  MODULE_DEBUG_LOADER("Invalidating module: %s", specifier);
 
   // Normalize specifier to match cache key
   char* cache_key = normalize_specifier(specifier, NULL);
@@ -249,9 +249,9 @@ int jsrt_invalidate_module(JSRT_ModuleLoader* loader, const char* specifier) {
   free(cache_key);
 
   if (result == 0) {
-    MODULE_Debug_Loader("Module invalidated successfully: %s", specifier);
+    MODULE_DEBUG_LOADER("Module invalidated successfully: %s", specifier);
   } else {
-    MODULE_Debug_Loader("Module not found in cache: %s", specifier);
+    MODULE_DEBUG_LOADER("Module not found in cache: %s", specifier);
   }
 
   return result;
@@ -262,16 +262,16 @@ int jsrt_invalidate_module(JSRT_ModuleLoader* loader, const char* specifier) {
  */
 void jsrt_invalidate_all_modules(JSRT_ModuleLoader* loader) {
   if (!loader) {
-    MODULE_Debug_Error("Invalid arguments to jsrt_invalidate_all_modules");
+    MODULE_DEBUG_ERROR("Invalid arguments to jsrt_invalidate_all_modules");
     return;
   }
 
   if (!loader->cache) {
-    MODULE_Debug_Error("No cache available");
+    MODULE_DEBUG_ERROR("No cache available");
     return;
   }
 
-  MODULE_Debug_Loader("Invalidating all modules");
+  MODULE_DEBUG_LOADER("Invalidating all modules");
   jsrt_module_cache_clear(loader->cache);
-  MODULE_Debug_Loader("All modules invalidated");
+  MODULE_DEBUG_LOADER("All modules invalidated");
 }

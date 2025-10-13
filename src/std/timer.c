@@ -13,6 +13,7 @@ typedef struct {
   uint64_t timeout;
   bool is_interval;
   uint64_t timer_id;  // Add our own timer ID field
+  JSValue timer_obj;  // Reference to the JS timer object (for clearing opaque)
   JSValue this_val;
   int argc;
   JSValue* argv;
@@ -35,8 +36,15 @@ static JSClassID timer_class_id;
 static void jsrt_timer_finalizer(JSRuntime* rt, JSValue val) {
   JSRT_Timer* timer = JS_GetOpaque(val, timer_class_id);
   if (timer) {
-    // Use our own timer_id instead of potentially problematic uv_timer.start_id
-    // JSRT_Debug("TimerFinalizer: timer=%p id=%llu", timer, timer->timer_id);
+    // Prevent double-free: clear opaque pointer immediately
+    JS_SetOpaque(val, NULL);
+
+    // Stop and close the timer handle
+    // The close callback will check if runtime is still valid before freeing JSValues
+    uv_timer_stop(&timer->uv_timer);
+    if (!uv_is_closing((uv_handle_t*)&timer->uv_timer)) {
+      uv_close((uv_handle_t*)&timer->uv_timer, jsrt_timer_close_callback);
+    }
   }
 }
 static JSClassDef timer_class = {
@@ -129,6 +137,8 @@ static JSValue jsrt_start_timer(bool is_interval, JSContext* ctx, JSValueConst t
 
   JSValueConst result = JS_NewObjectClass(rt->ctx, timer_class_id);
   if (!JS_IsException(result)) {
+    // Store reference to timer object for clearing opaque later
+    timer->timer_obj = JS_DupValue(rt->ctx, result);
     JS_SetOpaque(result, timer);
     // Use our own timer_id instead of potentially problematic uv_timer.start_id
     JS_SetPropertyStr(rt->ctx, result, "id", JS_NewInt64(rt->ctx, (int64_t)timer->timer_id));
@@ -143,6 +153,8 @@ static JSValue jsrt_stop_timer(JSContext* ctx, JSValueConst this_val, int argc, 
   if (argc > 0) {
     JSRT_Timer* timer = JS_GetOpaque(argv[0], timer_class_id);
     if (timer != NULL) {
+      // Clear opaque pointer BEFORE freeing to prevent finalizer from accessing freed memory
+      JS_SetOpaque(argv[0], NULL);
       jsrt_timer_free(timer);
     }
   }
@@ -181,6 +193,8 @@ void jsrt_on_timer_callback(uv_timer_t* uv_timer) {
   }
 
   if (!timer->is_interval && !uv_is_closing((uv_handle_t*)&timer->uv_timer)) {
+    // Clear opaque pointer BEFORE freeing to prevent finalizer from accessing freed memory
+    JS_SetOpaque(timer->timer_obj, NULL);
     jsrt_timer_free(timer);
   }
 }
@@ -195,18 +209,30 @@ static void jsrt_timer_close_callback(uv_handle_t* handle) {
   JSRT_Timer* timer = (JSRT_Timer*)handle->data;
   JSRT_Debug("TimerCloseCallback: timer=%p id=%" PRIu64, timer, timer->timer_id);
 
-  JSRT_RuntimeFreeValue(timer->rt, timer->callback);
-  timer->callback = JS_UNDEFINED;
-  JSRT_RuntimeFreeValue(timer->rt, timer->this_val);
-  timer->this_val = JS_UNDEFINED;
+  // Only free JSValues if runtime and context are still valid
+  // During runtime teardown, these may already be freed
+  if (timer->rt && timer->rt->ctx) {
+    JSRT_RuntimeFreeValue(timer->rt, timer->timer_obj);
+    timer->timer_obj = JS_UNDEFINED;
+    JSRT_RuntimeFreeValue(timer->rt, timer->callback);
+    timer->callback = JS_UNDEFINED;
+    JSRT_RuntimeFreeValue(timer->rt, timer->this_val);
+    timer->this_val = JS_UNDEFINED;
 
-  // Free the copied arguments
-  if (timer->argv) {
-    for (int i = 0; i < timer->argc; i++) {
-      JSRT_RuntimeFreeValue(timer->rt, timer->argv[i]);
+    // Free the copied arguments
+    if (timer->argv) {
+      for (int i = 0; i < timer->argc; i++) {
+        JSRT_RuntimeFreeValue(timer->rt, timer->argv[i]);
+      }
+      free(timer->argv);
+      timer->argv = NULL;
     }
-    free(timer->argv);
-    timer->argv = NULL;
+  } else {
+    // Runtime is being torn down, just free the argv array
+    if (timer->argv) {
+      free(timer->argv);
+      timer->argv = NULL;
+    }
   }
 
   free(timer);

@@ -200,38 +200,56 @@ test('server listen on already-bound port emits error', () => {
     const server1 = net.createServer();
     const server2 = net.createServer();
     let failTimer;
+    let delayTimer;
     let errorEmitted = false;
+
+    // Set up server2 handlers before server1 starts
+    server2.on('error', (err) => {
+      if (!errorEmitted) {
+        errorEmitted = true;
+        assert.ok(err instanceof Error, 'error should be Error instance');
+        clearTimeout(failTimer);
+        clearTimeout(delayTimer);
+        server1.close();
+        server2.close();
+        resolve();
+      }
+    });
+
+    server2.on('listening', () => {
+      // On some systems, binding may succeed due to SO_REUSEADDR
+      // Consider this acceptable
+      clearTimeout(failTimer);
+      clearTimeout(delayTimer);
+      server1.close();
+      server2.close();
+      console.log('  (port reuse allowed on this system - test skipped)');
+      resolve();
+    });
 
     server1.listen(0, '127.0.0.1', () => {
       const port = server1.address().port;
 
-      server2.on('error', (err) => {
-        if (!errorEmitted) {
-          errorEmitted = true;
-          assert.ok(err instanceof Error, 'error should be Error instance');
-          clearTimeout(failTimer);
-          server1.close();
-          server2.close();
-          resolve();
-        }
-      });
-
-      server2.on('listening', () => {
-        // On some systems, binding may succeed due to SO_REUSEADDR
-        // Consider this acceptable
-        clearTimeout(failTimer);
-        server1.close();
-        server2.close();
-        console.log('  (port reuse allowed on this system - test skipped)');
-        resolve();
-      });
-
       // Add small delay to ensure server1 is fully bound
-      setTimeout(() => {
-        server2.listen(port, '127.0.0.1');
+      delayTimer = setTimeout(() => {
+        try {
+          server2.listen(port, '127.0.0.1');
+        } catch (err) {
+          // If listen throws synchronously, treat it as an error event
+          if (!errorEmitted) {
+            errorEmitted = true;
+            assert.ok(err instanceof Error, 'error should be Error instance');
+            clearTimeout(failTimer);
+            clearTimeout(delayTimer);
+            server1.close();
+            server2.close();
+            resolve();
+          }
+        }
       }, 50);
 
       failTimer = setTimeout(() => {
+        clearTimeout(delayTimer);
         server1.close();
         server2.close();
         if (!errorEmitted) {

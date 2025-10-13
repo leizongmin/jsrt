@@ -1,10 +1,58 @@
 #include "net_internal.h"
 
+// Deferred cleanup list - structs to free after loop closes
+typedef struct DeferredCleanup {
+  void* ptr;
+  char* string1;  // For host
+  char* string2;  // For encoding
+  struct DeferredCleanup* next;
+} DeferredCleanup;
+
+static DeferredCleanup* deferred_cleanup_head = NULL;
+
+static void add_deferred_cleanup(void* ptr, char* string1, char* string2) {
+  // Check if this pointer is already in the list to prevent double-free
+  DeferredCleanup* current = deferred_cleanup_head;
+  while (current) {
+    if (current->ptr == ptr) {
+      // Already in list, don't add again
+      return;
+    }
+    current = current->next;
+  }
+
+  // Not in list, add it
+  DeferredCleanup* node = malloc(sizeof(DeferredCleanup));
+  if (node) {
+    node->ptr = ptr;
+    node->string1 = string1;
+    node->string2 = string2;
+    node->next = deferred_cleanup_head;
+    deferred_cleanup_head = node;
+  }
+}
+
+void jsrt_net_cleanup_deferred(void) {
+  DeferredCleanup* current = deferred_cleanup_head;
+  while (current) {
+    DeferredCleanup* next = current->next;
+    if (current->string1) {
+      free(current->string1);
+    }
+    if (current->string2) {
+      free(current->string2);
+    }
+    free(current->ptr);
+    free(current);
+    current = next;
+  }
+  deferred_cleanup_head = NULL;
+}
+
 // Timer close callback - frees timer memory and decrements close count
 void socket_timeout_timer_close_callback(uv_handle_t* handle) {
   if (handle->data) {
     JSNetConnection* conn = (JSNetConnection*)handle->data;
-    handle->data = NULL;
 
     // Free the timer itself
     free(conn->timeout_timer);
@@ -13,22 +61,23 @@ void socket_timeout_timer_close_callback(uv_handle_t* handle) {
 
     conn->close_count--;
     if (conn->close_count == 0) {
-      // All handles closed, safe to free
-      if (conn->host) {
-        free(conn->host);
-      }
-      free(conn);
+      // Defer freeing until after loop closes to avoid use-after-free in uv_walk
+      add_deferred_cleanup(conn, conn->host, conn->encoding);
     }
   }
 }
 
 // Close callback for socket cleanup
-// NOTE: DO NOT free the connection struct here!
-// It will be freed by JSRT_RuntimeCleanupWalkCallback after the loop closes
-// Freeing here causes use-after-free during uv_walk in shutdown
-// NOTE: DO NOT emit close event here - socket_obj may be invalid after finalizer runs
 void socket_close_callback(uv_handle_t* handle) {
-  // Do nothing - cleanup happens in JSRT_RuntimeCleanupWalkCallback
+  if (handle->data) {
+    JSNetConnection* conn = (JSNetConnection*)handle->data;
+
+    conn->close_count--;
+    if (conn->close_count == 0) {
+      // Defer freeing until after loop closes to avoid use-after-free in uv_walk
+      add_deferred_cleanup(conn, conn->host, conn->encoding);
+    }
+  }
 }
 
 // Class finalizers
@@ -48,44 +97,44 @@ void js_socket_finalizer(JSRuntime* rt, JSValue val) {
     conn->client_request_obj = JS_UNDEFINED;
   }
 
-  // Close timeout timer if it's initialized
-  if (conn->timeout_timer_initialized && conn->timeout_timer) {
-    uv_timer_stop(conn->timeout_timer);
-    if (!uv_is_closing((uv_handle_t*)conn->timeout_timer)) {
-      conn->timeout_timer->data = conn;
-      uv_close((uv_handle_t*)conn->timeout_timer, socket_timeout_timer_close_callback);
-    }
-    conn->timeout_enabled = false;
-  }
-
-  // Free encoding string if set
-  if (conn->encoding) {
-    free(conn->encoding);
-    conn->encoding = NULL;
-  }
+  // DO NOT free encoding or host strings here - deferred cleanup will handle them
+  // to avoid double-free when close callbacks also try to free them
 
   // Free any queued pending writes
   js_net_connection_clear_pending_writes(conn);
 
-  // Close socket handle - callback will free the struct
-  if (!uv_is_closing((uv_handle_t*)&conn->handle)) {
-    conn->handle.data = conn;
-    uv_close((uv_handle_t*)&conn->handle, socket_close_callback);
-  } else {
-    // Handle already closing or closed, free immediately
-    if (conn->host) {
-      free(conn->host);
-      conn->host = NULL;
+  // Initialize close_count if not already set (e.g., by destroy())
+  if (conn->close_count == 0) {
+    // Close timeout timer if it's initialized
+    if (conn->timeout_timer_initialized && conn->timeout_timer) {
+      uv_timer_stop(conn->timeout_timer);
+      if (!uv_is_closing((uv_handle_t*)conn->timeout_timer)) {
+        conn->close_count++;
+        conn->timeout_timer->data = conn;
+        uv_close((uv_handle_t*)conn->timeout_timer, socket_timeout_timer_close_callback);
+      }
+      conn->timeout_enabled = false;
     }
-    free(conn);
+
+    // Close socket handle
+    if (!uv_is_closing((uv_handle_t*)&conn->handle)) {
+      conn->close_count++;
+      conn->handle.data = conn;
+      uv_close((uv_handle_t*)&conn->handle, socket_close_callback);
+    }
+
+    // Defer freeing even if no handles to close, to avoid use-after-free in uv_walk
+    if (conn->close_count == 0) {
+      add_deferred_cleanup(conn, conn->host, conn->encoding);
+    }
   }
+  // else: destroy() was called, close_count already set, cleanup will happen in callbacks
 }
 
 // Timer close callback for server - frees timer memory and decrements close count
 void server_callback_timer_close_callback(uv_handle_t* handle) {
   if (handle->data) {
     JSNetServer* server = (JSNetServer*)handle->data;
-    handle->data = NULL;
 
     // Free the timer itself
     free(server->callback_timer);
@@ -94,22 +143,23 @@ void server_callback_timer_close_callback(uv_handle_t* handle) {
 
     server->close_count--;
     if (server->close_count == 0) {
-      // All handles closed, safe to free
-      if (server->host) {
-        free(server->host);
-      }
-      free(server);
+      // Defer freeing until after loop closes to avoid use-after-free in uv_walk
+      add_deferred_cleanup(server, server->host, NULL);
     }
   }
 }
 
 // Close callback for server cleanup
-// NOTE: DO NOT free the server struct here!
-// It will be freed by JSRT_RuntimeCleanupWalkCallback after the loop closes
-// Freeing here causes use-after-free during uv_walk in shutdown
-// NOTE: DO NOT emit close event here - server_obj may be invalid after finalizer runs
 void server_close_callback(uv_handle_t* handle) {
-  // Do nothing - cleanup happens in JSRT_RuntimeCleanupWalkCallback
+  if (handle->data) {
+    JSNetServer* server = (JSNetServer*)handle->data;
+
+    server->close_count--;
+    if (server->close_count == 0) {
+      // Defer freeing until after loop closes to avoid use-after-free in uv_walk
+      add_deferred_cleanup(server, server->host, NULL);
+    }
+  }
 }
 
 void js_server_finalizer(JSRuntime* rt, JSValue val) {
@@ -153,12 +203,9 @@ void js_server_finalizer(JSRuntime* rt, JSValue val) {
       uv_close((uv_handle_t*)&server->handle, server_close_callback);
     }
 
-    // If no handles to close, free immediately
+    // Defer freeing even if no handles to close, to avoid use-after-free in uv_walk
     if (server->close_count == 0) {
-      if (server->host) {
-        free(server->host);
-      }
-      free(server);
+      add_deferred_cleanup(server, server->host, NULL);
     }
   }
 }

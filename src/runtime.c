@@ -49,39 +49,6 @@ static void JSRT_RuntimeCloseWalkCallback(uv_handle_t* handle, void* arg) {
   }
 }
 
-// Type tags from net module (must match net_internal.h)
-#define NET_TYPE_SOCKET 0x534F434B  // 'SOCK' in hex
-#define NET_TYPE_SERVER 0x53525652  // 'SRVR' in hex
-
-// Simple linked list to collect structs for cleanup
-typedef struct CleanupNode {
-  void* data;
-  uint32_t type_tag;
-  struct CleanupNode* next;
-} CleanupNode;
-
-static CleanupNode* cleanup_list_head = NULL;
-
-// Collect walk callback - builds list of structs to free BEFORE closing loop
-static void JSRT_RuntimeCollectWalkCallback(uv_handle_t* handle, void* arg) {
-  if (handle->data && handle->type == UV_TCP) {
-    // Check the type tag to determine if this is a socket or server
-    uint32_t type_tag = *(uint32_t*)handle->data;
-
-    if (type_tag == NET_TYPE_SOCKET || type_tag == NET_TYPE_SERVER) {
-      // Add to cleanup list
-      CleanupNode* node = malloc(sizeof(CleanupNode));
-      if (node) {
-        node->data = handle->data;
-        node->type_tag = type_tag;
-        node->next = cleanup_list_head;
-        cleanup_list_head = node;
-        // DO NOT set handle->data = NULL here - loop still needs it
-      }
-    }
-  }
-}
-
 JSRT_Runtime* JSRT_RuntimeNew() {
   JSRT_Runtime* rt = malloc(sizeof(JSRT_Runtime));
   rt->rt = JS_NewRuntime();
@@ -141,56 +108,7 @@ JSRT_Runtime* JSRT_RuntimeNew() {
 }
 
 void JSRT_RuntimeFree(JSRT_Runtime* rt) {
-  // First, collect all net module structs BEFORE closing anything
-  cleanup_list_head = NULL;
-  uv_walk(rt->uv_loop, JSRT_RuntimeCollectWalkCallback, NULL);
-
-  // Close all handles before closing the loop
-  uv_walk(rt->uv_loop, JSRT_RuntimeCloseWalkCallback, NULL);
-
-  // Run the loop once more to process the close callbacks
-  uv_run(rt->uv_loop, UV_RUN_DEFAULT);
-
-  int result = uv_loop_close(rt->uv_loop);
-  if (result != 0) {
-    JSRT_Debug("uv_loop_close failed: %s", uv_strerror(result));
-  }
-
-  // Now free only string fields from collected net module structs
-  // DO NOT free the structs themselves - QuickJS finalizers will do that
-  CleanupNode* current = cleanup_list_head;
-  while (current) {
-    CleanupNode* next = current->next;
-
-    if (current->type_tag == NET_TYPE_SOCKET) {
-      // Use the actual struct definition from net_internal.h
-      JSNetConnection* conn = (JSNetConnection*)current->data;
-      if (conn->host) {
-        free(conn->host);
-        conn->host = NULL;
-      }
-      if (conn->encoding) {
-        free(conn->encoding);
-        conn->encoding = NULL;
-      }
-      // DO NOT free(conn) - finalizer will do it
-    } else if (current->type_tag == NET_TYPE_SERVER) {
-      // Use the actual struct definition from net_internal.h
-      JSNetServer* server = (JSNetServer*)current->data;
-      if (server->host) {
-        free(server->host);
-        server->host = NULL;
-      }
-      // DO NOT free(server) - finalizer will do it
-    }
-
-    free(current);
-    current = next;
-  }
-  cleanup_list_head = NULL;
-
-  free(rt->uv_loop);
-
+  // Free JavaScript objects first to trigger finalizers while loop is still alive
   JSRT_RuntimeFreeDisposeValues(rt);
   JSRT_RuntimeFreeExceptionValues(rt);
 
@@ -212,7 +130,30 @@ void JSRT_RuntimeFree(JSRT_Runtime* rt) {
   JSRT_RuntimeFreeValue(rt, rt->global);
   rt->global = JS_UNDEFINED;
 
+  // Run GC to trigger finalizers while loop is still active
+  // Finalizers will close their handles via uv_close()
   JS_RunGC(rt->rt);
+
+  // Run the loop to process all close callbacks from finalizers
+  // This must happen before uv_walk to avoid accessing freed memory
+  uv_run(rt->uv_loop, UV_RUN_DEFAULT);
+
+  // Now close any remaining handles that weren't managed by finalizers
+  // (timers, async handles, etc.)
+  uv_walk(rt->uv_loop, JSRT_RuntimeCloseWalkCallback, NULL);
+
+  // Run the loop again to process close callbacks from uv_walk
+  uv_run(rt->uv_loop, UV_RUN_DEFAULT);
+
+  int result = uv_loop_close(rt->uv_loop);
+  if (result != 0) {
+    JSRT_Debug("uv_loop_close failed: %s", uv_strerror(result));
+  }
+
+  free(rt->uv_loop);
+
+  // Clean up deferred net module structs after loop is closed
+  jsrt_net_cleanup_deferred();
 
   JS_FreeContext(rt->ctx);
   rt->ctx = NULL;

@@ -136,6 +136,7 @@ void js_socket_finalizer(JSRuntime* rt, JSValue val);
 void server_close_callback(uv_handle_t* handle);
 void server_timer_close_callback(uv_handle_t* handle);
 void js_server_finalizer(JSRuntime* rt, JSValue val);
+void jsrt_net_cleanup_deferred(void);
 
 // Module functions (from net_module.c)
 JSValue js_net_create_server(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv);

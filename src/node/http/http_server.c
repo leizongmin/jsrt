@@ -238,7 +238,9 @@ JSValue js_http_server_constructor(JSContext* ctx, JSValueConst new_target, int 
   server->ctx = ctx;
   server->server_obj = JS_DupValue(ctx, obj);
   server->destroyed = false;
-  server->timeout_ms = 0;  // No timeout by default
+  server->timeout_ms = 0;            // No timeout by default
+  server->max_headers_count = 2000;  // Default 2000 headers (Node.js default)
+  server->max_header_size = 8192;    // Default 8KB (Node.js default)
 
   // Create underlying net.Server
   JSValue net_module = JSRT_LoadNodeModuleCommonJS(ctx, "net");
@@ -266,6 +268,10 @@ JSValue js_http_server_constructor(JSContext* ctx, JSValueConst new_target, int 
   JS_SetPropertyStr(ctx, obj, "close", JS_NewCFunction(ctx, js_http_server_close, "close", 0));
   JS_SetPropertyStr(ctx, obj, "address", JS_NewCFunction(ctx, js_http_server_address, "address", 0));
   JS_SetPropertyStr(ctx, obj, "setTimeout", JS_NewCFunction(ctx, js_http_server_set_timeout, "setTimeout", 2));
+
+  // Phase 5.2: Add header limit properties
+  JS_SetPropertyStr(ctx, obj, "maxHeadersCount", JS_NewInt32(ctx, server->max_headers_count));
+  JS_SetPropertyStr(ctx, obj, "maxHeaderSize", JS_NewInt32(ctx, server->max_header_size));
 
   // Add EventEmitter functionality
   setup_event_emitter_inheritance(ctx, obj);

@@ -516,6 +516,90 @@ JSValue js_http_response_write_continue(JSContext* ctx, JSValueConst this_val, i
   return JS_UNDEFINED;
 }
 
+// Response writeProcessing method - sends 102 Processing (Phase 5.4.4)
+JSValue js_http_response_write_processing(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
+  JSHttpResponse* res = JS_GetOpaque(this_val, js_http_response_class_id);
+  if (!res) {
+    return JS_ThrowTypeError(ctx, "Invalid response object");
+  }
+
+  // Send 102 Processing status line
+  const char* processing_response = "HTTP/1.1 102 Processing\r\n\r\n";
+
+  if (!JS_IsUndefined(res->socket)) {
+    JSValue write_method = JS_GetPropertyStr(ctx, res->socket, "write");
+    if (JS_IsFunction(ctx, write_method)) {
+      JSValue data = JS_NewString(ctx, processing_response);
+      JS_Call(ctx, write_method, res->socket, 1, &data);
+      JS_FreeValue(ctx, data);
+    }
+    JS_FreeValue(ctx, write_method);
+  }
+
+  return JS_UNDEFINED;
+}
+
+// Phase 5.4.5: Generic method for sending informational (1xx) responses
+JSValue js_http_response_write_early_hints(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
+  JSHttpResponse* res = JS_GetOpaque(this_val, js_http_response_class_id);
+  if (!res) {
+    return JS_ThrowTypeError(ctx, "Invalid response object");
+  }
+
+  // writeEarlyHints sends 103 Early Hints with Link headers
+  // Expects an object with headers (specifically Link headers for resource hints)
+  if (argc < 1 || !JS_IsObject(argv[0])) {
+    return JS_ThrowTypeError(ctx, "writeEarlyHints requires headers object");
+  }
+
+  if (JS_IsUndefined(res->socket)) {
+    return JS_UNDEFINED;
+  }
+
+  // Build 103 response with headers
+  char response_buffer[4096];
+  int offset = snprintf(response_buffer, sizeof(response_buffer), "HTTP/1.1 103 Early Hints\r\n");
+
+  // Add headers from the provided object
+  JSPropertyEnum* props;
+  uint32_t prop_count;
+  if (JS_GetOwnPropertyNames(ctx, &props, &prop_count, argv[0], JS_GPN_STRING_MASK) == 0) {
+    for (uint32_t i = 0; i < prop_count && offset < (int)sizeof(response_buffer) - 100; i++) {
+      JSValue key = JS_AtomToString(ctx, props[i].atom);
+      JSValue val = JS_GetProperty(ctx, argv[0], props[i].atom);
+
+      const char* key_str = JS_ToCString(ctx, key);
+      const char* val_str = JS_ToCString(ctx, val);
+
+      if (key_str && val_str) {
+        offset += snprintf(response_buffer + offset, sizeof(response_buffer) - offset, "%s: %s\r\n", key_str, val_str);
+      }
+
+      if (key_str)
+        JS_FreeCString(ctx, key_str);
+      if (val_str)
+        JS_FreeCString(ctx, val_str);
+      JS_FreeValue(ctx, key);
+      JS_FreeValue(ctx, val);
+    }
+    js_free(ctx, props);
+  }
+
+  // Add final CRLF
+  snprintf(response_buffer + offset, sizeof(response_buffer) - offset, "\r\n");
+
+  // Send to socket
+  JSValue write_method = JS_GetPropertyStr(ctx, res->socket, "write");
+  if (JS_IsFunction(ctx, write_method)) {
+    JSValue data = JS_NewString(ctx, response_buffer);
+    JS_Call(ctx, write_method, res->socket, 1, &data);
+    JS_FreeValue(ctx, data);
+  }
+  JS_FreeValue(ctx, write_method);
+
+  return JS_UNDEFINED;
+}
+
 // ServerResponse constructor
 JSValue js_http_response_constructor(JSContext* ctx, JSValueConst new_target, int argc, JSValueConst* argv) {
   JSValue obj = JS_NewObjectClass(ctx, js_http_response_class_id);
@@ -578,6 +662,12 @@ JSValue js_http_response_constructor(JSContext* ctx, JSValueConst new_target, in
   JS_SetPropertyStr(ctx, obj, "getHeaders", JS_NewCFunction(ctx, js_http_response_get_headers, "getHeaders", 0));
   JS_SetPropertyStr(ctx, obj, "writeContinue",
                     JS_NewCFunction(ctx, js_http_response_write_continue, "writeContinue", 0));
+
+  // Phase 5.4: Add informational response methods
+  JS_SetPropertyStr(ctx, obj, "writeProcessing",
+                    JS_NewCFunction(ctx, js_http_response_write_processing, "writeProcessing", 0));
+  JS_SetPropertyStr(ctx, obj, "writeEarlyHints",
+                    JS_NewCFunction(ctx, js_http_response_write_early_hints, "writeEarlyHints", 1));
 
   // Phase 4.2: Add Writable stream methods
   JS_SetPropertyStr(ctx, obj, "cork", JS_NewCFunction(ctx, js_http_response_cork, "cork", 0));

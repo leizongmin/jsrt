@@ -68,7 +68,9 @@ typedef struct {
   JSValue server_obj;
   JSValue net_server;  // Underlying net.Server
   bool destroyed;
-  uint32_t timeout_ms;  // Default connection timeout (0 = no timeout)
+  uint32_t timeout_ms;         // Default connection timeout (0 = no timeout)
+  uint32_t max_headers_count;  // Maximum number of headers (default 2000, 0 = unlimited)
+  uint32_t max_header_size;    // Maximum header size in bytes (default 8192, 0 = unlimited)
 } JSHttpServer;
 
 // HTTP Request state (IncomingMessage)
@@ -171,6 +173,8 @@ JSValue js_http_response_get_header(JSContext* ctx, JSValueConst this_val, int a
 JSValue js_http_response_remove_header(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv);
 JSValue js_http_response_get_headers(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv);
 JSValue js_http_response_write_continue(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv);
+JSValue js_http_response_write_processing(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv);
+JSValue js_http_response_write_early_hints(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv);
 void js_http_response_finalizer(JSRuntime* rt, JSValue val);
 
 // Phase 4.2: Writable stream methods for ServerResponse

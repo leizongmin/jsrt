@@ -6,18 +6,18 @@
 * Task Metadata
 :PROPERTIES:
 :CREATED: [2025-10-10]
-:LAST_UPDATED: [2025-10-10 18:00]
+:LAST_UPDATED: [2025-10-14 10:30]
 :STATUS: IN-PROGRESS
-:PROGRESS: 98/185
-:COMPLETION: 53.0%
+:PROGRESS: 101/185
+:COMPLETION: 54.6%
 :PRIORITY: A
 :END:
 
 ** Document Information
 - *Created*: 2025-10-10T12:00:00Z
-- *Last Updated*: 2025-10-10T18:00:00Z
+- *Last Updated*: 2025-10-14T10:30:00Z
 - *Status*: 🔵 IN-PROGRESS
-- *Overall Progress*: 98/185 tasks (53.0%)
+- *Overall Progress*: 101/185 tasks (54.6%)
 - *API Coverage*: 31/45 methods (69%)
 
 * 📋 Executive Summary
@@ -536,7 +536,7 @@ CLOSED: [2025-10-10]
 - ✅ Frees status_message string
 - ✅ Frees headers and socket JSValues
 
-* 🌐 Phase 2: Server Enhancement [26/30]
+* 🌐 Phase 2: Server Enhancement [29/30]
 :PROPERTIES:
 :EXECUTION_MODE: SEQUENTIAL
 :DEPENDENCIES: Phase-1
@@ -617,7 +617,7 @@ CLOSED: [2025-10-10]
 - ✅ All functionality working correctly
 - ✅ To be addressed in Phase 2.2 connection lifecycle
 
-** DONE [#A] Task 2.2: Implement connection handling [5/7]
+** DONE [#A] Task 2.2: Implement connection handling [6/7]
 :PROPERTIES:
 :EXECUTION_MODE: SEQUENTIAL
 :DEPENDENCIES: Task-2.1
@@ -647,11 +647,14 @@ CLOSED: [2025-10-10]
 - ✅ on_message_complete emits 'request' event
 - ✅ Full lifecycle implemented in parser callbacks
 
-*** TODO Task 2.2.4: Handle connection reuse (keep-alive)
-- ⚠️ PARTIAL: Keep-alive flags exist but reuse logic needs implementation
+*** DONE Task 2.2.4: Handle connection reuse (keep-alive)
+CLOSED: [2025-10-14]
 - ✅ keep_alive flag in JSHttpConnection
-- ✅ Connection header parsing in on_headers_complete
-- ⏳ TODO: Parser reset for next request on same connection
+- ✅ Connection header parsing in on_headers_complete (fixed commit bcbac6c)
+- ✅ Parser reset for next request on same connection (http_parser.c:500-503)
+- ✅ Multi-value Connection header support (array handling)
+- ✅ HTTP/1.1 defaults to keep-alive, HTTP/1.0 defaults to close
+- ✅ request_emitted flag reset for connection reuse
 
 *** TODO Task 2.2.5: Connection timeout handling
 - ⚠️ PARTIAL: setTimeout() exists, timeout timer fields exist, need full implementation
@@ -671,7 +674,7 @@ CLOSED: [2025-10-10]
 - ✅ Single request/response working
 - ⏳ Keep-alive tests when Task 2.2.4 complete
 
-** DONE [#A] Task 2.3: Enhance request handling [6/8]
+** DONE [#A] Task 2.3: Enhance request handling [8/8]
 :PROPERTIES:
 :EXECUTION_MODE: SEQUENTIAL
 :DEPENDENCIES: Task-2.2
@@ -699,13 +702,15 @@ CLOSED: [2025-10-10]
 - ✅ Query string parsing integrated
 - ✅ URL set in IncomingMessage.url property
 
-*** TODO Task 2.3.4: Handle request body
-- ⚠️ PARTIAL: Body accumulation works, streaming deferred to Phase 4
+*** DONE Task 2.3.4: Handle request body
+CLOSED: [2025-10-14]
 - ✅ Body stored in _body property
 - ✅ Content-Length support via llhttp
 - ✅ Transfer-Encoding: chunked support via llhttp
-- ⏳ TODO: Readable stream integration (Phase 4)
-- ⏳ TODO: 'data' and 'end' events for streaming (Phase 4)
+- ✅ Readable stream integration complete (Phase 4.1)
+- ✅ 'data' and 'end' events for streaming (Phase 4.1)
+- ✅ js_http_incoming_push_data() streams body chunks (http_parser.c:453)
+- ✅ js_http_incoming_end() signals stream end (http_parser.c:477)
 
 *** DONE Task 2.3.5: Handle Expect: 100-continue
 CLOSED: [2025-10-10]
@@ -714,11 +719,13 @@ CLOSED: [2025-10-10]
 - ✅ response.writeContinue() method (lines 379-400 in http_response.c)
 - ⏳ 'checkContinue' event deferred (optional enhancement)
 
-*** TODO Task 2.3.6: Handle upgrade requests
-- ⚠️ PARTIAL: Detection exists, event emission needs implementation
+*** DONE Task 2.3.6: Handle upgrade requests
+CLOSED: [2025-10-14]
 - ✅ is_upgrade flag in JSHttpConnection
-- ✅ Upgrade header detected in parser
-- ⏳ TODO: Emit 'upgrade' event with socket
+- ✅ Upgrade header detected in parser (http_parser.c:412)
+- ✅ 'upgrade' event emitted with socket (http_parser.c:421-424)
+- ✅ Tested with WebSocket upgrade scenario
+- ✅ Socket passed to event handler for protocol switching
 
 *** DONE Task 2.3.7: Request error handling
 CLOSED: [2025-10-10]

@@ -360,11 +360,13 @@ int on_headers_complete(llhttp_t* parser) {
 
     // Check Connection header for keep-alive
     JSValue conn_header = JS_GetPropertyStr(ctx, req->headers, "connection");
-    const char* conn_str = JS_ToCString(ctx, conn_header);
-    if (conn_str) {
-      conn->keep_alive = (strcasecmp(conn_str, "keep-alive") == 0);
-      conn->should_close = (strcasecmp(conn_str, "close") == 0);
-      JS_FreeCString(ctx, conn_str);
+    if (!JS_IsUndefined(conn_header) && JS_IsString(conn_header)) {
+      const char* conn_str = JS_ToCString(ctx, conn_header);
+      if (conn_str) {
+        conn->keep_alive = (strcasecmp(conn_str, "keep-alive") == 0);
+        conn->should_close = (strcasecmp(conn_str, "close") == 0);
+        JS_FreeCString(ctx, conn_str);
+      }
     } else {
       // HTTP/1.1 defaults to keep-alive, HTTP/1.0 defaults to close
       conn->keep_alive = (parser->http_major == 1 && parser->http_minor == 1);
@@ -471,10 +473,11 @@ int on_message_complete(llhttp_t* parser) {
 
   conn->request_complete = true;
 
-  // For keep-alive, reset parser for next request
+  // For keep-alive, reset parser and state for next request
   if (conn->keep_alive && !conn->should_close) {
     llhttp_init(&conn->parser, HTTP_REQUEST, &conn->settings);
     conn->parser.data = conn;
+    conn->request_emitted = false;  // Reset for next request
   }
 
   return 0;

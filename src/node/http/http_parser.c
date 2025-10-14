@@ -1,4 +1,5 @@
 #include <ctype.h>
+#include <stdbool.h>
 #include <stdint.h>
 #include "http_incoming.h"
 #include "http_internal.h"
@@ -229,8 +230,7 @@ int on_header_field(llhttp_t* parser, const char* at, size_t length) {
           } else {
             // Convert to array
             JSValue array = JS_NewArray(ctx);
-            JSValue old_value = existing;  // Don't free, we're moving it
-            JS_SetPropertyUint32(ctx, array, 0, old_value);
+            JS_SetPropertyUint32(ctx, array, 0, JS_DupValue(ctx, existing));
             JSValue new_value = JS_NewString(ctx, conn->current_header_value);
             JS_SetPropertyUint32(ctx, array, 1, new_value);
             JS_SetPropertyStr(ctx, req->headers, lower_name, array);
@@ -298,7 +298,7 @@ int on_headers_complete(llhttp_t* parser) {
             JS_FreeValue(ctx, new_value);
           } else {
             JSValue array = JS_NewArray(ctx);
-            JS_SetPropertyUint32(ctx, array, 0, existing);
+            JS_SetPropertyUint32(ctx, array, 0, JS_DupValue(ctx, existing));
             JSValue new_value = JS_NewString(ctx, conn->current_header_value);
             JS_SetPropertyUint32(ctx, array, 1, new_value);
             JS_SetPropertyStr(ctx, req->headers, lower_name, array);
@@ -360,14 +360,37 @@ int on_headers_complete(llhttp_t* parser) {
 
     // Check Connection header for keep-alive
     JSValue conn_header = JS_GetPropertyStr(ctx, req->headers, "connection");
-    if (!JS_IsUndefined(conn_header) && JS_IsString(conn_header)) {
-      const char* conn_str = JS_ToCString(ctx, conn_header);
-      if (conn_str) {
-        conn->keep_alive = (strcasecmp(conn_str, "keep-alive") == 0);
-        conn->should_close = (strcasecmp(conn_str, "close") == 0);
-        JS_FreeCString(ctx, conn_str);
+    bool connection_processed = false;
+
+    if (!JS_IsUndefined(conn_header)) {
+      // Handle array case (multiple Connection headers)
+      if (JS_IsArray(ctx, conn_header)) {
+        // Get the first element
+        JSValue first_elem = JS_GetPropertyUint32(ctx, conn_header, 0);
+        if (JS_IsString(first_elem)) {
+          const char* conn_str = JS_ToCString(ctx, first_elem);
+          if (conn_str) {
+            conn->keep_alive = (strcasecmp(conn_str, "keep-alive") == 0);
+            conn->should_close = (strcasecmp(conn_str, "close") == 0);
+            connection_processed = true;
+            JS_FreeCString(ctx, conn_str);
+          }
+        }
+        JS_FreeValue(ctx, first_elem);
       }
-    } else {
+      // Handle string case (single Connection header)
+      else if (JS_IsString(conn_header)) {
+        const char* conn_str = JS_ToCString(ctx, conn_header);
+        if (conn_str) {
+          conn->keep_alive = (strcasecmp(conn_str, "keep-alive") == 0);
+          conn->should_close = (strcasecmp(conn_str, "close") == 0);
+          connection_processed = true;
+          JS_FreeCString(ctx, conn_str);
+        }
+      }
+    }
+
+    if (!connection_processed) {
       // HTTP/1.1 defaults to keep-alive, HTTP/1.0 defaults to close
       conn->keep_alive = (parser->http_major == 1 && parser->http_minor == 1);
       conn->should_close = !conn->keep_alive;

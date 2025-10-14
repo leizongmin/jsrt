@@ -738,6 +738,17 @@ void js_http_connection_handler(JSContext* ctx, JSValue server, JSValue socket) 
     JS_FreeValue(ctx, args[0]);
   }
   JS_FreeValue(ctx, on_close_method);
+
+  // Phase 5.6.1: Emit 'connection' event on server
+  JSValue emit = JS_GetPropertyStr(ctx, server, "emit");
+  if (JS_IsFunction(ctx, emit)) {
+    JSValue args[] = {JS_NewString(ctx, "connection"), JS_DupValue(ctx, socket)};
+    JSValue result = JS_Call(ctx, emit, server, 2, args);
+    JS_FreeValue(ctx, result);
+    JS_FreeValue(ctx, args[0]);
+    JS_FreeValue(ctx, args[1]);
+  }
+  JS_FreeValue(ctx, emit);
 }
 
 // llhttp data handler - parses incoming socket data

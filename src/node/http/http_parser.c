@@ -130,10 +130,51 @@ static int buffer_append(char** buffer, size_t* size, size_t* capacity, const ch
   return 0;
 }
 
+// Timeout callback for server connections
+static void connection_timeout_callback(uv_timer_t* timer) {
+  JSHttpConnection* conn = (JSHttpConnection*)timer->data;
+  if (!conn || !conn->ctx) {
+    return;
+  }
+
+  JSContext* ctx = conn->ctx;
+
+  // Emit 'timeout' event on server
+  JSValue emit = JS_GetPropertyStr(ctx, conn->server, "emit");
+  if (JS_IsFunction(ctx, emit)) {
+    JSValue args[] = {JS_NewString(ctx, "timeout"), JS_DupValue(ctx, conn->socket)};
+    JSValue result = JS_Call(ctx, emit, conn->server, 2, args);
+    JS_FreeValue(ctx, result);
+    JS_FreeValue(ctx, args[0]);
+    JS_FreeValue(ctx, args[1]);
+  }
+  JS_FreeValue(ctx, emit);
+
+  // Also emit 'timeout' on socket if it exists
+  if (!JS_IsUndefined(conn->socket)) {
+    JSValue socket_emit = JS_GetPropertyStr(ctx, conn->socket, "emit");
+    if (JS_IsFunction(ctx, socket_emit)) {
+      JSValue args[] = {JS_NewString(ctx, "timeout")};
+      JSValue result = JS_Call(ctx, socket_emit, conn->socket, 1, args);
+      JS_FreeValue(ctx, result);
+      JS_FreeValue(ctx, args[0]);
+    }
+    JS_FreeValue(ctx, socket_emit);
+  }
+}
+
 // llhttp callback: message begin
 int on_message_begin(llhttp_t* parser) {
   JSHttpConnection* conn = (JSHttpConnection*)parser->data;
   JSContext* ctx = conn->ctx;
+
+  // Phase 5.1.1: Start/restart timeout timer on each new message
+  // Get current timeout value from server (it may have changed via setTimeout())
+  JSHttpServer* http_server = JS_GetOpaque(conn->server, js_http_server_class_id);
+  if (http_server && http_server->timeout_ms > 0 && conn->timeout_timer) {
+    conn->timeout_ms = http_server->timeout_ms;
+    uv_timer_start(conn->timeout_timer, connection_timeout_callback, conn->timeout_ms, 0);
+  }
 
   // Free previous request/response if they exist (keep-alive reuse)
   if (!JS_IsUndefined(conn->current_request)) {
@@ -496,11 +537,16 @@ int on_message_complete(llhttp_t* parser) {
 
   conn->request_complete = true;
 
+  // Note: Don't stop timeout timer here - it should remain active until the RESPONSE
+  // is complete (res.end()), not just when request parsing completes.
+  // The timer will be stopped by the response's end() method.
+
   // For keep-alive, reset parser and state for next request
   if (conn->keep_alive && !conn->should_close) {
     llhttp_init(&conn->parser, HTTP_REQUEST, &conn->settings);
     conn->parser.data = conn;
     conn->request_emitted = false;  // Reset for next request
+    // Timer will be restarted on next message_begin
   }
 
   return 0;
@@ -673,6 +719,16 @@ void js_http_connection_handler(JSContext* ctx, JSValue server, JSValue socket) 
 
   // CRITICAL FIX #1.5: Track connection for cleanup
   track_connection(conn);
+
+  // Phase 5.1.1: Initialize timeout timer (will be started on first message)
+  // Note: We allocate the timer here but don't start it yet, because server.setTimeout()
+  // might be called after createServer() but before any connections arrive
+  JSRT_Runtime* rt = JS_GetContextOpaque(ctx);
+  conn->timeout_timer = malloc(sizeof(uv_timer_t));
+  if (conn->timeout_timer) {
+    uv_timer_init(rt->uv_loop, conn->timeout_timer);
+    conn->timeout_timer->data = conn;
+  }
 
   // Initialize llhttp parser
   llhttp_settings_init(&conn->settings);

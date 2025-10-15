@@ -6,18 +6,18 @@
 * Task Metadata
 :PROPERTIES:
 :CREATED: [2025-10-10]
-:LAST_UPDATED: [2025-10-15 11:35]
+:LAST_UPDATED: [2025-10-15 12:00]
 :STATUS: IN-PROGRESS
-:PROGRESS: 121/185
-:COMPLETION: 65.4%
+:PROGRESS: 125/185
+:COMPLETION: 67.6%
 :PRIORITY: A
 :END:
 
 ** Document Information
 - *Created*: 2025-10-10T12:00:00Z
-- *Last Updated*: 2025-10-15T11:35:00Z
+- *Last Updated*: 2025-10-15T12:00:00Z
 - *Status*: 🔵 IN-PROGRESS
-- *Overall Progress*: 121/185 tasks (65.4%)
+- *Overall Progress*: 125/185 tasks (67.6%)
 - *API Coverage*: 31/45 methods (69%)
 
 * 📋 Executive Summary
@@ -1467,7 +1467,7 @@ CLOSED: [2025-10-14]
 - ✅ ClientRequest 'finish' after end() (http_client.c:497-507)
 - ✅ Already implemented in Phase 3-4
 
-* ✅ Phase 6: Testing & Validation [8/20]
+* ✅ Phase 6: Testing & Validation [12/20]
 :PROPERTIES:
 :EXECUTION_MODE: SEQUENTIAL
 :DEPENDENCIES: Phase-5
@@ -1508,32 +1508,49 @@ CLOSED: [2025-10-15]
 - ✅ All http tests run correctly via ~make test N=node/http~
 - ✅ Test results: 8/9 passing (89% pass rate)
 
-** TODO [#A] Task 6.2: Server tests [0/4]
+** DONE [#A] Task 6.2: Server tests [4/4]
+CLOSED: [2025-10-15]
 :PROPERTIES:
 :EXECUTION_MODE: PARALLEL
 :DEPENDENCIES: Task-6.1
 :COMPLEXITY: SIMPLE
 :END:
 
-*** TODO Task 6.2.1: Basic server tests
-- test/node/http/server/test_basic.js
-- createServer, listen, close
-- Simple request/response
+*** DONE Task 6.2.1: Basic server tests
+CLOSED: [2025-10-15]
+- ✅ test/node/http/server/test_basic.js (15 tests, all passing)
+- ✅ createServer, listen, close, address
+- ✅ Server properties (maxHeadersCount, setTimeout)
+- ✅ Server events (listening, close)
+- ✅ Simple request/response cycles
 
-*** TODO Task 6.2.2: Request handling tests
-- test/node/http/server/test_request.js
-- Headers, body, URL parsing
-- Various HTTP methods
+*** DONE Task 6.2.2: Request handling tests
+CLOSED: [2025-10-15]
+- ✅ test/node/http/server/test_request.js (15 tests, all passing)
+- ✅ Headers parsing (case-insensitive, duplicate headers)
+- ✅ Body receiving (small, large, JSON)
+- ✅ URL parsing with query strings
+- ✅ All HTTP methods (GET, POST, PUT, DELETE, HEAD, OPTIONS)
+- ✅ HTTP version detection
 
-*** TODO Task 6.2.3: Response writing tests
-- test/node/http/server/test_response.js
-- writeHead, headers, write, end
-- Chunked encoding
+*** DONE Task 6.2.3: Response writing tests
+CLOSED: [2025-10-15]
+- ✅ test/node/http/server/test_response.js (15 tests, all passing)
+- ✅ writeHead with status code and headers
+- ✅ Header management (setHeader, getHeader, removeHeader, getHeaders)
+- ✅ write() and end() methods
+- ✅ Chunked encoding (implicit)
+- ✅ JSON responses, large bodies
 
-*** TODO Task 6.2.4: Server edge cases
-- test/node/http/server/test_edge_cases.js
-- Timeouts, errors, limits
-- Invalid requests
+*** DONE Task 6.2.4: Server edge cases
+CLOSED: [2025-10-15]
+- ✅ test/node/http/server/test_edge_cases.js (15 tests, all passing)
+- ✅ Error handling (connection errors, client disconnect)
+- ✅ Edge cases (long URLs, many headers, large header values)
+- ✅ HTTP/1.0 support
+- ✅ Concurrent connections
+- ✅ Pipelined requests
+- ✅ Special headers (Connection: close, zero Content-Length)
 
 ** TODO [#A] Task 6.3: Client tests [0/4]
 :PROPERTIES:

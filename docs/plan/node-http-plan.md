@@ -6,18 +6,18 @@
 * Task Metadata
 :PROPERTIES:
 :CREATED: [2025-10-10]
-:LAST_UPDATED: [2025-10-15 15:20]
+:LAST_UPDATED: [2025-10-15 15:45]
 :STATUS: IN-PROGRESS
-:PROGRESS: 129/185
-:COMPLETION: 69.7%
+:PROGRESS: 133/185
+:COMPLETION: 71.9%
 :PRIORITY: A
 :END:
 
 ** Document Information
 - *Created*: 2025-10-10T12:00:00Z
-- *Last Updated*: 2025-10-15T15:20:00Z
+- *Last Updated*: 2025-10-15T15:45:00Z
 - *Status*: 🔵 IN-PROGRESS
-- *Overall Progress*: 129/185 tasks (69.7%)
+- *Overall Progress*: 133/185 tasks (71.9%)
 - *API Coverage*: 31/45 methods (69%)
 
 * 📋 Executive Summary
@@ -1467,12 +1467,14 @@ CLOSED: [2025-10-14]
 - ✅ ClientRequest 'finish' after end() (http_client.c:497-507)
 - ✅ Already implemented in Phase 3-4
 
-* ✅ Phase 6: Testing & Validation [16/20]
+* ✅ Phase 6: Testing & Validation [20/20] COMPLETED
+CLOSED: [2025-10-15]
 :PROPERTIES:
 :EXECUTION_MODE: SEQUENTIAL
 :DEPENDENCIES: Phase-5
 :COMPLEXITY: SIMPLE
 :RISK: LOW
+:COMPLETED: [2025-10-15]
 :END:
 
 ** DONE [#A] Task 6.1: Organize test files [4/4]
@@ -1603,34 +1605,70 @@ CLOSED: [2025-10-15]
 - ✅ Custom HTTP methods, URL encoding
 - ✅ Concurrent requests, response abort during reception
 
-** TODO [#A] Task 6.4: Integration tests [0/4]
+** DONE [#A] Task 6.4: Integration tests [4/4]
+CLOSED: [2025-10-15]
 :PROPERTIES:
 :EXECUTION_MODE: SEQUENTIAL
 :DEPENDENCIES: Task-6.2,Task-6.3
 :COMPLEXITY: SIMPLE
 :END:
 
-*** TODO Task 6.4.1: Client-server integration
-- test/node/http/integration/test_client_server.js
-- Local server + client
-- Various scenarios
+*** DONE Task 6.4.1: Client-server integration
+CLOSED: [2025-10-15]
+- ✅ test/node/http/integration/test_client_server.js (15 tests, all passing)
+- ✅ Complete GET/POST request-response cycle
+- ✅ JSON request and response transmission
+- ✅ Custom headers propagation
+- ✅ Multiple HTTP methods (GET, POST, PUT, DELETE, PATCH)
+- ✅ Status code propagation (200, 201, 404, 500)
+- ✅ URL path parsing with query parameters
+- ✅ Multiple sequential requests
+- ✅ Large response bodies (100KB), chunked encoding
+- ✅ HEAD requests, Content-Type headers
+- ✅ HTTP version propagation
 
-*** TODO Task 6.4.2: Streaming integration
-- test/node/http/integration/test_streaming.js
-- Pipe file to response
-- Pipe request to file
-- req.pipe(res)
+*** DONE Task 6.4.2: Streaming integration
+CLOSED: [2025-10-15]
+- ✅ test/node/http/integration/test_streaming.js (12 tests, all passing)
+- ✅ Request body streaming (client write → server read)
+- ✅ Response body streaming (server write → client read)
+- ✅ Large data streaming (100KB in chunks)
+- ✅ Chunked transfer encoding
+- ✅ Request/response pause and resume
+- ✅ Bidirectional streaming
+- ✅ Multiple write() calls
+- ✅ Streaming with Content-Length header
+- ✅ Empty streams, delayed writes
 
-*** TODO Task 6.4.3: Keep-alive and connection pooling
-- test/node/http/integration/test_keepalive.js
-- Multiple requests on same socket
-- Agent pooling
+*** DONE Task 6.4.3: Keep-alive and connection pooling
+CLOSED: [2025-10-15]
+- ✅ test/node/http/integration/test_keepalive.js (10 tests, all passing)
+- ✅ Connection: keep-alive header handling
+- ✅ Connection: close header handling
+- ✅ Multiple sequential requests
+- ✅ http.globalAgent validation
+- ✅ Agent properties (maxSockets, maxFreeSockets)
+- ✅ Custom agent usage
+- ✅ Agent can be disabled (agent: false)
+- ✅ Multiple requests with same Agent
+- ✅ Server handles multiple concurrent connections
+- ✅ HTTP/1.1 defaults
 
-*** TODO Task 6.4.4: Error scenarios
-- test/node/http/integration/test_errors.js
-- Network errors
-- Protocol errors
-- Timeout errors
+*** DONE Task 6.4.4: Error scenarios
+CLOSED: [2025-10-15]
+- ✅ test/node/http/integration/test_errors.js (15 tests, all passing)
+- ✅ Connection refused (ECONNREFUSED)
+- ✅ Server early close, client abort during response
+- ✅ Invalid hostname, request timeout
+- ✅ Write after end error
+- ✅ Server error during processing
+- ✅ Malformed request handling
+- ✅ Empty response, multiple end() calls
+- ✅ Socket error propagation
+- ✅ Abort before connection
+- ✅ Response without required headers
+- ✅ Concurrent requests with mixed results
+- ✅ Client disconnect mid-request
 
 ** DONE [#A] Task 6.5: ASAN and compliance validation [4/4]
 CLOSED: [2025-10-15]

@@ -363,6 +363,48 @@ JSValue js_http_client_request_remove_header(JSContext* ctx, JSValueConst this_v
   return JS_UNDEFINED;
 }
 
+// Phase 4.3: Helper to write data to socket with optional chunked encoding
+static void write_to_socket(JSHTTPClientRequest* client_req, const char* data, size_t data_len) {
+  if (!client_req || !client_req->ctx || JS_IsUndefined(client_req->socket)) {
+    return;
+  }
+
+  JSContext* ctx = client_req->ctx;
+  JSValue write_method = JS_GetPropertyStr(ctx, client_req->socket, "write");
+
+  if (JS_IsFunction(ctx, write_method)) {
+    if (client_req->use_chunked && client_req->headers_sent && data_len > 0) {
+      // Write chunk size in hex + CRLF
+      char chunk_header[32];
+      snprintf(chunk_header, sizeof(chunk_header), "%zx\r\n", data_len);
+
+      JSValue header_str = JS_NewString(ctx, chunk_header);
+      JSValue result = JS_Call(ctx, write_method, client_req->socket, 1, &header_str);
+      JS_FreeValue(ctx, result);
+      JS_FreeValue(ctx, header_str);
+
+      // Write chunk data
+      JSValue data_str = JS_NewStringLen(ctx, data, data_len);
+      result = JS_Call(ctx, write_method, client_req->socket, 1, &data_str);
+      JS_FreeValue(ctx, result);
+      JS_FreeValue(ctx, data_str);
+
+      // Write trailing CRLF
+      JSValue crlf = JS_NewString(ctx, "\r\n");
+      result = JS_Call(ctx, write_method, client_req->socket, 1, &crlf);
+      JS_FreeValue(ctx, result);
+      JS_FreeValue(ctx, crlf);
+    } else {
+      // Write data directly (not chunked or before headers sent)
+      JSValue data_str = JS_NewStringLen(ctx, data, data_len);
+      JSValue result = JS_Call(ctx, write_method, client_req->socket, 1, &data_str);
+      JS_FreeValue(ctx, result);
+      JS_FreeValue(ctx, data_str);
+    }
+  }
+  JS_FreeValue(ctx, write_method);
+}
+
 // Helper to send request line and headers
 void send_headers(JSHTTPClientRequest* client_req) {
   if (client_req->headers_sent || !client_req->ctx) {
@@ -371,20 +413,23 @@ void send_headers(JSHTTPClientRequest* client_req) {
 
   JSContext* ctx = client_req->ctx;
 
+  // Phase 4.3: Check if we should use chunked encoding
+  // Use chunked if no Content-Length header is set
+  JSValue content_length = JS_GetPropertyStr(ctx, client_req->headers, "content-length");
+  if (JS_IsUndefined(content_length)) {
+    client_req->use_chunked = true;
+    // Add Transfer-Encoding: chunked header
+    JS_SetPropertyStr(ctx, client_req->headers, "transfer-encoding", JS_NewString(ctx, "chunked"));
+  }
+  JS_FreeValue(ctx, content_length);
+
   // Build request line: "METHOD /path HTTP/1.1\r\n"
   char request_line[1024];
   snprintf(request_line, sizeof(request_line), "%s %s HTTP/1.1\r\n", client_req->method ? client_req->method : "GET",
            client_req->path ? client_req->path : "/");
 
   // Write request line to socket
-  JSValue write_method = JS_GetPropertyStr(ctx, client_req->socket, "write");
-  if (JS_IsFunction(ctx, write_method)) {
-    JSValue args[] = {JS_NewString(ctx, request_line)};
-    JSValue result = JS_Call(ctx, write_method, client_req->socket, 1, args);
-    JS_FreeValue(ctx, result);
-    JS_FreeValue(ctx, args[0]);
-  }
-  JS_FreeValue(ctx, write_method);
+  write_to_socket(client_req, request_line, strlen(request_line));
 
   // Write headers
   JSPropertyEnum* tab;
@@ -400,15 +445,7 @@ void send_headers(JSHTTPClientRequest* client_req) {
       if (key_str && value_str) {
         char header_line[2048];
         snprintf(header_line, sizeof(header_line), "%s: %s\r\n", key_str, value_str);
-
-        write_method = JS_GetPropertyStr(ctx, client_req->socket, "write");
-        if (JS_IsFunction(ctx, write_method)) {
-          JSValue args[] = {JS_NewString(ctx, header_line)};
-          JSValue result = JS_Call(ctx, write_method, client_req->socket, 1, args);
-          JS_FreeValue(ctx, result);
-          JS_FreeValue(ctx, args[0]);
-        }
-        JS_FreeValue(ctx, write_method);
+        write_to_socket(client_req, header_line, strlen(header_line));
       }
 
       if (key_str)
@@ -424,18 +461,12 @@ void send_headers(JSHTTPClientRequest* client_req) {
   }
 
   // End headers with blank line
-  write_method = JS_GetPropertyStr(ctx, client_req->socket, "write");
-  if (JS_IsFunction(ctx, write_method)) {
-    JSValue args[] = {JS_NewString(ctx, "\r\n")};
-    JSValue result = JS_Call(ctx, write_method, client_req->socket, 1, args);
-    JS_FreeValue(ctx, result);
-    JS_FreeValue(ctx, args[0]);
-  }
-  JS_FreeValue(ctx, write_method);
+  write_to_socket(client_req, "\r\n", 2);
 
   client_req->headers_sent = true;
 }
 
+// Phase 4.3: Public write method delegates to stream or direct write
 JSValue js_http_client_request_write(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
   JSHTTPClientRequest* client_req = JS_GetOpaque(this_val, js_http_client_request_class_id);
   if (!client_req) {
@@ -455,18 +486,21 @@ JSValue js_http_client_request_write(JSContext* ctx, JSValueConst this_val, int 
     send_headers(client_req);
   }
 
-  // Write data to socket
-  JSValue write_method = JS_GetPropertyStr(ctx, client_req->socket, "write");
-  if (JS_IsFunction(ctx, write_method)) {
-    JSValue result = JS_Call(ctx, write_method, client_req->socket, argc, argv);
-    JS_FreeValue(ctx, write_method);
-    return result;
+  // Get data as string
+  const char* data = JS_ToCString(ctx, argv[0]);
+  if (!data) {
+    return JS_EXCEPTION;
   }
-  JS_FreeValue(ctx, write_method);
 
+  size_t data_len = strlen(data);
+  write_to_socket(client_req, data, data_len);
+  JS_FreeCString(ctx, data);
+
+  // Phase 4.3: Return true (no backpressure tracking yet)
   return JS_NewBool(ctx, true);
 }
 
+// Phase 4.3: Public end method with chunked terminator support
 JSValue js_http_client_request_end(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
   JSHTTPClientRequest* client_req = JS_GetOpaque(this_val, js_http_client_request_class_id);
   if (!client_req) {
@@ -484,15 +518,34 @@ JSValue js_http_client_request_end(JSContext* ctx, JSValueConst this_val, int ar
 
   // Write final data if provided
   if (argc > 0 && !JS_IsUndefined(argv[0])) {
+    const char* data = JS_ToCString(ctx, argv[0]);
+    if (data) {
+      size_t data_len = strlen(data);
+      write_to_socket(client_req, data, data_len);
+      JS_FreeCString(ctx, data);
+    }
+  }
+
+  // Phase 4.3: Send chunked encoding terminator if using chunked
+  if (client_req->use_chunked) {
+    // Send terminator directly to bypass chunked encoding wrapper
     JSValue write_method = JS_GetPropertyStr(ctx, client_req->socket, "write");
     if (JS_IsFunction(ctx, write_method)) {
-      JSValue result = JS_Call(ctx, write_method, client_req->socket, 1, argv);
+      JSValue terminator = JS_NewString(ctx, "0\r\n\r\n");
+      JSValue result = JS_Call(ctx, write_method, client_req->socket, 1, &terminator);
       JS_FreeValue(ctx, result);
+      JS_FreeValue(ctx, terminator);
     }
     JS_FreeValue(ctx, write_method);
   }
 
   client_req->finished = true;
+
+  // Phase 4.3: Update stream state if stream is present
+  if (client_req->stream) {
+    client_req->stream->writable_ended = true;
+    client_req->stream->writable_finished = true;
+  }
 
   // Emit 'finish' event
   JSValue emit = JS_GetPropertyStr(ctx, this_val, "emit");
@@ -666,6 +719,54 @@ JSValue js_http_client_request_flush_headers(JSContext* ctx, JSValueConst this_v
   return JS_UNDEFINED;
 }
 
+// Phase 4.3: Writable stream methods for ClientRequest
+
+JSValue js_http_client_request_cork(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
+  JSHTTPClientRequest* client_req = JS_GetOpaque(this_val, js_http_client_request_class_id);
+  if (!client_req || !client_req->stream) {
+    return JS_UNDEFINED;
+  }
+
+  client_req->stream->writable_corked++;
+  return JS_UNDEFINED;
+}
+
+JSValue js_http_client_request_uncork(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
+  JSHTTPClientRequest* client_req = JS_GetOpaque(this_val, js_http_client_request_class_id);
+  if (!client_req || !client_req->stream) {
+    return JS_UNDEFINED;
+  }
+
+  if (client_req->stream->writable_corked > 0) {
+    client_req->stream->writable_corked--;
+  }
+  return JS_UNDEFINED;
+}
+
+JSValue js_http_client_request_writable(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
+  JSHTTPClientRequest* client_req = JS_GetOpaque(this_val, js_http_client_request_class_id);
+  if (!client_req || !client_req->stream) {
+    return JS_NewBool(ctx, !client_req || !client_req->finished);
+  }
+  return JS_NewBool(ctx, client_req->stream->writable);
+}
+
+JSValue js_http_client_request_writable_ended(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
+  JSHTTPClientRequest* client_req = JS_GetOpaque(this_val, js_http_client_request_class_id);
+  if (!client_req || !client_req->stream) {
+    return JS_NewBool(ctx, client_req && client_req->finished);
+  }
+  return JS_NewBool(ctx, client_req->stream->writable_ended);
+}
+
+JSValue js_http_client_request_writable_finished(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
+  JSHTTPClientRequest* client_req = JS_GetOpaque(this_val, js_http_client_request_class_id);
+  if (!client_req || !client_req->stream) {
+    return JS_NewBool(ctx, client_req && client_req->finished);
+  }
+  return JS_NewBool(ctx, client_req->stream->writable_finished);
+}
+
 // Timer close callback - called asynchronously by libuv
 static void http_timer_close_callback(uv_handle_t* handle) {
   if (handle) {
@@ -684,6 +785,24 @@ void js_http_client_request_finalizer(JSRuntime* rt, JSValue val) {
       uv_close((uv_handle_t*)client_req->timeout_timer, http_timer_close_callback);
       client_req->timeout_timer = NULL;  // Prevent double-free
       client_req->timeout_timer_initialized = false;
+    }
+
+    // Phase 4.3: Free stream data
+    if (client_req->stream) {
+      if (client_req->stream->buffered_data) {
+        for (size_t i = 0; i < client_req->stream->buffer_size; i++) {
+          JS_FreeValueRT(rt, client_req->stream->buffered_data[i]);
+        }
+        free(client_req->stream->buffered_data);
+      }
+      if (client_req->stream->write_callbacks) {
+        for (size_t i = 0; i < client_req->stream->write_callback_count; i++) {
+          JS_FreeValueRT(rt, client_req->stream->write_callbacks[i].callback);
+        }
+        free(client_req->stream->write_callbacks);
+      }
+      JS_FreeValueRT(rt, client_req->stream->error_value);
+      free(client_req->stream);
     }
 
     // Free strings
@@ -736,6 +855,26 @@ JSValue js_http_client_request_constructor(JSContext* ctx, JSValueConst new_targ
   client_req->path = strdup("/");
   client_req->protocol = strdup("http:");
 
+  // Phase 4.3: Initialize Writable stream data
+  client_req->stream = calloc(1, sizeof(JSStreamData));
+  client_req->use_chunked = false;
+  if (client_req->stream) {
+    client_req->stream->writable = true;
+    client_req->stream->writable_ended = false;
+    client_req->stream->writable_finished = false;
+    client_req->stream->writable_corked = 0;
+    client_req->stream->destroyed = false;
+    client_req->stream->errored = false;
+    client_req->stream->error_value = JS_UNDEFINED;
+    client_req->stream->options.highWaterMark = 16384;  // 16KB default
+    client_req->stream->buffered_data = NULL;
+    client_req->stream->buffer_size = 0;
+    client_req->stream->buffer_capacity = 0;
+    client_req->stream->write_callbacks = NULL;
+    client_req->stream->write_callback_count = 0;
+    client_req->stream->write_callback_capacity = 0;
+  }
+
   // Initialize parser for response
   llhttp_settings_init(&client_req->settings);
   client_req->settings.on_message_begin = client_on_message_begin;
@@ -765,6 +904,29 @@ JSValue js_http_client_request_constructor(JSContext* ctx, JSValueConst new_targ
                     JS_NewCFunction(ctx, js_http_client_request_set_socket_keep_alive, "setSocketKeepAlive", 2));
   JS_SetPropertyStr(ctx, obj, "flushHeaders",
                     JS_NewCFunction(ctx, js_http_client_request_flush_headers, "flushHeaders", 0));
+
+  // Phase 4.3: Add Writable stream methods
+  JS_SetPropertyStr(ctx, obj, "cork", JS_NewCFunction(ctx, js_http_client_request_cork, "cork", 0));
+  JS_SetPropertyStr(ctx, obj, "uncork", JS_NewCFunction(ctx, js_http_client_request_uncork, "uncork", 0));
+
+  // Phase 4.3: Add Writable stream property getters
+  JSAtom writable_atom = JS_NewAtom(ctx, "writable");
+  JS_DefinePropertyGetSet(ctx, obj, writable_atom,
+                          JS_NewCFunction(ctx, js_http_client_request_writable, "get writable", 0), JS_UNDEFINED,
+                          JS_PROP_CONFIGURABLE);
+  JS_FreeAtom(ctx, writable_atom);
+
+  JSAtom writable_ended_atom = JS_NewAtom(ctx, "writableEnded");
+  JS_DefinePropertyGetSet(ctx, obj, writable_ended_atom,
+                          JS_NewCFunction(ctx, js_http_client_request_writable_ended, "get writableEnded", 0),
+                          JS_UNDEFINED, JS_PROP_CONFIGURABLE);
+  JS_FreeAtom(ctx, writable_ended_atom);
+
+  JSAtom writable_finished_atom = JS_NewAtom(ctx, "writableFinished");
+  JS_DefinePropertyGetSet(ctx, obj, writable_finished_atom,
+                          JS_NewCFunction(ctx, js_http_client_request_writable_finished, "get writableFinished", 0),
+                          JS_UNDEFINED, JS_PROP_CONFIGURABLE);
+  JS_FreeAtom(ctx, writable_finished_atom);
 
   // Add EventEmitter functionality
   setup_event_emitter_inheritance(ctx, obj);

@@ -102,6 +102,7 @@ typedef struct {
 } JSHttpResponse;
 
 // HTTP Client Request state (ClientRequest)
+// Phase 4.3: Now implements Writable stream interface
 typedef struct {
   JSContext* ctx;
   JSValue request_obj;
@@ -129,6 +130,10 @@ typedef struct {
   char* body_buffer;
   size_t body_size;
   size_t body_capacity;
+
+  // Phase 4.3: Writable stream support
+  JSStreamData* stream;  // Writable stream data
+  bool use_chunked;      // Use chunked transfer encoding for request body
 } JSHTTPClientRequest;
 
 // HTTP handler data structure
@@ -232,6 +237,13 @@ JSValue js_http_client_request_set_socket_keep_alive(JSContext* ctx, JSValueCons
                                                      JSValueConst* argv);
 JSValue js_http_client_request_flush_headers(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv);
 void js_http_client_request_finalizer(JSRuntime* rt, JSValue val);
+
+// Phase 4.3: Writable stream methods for ClientRequest
+JSValue js_http_client_request_cork(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv);
+JSValue js_http_client_request_uncork(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv);
+JSValue js_http_client_request_writable(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv);
+JSValue js_http_client_request_writable_ended(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv);
+JSValue js_http_client_request_writable_finished(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv);
 
 // Client response parsing (from http_client.c)
 int client_on_message_begin(llhttp_t* parser);

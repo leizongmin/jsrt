@@ -51,7 +51,9 @@ test('request.url contains path', (done) => {
   server.listen(0, () => {
     const port = server.address().port;
     const client = net.createConnection(port, () => {
-      client.write('GET /test/path?foo=bar HTTP/1.1\r\nHost: localhost\r\n\r\n');
+      client.write(
+        'GET /test/path?foo=bar HTTP/1.1\r\nHost: localhost\r\n\r\n'
+      );
       client.end();
     });
   });
@@ -60,9 +62,21 @@ test('request.url contains path', (done) => {
 // Test 3: Request headers
 test('request.headers contains parsed headers', (done) => {
   const server = http.createServer((req, res) => {
-    assert.strictEqual(typeof req.headers, 'object', 'Headers should be object');
-    assert.strictEqual(req.headers['host'], 'localhost', 'Should have host header');
-    assert.strictEqual(req.headers['user-agent'], 'test-agent', 'Should have user-agent');
+    assert.strictEqual(
+      typeof req.headers,
+      'object',
+      'Headers should be object'
+    );
+    assert.strictEqual(
+      req.headers['host'],
+      'localhost',
+      'Should have host header'
+    );
+    assert.strictEqual(
+      req.headers['user-agent'],
+      'test-agent',
+      'Should have user-agent'
+    );
     res.end();
     server.close();
   });
@@ -82,8 +96,16 @@ test('request.headers contains parsed headers', (done) => {
 // Test 4: Case-insensitive headers
 test('request.headers are lowercase', (done) => {
   const server = http.createServer((req, res) => {
-    assert.strictEqual(req.headers['content-type'], 'application/json', 'Lowercase key');
-    assert.strictEqual(req.headers['Content-Type'], undefined, 'Uppercase should not exist');
+    assert.strictEqual(
+      req.headers['content-type'],
+      'application/json',
+      'Lowercase key'
+    );
+    assert.strictEqual(
+      req.headers['Content-Type'],
+      undefined,
+      'Uppercase should not exist'
+    );
     res.end();
     server.close();
   });
@@ -193,7 +215,9 @@ test('request handles POST method', (done) => {
   server.listen(0, () => {
     const port = server.address().port;
     const client = net.createConnection(port, () => {
-      client.write('POST / HTTP/1.1\r\nHost: localhost\r\nContent-Length: 0\r\n\r\n');
+      client.write(
+        'POST / HTTP/1.1\r\nHost: localhost\r\nContent-Length: 0\r\n\r\n'
+      );
       client.end();
     });
   });
@@ -210,7 +234,9 @@ test('request handles PUT method', (done) => {
   server.listen(0, () => {
     const port = server.address().port;
     const client = net.createConnection(port, () => {
-      client.write('PUT /resource HTTP/1.1\r\nHost: localhost\r\nContent-Length: 0\r\n\r\n');
+      client.write(
+        'PUT /resource HTTP/1.1\r\nHost: localhost\r\nContent-Length: 0\r\n\r\n'
+      );
       client.end();
     });
   });
@@ -296,7 +322,9 @@ test('request.url includes query string', (done) => {
   server.listen(0, () => {
     const port = server.address().port;
     const client = net.createConnection(port, () => {
-      client.write('GET /path?key=value&foo=bar HTTP/1.1\r\nHost: localhost\r\n\r\n');
+      client.write(
+        'GET /path?key=value&foo=bar HTTP/1.1\r\nHost: localhost\r\n\r\n'
+      );
       client.end();
     });
   });

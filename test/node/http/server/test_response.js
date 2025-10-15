@@ -60,7 +60,10 @@ test('response.writeHead() sets headers', (done) => {
 
     client.on('data', (data) => {
       const response = data.toString();
-      assert.ok(response.includes('Content-Type: application/json'), 'Should have content type');
+      assert.ok(
+        response.includes('Content-Type: application/json'),
+        'Should have content type'
+      );
       client.end();
       server.close();
     });
@@ -83,7 +86,10 @@ test('response.setHeader() sets individual headers', (done) => {
 
     client.on('data', (data) => {
       const response = data.toString();
-      assert.ok(response.includes('X-Custom: test-value'), 'Should have custom header');
+      assert.ok(
+        response.includes('X-Custom: test-value'),
+        'Should have custom header'
+      );
       client.end();
       server.close();
     });
@@ -113,9 +119,17 @@ test('response.getHeader() retrieves header value', (done) => {
 test('response.removeHeader() removes header', (done) => {
   const server = http.createServer((req, res) => {
     res.setHeader('X-Remove', 'value');
-    assert.strictEqual(res.getHeader('X-Remove'), 'value', 'Header should exist');
+    assert.strictEqual(
+      res.getHeader('X-Remove'),
+      'value',
+      'Header should exist'
+    );
     res.removeHeader('X-Remove');
-    assert.strictEqual(res.getHeader('X-Remove'), undefined, 'Header should be removed');
+    assert.strictEqual(
+      res.getHeader('X-Remove'),
+      undefined,
+      'Header should be removed'
+    );
     res.end();
     server.close();
   });
@@ -150,7 +164,10 @@ test('response.write() and end() send data', (done) => {
     });
 
     client.on('end', () => {
-      assert.ok(responseData.includes('Hello World!'), 'Should have complete body');
+      assert.ok(
+        responseData.includes('Hello World!'),
+        'Should have complete body'
+      );
       server.close();
     });
   });
@@ -280,7 +297,11 @@ test('response can send JSON data', (done) => {
       const bodyStart = responseData.indexOf('\r\n\r\n') + 4;
       const body = responseData.substring(bodyStart);
       const parsed = JSON.parse(body.trim());
-      assert.strictEqual(parsed.message, 'Hello', 'Should have correct message');
+      assert.strictEqual(
+        parsed.message,
+        'Hello',
+        'Should have correct message'
+      );
       assert.strictEqual(parsed.value, 42, 'Should have correct value');
       server.close();
     });

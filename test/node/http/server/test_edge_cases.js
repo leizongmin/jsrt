@@ -193,7 +193,11 @@ test('server handles write after client disconnect', (done) => {
 // Test 9: Server handles zero Content-Length
 test('server handles zero Content-Length', (done) => {
   const server = http.createServer((req, res) => {
-    assert.strictEqual(req.headers['content-length'], '0', 'Should have zero length');
+    assert.strictEqual(
+      req.headers['content-length'],
+      '0',
+      'Should have zero length'
+    );
 
     let dataReceived = false;
     req.on('data', () => {
@@ -319,7 +323,11 @@ test('server emits request event', (done) => {
 // Test 14: Server handles Connection: close
 test('server handles Connection: close header', (done) => {
   const server = http.createServer((req, res) => {
-    assert.strictEqual(req.headers['connection'], 'close', 'Should have close header');
+    assert.strictEqual(
+      req.headers['connection'],
+      'close',
+      'Should have close header'
+    );
     res.end();
     server.close();
   });

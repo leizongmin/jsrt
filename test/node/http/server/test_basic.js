@@ -28,8 +28,16 @@ test('http.createServer creates a server object', () => {
   const server = http.createServer();
   // Note: instanceof check may not work in all JS engines
   assert.strictEqual(typeof server, 'object', 'Should be an object');
-  assert.strictEqual(typeof server.listen, 'function', 'Should have listen method');
-  assert.strictEqual(typeof server.close, 'function', 'Should have close method');
+  assert.strictEqual(
+    typeof server.listen,
+    'function',
+    'Should have listen method'
+  );
+  assert.strictEqual(
+    typeof server.close,
+    'function',
+    'Should have close method'
+  );
 });
 
 // Test 2: Server with request handler
@@ -160,14 +168,22 @@ test('server emits "close" event', (done) => {
 // Test 11: Server maxHeadersCount property
 test('server has maxHeadersCount property', () => {
   const server = http.createServer();
-  assert.strictEqual(typeof server.maxHeadersCount, 'number', 'Should have maxHeadersCount');
+  assert.strictEqual(
+    typeof server.maxHeadersCount,
+    'number',
+    'Should have maxHeadersCount'
+  );
   assert.ok(server.maxHeadersCount > 0, 'Should have positive value');
 });
 
 // Test 12: Server timeout property
 test('server has setTimeout() method', () => {
   const server = http.createServer();
-  assert.strictEqual(typeof server.setTimeout, 'function', 'Should have setTimeout method');
+  assert.strictEqual(
+    typeof server.setTimeout,
+    'function',
+    'Should have setTimeout method'
+  );
 });
 
 // Test 13: Simple request/response cycle
@@ -237,9 +253,21 @@ test('server handles POST request with body', (done) => {
 // Test 15: Server has essential methods
 test('server has essential methods', () => {
   const server = http.createServer();
-  assert.strictEqual(typeof server.listen, 'function', 'Should have listen method');
-  assert.strictEqual(typeof server.close, 'function', 'Should have close method');
-  assert.strictEqual(typeof server.address, 'function', 'Should have address method');
+  assert.strictEqual(
+    typeof server.listen,
+    'function',
+    'Should have listen method'
+  );
+  assert.strictEqual(
+    typeof server.close,
+    'function',
+    'Should have close method'
+  );
+  assert.strictEqual(
+    typeof server.address,
+    'function',
+    'Should have address method'
+  );
   // Note: ref() and unref() are libuv features that may not be exposed yet
 });
 

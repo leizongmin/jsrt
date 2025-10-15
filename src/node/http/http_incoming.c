@@ -31,6 +31,10 @@ JSValue js_http_request_constructor(JSContext* ctx, JSValueConst new_target, int
   req->request_obj = JS_DupValue(ctx, obj);
   req->headers = JS_NewObject(ctx);
 
+  // Phase 5.1.2: Initialize timeout fields
+  req->timeout_timer = NULL;
+  req->timeout_ms = 0;
+
   // Phase 4: Initialize Readable stream
   req->stream = calloc(1, sizeof(JSStreamData));
   if (!req->stream) {
@@ -97,6 +101,9 @@ JSValue js_http_request_constructor(JSContext* ctx, JSValueConst new_target, int
   JS_SetPropertyStr(ctx, obj, "unpipe", JS_NewCFunction(ctx, js_http_incoming_unpipe, "unpipe", 1));
   JS_SetPropertyStr(ctx, obj, "read", JS_NewCFunction(ctx, js_http_incoming_read, "read", 1));
   JS_SetPropertyStr(ctx, obj, "setEncoding", JS_NewCFunction(ctx, js_http_incoming_set_encoding, "setEncoding", 1));
+
+  // Phase 5.1.2: Add timeout method
+  JS_SetPropertyStr(ctx, obj, "setTimeout", JS_NewCFunction(ctx, js_http_incoming_set_timeout, "setTimeout", 2));
 
   // Add EventEmitter methods (IncomingMessage extends EventEmitter)
   setup_event_emitter_inheritance(ctx, obj);
@@ -569,6 +576,80 @@ void js_http_incoming_end(JSContext* ctx, JSValue incoming_msg) {
   }
 }
 
+// Phase 5.1.2: Timeout callback for IncomingMessage
+static void incoming_timeout_callback(uv_timer_t* timer) {
+  JSHttpRequest* req = (JSHttpRequest*)timer->data;
+  if (!req || !req->ctx) {
+    return;
+  }
+
+  JSContext* ctx = req->ctx;
+
+  // Emit 'timeout' event on request (don't auto-destroy)
+  JSValue emit = JS_GetPropertyStr(ctx, req->request_obj, "emit");
+  if (JS_IsFunction(ctx, emit)) {
+    JSValue args[] = {JS_NewString(ctx, "timeout")};
+    JSValue result = JS_Call(ctx, emit, req->request_obj, 1, args);
+    JS_FreeValue(ctx, result);
+    JS_FreeValue(ctx, args[0]);
+  }
+  JS_FreeValue(ctx, emit);
+}
+
+// Phase 5.1.2: IncomingMessage.setTimeout(msecs, [callback])
+JSValue js_http_incoming_set_timeout(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
+  JSHttpRequest* req = JS_GetOpaque(this_val, js_http_request_class_id);
+  if (!req) {
+    return JS_ThrowTypeError(ctx, "Not an IncomingMessage");
+  }
+
+  if (argc > 0) {
+    int32_t timeout_ms;
+    if (JS_ToInt32(ctx, &timeout_ms, argv[0]) != 0) {
+      return JS_ThrowTypeError(ctx, "Invalid timeout value");
+    }
+    req->timeout_ms = timeout_ms >= 0 ? (uint32_t)timeout_ms : 0;
+
+    // Initialize timer if needed
+    if (req->timeout_timer == NULL && req->timeout_ms > 0) {
+      JSRT_Runtime* rt = JS_GetContextOpaque(ctx);
+      if (rt) {
+        req->timeout_timer = malloc(sizeof(uv_timer_t));
+        if (req->timeout_timer) {
+          uv_timer_init(rt->uv_loop, req->timeout_timer);
+          req->timeout_timer->data = req;
+        }
+      }
+    }
+
+    // Start or stop timer based on timeout value
+    if (req->timeout_timer) {
+      if (req->timeout_ms > 0) {
+        uv_timer_start(req->timeout_timer, incoming_timeout_callback, req->timeout_ms, 0);
+      } else {
+        uv_timer_stop(req->timeout_timer);
+      }
+    }
+  }
+
+  // Optional callback parameter (for compatibility)
+  if (argc > 1 && JS_IsFunction(ctx, argv[1])) {
+    // Register as 'timeout' event listener
+    JSValue on_method = JS_GetPropertyStr(ctx, this_val, "on");
+    if (JS_IsFunction(ctx, on_method)) {
+      JSValue args[] = {JS_NewString(ctx, "timeout"), JS_DupValue(ctx, argv[1])};
+      JSValue result = JS_Call(ctx, on_method, this_val, 2, args);
+      JS_FreeValue(ctx, result);
+      JS_FreeValue(ctx, args[0]);
+      JS_FreeValue(ctx, args[1]);
+    }
+    JS_FreeValue(ctx, on_method);
+  }
+
+  // Return this for chaining
+  return JS_DupValue(ctx, this_val);
+}
+
 // IncomingMessage finalizer
 void js_http_request_finalizer(JSRuntime* rt, JSValue val) {
   JSHttpRequest* req = JS_GetOpaque(val, js_http_request_class_id);
@@ -578,6 +659,12 @@ void js_http_request_finalizer(JSRuntime* rt, JSValue val) {
     free(req->http_version);
     JS_FreeValueRT(rt, req->headers);
     JS_FreeValueRT(rt, req->socket);
+
+    // Phase 5.1.2: Clean up timeout timer
+    if (req->timeout_timer) {
+      uv_timer_stop(req->timeout_timer);
+      uv_close((uv_handle_t*)req->timeout_timer, (uv_close_cb)free);
+    }
 
     // Phase 4: Free stream data
     if (req->stream) {

@@ -84,6 +84,9 @@ typedef struct {
   JSValue headers;
   JSValue socket;
   JSStreamData* stream;  // Readable stream data (Phase 4)
+  // Phase 5.1.2: Per-request timeout
+  uv_timer_t* timeout_timer;
+  uint32_t timeout_ms;
 } JSHttpRequest;
 
 // HTTP Response state (ServerResponse)
@@ -166,6 +169,7 @@ void js_http_server_finalizer(JSRuntime* rt, JSValue val);
 
 // IncomingMessage methods (from http_incoming.c)
 JSValue js_http_request_constructor(JSContext* ctx, JSValueConst new_target, int argc, JSValueConst* argv);
+JSValue js_http_incoming_set_timeout(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv);
 void js_http_request_finalizer(JSRuntime* rt, JSValue val);
 
 // ServerResponse methods (from http_response.c)

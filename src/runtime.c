@@ -49,6 +49,55 @@ static void JSRT_RuntimeCloseWalkCallback(uv_handle_t* handle, void* arg) {
   }
 }
 
+static void jsrt_set_constructor_prototype(JSRT_Runtime* rt, const char* ctor_name, JSValue* args, int argc) {
+  JSContext* ctx = rt->ctx;
+  JSValue ctor = JS_GetPropertyStr(ctx, rt->global, ctor_name);
+  if (JS_IsException(ctor)) {
+    JSRT_Debug("Constructor '%s' unavailable", ctor_name);
+    JS_FreeValue(ctx, ctor);
+    return;
+  }
+
+  JSValue existing_proto = JS_GetPropertyStr(ctx, ctor, "prototype");
+  bool need_define = !JS_IsObject(existing_proto);
+  JS_FreeValue(ctx, existing_proto);
+
+  if (need_define) {
+    JSValue instance = JS_CallConstructor(ctx, ctor, argc, args);
+    if (!JS_IsException(instance)) {
+      JSValue proto = JS_GetPrototype(ctx, instance);
+      if (!JS_IsException(proto) && JS_IsObject(proto)) {
+        JS_SetPropertyStr(ctx, ctor, "prototype", JS_DupValue(ctx, proto));
+        JSRT_Debug("Set %s.prototype via helper", ctor_name);
+      } else {
+        JSRT_Debug("Failed to derive prototype for %s", ctor_name);
+      }
+      JS_FreeValue(ctx, proto);
+      JS_FreeValue(ctx, instance);
+    } else {
+      JSRT_Debug("Failed to instantiate %s for prototype setup", ctor_name);
+      JS_FreeValue(ctx, instance);
+    }
+  }
+
+  JS_FreeValue(ctx, ctor);
+}
+
+static void jsrt_ensure_fetch_prototypes(JSRT_Runtime* rt) {
+  JSContext* ctx = rt->ctx;
+
+  JSValue request_args[1];
+  request_args[0] = JS_NewString(ctx, "https://jsrt.local/");
+  jsrt_set_constructor_prototype(rt, "Request", request_args, 1);
+  JS_FreeValue(ctx, request_args[0]);
+
+  JSValue response_args[1];
+  response_args[0] = JS_NULL;
+  jsrt_set_constructor_prototype(rt, "Response", response_args, 1);
+
+  jsrt_set_constructor_prototype(rt, "Headers", NULL, 0);
+}
+
 JSRT_Runtime* JSRT_RuntimeNew() {
   JSRT_Runtime* rt = malloc(sizeof(JSRT_Runtime));
   rt->rt = JS_NewRuntime();
@@ -60,6 +109,14 @@ JSRT_Runtime* JSRT_RuntimeNew() {
   rt->dispose_values_capacity = 16;
   rt->dispose_values_length = 0;
   rt->dispose_values = malloc(rt->dispose_values_capacity * sizeof(JSValue));
+
+  // Align Node.js global alias
+  JSValue global_alias = JS_DupValue(rt->ctx, rt->global);
+  if (JS_DefinePropertyValueStr(rt->ctx, rt->global, "global", global_alias, JS_PROP_C_W_E) < 0) {
+    JSRT_Debug("Failed to define global alias");
+  } else {
+    JSRT_Debug("Defined global alias successfully");
+  }
 
   rt->exception_values_capacity = 16;
   rt->exception_values_length = 0;
@@ -97,6 +154,7 @@ JSRT_Runtime* JSRT_RuntimeNew() {
   JSRT_RuntimeSetupStdFormData(rt);
   // JSRT_RuntimeSetupStdFetch(rt);  // Replaced with llhttp version
   JSRT_RuntimeSetupHttpFetch(rt);
+  jsrt_ensure_fetch_prototypes(rt);
   JSRT_RuntimeSetupStdCrypto(rt);
   JSRT_RuntimeSetupStdFFI(rt);
   JSRT_RuntimeSetupStdProcess(rt);

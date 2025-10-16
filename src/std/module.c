@@ -4,6 +4,7 @@
 #include "../node/node_modules.h"
 #endif
 
+#include <ctype.h>
 #include <stdbool.h>
 #include <stdint.h>
 #include <stdio.h>
@@ -350,6 +351,21 @@ static char* resolve_exports_entry(JSContext* ctx, JSValue entry, const char* pa
   }
 
   return NULL;
+}
+
+static bool is_valid_identifier(const char* name) {
+  if (!name || !*name) {
+    return false;
+  }
+  if (!(isalpha((unsigned char)name[0]) || name[0] == '_' || name[0] == '$')) {
+    return false;
+  }
+  for (const char* p = name + 1; *p; p++) {
+    if (!(isalnum((unsigned char)*p) || *p == '_' || *p == '$')) {
+      return false;
+    }
+  }
+  return true;
 }
 
 static char* resolve_package_exports(JSContext* ctx, JSValue package_json, const char* package_dir, bool is_esm) {
@@ -863,14 +879,49 @@ JSModuleDef* JSRT_StdModuleLoader(JSContext* ctx, const char* module_name, void*
   if (is_commonjs) {
     JSRT_Debug("JSRT_StdModuleLoader: detected CommonJS module, wrapping as ES module for '%s'", module_name);
 
-    // Create a synthetic ES module
-    char* wrapper_code;
-    size_t wrapper_size = strlen(file_result.data) + 1024;  // Increased buffer
-    wrapper_code = malloc(wrapper_size);
+    JSValue global = JS_GetGlobalObject(ctx);
+    JSValue require_func = JS_GetPropertyStr(ctx, global, "require");
+    if (JS_IsException(require_func) || !JS_IsFunction(ctx, require_func)) {
+      JS_FreeValue(ctx, global);
+      JS_FreeValue(ctx, require_func);
+      JSRT_Debug("JSRT_StdModuleLoader: global require() not available for '%s'", module_name);
+      JSRT_ReadFileResultFree(&file_result);
+      return NULL;
+    }
 
-    // Create a simple wrapper that uses the global require with proper context
-    // First, escape backslashes in the module_name for JavaScript string literal
-    size_t escaped_name_len = strlen(module_name) * 2 + 1;  // Worst case: every char needs escaping
+    JSValue prev_context = JS_GetPropertyStr(ctx, global, "__esm_module_context");
+    JSValue filename_val = JS_NewString(ctx, module_name);
+    JS_SetPropertyStr(ctx, global, "__esm_module_context", JS_DupValue(ctx, filename_val));
+
+    JSValue require_arg = JS_DupValue(ctx, filename_val);
+    JSValue exports = JS_Call(ctx, require_func, global, 1, &require_arg);
+    JS_FreeValue(ctx, require_arg);
+
+    JS_SetPropertyStr(ctx, global, "__esm_module_context", prev_context);
+
+    if (JS_IsException(exports)) {
+      JS_FreeValue(ctx, filename_val);
+      JS_FreeValue(ctx, require_func);
+      JS_FreeValue(ctx, global);
+      JSRT_Debug("JSRT_StdModuleLoader: require() failed for '%s'", module_name);
+      JSRT_ReadFileResultFree(&file_result);
+      return NULL;
+    }
+
+    JSPropertyEnum* prop_entries = NULL;
+    uint32_t prop_count = 0;
+    if (JS_GetOwnPropertyNames(ctx, &prop_entries, &prop_count, exports,
+                               JS_GPN_STRING_MASK | JS_GPN_ENUM_ONLY | JS_GPN_SET_ENUM) < 0) {
+      JS_FreeValue(ctx, exports);
+      JS_FreeValue(ctx, filename_val);
+      JS_FreeValue(ctx, require_func);
+      JS_FreeValue(ctx, global);
+      JSRT_Debug("JSRT_StdModuleLoader: failed to enumerate exports for '%s'", module_name);
+      JSRT_ReadFileResultFree(&file_result);
+      return NULL;
+    }
+
+    size_t escaped_name_len = strlen(module_name) * 2 + 1;
     char* escaped_module_name = malloc(escaped_name_len);
     char* dst = escaped_module_name;
     for (const char* src = module_name; *src; src++) {
@@ -886,37 +937,59 @@ JSModuleDef* JSRT_StdModuleLoader(JSContext* ctx, const char* module_name, void*
     }
     *dst = '\0';
 
-    snprintf(wrapper_code, wrapper_size,
-             "// Auto-generated ES module wrapper for CommonJS module\n"
-             "const __cjs_module = { exports: {} };\n"
-             "const __cjs_exports = __cjs_module.exports;\n"
-             "const __cjs_filename = \"%s\";\n"
-             "const __cjs_dirname = (() => {\n"
-             "  const lastSlash = __cjs_filename.lastIndexOf('/');\n"
-             "  const lastBackslash = __cjs_filename.lastIndexOf('\\\\');\n"
-             "  const lastSep = Math.max(lastSlash, lastBackslash);\n"
-             "  return lastSep > 0 ? __cjs_filename.substring(0, lastSep) : '.';\n"
-             "})();\n"
-             "\n"
-             "// Set context for require resolution\n"
-             "globalThis.__esm_module_context = __cjs_filename;\n"
-             "\n"
-             "// CommonJS module code starts here\n"
-             "(function(exports, require, module, __filename, __dirname) {\n"
-             "%s\n"
-             "})(__cjs_exports, globalThis.require, __cjs_module, __cjs_filename, __cjs_dirname);\n"
-             "\n"
-             "// Clear context\n"
-             "globalThis.__esm_module_context = undefined;\n"
-             "\n"
-             "// ES module exports\n"
-             "export default __cjs_module.exports;\n",
-             escaped_module_name, file_result.data);
+    size_t wrapper_size = 1024;
+    for (uint32_t i = 0; i < prop_count; i++) {
+      JSValue prop_name_val = JS_AtomToString(ctx, prop_entries[i].atom);
+      const char* prop_name_str = JS_ToCString(ctx, prop_name_val);
+      if (prop_name_str) {
+        if (strcmp(prop_name_str, "default") != 0 && strcmp(prop_name_str, "__esModule") != 0 &&
+            is_valid_identifier(prop_name_str)) {
+          wrapper_size += strlen(prop_name_str) * 3 + 64;
+        }
+        JS_FreeCString(ctx, prop_name_str);
+      }
+      JS_FreeValue(ctx, prop_name_val);
+    }
 
+    char* wrapper_code = malloc(wrapper_size);
+    size_t offset = 0;
+    offset += snprintf(wrapper_code + offset, wrapper_size - offset,
+                       "// Auto-generated ES module wrapper for CommonJS module\n"
+                       "const __cjs_filename = \"%s\";\n"
+                       "const __cjs_prev_context = globalThis.__esm_module_context;\n"
+                       "let __cjs_exports;\n"
+                       "try {\n"
+                       "  globalThis.__esm_module_context = __cjs_filename;\n"
+                       "  __cjs_exports = globalThis.require(__cjs_filename);\n"
+                       "} finally {\n"
+                       "  globalThis.__esm_module_context = __cjs_prev_context;\n"
+                       "}\n"
+                       "export default __cjs_exports;\n",
+                       escaped_module_name);
+
+    for (uint32_t i = 0; i < prop_count; i++) {
+      JSValue prop_name_val = JS_AtomToString(ctx, prop_entries[i].atom);
+      const char* prop_name_str = JS_ToCString(ctx, prop_name_val);
+      if (prop_name_str) {
+        if (strcmp(prop_name_str, "default") != 0 && strcmp(prop_name_str, "__esModule") != 0 &&
+            is_valid_identifier(prop_name_str)) {
+          offset += snprintf(wrapper_code + offset, wrapper_size - offset,
+                             "export const %s = __cjs_exports != null ? __cjs_exports[\"%s\"] : undefined;\n",
+                             prop_name_str, prop_name_str);
+        }
+        JS_FreeCString(ctx, prop_name_str);
+      }
+      JS_FreeValue(ctx, prop_name_val);
+    }
+
+    JS_FreeValue(ctx, exports);
+    js_free(ctx, prop_entries);
+    JS_FreeValue(ctx, filename_val);
+    JS_FreeValue(ctx, require_func);
+    JS_FreeValue(ctx, global);
     free(escaped_module_name);
 
-    JSValue func_val =
-        JS_Eval(ctx, wrapper_code, strlen(wrapper_code), module_name, JS_EVAL_TYPE_MODULE | JS_EVAL_FLAG_COMPILE_ONLY);
+    JSValue func_val = JS_Eval(ctx, wrapper_code, offset, module_name, JS_EVAL_TYPE_MODULE | JS_EVAL_FLAG_COMPILE_ONLY);
     free(wrapper_code);
 
     if (JS_IsException(func_val)) {

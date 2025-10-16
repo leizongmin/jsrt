@@ -477,6 +477,10 @@ JSValue js_http_client_request_write(JSContext* ctx, JSValueConst this_val, int 
     return JS_ThrowTypeError(ctx, "Request already finished");
   }
 
+  if (client_req->stream && client_req->stream->destroyed) {
+    return JS_ThrowTypeError(ctx, "ClientRequest has been destroyed");
+  }
+
   if (argc < 1) {
     return JS_ThrowTypeError(ctx, "write requires data");
   }
@@ -509,6 +513,10 @@ JSValue js_http_client_request_end(JSContext* ctx, JSValueConst this_val, int ar
 
   if (client_req->finished) {
     return JS_UNDEFINED;
+  }
+
+  if (client_req->stream && client_req->stream->destroyed) {
+    return JS_ThrowTypeError(ctx, "ClientRequest has been destroyed");
   }
 
   // Send headers if not already sent
@@ -571,6 +579,14 @@ JSValue js_http_client_request_abort(JSContext* ctx, JSValueConst this_val, int 
   }
 
   client_req->aborted = true;
+
+  if (client_req->stream) {
+    client_req->stream->destroyed = true;
+    client_req->stream->writable = false;
+    client_req->stream->writable_ended = true;
+    client_req->stream->writable_finished = true;
+  }
+  client_req->finished = true;
 
   // Destroy socket immediately
   if (!JS_IsUndefined(client_req->socket)) {
@@ -746,15 +762,20 @@ JSValue js_http_client_request_uncork(JSContext* ctx, JSValueConst this_val, int
 JSValue js_http_client_request_writable(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
   JSHTTPClientRequest* client_req = JS_GetOpaque(this_val, js_http_client_request_class_id);
   if (!client_req || !client_req->stream) {
-    return JS_NewBool(ctx, !client_req || !client_req->finished);
+    bool fallback = client_req ? !client_req->finished : false;
+    return JS_NewBool(ctx, fallback);
   }
-  return JS_NewBool(ctx, client_req->stream->writable);
+  bool writable = client_req->stream->writable && !client_req->stream->destroyed;
+  return JS_NewBool(ctx, writable);
 }
 
 JSValue js_http_client_request_writable_ended(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
   JSHTTPClientRequest* client_req = JS_GetOpaque(this_val, js_http_client_request_class_id);
   if (!client_req || !client_req->stream) {
     return JS_NewBool(ctx, client_req && client_req->finished);
+  }
+  if (client_req->stream->destroyed) {
+    return JS_TRUE;
   }
   return JS_NewBool(ctx, client_req->stream->writable_ended);
 }
@@ -764,7 +785,90 @@ JSValue js_http_client_request_writable_finished(JSContext* ctx, JSValueConst th
   if (!client_req || !client_req->stream) {
     return JS_NewBool(ctx, client_req && client_req->finished);
   }
+  if (client_req->stream->destroyed) {
+    return JS_TRUE;
+  }
   return JS_NewBool(ctx, client_req->stream->writable_finished);
+}
+
+JSValue js_http_client_request_writable_high_water_mark(JSContext* ctx, JSValueConst this_val, int argc,
+                                                        JSValueConst* argv) {
+  JSHTTPClientRequest* client_req = JS_GetOpaque(this_val, js_http_client_request_class_id);
+  if (!client_req || !client_req->stream) {
+    return JS_NewInt32(ctx, 0);
+  }
+  return JS_NewInt32(ctx, client_req->stream->options.highWaterMark);
+}
+
+JSValue js_http_client_request_destroyed(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
+  JSHTTPClientRequest* client_req = JS_GetOpaque(this_val, js_http_client_request_class_id);
+  if (!client_req || !client_req->stream) {
+    return JS_NewBool(ctx, client_req && client_req->finished);
+  }
+  return JS_NewBool(ctx, client_req->stream->destroyed);
+}
+
+JSValue js_http_client_request_destroy(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
+  JSHTTPClientRequest* client_req = JS_GetOpaque(this_val, js_http_client_request_class_id);
+  if (!client_req || !client_req->stream) {
+    return JS_ThrowTypeError(ctx, "Invalid ClientRequest object");
+  }
+
+  if (client_req->stream->destroyed) {
+    return JS_UNDEFINED;
+  }
+
+  JSValue error = JS_UNDEFINED;
+  if (argc > 0 && !JS_IsUndefined(argv[0])) {
+    error = JS_DupValue(ctx, argv[0]);
+    if (!JS_IsUndefined(client_req->stream->error_value)) {
+      JS_FreeValue(ctx, client_req->stream->error_value);
+    }
+    client_req->stream->errored = true;
+    client_req->stream->error_value = JS_DupValue(ctx, argv[0]);
+
+    JSValue emit_error = JS_GetPropertyStr(ctx, this_val, "emit");
+    if (JS_IsFunction(ctx, emit_error)) {
+      JSValue args[2] = {JS_NewString(ctx, "error"), JS_DupValue(ctx, argv[0])};
+      JSValue result = JS_Call(ctx, emit_error, this_val, 2, args);
+      JS_FreeValue(ctx, result);
+      JS_FreeValue(ctx, args[0]);
+      JS_FreeValue(ctx, args[1]);
+    }
+    JS_FreeValue(ctx, emit_error);
+  }
+
+  client_req->stream->destroyed = true;
+  client_req->stream->writable = false;
+  client_req->stream->writable_ended = true;
+  client_req->stream->writable_finished = true;
+  client_req->finished = true;
+
+  if (!JS_IsUndefined(client_req->socket)) {
+    JSValue destroy_method = JS_GetPropertyStr(ctx, client_req->socket, "destroy");
+    if (JS_IsFunction(ctx, destroy_method)) {
+      JSValue result = JS_Call(ctx, destroy_method, client_req->socket, 0, NULL);
+      JS_FreeValue(ctx, result);
+    }
+    JS_FreeValue(ctx, destroy_method);
+  }
+
+  client_req->aborted = true;
+
+  JSValue emit_close = JS_GetPropertyStr(ctx, this_val, "emit");
+  if (JS_IsFunction(ctx, emit_close)) {
+    JSValue args[1] = {JS_NewString(ctx, "close")};
+    JSValue result = JS_Call(ctx, emit_close, this_val, 1, args);
+    JS_FreeValue(ctx, result);
+    JS_FreeValue(ctx, args[0]);
+  }
+  JS_FreeValue(ctx, emit_close);
+
+  if (!JS_IsUndefined(error)) {
+    JS_FreeValue(ctx, error);
+  }
+
+  return JS_UNDEFINED;
 }
 
 // Timer close callback - called asynchronously by libuv
@@ -927,6 +1031,21 @@ JSValue js_http_client_request_constructor(JSContext* ctx, JSValueConst new_targ
                           JS_NewCFunction(ctx, js_http_client_request_writable_finished, "get writableFinished", 0),
                           JS_UNDEFINED, JS_PROP_CONFIGURABLE);
   JS_FreeAtom(ctx, writable_finished_atom);
+
+  JSAtom writable_hwm_atom = JS_NewAtom(ctx, "writableHighWaterMark");
+  JS_DefinePropertyGetSet(
+      ctx, obj, writable_hwm_atom,
+      JS_NewCFunction(ctx, js_http_client_request_writable_high_water_mark, "get writableHighWaterMark", 0),
+      JS_UNDEFINED, JS_PROP_CONFIGURABLE);
+  JS_FreeAtom(ctx, writable_hwm_atom);
+
+  JSAtom destroyed_atom = JS_NewAtom(ctx, "destroyed");
+  JS_DefinePropertyGetSet(ctx, obj, destroyed_atom,
+                          JS_NewCFunction(ctx, js_http_client_request_destroyed, "get destroyed", 0), JS_UNDEFINED,
+                          JS_PROP_CONFIGURABLE);
+  JS_FreeAtom(ctx, destroyed_atom);
+
+  JS_SetPropertyStr(ctx, obj, "destroy", JS_NewCFunction(ctx, js_http_client_request_destroy, "destroy", 1));
 
   // Add EventEmitter functionality
   setup_event_emitter_inheritance(ctx, obj);

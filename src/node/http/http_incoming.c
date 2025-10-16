@@ -90,8 +90,29 @@ JSValue js_http_request_constructor(JSContext* ctx, JSValueConst new_target, int
   JS_SetPropertyStr(ctx, obj, "headers", JS_DupValue(ctx, req->headers));
 
   // Phase 4: Add Readable stream properties
-  JS_SetPropertyStr(ctx, obj, "readable", JS_NewBool(ctx, true));
-  JS_SetPropertyStr(ctx, obj, "readableEnded", JS_NewBool(ctx, false));
+  JSAtom readable_atom = JS_NewAtom(ctx, "readable");
+  JS_DefinePropertyGetSet(ctx, obj, readable_atom, JS_NewCFunction(ctx, js_http_incoming_readable, "get readable", 0),
+                          JS_UNDEFINED, JS_PROP_CONFIGURABLE);
+  JS_FreeAtom(ctx, readable_atom);
+
+  JSAtom readable_ended_atom = JS_NewAtom(ctx, "readableEnded");
+  JS_DefinePropertyGetSet(ctx, obj, readable_ended_atom,
+                          JS_NewCFunction(ctx, js_http_incoming_readable_ended, "get readableEnded", 0), JS_UNDEFINED,
+                          JS_PROP_CONFIGURABLE);
+  JS_FreeAtom(ctx, readable_ended_atom);
+
+  JSAtom readable_hwm_atom = JS_NewAtom(ctx, "readableHighWaterMark");
+  JS_DefinePropertyGetSet(
+      ctx, obj, readable_hwm_atom,
+      JS_NewCFunction(ctx, js_http_incoming_readable_high_water_mark, "get readableHighWaterMark", 0), JS_UNDEFINED,
+      JS_PROP_CONFIGURABLE);
+  JS_FreeAtom(ctx, readable_hwm_atom);
+
+  JSAtom destroyed_atom = JS_NewAtom(ctx, "destroyed");
+  JS_DefinePropertyGetSet(ctx, obj, destroyed_atom,
+                          JS_NewCFunction(ctx, js_http_incoming_destroyed, "get destroyed", 0), JS_UNDEFINED,
+                          JS_PROP_CONFIGURABLE);
+  JS_FreeAtom(ctx, destroyed_atom);
 
   // Phase 4: Add Readable stream methods
   JS_SetPropertyStr(ctx, obj, "pause", JS_NewCFunction(ctx, js_http_incoming_pause, "pause", 0));
@@ -102,6 +123,9 @@ JSValue js_http_request_constructor(JSContext* ctx, JSValueConst new_target, int
   JS_SetPropertyStr(ctx, obj, "read", JS_NewCFunction(ctx, js_http_incoming_read, "read", 1));
   JS_SetPropertyStr(ctx, obj, "setEncoding", JS_NewCFunction(ctx, js_http_incoming_set_encoding, "setEncoding", 1));
 
+  // Phase 4.4: Add destroy method for Readable stream
+  JS_SetPropertyStr(ctx, obj, "destroy", JS_NewCFunction(ctx, js_http_incoming_destroy, "destroy", 1));
+
   // Phase 5.1.2: Add timeout method
   JS_SetPropertyStr(ctx, obj, "setTimeout", JS_NewCFunction(ctx, js_http_incoming_set_timeout, "setTimeout", 2));
 
@@ -111,6 +135,103 @@ JSValue js_http_request_constructor(JSContext* ctx, JSValueConst new_target, int
   return obj;
 }
 
+// Phase 4.4: Readable stream property getters and destroy()
+JSValue js_http_incoming_readable(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
+  JSHttpRequest* req = JS_GetOpaque(this_val, js_http_request_class_id);
+  if (!req || !req->stream) {
+    return JS_FALSE;
+  }
+  bool readable = req->stream->readable && !req->stream->destroyed;
+  return JS_NewBool(ctx, readable);
+}
+
+JSValue js_http_incoming_readable_ended(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
+  JSHttpRequest* req = JS_GetOpaque(this_val, js_http_request_class_id);
+  if (!req || !req->stream) {
+    return JS_FALSE;
+  }
+  return JS_NewBool(ctx, req->stream->ended);
+}
+
+JSValue js_http_incoming_readable_high_water_mark(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
+  JSHttpRequest* req = JS_GetOpaque(this_val, js_http_request_class_id);
+  if (!req || !req->stream) {
+    return JS_NewInt32(ctx, 0);
+  }
+  return JS_NewInt32(ctx, req->stream->options.highWaterMark);
+}
+
+JSValue js_http_incoming_destroyed(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
+  JSHttpRequest* req = JS_GetOpaque(this_val, js_http_request_class_id);
+  if (!req || !req->stream) {
+    return JS_FALSE;
+  }
+  return JS_NewBool(ctx, req->stream->destroyed);
+}
+
+JSValue js_http_incoming_destroy(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
+  JSHttpRequest* req = JS_GetOpaque(this_val, js_http_request_class_id);
+  if (!req || !req->stream) {
+    return JS_ThrowTypeError(ctx, "Not an IncomingMessage");
+  }
+
+  if (req->stream->destroyed) {
+    return JS_DupValue(ctx, this_val);
+  }
+
+  if (req->stream->destroyed) {
+    return JS_UNDEFINED;
+  }
+
+  if (argc > 0 && !JS_IsUndefined(argv[0])) {
+    if (!JS_IsUndefined(req->stream->error_value)) {
+      JS_FreeValue(ctx, req->stream->error_value);
+    }
+    req->stream->errored = true;
+    req->stream->error_value = JS_DupValue(ctx, argv[0]);
+
+    JSValue emit_error = JS_GetPropertyStr(ctx, this_val, "emit");
+    if (JS_IsFunction(ctx, emit_error)) {
+      JSValue args[2] = {JS_NewString(ctx, "error"), JS_DupValue(ctx, argv[0])};
+      JSValue result = JS_Call(ctx, emit_error, this_val, 2, args);
+      JS_FreeValue(ctx, result);
+      JS_FreeValue(ctx, args[0]);
+      JS_FreeValue(ctx, args[1]);
+    }
+    JS_FreeValue(ctx, emit_error);
+  }
+
+  req->stream->destroyed = true;
+  req->stream->readable = false;
+
+  if (req->timeout_timer) {
+    uv_timer_stop(req->timeout_timer);
+    uv_close((uv_handle_t*)req->timeout_timer, (uv_close_cb)free);
+    req->timeout_timer = NULL;
+    req->timeout_ms = 0;
+  }
+
+  if (!JS_IsUndefined(req->socket)) {
+    JSValue destroy_method = JS_GetPropertyStr(ctx, req->socket, "destroy");
+    if (JS_IsFunction(ctx, destroy_method)) {
+      JSValue result = JS_Call(ctx, destroy_method, req->socket, 0, NULL);
+      JS_FreeValue(ctx, result);
+    }
+    JS_FreeValue(ctx, destroy_method);
+  }
+
+  JSValue emit_close = JS_GetPropertyStr(ctx, this_val, "emit");
+  if (JS_IsFunction(ctx, emit_close)) {
+    JSValue args[1] = {JS_NewString(ctx, "close")};
+    JSValue result = JS_Call(ctx, emit_close, this_val, 1, args);
+    JS_FreeValue(ctx, result);
+    JS_FreeValue(ctx, args[0]);
+  }
+  JS_FreeValue(ctx, emit_close);
+
+  return JS_UNDEFINED;
+}
+
 // Phase 4: Readable stream method implementations
 
 // IncomingMessage.prototype.pause()
@@ -118,6 +239,10 @@ JSValue js_http_incoming_pause(JSContext* ctx, JSValueConst this_val, int argc, 
   JSHttpRequest* req = JS_GetOpaque(this_val, js_http_request_class_id);
   if (!req || !req->stream) {
     return JS_ThrowTypeError(ctx, "Not an IncomingMessage");
+  }
+
+  if (req->stream->destroyed) {
+    return JS_DupValue(ctx, this_val);
   }
 
   if (req->stream->flowing) {
@@ -152,6 +277,10 @@ JSValue js_http_incoming_resume(JSContext* ctx, JSValueConst this_val, int argc,
   JSHttpRequest* req = JS_GetOpaque(this_val, js_http_request_class_id);
   if (!req || !req->stream) {
     return JS_ThrowTypeError(ctx, "Not an IncomingMessage");
+  }
+
+  if (req->stream->destroyed) {
+    return JS_NULL;
   }
 
   if (!req->stream->flowing) {
@@ -536,8 +665,7 @@ void js_http_incoming_end(JSContext* ctx, JSValue incoming_msg) {
   }
 
   req->stream->ended = true;
-  JS_SetPropertyStr(ctx, incoming_msg, "readable", JS_NewBool(ctx, false));
-  JS_SetPropertyStr(ctx, incoming_msg, "readableEnded", JS_NewBool(ctx, true));
+  req->stream->readable = false;
 
   // If buffer is empty or in flowing mode, emit 'end' immediately
   if ((req->stream->buffer_size == 0 || req->stream->flowing) && !req->stream->ended_emitted) {

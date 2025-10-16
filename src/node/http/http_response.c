@@ -104,6 +104,35 @@ static void http_response_update_backpressure(JSHttpResponse* res, size_t bytes_
   }
 }
 
+static void http_response_process_write_callbacks(JSContext* ctx, JSHttpResponse* res, JSValue error) {
+  if (!res || !res->stream || res->stream->write_callback_count == 0) {
+    return;
+  }
+
+  bool has_error = !JS_IsUndefined(error) && !JS_IsNull(error);
+
+  for (size_t i = 0; i < res->stream->write_callback_count; i++) {
+    JSValue callback = res->stream->write_callbacks[i].callback;
+    if (JS_IsUndefined(callback)) {
+      continue;
+    }
+
+    JSValue result;
+    if (has_error) {
+      JSValue arg = JS_DupValue(ctx, error);
+      JSValue args[1] = {arg};
+      result = JS_Call(ctx, callback, res->response_obj, 1, args);
+      JS_FreeValue(ctx, arg);
+    } else {
+      result = JS_Call(ctx, callback, res->response_obj, 0, NULL);
+    }
+    JS_FreeValue(ctx, result);
+    JS_FreeValue(ctx, callback);
+  }
+
+  res->stream->write_callback_count = 0;
+}
+
 static void http_response_flush_buffer(JSHttpResponse* res) {
   if (!res || !res->stream || res->stream->buffer_size == 0) {
     return;
@@ -134,6 +163,10 @@ JSValue js_http_response_write(JSContext* ctx, JSValueConst this_val, int argc, 
   // Check if response is already finished
   if (res->finished) {
     return JS_ThrowTypeError(ctx, "Cannot write after end");
+  }
+
+  if (res->stream && res->stream->destroyed) {
+    return JS_ThrowTypeError(ctx, "Response has been destroyed");
   }
 
   if (!res->headers_sent) {
@@ -300,6 +333,10 @@ JSValue js_http_response_end(JSContext* ctx, JSValueConst this_val, int argc, JS
     return JS_ThrowTypeError(ctx, "Response already ended");
   }
 
+  if (res->stream && res->stream->destroyed) {
+    return JS_ThrowTypeError(ctx, "Response has been destroyed");
+  }
+
   if (argc > 0) {
     // Write final data
     js_http_response_write(ctx, this_val, argc, argv);
@@ -334,11 +371,6 @@ JSValue js_http_response_end(JSContext* ctx, JSValueConst this_val, int argc, JS
     res->stream->writable = false;
     res->stream->writable_ended = true;
     res->stream->writable_finished = true;
-
-    // Update properties
-    JS_SetPropertyStr(ctx, this_val, "writable", JS_FALSE);
-    JS_SetPropertyStr(ctx, this_val, "writableEnded", JS_TRUE);
-    JS_SetPropertyStr(ctx, this_val, "writableFinished", JS_TRUE);
   }
 
   // Emit 'finish' event
@@ -636,6 +668,9 @@ JSValue js_http_response_constructor(JSContext* ctx, JSValueConst new_target, in
   res->stream->writable_finished = false;
   res->stream->writable_corked = 0;
   res->stream->need_drain = false;
+  res->stream->destroyed = false;
+  res->stream->errored = false;
+  res->stream->error_value = JS_UNDEFINED;
   res->stream->options.highWaterMark = 16384;  // 16KB default
 
   // Initialize write callbacks array
@@ -672,16 +707,43 @@ JSValue js_http_response_constructor(JSContext* ctx, JSValueConst new_target, in
   // Phase 4.2: Add Writable stream methods
   JS_SetPropertyStr(ctx, obj, "cork", JS_NewCFunction(ctx, js_http_response_cork, "cork", 0));
   JS_SetPropertyStr(ctx, obj, "uncork", JS_NewCFunction(ctx, js_http_response_uncork, "uncork", 0));
+  JS_SetPropertyStr(ctx, obj, "destroy", JS_NewCFunction(ctx, js_http_response_destroy, "destroy", 1));
 
   // Add properties
   JS_SetPropertyStr(ctx, obj, "statusCode", JS_NewInt32(ctx, 200));
   JS_SetPropertyStr(ctx, obj, "statusMessage", JS_NewString(ctx, "OK"));
   JS_SetPropertyStr(ctx, obj, "headersSent", JS_NewBool(ctx, false));
 
-  // Phase 4.2: Add Writable stream properties
-  JS_SetPropertyStr(ctx, obj, "writable", JS_NewBool(ctx, true));
-  JS_SetPropertyStr(ctx, obj, "writableEnded", JS_NewBool(ctx, false));
-  JS_SetPropertyStr(ctx, obj, "writableFinished", JS_NewBool(ctx, false));
+  // Phase 4.4: Add Writable stream property getters
+  JSAtom writable_atom = JS_NewAtom(ctx, "writable");
+  JS_DefinePropertyGetSet(ctx, obj, writable_atom, JS_NewCFunction(ctx, js_http_response_writable, "get writable", 0),
+                          JS_UNDEFINED, JS_PROP_CONFIGURABLE);
+  JS_FreeAtom(ctx, writable_atom);
+
+  JSAtom writable_ended_atom = JS_NewAtom(ctx, "writableEnded");
+  JS_DefinePropertyGetSet(ctx, obj, writable_ended_atom,
+                          JS_NewCFunction(ctx, js_http_response_writable_ended, "get writableEnded", 0), JS_UNDEFINED,
+                          JS_PROP_CONFIGURABLE);
+  JS_FreeAtom(ctx, writable_ended_atom);
+
+  JSAtom writable_finished_atom = JS_NewAtom(ctx, "writableFinished");
+  JS_DefinePropertyGetSet(ctx, obj, writable_finished_atom,
+                          JS_NewCFunction(ctx, js_http_response_writable_finished, "get writableFinished", 0),
+                          JS_UNDEFINED, JS_PROP_CONFIGURABLE);
+  JS_FreeAtom(ctx, writable_finished_atom);
+
+  JSAtom writable_hwm_atom = JS_NewAtom(ctx, "writableHighWaterMark");
+  JS_DefinePropertyGetSet(
+      ctx, obj, writable_hwm_atom,
+      JS_NewCFunction(ctx, js_http_response_writable_high_water_mark, "get writableHighWaterMark", 0), JS_UNDEFINED,
+      JS_PROP_CONFIGURABLE);
+  JS_FreeAtom(ctx, writable_hwm_atom);
+
+  JSAtom destroyed_atom = JS_NewAtom(ctx, "destroyed");
+  JS_DefinePropertyGetSet(ctx, obj, destroyed_atom,
+                          JS_NewCFunction(ctx, js_http_response_destroyed, "get destroyed", 0), JS_UNDEFINED,
+                          JS_PROP_CONFIGURABLE);
+  JS_FreeAtom(ctx, destroyed_atom);
 
   setup_event_emitter_inheritance(ctx, obj);
 
@@ -704,6 +766,9 @@ void js_http_response_finalizer(JSRuntime* rt, JSValue val) {
           JS_FreeValueRT(rt, res->stream->write_callbacks[i].callback);
         }
         free(res->stream->write_callbacks);
+      }
+      if (!JS_IsUndefined(res->stream->error_value)) {
+        JS_FreeValueRT(rt, res->stream->error_value);
       }
       free(res->stream);
     }
@@ -764,15 +829,16 @@ JSValue js_http_response_uncork(JSContext* ctx, JSValueConst this_val, int argc,
 }
 
 // Property getters for Writable stream properties
-JSValue js_http_response_writable(JSContext* ctx, JSValueConst this_val) {
+JSValue js_http_response_writable(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
   JSHttpResponse* res = JS_GetOpaque(this_val, js_http_response_class_id);
   if (!res || !res->stream) {
     return JS_FALSE;
   }
-  return JS_NewBool(ctx, res->stream->writable);
+  bool writable = res->stream->writable && !res->stream->destroyed;
+  return JS_NewBool(ctx, writable);
 }
 
-JSValue js_http_response_writable_ended(JSContext* ctx, JSValueConst this_val) {
+JSValue js_http_response_writable_ended(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
   JSHttpResponse* res = JS_GetOpaque(this_val, js_http_response_class_id);
   if (!res || !res->stream) {
     return JS_FALSE;
@@ -780,10 +846,92 @@ JSValue js_http_response_writable_ended(JSContext* ctx, JSValueConst this_val) {
   return JS_NewBool(ctx, res->stream->writable_ended);
 }
 
-JSValue js_http_response_writable_finished(JSContext* ctx, JSValueConst this_val) {
+JSValue js_http_response_writable_finished(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
   JSHttpResponse* res = JS_GetOpaque(this_val, js_http_response_class_id);
   if (!res || !res->stream) {
     return JS_FALSE;
   }
   return JS_NewBool(ctx, res->stream->writable_finished);
+}
+
+JSValue js_http_response_writable_high_water_mark(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
+  JSHttpResponse* res = JS_GetOpaque(this_val, js_http_response_class_id);
+  if (!res || !res->stream) {
+    return JS_NewInt32(ctx, 0);
+  }
+  return JS_NewInt32(ctx, res->stream->options.highWaterMark);
+}
+
+JSValue js_http_response_destroyed(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
+  JSHttpResponse* res = JS_GetOpaque(this_val, js_http_response_class_id);
+  if (!res || !res->stream) {
+    return JS_FALSE;
+  }
+  return JS_NewBool(ctx, res->stream->destroyed);
+}
+
+JSValue js_http_response_destroy(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
+  JSHttpResponse* res = JS_GetOpaque(this_val, js_http_response_class_id);
+  if (!res || !res->stream) {
+    return JS_ThrowTypeError(ctx, "Invalid response object");
+  }
+
+  if (res->stream->destroyed) {
+    return JS_UNDEFINED;
+  }
+
+  JSValue error = JS_UNDEFINED;
+  if (argc > 0 && !JS_IsUndefined(argv[0])) {
+    error = JS_DupValue(ctx, argv[0]);
+    if (!JS_IsUndefined(res->stream->error_value)) {
+      JS_FreeValue(ctx, res->stream->error_value);
+    }
+    res->stream->errored = true;
+    res->stream->error_value = JS_DupValue(ctx, argv[0]);
+
+    // Emit error event
+    JSValue emit_error = JS_GetPropertyStr(ctx, this_val, "emit");
+    if (JS_IsFunction(ctx, emit_error)) {
+      JSValue args[2] = {JS_NewString(ctx, "error"), JS_DupValue(ctx, argv[0])};
+      JSValue result = JS_Call(ctx, emit_error, this_val, 2, args);
+      JS_FreeValue(ctx, result);
+      JS_FreeValue(ctx, args[0]);
+      JS_FreeValue(ctx, args[1]);
+    }
+    JS_FreeValue(ctx, emit_error);
+  }
+
+  res->stream->destroyed = true;
+  res->stream->writable = false;
+  res->stream->writable_ended = true;
+  res->stream->writable_finished = true;
+  res->finished = true;
+
+  // Resolve any pending write callbacks
+  http_response_process_write_callbacks(ctx, res, error);
+
+  if (!JS_IsUndefined(error)) {
+    JS_FreeValue(ctx, error);
+    error = JS_UNDEFINED;
+  }
+
+  if (!JS_IsUndefined(res->socket)) {
+    JSValue destroy_method = JS_GetPropertyStr(ctx, res->socket, "destroy");
+    if (JS_IsFunction(ctx, destroy_method)) {
+      JSValue result = JS_Call(ctx, destroy_method, res->socket, 0, NULL);
+      JS_FreeValue(ctx, result);
+    }
+    JS_FreeValue(ctx, destroy_method);
+  }
+
+  JSValue emit_close = JS_GetPropertyStr(ctx, this_val, "emit");
+  if (JS_IsFunction(ctx, emit_close)) {
+    JSValue args[1] = {JS_NewString(ctx, "close")};
+    JSValue result = JS_Call(ctx, emit_close, this_val, 1, args);
+    JS_FreeValue(ctx, result);
+    JS_FreeValue(ctx, args[0]);
+  }
+  JS_FreeValue(ctx, emit_close);
+
+  return JS_UNDEFINED;
 }

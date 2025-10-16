@@ -1,5 +1,6 @@
 #include "jsrt.h"
 
+#include <limits.h>
 #include <stdbool.h>
 #include <stdint.h>
 #include <stdio.h>
@@ -8,6 +9,11 @@
 #include <unistd.h>
 #include <uv.h>
 
+#ifndef PATH_MAX
+#define PATH_MAX 4096
+#endif
+
+#include "build.h"
 #include "runtime.h"
 #include "util/file.h"
 #include "util/http_client.h"
@@ -19,6 +25,11 @@ extern char** jsrt_argv;
 // Forward declarations
 static bool is_url(const char* str);
 static JSRT_ReadFileResult download_url(const char* url);
+static void print_module_not_found_error(const char* filename);
+static const char* jsrt_get_version_string(void);
+static char* jsrt_cli_resolve_path(const char* filename);
+static char* jsrt_cli_normalize_path(const char* path);
+static bool jsrt_cli_is_absolute_path(const char* path);
 
 // Helper function to check if a string is a URL
 static bool is_url(const char* str) {
@@ -114,7 +125,11 @@ int JSRT_CmdRunFile(const char* filename, bool compact_node, int argc, char** ar
   }
 
   if (file.error != JSRT_READ_FILE_OK) {
-    fprintf(stderr, "Error: %s\n", JSRT_ReadFileErrorToString(file.error));
+    if (file.error == JSRT_READ_FILE_ERROR_FILE_NOT_FOUND) {
+      print_module_not_found_error(filename);
+    } else {
+      fprintf(stderr, "Error: %s\n", JSRT_ReadFileErrorToString(file.error));
+    }
     ret = 1;
     goto end;
   }
@@ -385,4 +400,240 @@ end:
   JSRT_EvalResultFree(&res);
   JSRT_RuntimeFree(rt);
   return ret;
+}
+
+#ifdef _WIN32
+#define JSRT_CLI_PATH_SEPARATOR_STR "\\"
+#define JSRT_CLI_IS_PATH_SEPARATOR(c) ((c) == '\\' || (c) == '/')
+#else
+#define JSRT_CLI_PATH_SEPARATOR_STR "/"
+#define JSRT_CLI_IS_PATH_SEPARATOR(c) ((c) == '/')
+#endif
+
+#define JSRT_CLI_MAX_PATH_SEGMENTS 256
+
+static const char* jsrt_get_version_string(void) {
+#ifdef JSRT_VERSION
+  return JSRT_VERSION;
+#else
+  return "unknown";
+#endif
+}
+
+static char* jsrt_cli_get_cwd(void) {
+  size_t size = PATH_MAX;
+  char* buffer = (char*)malloc(size + 1);
+  if (!buffer) {
+    return NULL;
+  }
+
+  int rc = uv_cwd(buffer, &size);
+  if (rc == UV_ENOBUFS) {
+    char* resized = (char*)realloc(buffer, size + 1);
+    if (!resized) {
+      free(buffer);
+      return NULL;
+    }
+    buffer = resized;
+    rc = uv_cwd(buffer, &size);
+  }
+
+  if (rc != 0) {
+    free(buffer);
+    return NULL;
+  }
+
+  buffer[size] = '\0';
+  return buffer;
+}
+
+static bool jsrt_cli_is_absolute_path(const char* path) {
+  if (!path || !*path) {
+    return false;
+  }
+
+#ifdef _WIN32
+  if ((path[0] >= 'A' && path[0] <= 'Z') || (path[0] >= 'a' && path[0] <= 'z')) {
+    return path[1] == ':' && JSRT_CLI_IS_PATH_SEPARATOR(path[2]);
+  }
+  return JSRT_CLI_IS_PATH_SEPARATOR(path[0]);
+#else
+  return path[0] == '/';
+#endif
+}
+
+static char* jsrt_cli_normalize_path(const char* path) {
+  if (!path || !*path) {
+    return NULL;
+  }
+
+  size_t len = strlen(path);
+  char* normalized = (char*)malloc(len + 1);
+  if (!normalized) {
+    return NULL;
+  }
+
+  for (size_t i = 0; i < len; i++) {
+#ifdef _WIN32
+    if (path[i] == '/') {
+      normalized[i] = '\\';
+    } else {
+      normalized[i] = path[i];
+    }
+#else
+    if (path[i] == '\\') {
+      normalized[i] = '/';
+    } else {
+      normalized[i] = path[i];
+    }
+#endif
+  }
+  normalized[len] = '\0';
+
+  bool is_absolute = jsrt_cli_is_absolute_path(normalized);
+  char* result = (char*)malloc(len + 3);
+  if (!result) {
+    free(normalized);
+    return NULL;
+  }
+
+  char* segments[JSRT_CLI_MAX_PATH_SEGMENTS];
+  size_t segment_count = 0;
+
+#ifdef _WIN32
+  bool is_drive_path = false;
+  char drive_prefix[4] = {0};
+  if (is_absolute && len >= 2 &&
+      ((normalized[0] >= 'A' && normalized[0] <= 'Z') || (normalized[0] >= 'a' && normalized[0] <= 'z')) &&
+      normalized[1] == ':') {
+    is_drive_path = true;
+    drive_prefix[0] = normalized[0];
+    drive_prefix[1] = ':';
+    drive_prefix[2] = '\0';
+  }
+#endif
+
+  char* token = strtok(normalized, JSRT_CLI_PATH_SEPARATOR_STR);
+  while (token && segment_count < JSRT_CLI_MAX_PATH_SEGMENTS) {
+    if (strcmp(token, ".") == 0) {
+      token = strtok(NULL, JSRT_CLI_PATH_SEPARATOR_STR);
+      continue;
+    }
+
+    if (strcmp(token, "..") == 0) {
+      if (segment_count > 0 && strcmp(segments[segment_count - 1], "..") != 0) {
+        segment_count--;
+      } else if (!is_absolute && segment_count < JSRT_CLI_MAX_PATH_SEGMENTS) {
+        segments[segment_count++] = token;
+      }
+    } else if (segment_count < JSRT_CLI_MAX_PATH_SEGMENTS) {
+      segments[segment_count++] = token;
+    }
+
+    token = strtok(NULL, JSRT_CLI_PATH_SEPARATOR_STR);
+  }
+
+  result[0] = '\0';
+
+#ifdef _WIN32
+  if (is_drive_path) {
+    strcpy(result, drive_prefix);
+  } else if (is_absolute) {
+    strcpy(result, JSRT_CLI_PATH_SEPARATOR_STR);
+  }
+#else
+  if (is_absolute) {
+    strcpy(result, JSRT_CLI_PATH_SEPARATOR_STR);
+  }
+#endif
+
+  for (size_t i = 0; i < segment_count; i++) {
+#ifdef _WIN32
+    if (is_drive_path) {
+      strcat(result, JSRT_CLI_PATH_SEPARATOR_STR);
+      strcat(result, segments[i]);
+    } else {
+#endif
+      if (i > 0) {
+        strcat(result, JSRT_CLI_PATH_SEPARATOR_STR);
+      }
+      strcat(result, segments[i]);
+#ifdef _WIN32
+    }
+#endif
+  }
+
+  if (result[0] == '\0') {
+#ifdef _WIN32
+    if (is_drive_path) {
+      strcat(result, JSRT_CLI_PATH_SEPARATOR_STR);
+    } else {
+      strcpy(result, ".");
+    }
+#else
+    strcpy(result, is_absolute ? JSRT_CLI_PATH_SEPARATOR_STR : ".");
+#endif
+  }
+
+  free(normalized);
+  return result;
+}
+
+static char* jsrt_cli_resolve_path(const char* filename) {
+  if (!filename) {
+    return NULL;
+  }
+
+  if (jsrt_cli_is_absolute_path(filename)) {
+    return jsrt_cli_normalize_path(filename);
+  }
+
+  char* cwd = jsrt_cli_get_cwd();
+  if (!cwd) {
+    return NULL;
+  }
+
+  size_t cwd_len = strlen(cwd);
+  size_t filename_len = strlen(filename);
+  bool needs_separator = cwd_len > 0 && !JSRT_CLI_IS_PATH_SEPARATOR(cwd[cwd_len - 1]);
+
+  size_t combined_len = cwd_len + (needs_separator ? 1 : 0) + filename_len + 1;
+  char* combined = (char*)malloc(combined_len);
+  if (!combined) {
+    free(cwd);
+    return NULL;
+  }
+
+  if (needs_separator) {
+    snprintf(combined, combined_len, "%s%s%s", cwd, JSRT_CLI_PATH_SEPARATOR_STR, filename);
+  } else {
+    snprintf(combined, combined_len, "%s%s", cwd, filename);
+  }
+
+  free(cwd);
+  char* normalized = jsrt_cli_normalize_path(combined);
+  free(combined);
+  return normalized;
+}
+
+static void print_module_not_found_error(const char* filename) {
+  char* resolved = NULL;
+  if (!is_url(filename)) {
+    resolved = jsrt_cli_resolve_path(filename);
+  }
+
+  const char* display = resolved ? resolved : filename;
+
+  fprintf(stderr, "jsrt:internal/modules/cjs/loader:1404\n");
+  fprintf(stderr, "  throw err;\n");
+  fprintf(stderr, "  ^\n\n");
+  fprintf(stderr, "Error: Cannot find module '%s'\n", display);
+  fprintf(stderr, "    at Function._resolveFilename (jsrt:internal/modules/cjs/loader:1401:15)\n");
+  fprintf(stderr, "    at jsrt:internal/main/run_main_module:36:49 {\n");
+  fprintf(stderr, "  code: 'MODULE_NOT_FOUND',\n");
+  fprintf(stderr, "  requireStack: []\n");
+  fprintf(stderr, "}\n\n");
+  fprintf(stderr, "jsrt v%s\n", jsrt_get_version_string());
+
+  free(resolved);
 }

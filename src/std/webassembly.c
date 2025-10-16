@@ -344,6 +344,92 @@ static JSValue js_webassembly_module_exports(JSContext* ctx, JSValueConst this_v
   return result;
 }
 
+// WebAssembly.Module.imports(module) static method
+static JSValue js_webassembly_module_imports(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
+  // Validate argument count
+  if (argc < 1) {
+    return JS_ThrowTypeError(ctx, "Module.imports requires 1 argument");
+  }
+
+  // Get module data - validate it's a WebAssembly.Module
+  jsrt_wasm_module_data_t* module_data = JS_GetOpaque(argv[0], js_webassembly_module_class_id);
+  if (!module_data) {
+    return JS_ThrowTypeError(ctx, "Argument must be a WebAssembly.Module");
+  }
+
+  // Get import count
+  int32_t import_count = wasm_runtime_get_import_count(module_data->module);
+  if (import_count < 0) {
+    return JS_ThrowInternalError(ctx, "Failed to get import count");
+  }
+
+  JSRT_Debug("Module has %d imports", import_count);
+
+  // Create result array
+  JSValue result = JS_NewArray(ctx);
+  if (JS_IsException(result)) {
+    return result;
+  }
+
+  // Iterate through imports
+  for (int32_t i = 0; i < import_count; i++) {
+    wasm_import_t import_info;
+
+    // Get import type (void return, fills import_info)
+    wasm_runtime_get_import_type(module_data->module, i, &import_info);
+
+    // Check if names are valid
+    if (!import_info.module_name || !import_info.name) {
+      JS_FreeValue(ctx, result);
+      return JS_ThrowInternalError(ctx, "Import name is NULL");
+    }
+
+    // Get kind string
+    const char* kind_str = wasm_export_kind_to_string(import_info.kind);
+
+    JSRT_Debug("Import %d: module='%s', name='%s', kind='%s'", i, import_info.module_name, import_info.name, kind_str);
+
+    // Create descriptor object {module, name, kind}
+    JSValue descriptor = JS_NewObject(ctx);
+    if (JS_IsException(descriptor)) {
+      JS_FreeValue(ctx, result);
+      return descriptor;
+    }
+
+    // Set module property
+    JSValue module = JS_NewString(ctx, import_info.module_name);
+    if (JS_IsException(module)) {
+      JS_FreeValue(ctx, descriptor);
+      JS_FreeValue(ctx, result);
+      return module;
+    }
+    JS_SetPropertyStr(ctx, descriptor, "module", module);
+
+    // Set name property
+    JSValue name = JS_NewString(ctx, import_info.name);
+    if (JS_IsException(name)) {
+      JS_FreeValue(ctx, descriptor);
+      JS_FreeValue(ctx, result);
+      return name;
+    }
+    JS_SetPropertyStr(ctx, descriptor, "name", name);
+
+    // Set kind property
+    JSValue kind = JS_NewString(ctx, kind_str);
+    if (JS_IsException(kind)) {
+      JS_FreeValue(ctx, descriptor);
+      JS_FreeValue(ctx, result);
+      return kind;
+    }
+    JS_SetPropertyStr(ctx, descriptor, "kind", kind);
+
+    // Add descriptor to result array
+    JS_SetPropertyUint32(ctx, result, i, descriptor);
+  }
+
+  return result;
+}
+
 // WebAssembly class finalizers
 static void js_webassembly_module_finalizer(JSRuntime* rt, JSValue val) {
   jsrt_wasm_module_data_t* data = JS_GetOpaque(val, js_webassembly_module_class_id);
@@ -501,6 +587,10 @@ void JSRT_RuntimeSetupStdWebAssembly(JSRT_Runtime* rt) {
   // Add Module.exports static method
   JS_SetPropertyStr(rt->ctx, module_ctor, "exports",
                     JS_NewCFunction(rt->ctx, js_webassembly_module_exports, "exports", 1));
+
+  // Add Module.imports static method
+  JS_SetPropertyStr(rt->ctx, module_ctor, "imports",
+                    JS_NewCFunction(rt->ctx, js_webassembly_module_imports, "imports", 1));
 
   JS_SetPropertyStr(rt->ctx, webassembly, "Module", module_ctor);
 

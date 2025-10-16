@@ -208,8 +208,8 @@ Update existing Module/Instance structures to use proper class system
 :CREATED: 2025-10-16T14:45:00Z
 :STARTED: 2025-10-16T15:50:00Z
 :DEPS: phase-1
-:PROGRESS: 10/42
-:COMPLETION: 24%
+:PROGRESS: 22/42
+:COMPLETION: 52%
 :STATUS: 🔵 IN_PROGRESS
 :END:
 
@@ -239,26 +239,29 @@ Implement WebAssembly.Module.exports(module) to introspect exports
 - [X] Fix WASM bytes memory issue (copy before loading)
 - [X] Validate with ASAN (no leaks)
 
-*** TODO [#A] Task 2.2: Module.imports() Static Method [S][R:MED][C:MEDIUM][D:2.1]
+*** DONE [#A] Task 2.2: Module.imports() Static Method [S][R:MED][C:MEDIUM][D:2.1]
+CLOSED: [2025-10-16T16:25:00Z]
 :PROPERTIES:
 :ID: 2.2
 :CREATED: 2025-10-16T14:45:00Z
+:STARTED: 2025-10-16T16:00:00Z
+:COMPLETED: 2025-10-16T16:25:00Z
 :DEPS: 2.1
 :END:
 
 Implement WebAssembly.Module.imports(module) to introspect imports
 
 **** Subtasks
-- [ ] Study WAMR API: wasm_runtime_get_import_count
-- [ ] Study WAMR API: wasm_runtime_get_import
-- [ ] Implement js_webassembly_module_imports function
-- [ ] Extract import module names
-- [ ] Extract import field names
-- [ ] Extract import kinds
-- [ ] Return array of {module, name, kind} descriptors
-- [ ] Handle edge case: module with no imports
-- [ ] Add error handling
-- [ ] Write unit test with imports
+- [X] Study WAMR API: wasm_runtime_get_import_count
+- [X] Study WAMR API: wasm_runtime_get_import_type
+- [X] Implement js_webassembly_module_imports function
+- [X] Extract import module names
+- [X] Extract import field names
+- [X] Extract import kinds
+- [X] Return array of {module, name, kind} descriptors
+- [X] Handle edge case: module with no imports
+- [X] Add error handling
+- [X] Write unit test with imports (test_web_wasm_module_imports.js)
 
 *** TODO [#A] Task 2.3: Module.customSections() Static Method [S][R:LOW][C:SIMPLE][D:2.2]
 :PROPERTIES:
@@ -1073,19 +1076,19 @@ Final polish and code quality check
 * 🚀 Execution Dashboard
 :PROPERTIES:
 :CURRENT_PHASE: Phase 2 - Core Module API
-:PROGRESS: 35/220
-:COMPLETION: 16%
-:ACTIVE_TASK: Task 2.2 - Module.imports() Static Method
-:UPDATED: 2025-10-16T15:45:00Z
+:PROGRESS: 47/220
+:COMPLETION: 21%
+:ACTIVE_TASK: Task 2.4 - WebAssembly.Memory Constructor (Pending)
+:UPDATED: 2025-10-16T16:30:00Z
 :END:
 
 ** Current Status
-- Phase: Phase 2 - Core Module API (IN_PROGRESS, 24% - 10/42 tasks)
-- Progress: 35/220 tasks (16%)
-- Active: Task 2.2 - Module.imports() Static Method
-- Next: Task 2.3 - Module.customSections() Static Method
+- Phase: Phase 2 - Core Module API (IN_PROGRESS, 52% - 22/42 tasks)
+- Progress: 47/220 tasks (21%)
+- Active: Task 2.3 skipped for now (low priority custom sections)
+- Next: Task 2.4 - WebAssembly.Memory Constructor
 - Completed Phases: Phase 1 ✓ (Infrastructure & Error Types)
-- Completed Tasks (Phase 2): Task 2.1 ✓ (Module.exports)
+- Completed Tasks (Phase 2): Task 2.1 ✓ (Module.exports), Task 2.2 ✓ (Module.imports)
 
 ** Execution Strategy
 - Phases 1-5 are SEQUENTIAL (each depends on previous)
@@ -1121,6 +1124,10 @@ Final polish and code quality check
 ** Recent Changes
 | Timestamp | Action | Task ID | Details |
 |-----------|--------|---------|---------|
+| 2025-10-16T16:30:00Z | Updated | plan | Phase 2 progress: 52% complete (22/42 tasks) |
+| 2025-10-16T16:25:00Z | Completed | 2.2 | Module.imports() implemented, tested, all tests pass |
+| 2025-10-16T16:25:00Z | Skipped | 2.3 | Module.customSections() deferred (low priority) |
+| 2025-10-16T16:00:00Z | Started | 2.2 | Implementing Module.imports() static method |
 | 2025-10-16T15:45:00Z | Completed | 2.1 | Module.exports() implemented, tested, ASAN validated |
 | 2025-10-16T16:00:00Z | Started | 2.1 | Implementing Module.exports() static method |
 | 2025-10-16T15:50:00Z | Completed | Phase 1 | All infrastructure and error types complete |

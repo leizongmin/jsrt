@@ -300,6 +300,7 @@ claude: docker-build
 		--name claude-session-$(shell basename $(CURDIR)) \
 		-e HOME="/repo/target/dev" \
 		-e USER="$(shell whoami)" \
+		-e TERM=$(TERM) \
 		-e GIT_USER_NAME="$(shell git config user.name)" \
 		-e GIT_USER_EMAIL="$(shell git config user.email)" \
 		-e ANTHROPIC_BASE_URL=$(ANTHROPIC_BASE_URL) \
@@ -324,6 +325,7 @@ codex: docker-build
 		--name codex-session-$(shell basename $(CURDIR)) \
 		-e HOME="/repo/target/dev" \
 		-e USER="$(shell whoami)" \
+		-e TERM=$(TERM) \
 		-e GIT_USER_NAME="$(shell git config user.name)" \
 		-e GIT_USER_EMAIL="$(shell git config user.email)" \
 		-e OPENAI_BASE_URL=$(OPENAI_BASE_URL) \
@@ -345,6 +347,7 @@ dev-shell: docker-build
 		--name dev-shell-$(shell basename $(CURDIR)) \
 		-e HOME="/tmp" \
 		-e USER="$(shell whoami)" \
+		-e TERM=$(TERM) \
 		-e GIT_USER_NAME="$(shell git config user.name)" \
 		-e GIT_USER_EMAIL="$(shell git config user.email)" \
 		--entrypoint /usr/bin/fish \

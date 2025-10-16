@@ -15,6 +15,11 @@ typedef struct JSRT_ModuleCache JSRT_ModuleCache;
 typedef struct JSRT_ModuleResolver JSRT_ModuleResolver;
 typedef struct JSRT_ModuleDetector JSRT_ModuleDetector;
 
+typedef enum {
+  JSRT_MODULE_REQUEST_ESM = 0,
+  JSRT_MODULE_REQUEST_COMMONJS = 1,
+} JSRT_ModuleRequestType;
+
 /**
  * Main module loader context structure
  *
@@ -30,6 +35,8 @@ typedef struct JSRT_ModuleLoader {
   JSRT_ModuleCache* cache;        // Module cache
   JSRT_ModuleResolver* resolver;  // Module resolver (Phase 2)
   JSRT_ModuleDetector* detector;  // Type detector (Phase 3)
+
+  JSRT_ModuleRequestType current_request_type;
 
   // Configuration
   int enable_cache;         // Whether caching is enabled (default: 1)

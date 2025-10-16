@@ -108,7 +108,7 @@ static JSValue js_import_meta_resolve(JSContext* ctx, JSValueConst this_val, int
   MODULE_DEBUG_LOADER("import.meta.resolve('%s') from: %s", specifier, module_path);
 
   // Resolve the specifier using path resolver
-  JSRT_ResolvedPath* resolved = jsrt_resolve_path(ctx, specifier, module_path);
+  JSRT_ResolvedPath* resolved = jsrt_resolve_path(ctx, specifier, module_path, true);
 
   JS_FreeCString(ctx, specifier);
   JS_FreeCString(ctx, module_path);

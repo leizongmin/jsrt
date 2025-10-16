@@ -161,7 +161,9 @@ function runTests() {
 
 // Add global timeout to prevent hanging in restricted environments
 const globalTimeout = setTimeout(() => {
-  console.log('⚠️  SKIP: HTTP module tests timed out (likely no network access)');
+  console.log(
+    '⚠️  SKIP: HTTP module tests timed out (likely no network access)'
+  );
   console.log('   To skip this test, set SKIP_HTTP_MODULE_TESTS=1');
   process.exit(0);
 }, 15000); // 15 second global timeout

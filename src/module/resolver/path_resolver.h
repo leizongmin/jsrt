@@ -37,7 +37,7 @@ typedef struct {
  * @return Resolved path info (caller must free with jsrt_resolved_path_free)
  * @note Returns NULL if resolution fails
  */
-JSRT_ResolvedPath* jsrt_resolve_path(JSContext* ctx, const char* specifier, const char* base_path);
+JSRT_ResolvedPath* jsrt_resolve_path(JSContext* ctx, const char* specifier, const char* base_path, bool is_esm);
 
 /**
  * Free a resolved path structure

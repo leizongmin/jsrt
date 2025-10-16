@@ -6,6 +6,7 @@
  */
 
 #include "module_loader.h"
+#include <stdbool.h>
 #include <stdlib.h>
 #include <string.h>
 #include "../detector/format_detector.h"
@@ -73,6 +74,8 @@ JSValue jsrt_load_module(JSRT_ModuleLoader* loader, const char* specifier, const
 
   loader->loads_total++;
 
+  bool is_esm_request = (loader->current_request_type == JSRT_MODULE_REQUEST_ESM);
+
   // Step 1: Check if it's a builtin module (jsrt: or node:)
   if (jsrt_is_builtin_specifier(specifier)) {
     MODULE_DEBUG_LOADER("Detected builtin module specifier");
@@ -86,7 +89,7 @@ JSValue jsrt_load_module(JSRT_ModuleLoader* loader, const char* specifier, const
   }
 
   // Step 2: Resolve module specifier to absolute path/URL
-  JSRT_ResolvedPath* resolved = jsrt_resolve_path(loader->ctx, specifier, base_path);
+  JSRT_ResolvedPath* resolved = jsrt_resolve_path(loader->ctx, specifier, base_path, is_esm_request);
   if (!resolved) {
     loader->loads_failed++;
     return jsrt_module_throw_error(loader->ctx, JSRT_MODULE_NOT_FOUND, "Cannot resolve module specifier: %s",

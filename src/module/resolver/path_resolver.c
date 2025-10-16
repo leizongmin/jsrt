@@ -103,7 +103,7 @@ char* jsrt_validate_url(const char* url) {
   return strdup(url);
 }
 
-JSRT_ResolvedPath* jsrt_resolve_path(JSContext* ctx, const char* specifier, const char* base_path) {
+JSRT_ResolvedPath* jsrt_resolve_path(JSContext* ctx, const char* specifier, const char* base_path, bool is_esm) {
   if (!ctx || !specifier) {
     MODULE_DEBUG_RESOLVER("Cannot resolve path: NULL ctx or specifier");
     return NULL;
@@ -176,7 +176,7 @@ JSRT_ResolvedPath* jsrt_resolve_path(JSContext* ctx, const char* specifier, cons
 
     case JSRT_SPECIFIER_BARE:
       // lodash, react - resolve using npm algorithm
-      resolved = jsrt_resolve_npm_module(ctx, specifier, base_path, false);
+      resolved = jsrt_resolve_npm_module(ctx, specifier, base_path, is_esm);
       MODULE_DEBUG_RESOLVER("Bare specifier (npm) resolved to: %s", resolved ? resolved : "NULL");
       break;
 

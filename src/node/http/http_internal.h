@@ -214,8 +214,8 @@ typedef struct {
    * Flag to prevent cleanup during llhttp_execute
    * @{
    */
-  bool parsing_in_progress;   /**< Whether llhttp_execute is currently running */
-  bool cleanup_deferred;       /**< Whether cleanup should happen after parsing completes */
+  bool parsing_in_progress; /**< Whether llhttp_execute is currently running */
+  bool cleanup_deferred;    /**< Whether cleanup should happen after parsing completes */
   /** @} */
 } JSHttpConnection;
 

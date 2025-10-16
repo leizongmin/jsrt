@@ -5,6 +5,7 @@
 #endif
 
 #include <stdbool.h>
+#include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -289,10 +290,97 @@ static char* find_node_modules_path(const char* start_dir, const char* package_n
   return NULL;
 }
 
+static char* resolve_exports_entry(JSContext* ctx, JSValue entry, const char* package_dir, bool is_esm) {
+  if (JS_IsString(entry)) {
+    const char* target_str = JS_ToCString(ctx, entry);
+    if (!target_str) {
+      return NULL;
+    }
+
+    const char* relative = target_str;
+    if (relative[0] == '.' && relative[1] == '/') {
+      relative += 2;
+    }
+
+    char* full_path = path_join(package_dir, relative);
+    JS_FreeCString(ctx, target_str);
+    return full_path;
+  }
+
+  if (JS_IsArray(ctx, entry)) {
+    JSValue length_val = JS_GetPropertyStr(ctx, entry, "length");
+    uint32_t length = 0;
+    if (!JS_IsUndefined(length_val) && !JS_IsNull(length_val)) {
+      JS_ToUint32(ctx, &length, length_val);
+    }
+    JS_FreeValue(ctx, length_val);
+
+    for (uint32_t i = 0; i < length; i++) {
+      JSValue element = JS_GetPropertyUint32(ctx, entry, i);
+      if (JS_IsUndefined(element) || JS_IsNull(element)) {
+        JS_FreeValue(ctx, element);
+        continue;
+      }
+      char* resolved = resolve_exports_entry(ctx, element, package_dir, is_esm);
+      JS_FreeValue(ctx, element);
+      if (resolved) {
+        return resolved;
+      }
+    }
+    return NULL;
+  }
+
+  if (JS_IsObject(entry)) {
+    const char* esm_keys[] = {"import", "module", "browser", "default", "require", NULL};
+    const char* cjs_keys[] = {"require", "default", "node", "import", NULL};
+    const char** keys = is_esm ? esm_keys : cjs_keys;
+
+    for (int i = 0; keys[i]; i++) {
+      JSValue prop = JS_GetPropertyStr(ctx, entry, keys[i]);
+      if (JS_IsUndefined(prop) || JS_IsNull(prop)) {
+        JS_FreeValue(ctx, prop);
+        continue;
+      }
+      char* resolved = resolve_exports_entry(ctx, prop, package_dir, is_esm);
+      JS_FreeValue(ctx, prop);
+      if (resolved) {
+        return resolved;
+      }
+    }
+  }
+
+  return NULL;
+}
+
+static char* resolve_package_exports(JSContext* ctx, JSValue package_json, const char* package_dir, bool is_esm) {
+  JSValue exports_val = JS_GetPropertyStr(ctx, package_json, "exports");
+  if (JS_IsUndefined(exports_val) || JS_IsNull(exports_val)) {
+    JS_FreeValue(ctx, exports_val);
+    return NULL;
+  }
+
+  char* resolved = NULL;
+  if (JS_IsObject(exports_val)) {
+    JSValue dot_val = JS_GetPropertyStr(ctx, exports_val, ".");
+    if (!JS_IsUndefined(dot_val) && !JS_IsNull(dot_val)) {
+      resolved = resolve_exports_entry(ctx, dot_val, package_dir, is_esm);
+    }
+    JS_FreeValue(ctx, dot_val);
+
+    if (!resolved) {
+      resolved = resolve_exports_entry(ctx, exports_val, package_dir, is_esm);
+    }
+  } else {
+    resolved = resolve_exports_entry(ctx, exports_val, package_dir, is_esm);
+  }
+
+  JS_FreeValue(ctx, exports_val);
+  return resolved;
+}
+
 static char* resolve_package_main(const char* package_dir, bool is_esm) {
   JSRT_Debug("resolve_package_main: package_dir='%s', is_esm=%d", package_dir, is_esm);
 
-  // Try to read package.json
   char* package_json_path = path_join(package_dir, "package.json");
   if (!package_json_path)
     return NULL;
@@ -301,7 +389,6 @@ static char* resolve_package_main(const char* package_dir, bool is_esm) {
   free(package_json_path);
 
   if (json_result.error == JSRT_READ_FILE_OK) {
-    // Parse package.json
     JSRuntime* rt = JS_NewRuntime();
     JSContext* ctx = JS_NewContext(rt);
 
@@ -309,48 +396,72 @@ static char* resolve_package_main(const char* package_dir, bool is_esm) {
     JSRT_ReadFileResultFree(&json_result);
 
     if (!JS_IsNull(package_json) && !JS_IsException(package_json)) {
-      const char* entry_point = NULL;
-
-      if (is_esm) {
-        // For ES modules, prefer "module" field over "main"
-        entry_point = JSRT_GetPackageModule(ctx, package_json);
-        if (!entry_point) {
-          entry_point = JSRT_GetPackageMain(ctx, package_json);
-        }
-      } else {
-        // For CommonJS, use "main" field
-        entry_point = JSRT_GetPackageMain(ctx, package_json);
-      }
-
-      if (entry_point) {
-        char* full_path = path_join(package_dir, entry_point);
-
-        // Free the JSON parsing resources
-        if (entry_point != JSRT_GetPackageMain(ctx, package_json)) {
-          JS_FreeCString(ctx, entry_point);
-        }
-        JS_FreeCString(ctx, JSRT_GetPackageMain(ctx, package_json));
+      char* exports_path = resolve_package_exports(ctx, package_json, package_dir, is_esm);
+      if (exports_path) {
         JS_FreeValue(ctx, package_json);
         JS_FreeContext(ctx);
         JS_FreeRuntime(rt);
-
-        JSRT_Debug("resolve_package_main: resolved to '%s'", full_path ? full_path : "NULL");
-        return full_path;
+        JSRT_Debug("resolve_package_main: resolved via exports to '%s'", exports_path);
+        return exports_path;
       }
 
-      JS_FreeValue(ctx, package_json);
-    }
+      bool entry_point_needs_free = false;
+      const char* entry_point = NULL;
+      JSValue entry_val = JS_UNDEFINED;
 
-    JS_FreeContext(ctx);
-    JS_FreeRuntime(rt);
+      if (is_esm) {
+        entry_val = JS_GetPropertyStr(ctx, package_json, "module");
+        if (JS_IsString(entry_val)) {
+          entry_point = JS_ToCString(ctx, entry_val);
+          entry_point_needs_free = true;
+        }
+      }
+
+      if (!entry_point) {
+        if (!JS_IsUndefined(entry_val))
+          JS_FreeValue(ctx, entry_val);
+        entry_val = JS_GetPropertyStr(ctx, package_json, "main");
+        if (JS_IsString(entry_val)) {
+          entry_point = JS_ToCString(ctx, entry_val);
+          entry_point_needs_free = true;
+        } else if (JS_IsUndefined(entry_val) || JS_IsNull(entry_val)) {
+          entry_point = is_esm ? "index.mjs" : "index.js";
+        }
+      }
+
+      if (!JS_IsUndefined(entry_val))
+        JS_FreeValue(ctx, entry_val);
+
+      char* full_path = NULL;
+      if (entry_point) {
+        const char* relative = entry_point;
+        if (relative[0] == '.' && relative[1] == '/')
+          relative += 2;
+        full_path = path_join(package_dir, relative);
+      }
+
+      if (entry_point_needs_free && entry_point)
+        JS_FreeCString(ctx, entry_point);
+
+      JS_FreeValue(ctx, package_json);
+      JS_FreeContext(ctx);
+      JS_FreeRuntime(rt);
+
+      if (full_path) {
+        JSRT_Debug("resolve_package_main: resolved to '%s'", full_path);
+        return full_path;
+      }
+    } else {
+      JS_FreeValue(ctx, package_json);
+      JS_FreeContext(ctx);
+      JS_FreeRuntime(rt);
+    }
   } else {
     JSRT_ReadFileResultFree(&json_result);
   }
 
-  // Fallback to index.js or index.mjs
   const char* default_file = is_esm ? "index.mjs" : "index.js";
   char* default_path = path_join(package_dir, default_file);
-
   JSRT_Debug("resolve_package_main: falling back to '%s'", default_path ? default_path : "NULL");
   return default_path;
 }
@@ -358,6 +469,18 @@ static char* resolve_package_main(const char* package_dir, bool is_esm) {
 static char* resolve_npm_module(const char* module_name, const char* base_path, bool is_esm) {
   JSRT_Debug("resolve_npm_module: module_name='%s', base_path='%s', is_esm=%d", module_name,
              base_path ? base_path : "null", is_esm);
+
+#ifdef JSRT_NODE_COMPAT
+  if (!is_absolute_path(module_name) && !is_relative_path(module_name) && JSRT_IsNodeModule(module_name)) {
+    size_t len = strlen(module_name) + 6;
+    char* node_specifier = malloc(len);
+    if (!node_specifier)
+      return NULL;
+    snprintf(node_specifier, len, "node:%s", module_name);
+    JSRT_Debug("resolve_npm_module: mapped Node builtin '%s' to '%s'", module_name, node_specifier);
+    return node_specifier;
+  }
+#endif
 
   // Determine the starting directory for resolution
   char* start_dir = NULL;

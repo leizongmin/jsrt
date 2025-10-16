@@ -44,6 +44,7 @@ JSRT_ModuleLoader* jsrt_module_loader_create(JSContext* ctx) {
   loader->enable_http_imports = 0;  // Disabled by default for security
   loader->enable_node_compat = 1;
   loader->max_cache_size = 1000;
+  loader->current_request_type = JSRT_MODULE_REQUEST_ESM;
 
   // Initialize statistics
   loader->loads_total = 0;

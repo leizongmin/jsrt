@@ -341,8 +341,13 @@ static JSValue js_commonjs_require(JSContext* ctx, JSValueConst this_val, int ar
 
   MODULE_DEBUG_LOADER("require('%s') from module: %s", specifier, module_path);
 
+  JSRT_ModuleRequestType previous_request_type = loader->current_request_type;
+  loader->current_request_type = JSRT_MODULE_REQUEST_COMMONJS;
+
   // Load the module (this will handle resolution, detection, and loading)
   JSValue result = jsrt_load_module(loader, specifier, module_path);
+
+  loader->current_request_type = previous_request_type;
 
   JS_FreeCString(ctx, specifier);
   JS_FreeCString(ctx, module_path);

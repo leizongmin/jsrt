@@ -210,7 +210,9 @@ Update existing Module/Instance structures to use proper class system
 :DEPS: phase-1
 :PROGRESS: 22/42
 :COMPLETION: 52%
-:STATUS: 🔵 IN_PROGRESS
+:STATUS: 🔴 BLOCKED
+:BLOCKED_BY: Tasks 2.4-2.6 blocked by WAMR API limitation
+:NOTE: Moving to Phase 3 Instance.exports (no dependency on standalone Memory)
 :END:
 
 *** DONE [#A] Task 2.1: Module.exports() Static Method [S][R:MED][C:MEDIUM][D:1.3]
@@ -284,20 +286,38 @@ Implement Module.customSections(module, sectionName) for custom data
 - [ ] Register method on Module
 - [ ] Document limitations if WAMR lacks full support
 
-*** TODO [#A] Task 2.4: WebAssembly.Memory Constructor [S][R:MED][C:COMPLEX][D:1.3]
+*** BLOCKED [#A] Task 2.4: WebAssembly.Memory Constructor [S][R:MED][C:COMPLEX][D:1.3]
 :PROPERTIES:
 :ID: 2.4
 :CREATED: 2025-10-16T14:45:00Z
+:BLOCKED_BY: WAMR API limitation
 :DEPS: 1.3
+:NOTE: WAMR does not expose standalone memory creation - memory is tied to instances
 :END:
 
 Implement WebAssembly.Memory for linear memory management
 
-**** Subtasks
-- [ ] Define memory data structure (stores wasm_memory_t)
+**** Blocker Details
+WAMR v2.4.1 does not provide wasm_runtime_create_memory() or equivalent API for standalone Memory objects. Memory instances are only accessible via:
+- wasm_runtime_get_default_memory(instance)
+- wasm_runtime_lookup_memory(instance, name)
+- wasm_runtime_get_memory(instance, index)
+
+All require an existing module instance. Per WebAssembly JS spec, Memory should be constructible independently and importable.
+
+**** Workaround Options
+1. Defer to Phase 3: Implement Memory.buffer getter for instance-exported memory first
+2. Implement limited constructor that throws "not yet implemented"
+3. Research WAMR internals for manual memory creation (complex, risky)
+
+**** Decision
+BLOCKED pending Phase 3 Instance.exports implementation. Will revisit after understanding WAMR memory model better through instance exports.
+
+**** Original Subtasks (Deferred)
+- [ ] Define memory data structure (stores wasm_memory_inst_t)
 - [ ] Implement Memory constructor (initial, maximum, shared)
 - [ ] Parse descriptor: {initial, maximum, shared}
-- [ ] Create WAMR memory with wasm_runtime_create_memory
+- [ ] Create WAMR memory (BLOCKED - no API)
 - [ ] Store memory handle in opaque data
 - [ ] Implement buffer getter (returns ArrayBuffer/SharedArrayBuffer)
 - [ ] Map WAMR memory to JS ArrayBuffer
@@ -307,21 +327,25 @@ Implement WebAssembly.Memory for linear memory management
 - [ ] Test memory creation with valid descriptors
 - [ ] Test error: negative initial size
 
-*** TODO [#A] Task 2.5: Memory.prototype.grow() Method [S][R:MED][C:MEDIUM][D:2.4]
+*** BLOCKED [#A] Task 2.5: Memory.prototype.grow() Method [S][R:MED][C:MEDIUM][D:2.4]
 :PROPERTIES:
 :ID: 2.5
 :CREATED: 2025-10-16T14:45:00Z
+:BLOCKED_BY: Task 2.4 (Memory constructor)
 :DEPS: 2.4
 :END:
 
 Implement grow(delta) to expand linear memory
 
-**** Subtasks
-- [ ] Study WAMR memory growth API
+**** Note
+WAMR provides wasm_memory_enlarge(memory_inst, inc_page_count) and wasm_runtime_enlarge_memory(module_inst, inc_page_count) which can be used once Memory objects are implemented.
+
+**** Subtasks (Deferred)
+- [ ] Study WAMR memory growth API (wasm_memory_enlarge)
 - [ ] Implement js_webassembly_memory_grow function
-- [ ] Get current memory size in pages
+- [ ] Get current memory size in pages (wasm_memory_get_cur_page_count)
 - [ ] Validate delta parameter (must be non-negative)
-- [ ] Call WAMR memory grow function
+- [ ] Call wasm_memory_enlarge
 - [ ] Return old size in pages
 - [ ] Throw RangeError if growth exceeds maximum
 - [ ] Update buffer reference after growth
@@ -330,19 +354,23 @@ Implement grow(delta) to expand linear memory
 - [ ] Test failure case: exceeding maximum
 - [ ] Test with AddressSanitizer
 
-*** TODO [#B] Task 2.6: Memory Buffer Property (Detachment Handling) [S][R:MED][C:COMPLEX][D:2.5]
+*** BLOCKED [#B] Task 2.6: Memory Buffer Property (Detachment Handling) [S][R:MED][C:COMPLEX][D:2.5]
 :PROPERTIES:
 :ID: 2.6
 :CREATED: 2025-10-16T14:45:00Z
+:BLOCKED_BY: Task 2.5 (Memory.grow)
 :DEPS: 2.5
 :END:
 
 Implement buffer detachment when memory grows (per spec)
 
-**** Subtasks
-- [ ] Research ArrayBuffer detachment in QuickJS
+**** Technical Notes
+QuickJS provides JS_DetachArrayBuffer(ctx, obj) for buffer detachment - this is the key API for implementing spec-compliant buffer detachment when Memory.grow() is called.
+
+**** Subtasks (Deferred)
+- [X] Research ArrayBuffer detachment in QuickJS (DONE - use JS_DetachArrayBuffer)
 - [ ] Implement buffer getter that returns current backing store
-- [ ] Detach old ArrayBuffer when memory grows
+- [ ] Detach old ArrayBuffer when memory grows (call JS_DetachArrayBuffer)
 - [ ] Create new ArrayBuffer for grown memory
 - [ ] Test that old buffer becomes inaccessible after grow
 - [ ] Add unit test for detachment behavior
@@ -1078,15 +1106,15 @@ Final polish and code quality check
 :CURRENT_PHASE: Phase 2 - Core Module API
 :PROGRESS: 47/220
 :COMPLETION: 21%
-:ACTIVE_TASK: Task 2.4 - WebAssembly.Memory Constructor (Pending)
-:UPDATED: 2025-10-16T16:30:00Z
+:ACTIVE_TASK: Documented blocker for Task 2.4-2.6, plan updated
+:UPDATED: 2025-10-16T17:05:00Z
 :END:
 
 ** Current Status
-- Phase: Phase 2 - Core Module API (IN_PROGRESS, 52% - 22/42 tasks)
+- Phase: Phase 3 - Instance & Exports (STARTING, 0% - 0/38 tasks)
 - Progress: 47/220 tasks (21%)
-- Active: Task 2.3 skipped for now (low priority custom sections)
-- Next: Task 2.4 - WebAssembly.Memory Constructor
+- Active: Task 3.3 - Instance.exports Property (NEXT)
+- Blocked: Phase 2 Tasks 2.4-2.6 (Memory API - WAMR limitation)
 - Completed Phases: Phase 1 ✓ (Infrastructure & Error Types)
 - Completed Tasks (Phase 2): Task 2.1 ✓ (Module.exports), Task 2.2 ✓ (Module.imports)
 
@@ -1124,20 +1152,32 @@ Final polish and code quality check
 ** Recent Changes
 | Timestamp | Action | Task ID | Details |
 |-----------|--------|---------|---------|
+| 2025-10-16T17:00:00Z | Blocked | 2.4-2.6 | Memory API blocked - WAMR lacks standalone memory creation |
+| 2025-10-16T17:00:00Z | Research | WAMR | Confirmed memory APIs require instance, documented blocker |
+| 2025-10-16T17:00:00Z | Research | QuickJS | Found JS_DetachArrayBuffer for future use |
+| 2025-10-16T17:00:00Z | Decision | Phase 2 | Moving to Phase 3 (Instance.exports has no Memory dependency) |
 | 2025-10-16T16:30:00Z | Updated | plan | Phase 2 progress: 52% complete (22/42 tasks) |
 | 2025-10-16T16:25:00Z | Completed | 2.2 | Module.imports() implemented, tested, all tests pass |
 | 2025-10-16T16:25:00Z | Skipped | 2.3 | Module.customSections() deferred (low priority) |
 | 2025-10-16T16:00:00Z | Started | 2.2 | Implementing Module.imports() static method |
 | 2025-10-16T15:45:00Z | Completed | 2.1 | Module.exports() implemented, tested, ASAN validated |
-| 2025-10-16T16:00:00Z | Started | 2.1 | Implementing Module.exports() static method |
 | 2025-10-16T15:50:00Z | Completed | Phase 1 | All infrastructure and error types complete |
-| 2025-10-16T14:45:00Z | Created | plan | Initial comprehensive plan with 220 tasks |
 
 ** Baseline Test Results
 Not yet established. Will be documented in Task 7.2.
 
 ** Known Issues
-None yet - plan just created.
+
+*** WAMR Memory API Limitation (Task 2.4-2.6 Blocker)
+**Issue**: WAMR v2.4.1 does not provide API for standalone Memory object creation
+**Impact**: Cannot implement WebAssembly.Memory constructor per spec
+**APIs Available**: Only instance-bound memory (wasm_runtime_get_default_memory, etc.)
+**Workaround**: Defer Memory constructor, implement Instance.exports first to understand WAMR memory model
+**Resolution Path**:
+1. Implement Phase 3 Instance.exports with exported memory
+2. Research WAMR internal memory structures
+3. Consider implementing limited Memory wrapper around instance-exported memory
+4. Alternative: Contribute WAMR enhancement for standalone memory creation
 
 ** Future Considerations
 - Tag/Exception handling (tentative spec) - separate future plan

@@ -273,19 +273,19 @@ wpt-list:
 	@echo "Available WPT test categories:"
 	python3 scripts/run-wpt.py --list-categories
 
-# Docker and Claude Code commands
-DOCKER_IMAGE_NAME = jsrt-claude-dev
+# Docker development environment
+DOCKER_IMAGE_NAME = jsrt-dev
 DOCKER_TAG = latest
 
 .PHONY: docker-build
 docker-build:
-	@echo "Building Docker image for Claude Code development environment..."
-	docker build -t $(DOCKER_IMAGE_NAME):$(DOCKER_TAG) -f Dockerfile.claude .
+	@echo "Building Docker image for development environment..."
+	docker build -t $(DOCKER_IMAGE_NAME):$(DOCKER_TAG) -f Dockerfile.dev .
 	@echo "✓ Docker image built: $(DOCKER_IMAGE_NAME):$(DOCKER_TAG)"
 
 .PHONY: claude
 claude: docker-build
-	@echo "Starting Claude Code in Docker environment..."
+	@echo "Starting Claude Code development environment in Docker..."
 	@echo "Repository mapped to /repo inside container"
 	@echo "Running as current user (UID=$(shell id -u), GID=$(shell id -g))"
 	@echo "Git configured as: $(shell git config user.name) <$(shell git config user.email)>"
@@ -303,11 +303,35 @@ claude: docker-build
 		-e GIT_USER_EMAIL="$(shell git config user.email)" \
 		-e ANTHROPIC_BASE_URL=$(ANTHROPIC_BASE_URL) \
 		-e ANTHROPIC_AUTH_TOKEN=$(ANTHROPIC_AUTH_TOKEN) \
-		$(DOCKER_IMAGE_NAME):$(DOCKER_TAG)
+		$(DOCKER_IMAGE_NAME):$(DOCKER_TAG) \
+		/usr/local/bin/entrypoint claude --dangerously-skip-permissions
 
-.PHONY: claude-shell
-claude-shell: docker-build
-	@echo "Starting interactive shell in Claude development environment..."
+.PHONY: codex
+codex: docker-build
+	@echo "Starting Codex development environment in Docker..."
+	@echo "Repository mapped to /repo inside container"
+	@echo "Running as current user (UID=$(shell id -u), GID=$(shell id -g))"
+	@echo "Git configured as: $(shell git config user.name) <$(shell git config user.email)>"
+	@echo "Codex Code will run with unsafe operations allowed"
+	docker run -it --rm \
+		--user "$(shell id -u):$(shell id -g)" \
+		-v "$(CURDIR):/repo" \
+		-v "/etc/passwd:/etc/passwd:ro" \
+		-v "/etc/group:/etc/group:ro" \
+		-w /repo \
+		--name codex-session-$(shell basename $(CURDIR)) \
+		-e HOME="/tmp" \
+		-e USER="$(shell whoami)" \
+		-e GIT_USER_NAME="$(shell git config user.name)" \
+		-e GIT_USER_EMAIL="$(shell git config user.email)" \
+		-e OPENAI_BASE_URL=$(OPENAI_BASE_URL) \
+		-e OPENAI_API_KEY=$(OPENAI_API_KEY) \
+		$(DOCKER_IMAGE_NAME):$(DOCKER_TAG) \
+		/usr/local/bin/entrypoint codex --dangerously-bypass-approvals-and-sandbox
+
+.PHONY: dev-shell
+dev-shell: docker-build
+	@echo "Starting interactive shell in development environment..."
 	@echo "Running as current user (UID=$(shell id -u), GID=$(shell id -g))"
 	@echo "Git configured as: $(shell git config user.name) <$(shell git config user.email)>"
 	docker run -it --rm \
@@ -316,7 +340,7 @@ claude-shell: docker-build
 		-v "/etc/passwd:/etc/passwd:ro" \
 		-v "/etc/group:/etc/group:ro" \
 		-w /repo \
-		--name claude-shell-$(shell basename $(CURDIR)) \
+		--name dev-shell-$(shell basename $(CURDIR)) \
 		-e HOME="/tmp" \
 		-e USER="$(shell whoami)" \
 		-e GIT_USER_NAME="$(shell git config user.name)" \
@@ -324,10 +348,10 @@ claude-shell: docker-build
 		--entrypoint /bin/bash \
 		$(DOCKER_IMAGE_NAME):$(DOCKER_TAG)
 
-.PHONY: claude-shell-attach
-claude-shell-attach:
-	@echo "Attaching to existing Claude shell session..."
-	docker exec -it claude-shell-$(shell basename $(CURDIR)) /bin/bash
+.PHONY: dev-shell-attach
+dev-shell-attach:
+	@echo "Attaching to existing development shell session..."
+	docker exec -it dev-shell-$(shell basename $(CURDIR)) /bin/bash
 
 .PHONY: docker-clean
 docker-clean:
@@ -373,9 +397,10 @@ help:
 	@echo "  MAX_FAILURES=N     - Show max N failures per test (default: 10)"
 	@echo ""
 	@echo "Docker & Dev Environment:"
-	@echo "  make docker-build  - Build Claude Code Docker image"
+	@echo "  make docker-build  - Build Development Docker image"
 	@echo "  make claude        - Run Claude Code in Docker"
-	@echo "  make claude-shell  - Interactive shell in Docker"
+	@echo "  make codex         - Run Codex Code in Docker"
+	@echo "  make dev-shell     - Interactive shell in Docker"
 	@echo "  make docker-clean  - Clean Docker resources"
 	@echo ""
 	@echo "See docs/dev-container-setup.md for development environment setup"

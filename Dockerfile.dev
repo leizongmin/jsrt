@@ -48,31 +48,31 @@ RUN curl -fsSL https://deb.nodesource.com/setup_22.x | bash - \
     && npm config set registry https://registry.npmmirror.com \
     && rm -rf /var/lib/apt/lists/*
 
-# Install Claude Code
-RUN npm i -g @anthropic-ai/claude-code@^2.0.19
+# Install Claude Code and Codex
+RUN npm i -g @anthropic-ai/claude-code@^2.0.19 @openai/codex@0.46.0
 
 # Set up working directory
 WORKDIR /repo
 
-# Create entrypoint script for claude-code with unsafe operations allowed
-RUN echo '#!/bin/bash' > /usr/local/bin/claude-entrypoint \
-    && echo 'cd /repo' >> /usr/local/bin/claude-entrypoint \
-    && echo '# Fix git ownership issue in Docker for repo and submodules' >> /usr/local/bin/claude-entrypoint \
-    && echo 'git config --global --add safe.directory "*" 2>/dev/null || true' >> /usr/local/bin/claude-entrypoint \
-    && echo '# Configure git user from environment variables' >> /usr/local/bin/claude-entrypoint \
-    && echo 'if [ -n "$GIT_USER_NAME" ]; then' >> /usr/local/bin/claude-entrypoint \
-    && echo '  git config --global user.name "$GIT_USER_NAME"' >> /usr/local/bin/claude-entrypoint \
-    && echo '  git config user.name "$GIT_USER_NAME"' >> /usr/local/bin/claude-entrypoint \
-    && echo 'fi' >> /usr/local/bin/claude-entrypoint \
-    && echo 'if [ -n "$GIT_USER_EMAIL" ]; then' >> /usr/local/bin/claude-entrypoint \
-    && echo '  git config --global user.email "$GIT_USER_EMAIL"' >> /usr/local/bin/claude-entrypoint \
-    && echo '  git config user.email "$GIT_USER_EMAIL"' >> /usr/local/bin/claude-entrypoint \
-    && echo 'fi' >> /usr/local/bin/claude-entrypoint \
-    && echo 'export BASH_DEFAULT_TIMEOUT_MS=600000' >> /usr/local/bin/claude-entrypoint \
-    && echo 'export BASH_MAX_TIMEOUT_MS=600000' >> /usr/local/bin/claude-entrypoint \
-    && echo 'exec claude "$@"' >> /usr/local/bin/claude-entrypoint \
-    && chmod +x /usr/local/bin/claude-entrypoint
+# Create entrypoint script
+RUN echo '#!/bin/bash' > /usr/local/bin/entrypoint \
+    && echo 'cd /repo' >> /usr/local/bin/entrypoint \
+    && echo '# Fix git ownership issue in Docker for repo and submodules' >> /usr/local/bin/entrypoint \
+    && echo 'git config --global --add safe.directory "*" 2>/dev/null || true' >> /usr/local/bin/entrypoint \
+    && echo '# Configure git user from environment variables' >> /usr/local/bin/entrypoint \
+    && echo 'if [ -n "$GIT_USER_NAME" ]; then' >> /usr/local/bin/entrypoint \
+    && echo '  git config --global user.name "$GIT_USER_NAME"' >> /usr/local/bin/entrypoint \
+    && echo '  git config user.name "$GIT_USER_NAME"' >> /usr/local/bin/entrypoint \
+    && echo 'fi' >> /usr/local/bin/entrypoint \
+    && echo 'if [ -n "$GIT_USER_EMAIL" ]; then' >> /usr/local/bin/entrypoint \
+    && echo '  git config --global user.email "$GIT_USER_EMAIL"' >> /usr/local/bin/entrypoint \
+    && echo '  git config user.email "$GIT_USER_EMAIL"' >> /usr/local/bin/entrypoint \
+    && echo 'fi' >> /usr/local/bin/entrypoint \
+    && echo 'export BASH_DEFAULT_TIMEOUT_MS=600000' >> /usr/local/bin/entrypoint \
+    && echo 'export BASH_MAX_TIMEOUT_MS=600000' >> /usr/local/bin/entrypoint \
+    && echo 'exec "$@"' >> /usr/local/bin/entrypoint \
+    && chmod +x /usr/local/bin/entrypoint
 
 # Set the entrypoint
-ENTRYPOINT ["/usr/local/bin/claude-entrypoint", "--dangerously-skip-permissions"]
+ENTRYPOINT ["/usr/local/bin/entrypoint"]
 CMD []

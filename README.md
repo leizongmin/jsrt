@@ -11,18 +11,22 @@
 
 ---
 
+> **Important Notice**  
+> JSRT is an experimental, research-oriented project created to explore AI-assisted development by building a JavaScript runtime from scratch. The codebase is under active development and may change significantly; please evaluate carefully before using it in production environments.
+
 ## ✨ Features
 
 - **🏃‍♂️ Fast & Lightweight**: Minimal footprint JavaScript runtime
-- **🌐 Web Standards**: WinterCG Minimum Common API compliant
+- **🌐 Web Standards**: WinterCG Minimum Common API compliant (29/32 WPT tests pass)
 - **⚡ Async Support**: Full async/await and Promise support with libuv event loop
-- **📦 Module System**: CommonJS and ES modules support
-- **🔧 Rich APIs**: Console, Fetch, WebCrypto, Streams, Timers, URL, and more
-- **🧪 Testing Ready**: Web Platform Tests (WPT) integration with 32 test categories
-- **🔒 Security**: Complete WebCrypto API with RSA, AES, HMAC, and digest support
+- **📦 Smart Module Loader**: Node-style resolution, multi-format detection, caching, and `file://`/`http://`/`https://` protocol handlers
+- **🧱 Node Compatibility**: `node:` modules for assert, buffer, crypto, dns, events, fs, http/https, net, os, path, process, querystring, stream, url, util, and zlib
+- **🔧 Rich APIs**: Console, Fetch, WebCrypto, Streams, Timers, URL, AbortController, WebAssembly, and jsrt-specific stdlib
+- **🧪 Testing Ready**: Integrated WPT and unit suites with detailed compliance reporting
+- **🔒 Security**: Complete WebCrypto API with RSA, AES, HMAC, digest, and random UUID support
 - **🌍 Cross-platform**: Builds on Linux, macOS, and Windows
-- **🛠️ Developer Tools**: REPL, bytecode compilation, and Docker dev environment
-- **🧩 Extensible**: FFI support for native library integration
+- **🛠️ Developer Workflow**: REPL, bytecode compilation, dev containers, and Docker automation
+- **🧩 Extensible**: FFI bridge and custom module hooks for native integration
 
 ## 🚀 Quick Start
 
@@ -133,6 +137,30 @@ const libc = ffi.Library('libc.so.6', {
 console.log('Available functions:', Object.keys(libc));
 ```
 
+## 🧩 Module System
+
+JSRT includes a modular loader stack purpose-built for QuickJS:
+
+- **Unified Pipeline**: Cache lookup → Node-compatible resolution → Format detection → Protocol handler → Loader compilation.
+- **Multi-Format Support**: CommonJS, ES modules, JSON, built-in `jsrt:`/`node:` namespaces, and bytecode preloading.
+- **Protocol Handlers**: First-class `file://`, `http://`, and `https://` loaders with streaming fetch backed by libuv.
+- **Adaptive Cache**: FNV-1a hash cache with hit/miss statistics, collision tracking, and explicit invalidation APIs.
+- **Extensibility Hooks**: Register custom protocols, inject loaders, and introspect diagnostics from C or JavaScript embedders.
+
+See `docs/module-system-architecture.md` and `docs/module-system-api.md` for implementation details and extension guides.
+
+## 🧱 Node.js Compatibility
+
+The `node:` compatibility layer mirrors core Node.js modules while keeping the runtime lightweight:
+
+- **Module Registry**: Dependency-aware loader that shares state between CommonJS and ES module consumers.
+- **Implemented Modules**: `assert`, `buffer`, `crypto`, `dns`, `dgram`, `events`, `fs`, `http`, `https`, `net`, `os`, `path`, `process`, `querystring`, `stream`, `stream/promises`, `timers`, `url`, `util`, and `zlib`.
+- **Runtime Integrations**: Buffers backed by QuickJS ArrayBuffers, EventEmitter/event-target bridge, libuv-powered timers, and process globals.
+- **I/O Stack**: llhttp-based HTTP server/client, TLS via dynamically loaded OpenSSL, UDP sockets (`node:dgram`), and TCP sockets (`node:net`).
+- **Testing Suite**: Dedicated coverage under `test/node/**` with parity checks for both CommonJS `require()` and ESM `import`.
+
+Refer to `docs/nodejs-compatibility-layer.md` and module-specific plans in `docs/plan/` for progress reports and API coverage.
+
 ## 🛠️ API Reference
 
 ### Standard Modules
@@ -190,6 +218,30 @@ console.log('Available functions:', Object.keys(libc));
 | **Make** | 3.81+ | Build system |
 | **CMake** | 3.16+ | Build configuration |
 | **clang-format** | Latest | Code formatting |
+
+### Development Environment
+
+#### 🐳 VS Code Dev Container
+1. Install [VS Code](https://code.visualstudio.com/) and the [Dev Containers extension](https://marketplace.visualstudio.com/items?itemName=ms-vscode-remote.remote-containers).
+2. Open the repository in VS Code and choose **Reopen in Container**.
+3. Start hacking—build tools, submodules, and formatting utilities are pre-installed.
+
+**Highlights**
+- Ubuntu 22.04 base image with validated GCC, CMake, and clang-format versions.
+- Preconfigured C/C++ toolchain, QuickJS dependencies, and libuv build prerequisites.
+- Automatic project build, submodule initialization, and formatter setup on first launch.
+
+#### 🤖 Claude Code Docker Environment
+```bash
+make docker-build    # Build the development image (once)
+make claude          # Launch Claude Code with /repo mapped to the project
+make claude-shell    # Drop into an interactive container shell
+```
+
+**Highlights**
+- Ships with all native dependencies, Python helpers, and WPT tooling.
+- Enables reproducible builds across macOS, Linux, and Windows hosts.
+- `make help` lists every development convenience target.
 
 
 ## 🚀 Advanced Usage

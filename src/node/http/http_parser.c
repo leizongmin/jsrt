@@ -41,6 +41,13 @@ static void cleanup_connection(JSHttpConnection* conn) {
   if (!conn)
     return;
 
+  // CRITICAL: Defer cleanup if parsing is in progress
+  // Otherwise we get use-after-free when llhttp tries to access parser
+  if (conn->parsing_in_progress) {
+    conn->cleanup_deferred = true;
+    return;
+  }
+
   untrack_connection(conn);
 
   // Free all connection resources
@@ -467,6 +474,10 @@ int on_headers_complete(llhttp_t* parser) {
       event_name = "checkContinue";
     }
 
+    // CRITICAL: Set flag BEFORE emitting to prevent use-after-free
+    // The user's 'request' handler might destroy the socket/connection
+    conn->request_emitted = true;
+
     JSValue emit = JS_GetPropertyStr(ctx, conn->server, "emit");
     if (JS_IsFunction(ctx, emit)) {
       JSValue args[] = {JS_NewString(ctx, event_name), JS_DupValue(ctx, conn->current_request), target};
@@ -479,8 +490,6 @@ int on_headers_complete(llhttp_t* parser) {
       JS_FreeValue(ctx, target);
     }
     JS_FreeValue(ctx, emit);
-
-    conn->request_emitted = true;
   }
 
   return 0;
@@ -514,11 +523,9 @@ int on_message_complete(llhttp_t* parser) {
     JS_SetPropertyStr(ctx, conn->current_request, "_body", body_str);
   }
 
-  // Phase 4: Signal end of stream to IncomingMessage
-  if (!JS_IsUndefined(conn->current_request)) {
-    js_http_incoming_end(ctx, conn->current_request);
-  }
-
+  // CRITICAL FIX: Ensure 'request' event fires BEFORE 'end' event
+  // This is essential for POST requests where the user needs to register
+  // 'data' and 'end' listeners in the 'request' handler
   if (!conn->request_emitted) {
     const char* event_name = conn->is_upgrade ? "upgrade" : (conn->expect_continue ? "checkContinue" : "request");
     JSValue emit = JS_GetPropertyStr(ctx, conn->server, "emit");
@@ -533,6 +540,12 @@ int on_message_complete(llhttp_t* parser) {
     }
     JS_FreeValue(ctx, emit);
     conn->request_emitted = true;
+  }
+
+  // Phase 4: Signal end of stream to IncomingMessage
+  // NOW emit 'end' event AFTER 'request' event
+  if (!JS_IsUndefined(conn->current_request)) {
+    js_http_incoming_end(ctx, conn->current_request);
   }
 
   conn->request_complete = true;
@@ -716,6 +729,8 @@ void js_http_connection_handler(JSContext* ctx, JSValue server, JSValue socket) 
   conn->expect_continue = false;
   conn->is_upgrade = false;
   conn->request_emitted = false;
+  conn->parsing_in_progress = false;
+  conn->cleanup_deferred = false;
 
   // CRITICAL FIX #1.5: Track connection for cleanup
   track_connection(conn);
@@ -837,8 +852,19 @@ JSValue js_http_llhttp_data_handler(JSContext* ctx, JSValueConst this_val, int a
   if (!data)
     return JS_UNDEFINED;
 
+  // CRITICAL: Set parsing flag to prevent cleanup during parse
+  conn->parsing_in_progress = true;
+
   // Parse with llhttp
   llhttp_errno_t err = llhttp_execute(&conn->parser, data, data_len);
+
+  // CRITICAL: Clear parsing flag and check for deferred cleanup
+  conn->parsing_in_progress = false;
+  if (conn->cleanup_deferred) {
+    JS_FreeCString(ctx, data);
+    cleanup_connection(conn);
+    return JS_UNDEFINED;
+  }
 
   if (err != HPE_OK && err != HPE_PAUSED && err != HPE_PAUSED_UPGRADE) {
     // Parse error - emit error event on server

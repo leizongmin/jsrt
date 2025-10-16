@@ -209,6 +209,14 @@ typedef struct {
    */
   uv_timer_t* defer_end_timer; /**< Timer to defer 'end' event emission */
   /** @} */
+
+  /** @name Parsing State (Prevent use-after-free)
+   * Flag to prevent cleanup during llhttp_execute
+   * @{
+   */
+  bool parsing_in_progress;   /**< Whether llhttp_execute is currently running */
+  bool cleanup_deferred;       /**< Whether cleanup should happen after parsing completes */
+  /** @} */
 } JSHttpConnection;
 
 /**

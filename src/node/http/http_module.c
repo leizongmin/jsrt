@@ -1,3 +1,4 @@
+#include <ctype.h>
 #include <stdint.h>
 #include "../../util/debug.h"
 #include "../net/net_internal.h"
@@ -316,7 +317,17 @@ JSValue js_http_request(JSContext* ctx, JSValueConst this_val, int argc, JSValue
           const char* value_str = JS_ToCString(ctx, value);
 
           if (key_str && value_str) {
-            JS_SetPropertyStr(ctx, req_data->headers, key_str, JS_NewString(ctx, value_str));
+            // Normalize header name to lowercase for consistent access
+            size_t key_len = strlen(key_str);
+            char* lower_key = malloc(key_len + 1);
+            if (lower_key) {
+              for (size_t j = 0; j < key_len; j++) {
+                lower_key[j] = (char)tolower((unsigned char)key_str[j]);
+              }
+              lower_key[key_len] = '\0';
+              JS_SetPropertyStr(ctx, req_data->headers, lower_key, JS_NewString(ctx, value_str));
+              free(lower_key);
+            }
           }
 
           if (key_str)

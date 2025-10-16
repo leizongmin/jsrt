@@ -14,6 +14,7 @@ static JSClassID js_webassembly_memory_class_id;
 static JSClassID js_webassembly_table_class_id;
 static JSClassID js_webassembly_global_class_id;
 static JSClassID js_webassembly_tag_class_id;
+static JSClassID js_webassembly_exported_function_class_id;
 
 // Forward declarations for internal module/instance structure
 typedef struct {
@@ -25,12 +26,24 @@ typedef struct {
 typedef struct {
   wasm_module_inst_t instance;
   jsrt_wasm_module_data_t* module_data;
+  JSValue exports_object;  // Cached exports object
 } jsrt_wasm_instance_data_t;
+
+// Data structure for exported WASM function wrapper
+typedef struct {
+  wasm_module_inst_t instance;
+  wasm_function_inst_t func;
+  char* name;  // Function name (for debugging)
+} jsrt_wasm_export_func_data_t;
 
 // WebAssembly Error constructors (stored for creating error instances)
 static JSValue webassembly_compile_error_ctor;
 static JSValue webassembly_link_error_ctor;
 static JSValue webassembly_runtime_error_ctor;
+
+// Forward declarations
+static JSValue js_webassembly_instance_exports_getter(JSContext* ctx, JSValueConst this_val, int argc,
+                                                      JSValueConst* argv);
 
 // Helper function to create WebAssembly error constructors
 static JSValue create_webassembly_error_constructor(JSContext* ctx, const char* name, JSValue error_proto) {
@@ -199,6 +212,100 @@ static JSValue js_webassembly_module_constructor(JSContext* ctx, JSValueConst ne
   return module_obj;
 }
 
+// Exported WASM function wrapper - callable from JavaScript
+static JSValue js_wasm_exported_function_call(JSContext* ctx, JSValueConst func_obj, JSValueConst this_val, int argc,
+                                              JSValueConst* argv, int flags) {
+  // Get wrapper data
+  jsrt_wasm_export_func_data_t* func_data = JS_GetOpaque(func_obj, js_webassembly_exported_function_class_id);
+  if (!func_data) {
+    return JS_ThrowTypeError(ctx, "not an exported WebAssembly function");
+  }
+
+  // Get function signature info
+  uint32_t param_count = wasm_func_get_param_count(func_data->func, func_data->instance);
+  uint32_t result_count = wasm_func_get_result_count(func_data->func, func_data->instance);
+
+  JSRT_Debug("Calling WASM function '%s': params=%u, results=%u", func_data->name ? func_data->name : "<unknown>",
+             param_count, result_count);
+
+  // Check argument count
+  if ((uint32_t)argc < param_count) {
+    return JS_ThrowTypeError(ctx, "insufficient arguments for WebAssembly function");
+  }
+
+  // Allocate argument array for WAMR (uses uint32 cells)
+  // The array needs to be large enough for both arguments and return values
+  // Even with 0 params, we need space for potential return values
+  uint32_t total_cells = (param_count > result_count) ? param_count : result_count;
+  if (total_cells == 0) {
+    total_cells = 1;  // Minimum 1 cell
+  }
+
+  uint32_t* wasm_argv = js_malloc(ctx, sizeof(uint32_t) * total_cells);
+  if (!wasm_argv) {
+    return JS_ThrowOutOfMemory(ctx);
+  }
+
+  // Initialize to zero
+  memset(wasm_argv, 0, sizeof(uint32_t) * total_cells);
+
+  // Convert JS arguments to WASM i32 values
+  for (uint32_t i = 0; i < param_count; i++) {
+    int32_t val;
+    if (JS_ToInt32(ctx, &val, argv[i])) {
+      js_free(ctx, wasm_argv);
+      return JS_EXCEPTION;
+    }
+    wasm_argv[i] = (uint32_t)val;
+    JSRT_Debug("  arg[%u] = %d (0x%x)", i, val, wasm_argv[i]);
+  }
+
+  // Create execution environment
+  wasm_exec_env_t exec_env = wasm_runtime_create_exec_env(func_data->instance, 16384);  // 16KB stack
+  if (!exec_env) {
+    js_free(ctx, wasm_argv);
+    return throw_webassembly_runtime_error(ctx, "failed to create execution environment");
+  }
+
+  // Call the WASM function
+  // Note: wasm_runtime_call_wasm expects argc (argument count) as 3rd parameter
+  bool call_result = wasm_runtime_call_wasm(exec_env, func_data->func, param_count, wasm_argv);
+
+  // Check for exceptions/traps
+  if (!call_result) {
+    const char* exception = wasm_runtime_get_exception(func_data->instance);
+    wasm_runtime_destroy_exec_env(exec_env);
+    js_free(ctx, wasm_argv);
+    return throw_webassembly_runtime_error(ctx, exception ? exception : "WASM function call failed");
+  }
+
+  // Destroy execution environment
+  wasm_runtime_destroy_exec_env(exec_env);
+
+  // Convert result back to JavaScript
+  JSValue result = JS_UNDEFINED;
+  if (result_count > 0) {
+    // For now, only support single i32 return value
+    int32_t ret_val = (int32_t)wasm_argv[0];
+    JSRT_Debug("  result = %d (0x%x)", ret_val, wasm_argv[0]);
+    result = JS_NewInt32(ctx, ret_val);
+  }
+
+  js_free(ctx, wasm_argv);
+  return result;
+}
+
+// Finalizer for exported function wrapper
+static void js_wasm_exported_function_finalizer(JSRuntime* rt, JSValue val) {
+  jsrt_wasm_export_func_data_t* data = JS_GetOpaque(val, js_webassembly_exported_function_class_id);
+  if (data) {
+    if (data->name) {
+      js_free_rt(rt, data->name);
+    }
+    js_free_rt(rt, data);
+  }
+}
+
 // WebAssembly.Instance(module, importObject) constructor
 static JSValue js_webassembly_instance_constructor(JSContext* ctx, JSValueConst new_target, int argc,
                                                    JSValueConst* argv) {
@@ -244,8 +351,19 @@ static JSValue js_webassembly_instance_constructor(JSContext* ctx, JSValueConst 
 
   instance_data->instance = instance;
   instance_data->module_data = module_data;
+  instance_data->exports_object = JS_UNDEFINED;  // Will be created below
 
   JS_SetOpaque(instance_obj, instance_data);
+
+  // Create exports object and set it as a property
+  JSValue exports = js_webassembly_instance_exports_getter(ctx, instance_obj, 0, NULL);
+  if (JS_IsException(exports)) {
+    JS_FreeValue(ctx, instance_obj);
+    return exports;
+  }
+
+  // Set exports as a readonly property on the instance
+  JS_DefinePropertyValueStr(ctx, instance_obj, "exports", exports, JS_PROP_ENUMERABLE);
 
   JSRT_Debug("WebAssembly.Instance created successfully");
   return instance_obj;
@@ -265,6 +383,119 @@ static const char* wasm_export_kind_to_string(wasm_import_export_kind_t kind) {
     default:
       return "unknown";
   }
+}
+
+// Instance.exports property getter
+static JSValue js_webassembly_instance_exports_getter(JSContext* ctx, JSValueConst this_val, int argc,
+                                                      JSValueConst* argv) {
+  jsrt_wasm_instance_data_t* instance_data = JS_GetOpaque(this_val, js_webassembly_instance_class_id);
+  if (!instance_data) {
+    return JS_ThrowTypeError(ctx, "not an Instance");
+  }
+
+  // Return cached exports object if already created
+  if (!JS_IsUndefined(instance_data->exports_object)) {
+    return JS_DupValue(ctx, instance_data->exports_object);
+  }
+
+  // Create exports object
+  JSValue exports = JS_NewObject(ctx);
+  if (JS_IsException(exports)) {
+    return exports;
+  }
+
+  // Get module from instance
+  wasm_module_t module = instance_data->module_data->module;
+
+  // Enumerate exports
+  int32_t export_count = wasm_runtime_get_export_count(module);
+  if (export_count < 0) {
+    JS_FreeValue(ctx, exports);
+    return JS_ThrowInternalError(ctx, "Failed to get export count");
+  }
+
+  JSRT_Debug("Instance has %d exports", export_count);
+
+  // Add each export to the exports object
+  for (int32_t i = 0; i < export_count; i++) {
+    wasm_export_t export_info;
+    wasm_runtime_get_export_type(module, i, &export_info);
+
+    if (!export_info.name) {
+      continue;  // Skip invalid exports
+    }
+
+    JSRT_Debug("Processing export '%s' kind=%d", export_info.name, export_info.kind);
+
+    JSValue export_value = JS_UNDEFINED;
+
+    if (export_info.kind == WASM_IMPORT_EXPORT_KIND_FUNC) {
+      // Look up the function in the instance
+      wasm_function_inst_t func = wasm_runtime_lookup_function(instance_data->instance, export_info.name);
+      if (!func) {
+        JSRT_Debug("Warning: function '%s' not found in instance", export_info.name);
+        continue;
+      }
+
+      // Create wrapper function data
+      jsrt_wasm_export_func_data_t* func_data = js_malloc(ctx, sizeof(jsrt_wasm_export_func_data_t));
+      if (!func_data) {
+        JS_FreeValue(ctx, exports);
+        return JS_ThrowOutOfMemory(ctx);
+      }
+
+      func_data->instance = instance_data->instance;
+      func_data->func = func;
+      // Copy function name for debugging
+      size_t name_len = strlen(export_info.name);
+      func_data->name = js_malloc(ctx, name_len + 1);
+      if (func_data->name) {
+        memcpy(func_data->name, export_info.name, name_len + 1);
+      }
+
+      // Create JS function object with call handler
+      // The class already has .call set, so we just need to create the object
+      export_value = JS_NewObjectClass(ctx, js_webassembly_exported_function_class_id);
+      if (JS_IsException(export_value)) {
+        if (func_data->name)
+          js_free(ctx, func_data->name);
+        js_free(ctx, func_data);
+        JS_FreeValue(ctx, exports);
+        return export_value;
+      }
+
+      JS_SetOpaque(export_value, func_data);
+    } else {
+      // Memory, Table, Global not yet implemented - skip for now
+      JSRT_Debug("Skipping non-function export '%s'", export_info.name);
+      continue;
+    }
+
+    // Add to exports object
+    if (!JS_IsUndefined(export_value)) {
+      JS_SetPropertyStr(ctx, exports, export_info.name, export_value);
+    }
+  }
+
+  // Freeze the exports object (per WebAssembly spec)
+  JSValue global_obj = JS_GetGlobalObject(ctx);
+  JSValue freeze_func = JS_GetPropertyStr(ctx, global_obj, "Object");
+  if (!JS_IsException(freeze_func)) {
+    JSValue freeze_method = JS_GetPropertyStr(ctx, freeze_func, "freeze");
+    if (!JS_IsException(freeze_method)) {
+      JSValue args[] = {exports};
+      JSValue frozen = JS_Call(ctx, freeze_method, freeze_func, 1, args);
+      JS_FreeValue(ctx, frozen);
+      JS_FreeValue(ctx, freeze_method);
+    }
+    JS_FreeValue(ctx, freeze_func);
+  }
+  JS_FreeValue(ctx, global_obj);
+
+  // Cache the exports object
+  instance_data->exports_object = JS_DupValue(ctx, exports);
+
+  return exports;
 }
 
 // WebAssembly.Module.exports(module) static method
@@ -448,7 +679,11 @@ static void js_webassembly_module_finalizer(JSRuntime* rt, JSValue val) {
 static void js_webassembly_instance_finalizer(JSRuntime* rt, JSValue val) {
   jsrt_wasm_instance_data_t* data = JS_GetOpaque(val, js_webassembly_instance_class_id);
   if (data) {
-    // Cleanup will be implemented in Task 1.3
+    // Free cached exports object if it exists
+    if (!JS_IsUndefined(data->exports_object)) {
+      JS_FreeValueRT(rt, data->exports_object);
+    }
+    // Cleanup instance
     if (data->instance) {
       wasm_runtime_deinstantiate(data->instance);
     }
@@ -516,6 +751,12 @@ static JSClassDef js_webassembly_tag_class = {
     .finalizer = js_webassembly_tag_finalizer,
 };
 
+static JSClassDef js_webassembly_exported_function_class = {
+    "WebAssembly.ExportedFunction",
+    .finalizer = js_wasm_exported_function_finalizer,
+    .call = js_wasm_exported_function_call,
+};
+
 void JSRT_RuntimeSetupStdWebAssembly(JSRT_Runtime* rt) {
   JSRT_Debug("Setting up WebAssembly global object");
 
@@ -543,6 +784,10 @@ void JSRT_RuntimeSetupStdWebAssembly(JSRT_Runtime* rt) {
 
   JS_NewClassID(&js_webassembly_tag_class_id);
   JS_NewClass(JS_GetRuntime(rt->ctx), js_webassembly_tag_class_id, &js_webassembly_tag_class);
+
+  JS_NewClassID(&js_webassembly_exported_function_class_id);
+  JS_NewClass(JS_GetRuntime(rt->ctx), js_webassembly_exported_function_class_id,
+              &js_webassembly_exported_function_class);
 
   // Get Error.prototype for error constructors
   JSValue error_proto = JS_GetPropertyStr(rt->ctx, rt->global, "Error");
@@ -601,6 +846,7 @@ void JSRT_RuntimeSetupStdWebAssembly(JSRT_Runtime* rt) {
   JS_SetPropertyStr(rt->ctx, instance_proto, "constructor", JS_DupValue(rt->ctx, instance_ctor));
   JS_DefinePropertyValue(rt->ctx, instance_proto, JS_ValueToAtom(rt->ctx, toStringTag_symbol),
                          JS_NewString(rt->ctx, "WebAssembly.Instance"), JS_PROP_CONFIGURABLE);
+
   JS_SetConstructor(rt->ctx, instance_ctor, instance_proto);
   JS_SetClassProto(rt->ctx, js_webassembly_instance_class_id, instance_proto);
   JS_SetPropertyStr(rt->ctx, webassembly, "Instance", instance_ctor);

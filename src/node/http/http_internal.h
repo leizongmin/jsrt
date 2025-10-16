@@ -202,6 +202,13 @@ typedef struct {
   bool is_upgrade;      /**< Client requesting protocol upgrade (WebSocket, etc.) */
   bool request_emitted; /**< Whether 'request' event has been emitted for current request */
   /** @} */
+
+  /** @name Deferred Event Emission (Bug fix for POST body)
+   * Timer to defer 'end' event emission until after 'request' event handlers run
+   * @{
+   */
+  uv_timer_t* defer_end_timer; /**< Timer to defer 'end' event emission */
+  /** @} */
 } JSHttpConnection;
 
 /**
@@ -769,6 +776,29 @@ int on_chunk_complete(llhttp_t* parser);
  * @param socket net.Socket object for new connection
  */
 void js_http_connection_handler(JSContext* ctx, JSValue server, JSValue socket);
+
+/**
+ * @brief Helper function to push data into IncomingMessage stream
+ *
+ * Called from llhttp parser callback (on_body) to emit 'data' events.
+ *
+ * @param ctx QuickJS context
+ * @param incoming_msg IncomingMessage object
+ * @param data Pointer to body data
+ * @param length Length of body data
+ */
+void js_http_incoming_push_data(JSContext* ctx, JSValue incoming_msg, const char* data, size_t length);
+
+/**
+ * @brief Helper function to signal end of IncomingMessage stream
+ *
+ * Called from llhttp parser callback (on_message_complete) to emit 'end' event.
+ * Uses deferred timer to ensure event listeners are attached before emission.
+ *
+ * @param ctx QuickJS context
+ * @param incoming_msg IncomingMessage object
+ */
+void js_http_incoming_end(JSContext* ctx, JSValue incoming_msg);
 
 /** @brief net.Server 'connection' event handler wrapper */
 JSValue js_http_net_connection_handler(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv, int magic,

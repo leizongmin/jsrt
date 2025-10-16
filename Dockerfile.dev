@@ -27,6 +27,8 @@ RUN apt-get update && apt-get install -y \
     lsb-release \
     python3 \
     python3-pip \
+    fish \
+    htop \
     && update-alternatives --install /usr/bin/gcc gcc /usr/bin/gcc-12 100 \
     && update-alternatives --install /usr/bin/g++ g++ /usr/bin/g++-12 100 \
     && rm -rf /var/lib/apt/lists/*

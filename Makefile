@@ -347,13 +347,13 @@ dev-shell: docker-build
 		-e USER="$(shell whoami)" \
 		-e GIT_USER_NAME="$(shell git config user.name)" \
 		-e GIT_USER_EMAIL="$(shell git config user.email)" \
-		--entrypoint /bin/bash \
+		--entrypoint /usr/bin/fish \
 		$(DOCKER_IMAGE_NAME):$(DOCKER_TAG)
 
 .PHONY: dev-shell-attach
 dev-shell-attach:
 	@echo "Attaching to existing development shell session..."
-	docker exec -it dev-shell-$(shell basename $(CURDIR)) /bin/bash
+	docker exec -it dev-shell-$(shell basename $(CURDIR)) /usr/bin/fish
 
 .PHONY: docker-clean
 docker-clean:

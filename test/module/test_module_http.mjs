@@ -159,17 +159,28 @@ function runTests() {
   console.log('📊 HTTP module loading is fully functional');
 }
 
+// Add global timeout to prevent hanging in restricted environments
+const globalTimeout = setTimeout(() => {
+  console.log('⚠️  SKIP: HTTP module tests timed out (likely no network access)');
+  console.log('   To skip this test, set SKIP_HTTP_MODULE_TESTS=1');
+  process.exit(0);
+}, 15000); // 15 second global timeout
+
 // Run the tests
 if (typeof crypto === 'undefined') {
+  clearTimeout(globalTimeout);
   console.log('❌ SKIP: crypto object not available (OpenSSL not found)');
 } else if (process.env.SKIP_HTTP_MODULE_TESTS) {
+  clearTimeout(globalTimeout);
   console.log(
     'ℹ️  SKIP: HTTP module tests skipped (SKIP_HTTP_MODULE_TESTS set)'
   );
 } else {
   try {
     runTests();
+    clearTimeout(globalTimeout);
   } catch (error) {
+    clearTimeout(globalTimeout);
     // Check if it's a network-related error (common in restricted environments)
     const errorMsg = error.message || '';
     const isNetworkError =

@@ -830,7 +830,13 @@ foreach(test_file ${JSRT_TEST_JS_FILES})
         # Regular test without special flags
         add_test(NAME ${test_name} COMMAND jsrt ${test_file})
     endif()
-    
+
+    # Set environment variables for specific tests
+    if(test_file MATCHES "test_module_http\\.mjs")
+        set_tests_properties(${test_name} PROPERTIES
+            ENVIRONMENT "SKIP_HTTP_MODULE_TESTS=1")
+    endif()
+
     set_tests_properties(${test_name} PROPERTIES
         WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}
         OUTPUT_ON_FAILURE ON

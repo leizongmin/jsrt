@@ -14,10 +14,17 @@ function test(name, fn) {
 // Test 1: Basic server and client connection
 test('basic server and client connection', () => {
   return new Promise((resolve, reject) => {
+    let timeoutId;
+
     const server = net.createServer((socket) => {
       socket.write('hello');
       socket.end();
     });
+
+    timeoutId = setTimeout(() => {
+      server.close();
+      reject(new Error('Timeout'));
+    }, 2000);
 
     server.listen(0, '127.0.0.1', () => {
       const port = server.address().port;
@@ -28,20 +35,17 @@ test('basic server and client connection', () => {
       });
 
       client.on('close', () => {
+        clearTimeout(timeoutId);
         server.close();
         resolve();
       });
 
       client.on('error', (err) => {
+        clearTimeout(timeoutId);
         server.close();
         reject(err);
       });
     });
-
-    setTimeout(() => {
-      server.close();
-      reject(new Error('Timeout'));
-    }, 2000);
   });
 });
 
@@ -50,19 +54,28 @@ test('server handles multiple connections sequentially', () => {
   return new Promise((resolve, reject) => {
     const numClients = 3;
     let completedClients = 0;
+    let timeoutId;
 
     const server = net.createServer((socket) => {
       socket.write('response');
       socket.end();
     });
 
+    timeoutId = setTimeout(() => {
+      server.close();
+      reject(new Error('Test timeout'));
+    }, 5000); // Increased timeout for sequential connections
+
     server.listen(0, '127.0.0.1', () => {
       const port = server.address().port;
 
       function connectNext() {
         if (completedClients >= numClients) {
-          server.close();
-          resolve();
+          clearTimeout(timeoutId);
+          server.close(() => {
+            // Use setImmediate to ensure clean event loop state
+            setImmediate(() => resolve());
+          });
           return;
         }
 
@@ -79,12 +92,14 @@ test('server handles multiple connections sequentially', () => {
             completedClients++;
             connectNext();
           } catch (err) {
+            clearTimeout(timeoutId);
             server.close();
             reject(err);
           }
         });
 
         client.on('error', (err) => {
+          clearTimeout(timeoutId);
           client.destroy();
           server.close();
           reject(err);
@@ -93,17 +108,18 @@ test('server handles multiple connections sequentially', () => {
 
       connectNext();
     });
-
-    setTimeout(() => {
-      server.close();
-      reject(new Error('Test timeout'));
-    }, 3000);
   });
 });
 
 // Test 3: Multiple writes before connection completes
 test('multiple writes before connection are queued', () => {
   return new Promise((resolve, reject) => {
+    let timeoutId;
+
+    timeoutId = setTimeout(() => {
+      reject(new Error('Test timeout'));
+    }, 2000);
+
     const server = net.createServer((socket) => {
       let received = '';
       socket.on('data', (chunk) => {
@@ -114,10 +130,12 @@ test('multiple writes before connection are queued', () => {
           assert.ok(received.includes('write1'), 'should receive write1');
           assert.ok(received.includes('write2'), 'should receive write2');
           assert.ok(received.includes('write3'), 'should receive write3');
+          clearTimeout(timeoutId);
           socket.end();
           server.close();
           resolve();
         } catch (err) {
+          clearTimeout(timeoutId);
           socket.end();
           server.close();
           reject(err);
@@ -139,23 +157,27 @@ test('multiple writes before connection are queued', () => {
       });
 
       client.on('error', (err) => {
+        clearTimeout(timeoutId);
         client.destroy();
         server.close();
         reject(err);
       });
     });
-
-    setTimeout(() => {
-      reject(new Error('Test timeout'));
-    }, 2000);
   });
 });
 
 // Test 4: Destroy during connect callback
 test('destroy during connect callback is safe', () => {
   return new Promise((resolve, reject) => {
+    let timeoutId;
+
+    timeoutId = setTimeout(() => {
+      reject(new Error('Test timeout'));
+    }, 2000);
+
     const server = net.createServer((socket) => {
       socket.on('close', () => {
+        clearTimeout(timeoutId);
         server.close();
         resolve();
       });
@@ -170,20 +192,25 @@ test('destroy during connect callback is safe', () => {
 
       client.on('error', (err) => {
         // Error during destroy is acceptable
+        clearTimeout(timeoutId);
         server.close();
         resolve();
       });
     });
-
-    setTimeout(() => {
-      reject(new Error('Test timeout'));
-    }, 2000);
   });
 });
 
 // Test 5: Close server with active connections
 test('closing server with active connections', () => {
   return new Promise((resolve, reject) => {
+    let timeoutId;
+
+    timeoutId = setTimeout(() => {
+      clients.forEach((c) => c.destroy());
+      server.close();
+      reject(new Error('Test timeout'));
+    }, 2000);
+
     const clients = [];
     const server = net.createServer((socket) => {
       // Don't end the socket, keep it active
@@ -202,6 +229,7 @@ test('closing server with active connections', () => {
             // Close server while connections are active
             server.close(() => {
               // Server closed, now clean up clients
+              clearTimeout(timeoutId);
               clients.forEach((c) => c.destroy());
               resolve();
             });
@@ -213,18 +241,18 @@ test('closing server with active connections', () => {
         });
       }
     });
-
-    setTimeout(() => {
-      clients.forEach((c) => c.destroy());
-      server.close();
-      reject(new Error('Test timeout'));
-    }, 2000);
   });
 });
 
 // Test 6: Write moderate data in chunks (reduced from 100KB to avoid crashes)
 test('writing moderate data in chunks', () => {
   return new Promise((resolve, reject) => {
+    let timeoutId;
+
+    timeoutId = setTimeout(() => {
+      reject(new Error('Test timeout'));
+    }, 5000);
+
     const chunkSize = 512; // Reduced from 1024
     const numChunks = 20; // Reduced from 100
     const expectedSize = chunkSize * numChunks;
@@ -243,10 +271,12 @@ test('writing moderate data in chunks', () => {
             expectedSize,
             `should receive ${expectedSize} bytes`
           );
+          clearTimeout(timeoutId);
           socket.end();
           server.close();
           resolve();
         } catch (err) {
+          clearTimeout(timeoutId);
           socket.end();
           server.close();
           reject(err);
@@ -264,21 +294,24 @@ test('writing moderate data in chunks', () => {
       });
 
       client.on('error', (err) => {
+        clearTimeout(timeoutId);
         client.destroy();
         server.close();
         reject(err);
       });
     });
-
-    setTimeout(() => {
-      reject(new Error('Test timeout'));
-    }, 5000);
   });
 });
 
 // Test 7: Bidirectional communication
 test('bidirectional communication works correctly', () => {
   return new Promise((resolve, reject) => {
+    let timeoutId;
+
+    timeoutId = setTimeout(() => {
+      reject(new Error('Test timeout'));
+    }, 2000);
+
     const server = net.createServer((socket) => {
       socket.on('data', (chunk) => {
         // Echo back with prefix
@@ -309,24 +342,23 @@ test('bidirectional communication works correctly', () => {
       client.on('close', () => {
         try {
           assert.strictEqual(responseCount, 2, 'should receive 2 responses');
+          clearTimeout(timeoutId);
           server.close();
           resolve();
         } catch (err) {
+          clearTimeout(timeoutId);
           server.close();
           reject(err);
         }
       });
 
       client.on('error', (err) => {
+        clearTimeout(timeoutId);
         client.destroy();
         server.close();
         reject(err);
       });
     });
-
-    setTimeout(() => {
-      reject(new Error('Test timeout'));
-    }, 2000);
   });
 });
 

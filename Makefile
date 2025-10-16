@@ -290,6 +290,7 @@ claude: docker-build
 	@echo "Running as current user (UID=$(shell id -u), GID=$(shell id -g))"
 	@echo "Git configured as: $(shell git config user.name) <$(shell git config user.email)>"
 	@echo "Claude Code will run with unsafe operations allowed"
+	@mkdir -p target/dev
 	docker run -it --rm \
 		--user "$(shell id -u):$(shell id -g)" \
 		-v "$(CURDIR):/repo" \
@@ -297,7 +298,7 @@ claude: docker-build
 		-v "/etc/group:/etc/group:ro" \
 		-w /repo \
 		--name claude-session-$(shell basename $(CURDIR)) \
-		-e HOME="/tmp" \
+		-e HOME="/repo/target/dev" \
 		-e USER="$(shell whoami)" \
 		-e GIT_USER_NAME="$(shell git config user.name)" \
 		-e GIT_USER_EMAIL="$(shell git config user.email)" \
@@ -313,6 +314,7 @@ codex: docker-build
 	@echo "Running as current user (UID=$(shell id -u), GID=$(shell id -g))"
 	@echo "Git configured as: $(shell git config user.name) <$(shell git config user.email)>"
 	@echo "Codex Code will run with unsafe operations allowed"
+	@mkdir -p target/dev
 	docker run -it --rm \
 		--user "$(shell id -u):$(shell id -g)" \
 		-v "$(CURDIR):/repo" \
@@ -320,7 +322,7 @@ codex: docker-build
 		-v "/etc/group:/etc/group:ro" \
 		-w /repo \
 		--name codex-session-$(shell basename $(CURDIR)) \
-		-e HOME="/tmp" \
+		-e HOME="/repo/target/dev" \
 		-e USER="$(shell whoami)" \
 		-e GIT_USER_NAME="$(shell git config user.name)" \
 		-e GIT_USER_EMAIL="$(shell git config user.email)" \

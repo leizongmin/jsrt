@@ -389,7 +389,7 @@ void on_connect(uv_connect_t* req, int status) {
 
     if (conn->end_after_connect) {
       conn->shutdown_req.data = conn;
-      uv_shutdown(&conn->shutdown_req, (uv_stream_t*)&conn->handle, NULL);
+      uv_shutdown(&conn->shutdown_req, (uv_stream_t*)&conn->handle, on_shutdown);
       conn->connected = false;
       conn->end_after_connect = false;
     }
@@ -498,5 +498,44 @@ void on_socket_write_complete(uv_write_t* req, int status) {
       JS_FreeValue(ctx, args[0]);
     }
     JS_FreeValue(ctx, emit);
+  }
+}
+
+// Shutdown callback - called after uv_shutdown completes
+void on_shutdown(uv_shutdown_t* req, int status) {
+  JSNetConnection* conn = (JSNetConnection*)req->data;
+  if (!conn || !conn->ctx || conn->destroyed) {
+    return;
+  }
+
+  JSContext* ctx = conn->ctx;
+
+  // Emit 'end' event if socket object is still valid
+  if (!JS_IsUndefined(conn->socket_obj) && !JS_IsNull(conn->socket_obj)) {
+    JSValue emit = JS_GetPropertyStr(ctx, conn->socket_obj, "emit");
+    if (JS_IsFunction(ctx, emit)) {
+      JSValue args[] = {JS_NewString(ctx, "end")};
+      JS_Call(ctx, emit, conn->socket_obj, 1, args);
+      JS_FreeValue(ctx, args[0]);
+    }
+    JS_FreeValue(ctx, emit);
+
+    // Emit 'close' event
+    JSValue emit_close = JS_GetPropertyStr(ctx, conn->socket_obj, "emit");
+    if (JS_IsFunction(ctx, emit_close)) {
+      JSValue args[] = {JS_NewString(ctx, "close"), JS_NewBool(ctx, false)};
+      JS_Call(ctx, emit_close, conn->socket_obj, 2, args);
+      JS_FreeValue(ctx, args[0]);
+      JS_FreeValue(ctx, args[1]);
+    }
+    JS_FreeValue(ctx, emit_close);
+  }
+
+  // Close the handle after emitting events
+  if (!uv_is_closing((uv_handle_t*)&conn->handle)) {
+    if (conn->close_count == 0) {
+      conn->close_count = 1;
+    }
+    uv_close((uv_handle_t*)&conn->handle, socket_close_callback);
   }
 }

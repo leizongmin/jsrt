@@ -85,6 +85,7 @@ void on_connect(uv_connect_t* req, int status);
 void on_socket_timeout(uv_timer_t* timer);
 void on_listen_callback_timer(uv_timer_t* timer);
 void on_socket_write_complete(uv_write_t* req, int status);
+void on_shutdown(uv_shutdown_t* req, int status);
 
 // Timer cleanup helpers (from net_finalizers.c)
 void socket_timeout_timer_close_callback(uv_handle_t* handle);

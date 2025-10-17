@@ -277,7 +277,7 @@ JSValue js_socket_end(JSContext* ctx, JSValueConst this_val, int argc, JSValueCo
   if (conn->connected) {
     // Shutdown the connection
     conn->shutdown_req.data = conn;
-    uv_shutdown(&conn->shutdown_req, (uv_stream_t*)&conn->handle, NULL);
+    uv_shutdown(&conn->shutdown_req, (uv_stream_t*)&conn->handle, on_shutdown);
     conn->connected = false;
   } else if (conn->connecting) {
     conn->end_after_connect = true;

@@ -99,8 +99,10 @@ void on_getaddrinfo(uv_getaddrinfo_t* req, int status, struct addrinfo* res) {
 
 // Helper function to add EventEmitter methods to an object
 void add_event_emitter_methods(JSContext* ctx, JSValue obj) {
+  JSRT_Debug("add_event_emitter_methods: called");
   // Get the node:events module to access EventEmitter methods
   JSValue events_module = JSRT_LoadNodeModuleCommonJS(ctx, "events");
+  JSRT_Debug("add_event_emitter_methods: events_module loaded, isException=%d", JS_IsException(events_module));
   if (!JS_IsException(events_module)) {
     JSValue event_emitter = JS_GetPropertyStr(ctx, events_module, "EventEmitter");
     if (!JS_IsException(event_emitter)) {
@@ -150,6 +152,7 @@ void on_socket_read(uv_stream_t* stream, ssize_t nread, const uv_buf_t* buf) {
   if (nread < 0) {
     if (nread == UV_EOF) {
       // Emit 'end' event when connection closes gracefully
+      JSRT_Debug("on_socket_read: received EOF, emitting end event");
       JSValue emit = JS_GetPropertyStr(ctx, conn->socket_obj, "emit");
       if (JS_IsFunction(ctx, emit)) {
         JSValue args[] = {JS_NewString(ctx, "end")};
@@ -175,6 +178,7 @@ void on_socket_read(uv_stream_t* stream, ssize_t nread, const uv_buf_t* buf) {
     }
 
     // Emit 'close' event before closing handle (while socket_obj is still valid)
+    JSRT_Debug("on_socket_read: emitting close event");
     JSValue emit_close = JS_GetPropertyStr(ctx, conn->socket_obj, "emit");
     if (JS_IsFunction(ctx, emit_close)) {
       JSValue args[] = {JS_NewString(ctx, "close"), JS_NewBool(ctx, conn->had_error)};
@@ -284,8 +288,10 @@ void on_connection(uv_stream_t* server, int status) {
 }
 
 void on_connect(uv_connect_t* req, int status) {
+  JSRT_Debug("on_connect: CALLED with status=%d", status);
   JSNetConnection* conn = (JSNetConnection*)req->data;
   if (!conn || !conn->ctx || conn->destroyed) {
+    JSRT_Debug("on_connect: early return - conn=%p destroyed=%d", conn, conn ? conn->destroyed : -1);
     return;
   }
 
@@ -301,11 +307,13 @@ void on_connect(uv_connect_t* req, int status) {
   }
 
   if (status == 0) {
+    JSRT_Debug("on_connect: connection established");
     conn->connected = true;
     conn->connecting = false;
 
     // Start reading from the socket to enable data events
     uv_read_start((uv_stream_t*)&conn->handle, on_socket_alloc, on_socket_read);
+    JSRT_Debug("on_connect: uv_read_start called");
 
     // Flush any pending writes queued before the connection completed
     JSPendingWrite* pending = js_net_connection_detach_pending_writes(conn);
@@ -370,13 +378,31 @@ void on_connect(uv_connect_t* req, int status) {
     }
 
     // Emit 'connect' event
+    JSRT_Debug("on_connect: emitting connect event, socket_obj valid=%d",
+               !JS_IsUndefined(conn->socket_obj) && !JS_IsNull(conn->socket_obj));
     JSValue emit = JS_GetPropertyStr(ctx, conn->socket_obj, "emit");
+
+    // Debug: check what emit actually is
+    const char* emit_str = JS_ToCString(ctx, emit);
+    JSRT_Debug("on_connect: emit value = '%s', tag=%d, isFunction=%d, isUndefined=%d, isNull=%d",
+               emit_str ? emit_str : "NULL", JS_VALUE_GET_TAG(emit), JS_IsFunction(ctx, emit), JS_IsUndefined(emit),
+               JS_IsNull(emit));
+    if (emit_str)
+      JS_FreeCString(ctx, emit_str);
+
     if (JS_IsFunction(ctx, emit)) {
       JSValue args[] = {JS_NewString(ctx, "connect")};
-      JS_Call(ctx, emit, conn->socket_obj, 1, args);
+      JSValue result = JS_Call(ctx, emit, conn->socket_obj, 1, args);
+      if (JS_IsException(result)) {
+        JSRT_Debug("on_connect: emit connect threw exception");
+      }
+      JS_FreeValue(ctx, result);
       JS_FreeValue(ctx, args[0]);
+    } else {
+      JSRT_Debug("on_connect: emit is not a function");
     }
     JS_FreeValue(ctx, emit);
+    JSRT_Debug("on_connect: connect event emitted");
 
     // Emit 'ready' event (socket is ready for writing)
     emit = JS_GetPropertyStr(ctx, conn->socket_obj, "emit");

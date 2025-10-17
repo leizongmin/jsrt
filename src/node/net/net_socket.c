@@ -113,9 +113,11 @@ JSValue js_socket_connect(JSContext* ctx, JSValueConst this_val, int argc, JSVal
     connect_host = "::1";
   }
 
-  // Initialize TCP handle with the correct event loop
+  // Get runtime for uv_loop
   JSRT_Runtime* rt = JS_GetContextOpaque(ctx);
-  uv_tcp_init(rt->uv_loop, &conn->handle);
+
+  // DON'T call uv_tcp_init() again - the handle is already initialized in the constructor
+  // Calling it twice corrupts the handle state
   conn->handle.data = conn;
   conn->connect_req.data = conn;
 
@@ -137,8 +139,10 @@ JSValue js_socket_connect(JSContext* ctx, JSValueConst this_val, int argc, JSVal
   struct sockaddr_in addr4;
   if (uv_ip4_addr(connect_host, conn->port, &addr4) == 0) {
     // IPv4 address
+    JSRT_Debug("js_socket_connect: connecting to IPv4 address %s:%d", connect_host, conn->port);
     memcpy(&addr_storage, &addr4, sizeof(addr4));
     result = uv_tcp_connect(&conn->connect_req, &conn->handle, addr, on_connect);
+    JSRT_Debug("js_socket_connect: uv_tcp_connect returned %d", result);
   } else {
     // Try IPv6
     struct sockaddr_in6 addr6;

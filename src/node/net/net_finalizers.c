@@ -87,7 +87,18 @@ void js_socket_finalizer(JSRuntime* rt, JSValue val) {
     return;
   }
 
-  // Prevent double-free: clear opaque pointer immediately
+  JSRT_Debug("js_socket_finalizer: called for conn=%p connecting=%d connected=%d", conn, conn->connecting,
+             conn->connected);
+
+  // If socket is connecting or connected, DON'T finalize - the object must stay alive!
+  // Don't even clear the opaque pointer - the object is still in use
+  if (conn->connecting || conn->connected) {
+    JSRT_Debug("js_socket_finalizer: socket is active, skipping ALL finalization");
+    return;
+  }
+
+  // Socket is idle, proceed with full cleanup
+  // Now we can clear the opaque pointer
   JS_SetOpaque(val, NULL);
 
   // Mark socket object as invalid to prevent use-after-free in callbacks

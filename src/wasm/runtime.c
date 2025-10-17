@@ -4,6 +4,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <wasm_c_api.h>
 #include <wasm_export.h>
 
 // Default configuration values
@@ -19,6 +20,10 @@
 
 static bool wamr_initialized = false;
 static jsrt_wasm_config_t current_config;
+
+// WASM C API objects (for Memory/Table/Global)
+static wasm_engine_t* wasm_engine = NULL;
+static wasm_store_t* wasm_store = NULL;
 
 jsrt_wasm_config_t jsrt_wasm_default_config(void) {
   jsrt_wasm_config_t config;
@@ -51,8 +56,25 @@ int jsrt_wasm_init(void) {
     return -1;
   }
 
+  // Initialize WASM C API engine and store for Memory/Table/Global objects
+  wasm_engine = wasm_engine_new();
+  if (!wasm_engine) {
+    JSRT_Debug("Failed to create WASM C API engine");
+    wasm_runtime_destroy();
+    return -1;
+  }
+
+  wasm_store = wasm_store_new(wasm_engine);
+  if (!wasm_store) {
+    JSRT_Debug("Failed to create WASM C API store");
+    wasm_engine_delete(wasm_engine);
+    wasm_engine = NULL;
+    wasm_runtime_destroy();
+    return -1;
+  }
+
   wamr_initialized = true;
-  JSRT_Debug("WAMR runtime initialized successfully");
+  JSRT_Debug("WAMR runtime initialized successfully (with C API store)");
   return 0;
 }
 
@@ -62,6 +84,17 @@ void jsrt_wasm_cleanup(void) {
   }
 
   JSRT_Debug("Cleaning up WAMR runtime");
+
+  // Clean up C API objects first
+  if (wasm_store) {
+    wasm_store_delete(wasm_store);
+    wasm_store = NULL;
+  }
+  if (wasm_engine) {
+    wasm_engine_delete(wasm_engine);
+    wasm_engine = NULL;
+  }
+
   wasm_runtime_destroy();
   wamr_initialized = false;
   JSRT_Debug("WAMR runtime cleanup completed");
@@ -94,4 +127,12 @@ int jsrt_wasm_configure(const jsrt_wasm_config_t* config) {
   JSRT_Debug("WAMR configuration updated: heap=%u stack=%u max_modules=%u", config->heap_size, config->stack_size,
              config->max_modules);
   return 0;
+}
+
+wasm_store_t* jsrt_wasm_get_store(void) {
+  if (!wamr_initialized) {
+    JSRT_Debug("WARNING: Accessing WASM store before initialization");
+    return NULL;
+  }
+  return wasm_store;
 }

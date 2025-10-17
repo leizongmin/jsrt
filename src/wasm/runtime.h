@@ -4,6 +4,10 @@
 #include <stdbool.h>
 #include <stdint.h>
 
+// Forward declarations for WAMR types
+struct wasm_store_t;
+struct wasm_engine_t;
+
 // Runtime configuration
 typedef struct {
   uint32_t heap_size;    // WASM linear memory heap size
@@ -20,5 +24,8 @@ int jsrt_wasm_configure(const jsrt_wasm_config_t* config);
 
 // Get default configuration
 jsrt_wasm_config_t jsrt_wasm_default_config(void);
+
+// Get WASM C API store (for Memory/Table/Global objects)
+struct wasm_store_t* jsrt_wasm_get_store(void);
 
 #endif

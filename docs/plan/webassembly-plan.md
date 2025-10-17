@@ -649,28 +649,83 @@ Files: src/std/webassembly.c:787-871
 :STATUS: 🟡 PLANNING
 :END:
 
-*** TODO [#A] Task 4.1: WebAssembly.Table Constructor [S][R:MED][C:COMPLEX][D:1.3]
+*** BLOCKED [#A] Task 4.1: WebAssembly.Table Constructor [S][R:MED][C:COMPLEX][D:1.3]
 :PROPERTIES:
 :ID: 4.1
 :CREATED: 2025-10-16T14:45:00Z
+:INVESTIGATED: 2025-10-17T16:05:00Z
+:BLOCKED_BY: WAMR C API functional limitation
 :DEPS: 1.3
+:BLOCKER_DOC: docs/plan/wasm-phase4-table-blocker.md
+:NOTE: WAMR C API does not support standalone table creation from host
 :END:
 
 Implement Table for indirect function calls and references
 
-**** Subtasks
-- [ ] Study WAMR table API: wasm_runtime_create_table
-- [ ] Define table data structure (stores wasm_table_t)
-- [ ] Parse descriptor: {element, initial, maximum}
-- [ ] Validate element type (funcref, externref, etc.)
-- [ ] Create WAMR table
-- [ ] Store table handle in opaque data
-- [ ] Add finalizer to destroy table
-- [ ] Register Table constructor on WebAssembly
-- [ ] Test table creation with funcref
-- [ ] Test with initial/maximum constraints
-- [ ] Test error: invalid element type
-- [ ] Validate memory management with ASAN
+**** Investigation Results (2025-10-17)
+Attempted implementation using WAMR C API (wasm_c_api.h):
+1. ✅ Implemented Table constructor using wasm_table_new() (src/std/webassembly.c:1498-1624)
+2. ✅ Implemented Table.prototype.length getter (src/std/webassembly.c:1626-1636)
+3. ✅ Implemented Table.prototype.grow() method (src/std/webassembly.c:1638-1677)
+4. ✅ Implemented Table.prototype.get() method (src/std/webassembly.c:1679-1716)
+5. ✅ Implemented Table.prototype.set() method (src/std/webassembly.c:1718-1755)
+6. ✅ Created comprehensive test suite (test/jsrt/test_jsrt_wasm_table.js - 24 tests)
+7. ❌ CRITICAL: Created Table objects are non-functional
+
+**** WAMR C API Table Limitations (CONFIRMED)
+**Test Results**: 24 tests total, 13 passed (error handling), 11 failed (functionality)
+
+**Issue 1: wasm_table_size() returns 0**
+- Created Table objects have no internal data
+- `wasm_table_size(table)` always returns 0 instead of initial size
+- Table.prototype.length getter returns 0 instead of expected initial value
+
+**Issue 2: wasm_table_grow() explicitly blocked for host**
+- Error message: "Calling wasm_table_grow() by host is not supported. Only allow growing a table via the opcode table.grow"
+- WAMR explicitly prevents host-side table growth
+- grow() only works from within WASM code execution
+
+**Issue 3: get/set fail due to size being 0**
+- All indices considered out of bounds since size is 0
+- Cannot test actual get/set functionality
+
+**Root Cause**: WAMR C API Table design (CONFIRMED in sample code)
+- Sample code (deps/wamr/samples/wasm-c-api/src/table.c:206-208) states:
+  ```c
+  // Create stand-alone table.
+  // DO NOT SUPPORT
+  // TODO(wasm+): Once Wasm allows multiple tables, turn this into import.
+  ```
+- Tables created with wasm_table_new() require module instance runtime (`inst_comm_rt`)
+- wasm_table_size() implementation checks `if (!table || !table->inst_comm_rt) return 0;`
+- Designed as **import objects** for Instance, not standalone host manipulation
+
+**** Decision: REMAIN BLOCKED
+Task 4.1 remains BLOCKED. Reasons:
+1. **Constructor**: Can create but object is non-functional (length = 0)
+2. **length getter**: Returns 0 instead of initial size
+3. **grow()**: Explicitly prohibited by WAMR for host calls
+4. **get()/set()**: Fail due to size being 0 (all indices out of bounds)
+
+**** Resolution Path
+Options documented in `docs/plan/wasm-phase4-table-blocker.md`:
+1. **Upgrade WAMR** (recommended) - Check if newer versions support standalone tables
+2. **Use Internal APIs** - Bypass C API, use WAMR internals directly
+3. **Defer Implementation** - Document as "not yet implemented"
+
+**** Original Subtasks (Implementation Complete but Non-Functional)
+- [X] Study WAMR table API: wasm_runtime_create_table
+- [X] Define table data structure (stores wasm_table_t)
+- [X] Parse descriptor: {element, initial, maximum}
+- [X] Validate element type (funcref, externref, etc.)
+- [X] Create WAMR table (BLOCKED - API non-functional)
+- [X] Store table handle in opaque data
+- [X] Add finalizer to destroy table
+- [X] Register Table constructor on WebAssembly
+- [X] Test table creation with funcref
+- [X] Test with initial/maximum constraints
+- [X] Test error: invalid element type
+- [X] Validate memory management with ASAN (code compiles, tables non-functional)
 
 *** TODO [#A] Task 4.2: Table.prototype.length Property [S][R:LOW][C:SIMPLE][D:4.1]
 :PROPERTIES:

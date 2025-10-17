@@ -1495,6 +1495,263 @@ static JSValue js_webassembly_memory_grow(JSContext* ctx, JSValueConst this_val,
   return JS_NewUint32(ctx, old_size);
 }
 
+// WebAssembly.Table(descriptor) constructor
+static JSValue js_webassembly_table_constructor(JSContext* ctx, JSValueConst new_target, int argc, JSValueConst* argv) {
+  if (argc < 1) {
+    return JS_ThrowTypeError(ctx, "WebAssembly.Table constructor requires 1 argument");
+  }
+
+  // Get descriptor object
+  JSValueConst descriptor = argv[0];
+  if (!JS_IsObject(descriptor)) {
+    return JS_ThrowTypeError(ctx, "First argument must be an object");
+  }
+
+  // Get element property (required) - must be "funcref" or "externref"
+  JSValue element_val = JS_GetPropertyStr(ctx, descriptor, "element");
+  if (JS_IsException(element_val)) {
+    return element_val;
+  }
+
+  const char* element_str = JS_ToCString(ctx, element_val);
+  JS_FreeValue(ctx, element_val);
+  if (!element_str) {
+    return JS_ThrowTypeError(ctx, "element property must be a string");
+  }
+
+  // Validate element type
+  wasm_valkind_t element_type;
+  if (strcmp(element_str, "funcref") == 0) {
+    element_type = WASM_FUNCREF;
+  } else if (strcmp(element_str, "externref") == 0) {
+    element_type = WASM_EXTERNREF;
+  } else {
+    JS_FreeCString(ctx, element_str);
+    return JS_ThrowTypeError(ctx, "element must be 'funcref' or 'externref'");
+  }
+  JS_FreeCString(ctx, element_str);
+
+  // Get initial property (required)
+  JSValue initial_val = JS_GetPropertyStr(ctx, descriptor, "initial");
+  if (JS_IsException(initial_val)) {
+    return initial_val;
+  }
+
+  uint32_t initial;
+  if (JS_ToUint32(ctx, &initial, initial_val)) {
+    JS_FreeValue(ctx, initial_val);
+    return JS_EXCEPTION;
+  }
+  JS_FreeValue(ctx, initial_val);
+
+  // Get maximum property (optional)
+  JSValue maximum_val = JS_GetPropertyStr(ctx, descriptor, "maximum");
+  uint32_t maximum = 0xffffffff;  // wasm_limits_max_default
+  bool has_maximum = false;
+
+  if (!JS_IsException(maximum_val) && !JS_IsUndefined(maximum_val)) {
+    has_maximum = true;
+    if (JS_ToUint32(ctx, &maximum, maximum_val)) {
+      JS_FreeValue(ctx, maximum_val);
+      return JS_EXCEPTION;
+    }
+  }
+  JS_FreeValue(ctx, maximum_val);
+
+  // Validate: initial must not exceed maximum
+  if (has_maximum && initial > maximum) {
+    return JS_ThrowRangeError(ctx, "Initial table size exceeds maximum");
+  }
+
+  JSRT_Debug("Creating Table: element=%d, initial=%u, maximum=%u (has_max=%d)", element_type, initial, maximum,
+             has_maximum);
+
+  // Create table type using C API
+  wasm_valtype_t* valtype = wasm_valtype_new(element_type);
+  if (!valtype) {
+    return JS_ThrowInternalError(ctx, "Failed to create value type");
+  }
+
+  wasm_limits_t limits;
+  limits.min = initial;
+  limits.max = has_maximum ? maximum : wasm_limits_max_default;
+
+  wasm_tabletype_t* tabletype = wasm_tabletype_new(valtype, &limits);
+  // Note: tabletype takes ownership of valtype, so we should NOT delete it here
+
+  if (!tabletype) {
+    return JS_ThrowInternalError(ctx, "Failed to create table type");
+  }
+
+  // Create table using C API
+  wasm_store_t* store = jsrt_wasm_get_store();
+  if (!store) {
+    wasm_tabletype_delete(tabletype);
+    return JS_ThrowInternalError(ctx, "WASM store not initialized");
+  }
+
+  // For the initial value, use NULL (represents uninitialized funcref/externref)
+  wasm_table_t* table = wasm_table_new(store, tabletype, NULL);
+  wasm_tabletype_delete(tabletype);  // No longer needed
+
+  if (!table) {
+    return JS_ThrowRangeError(ctx, "Failed to create WebAssembly table");
+  }
+
+  // Create JS Table object
+  JSValue table_obj = JS_NewObjectClass(ctx, js_webassembly_table_class_id);
+  if (JS_IsException(table_obj)) {
+    wasm_table_delete(table);
+    return table_obj;
+  }
+
+  // Create table data
+  jsrt_wasm_table_data_t* table_data = js_malloc(ctx, sizeof(jsrt_wasm_table_data_t));
+  if (!table_data) {
+    wasm_table_delete(table);
+    JS_FreeValue(ctx, table_obj);
+    return JS_ThrowOutOfMemory(ctx);
+  }
+
+  table_data->table = table;
+  table_data->ctx = ctx;
+
+  JS_SetOpaque(table_obj, table_data);
+
+  JSRT_Debug("WebAssembly.Table created successfully");
+  return table_obj;
+}
+
+// Table.prototype.length getter
+static JSValue js_webassembly_table_length_getter(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
+  jsrt_wasm_table_data_t* table_data = JS_GetOpaque(this_val, js_webassembly_table_class_id);
+  if (!table_data) {
+    return JS_ThrowTypeError(ctx, "not a Table object");
+  }
+
+  wasm_table_size_t size = wasm_table_size(table_data->table);
+  return JS_NewUint32(ctx, size);
+}
+
+// Table.prototype.grow(delta, value) method
+static JSValue js_webassembly_table_grow(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
+  if (argc < 1) {
+    return JS_ThrowTypeError(ctx, "Table.grow requires 1 argument");
+  }
+
+  jsrt_wasm_table_data_t* table_data = JS_GetOpaque(this_val, js_webassembly_table_class_id);
+  if (!table_data) {
+    return JS_ThrowTypeError(ctx, "not a Table object");
+  }
+
+  // Get delta parameter
+  uint32_t delta;
+  if (JS_ToUint32(ctx, &delta, argv[0])) {
+    return JS_EXCEPTION;
+  }
+
+  // Get current size
+  wasm_table_size_t old_size = wasm_table_size(table_data->table);
+
+  JSRT_Debug("Table.grow: old_size=%u, delta=%u", old_size, delta);
+
+  // Get optional value parameter (default to NULL for uninitialized)
+  // For now, we only support NULL (Phase 4.1 - basic Table support)
+  wasm_ref_t* init_value = NULL;
+  if (argc >= 2 && !JS_IsUndefined(argv[1]) && !JS_IsNull(argv[1])) {
+    // TODO: Phase 4.2 - Support actual function/externref values
+    return JS_ThrowTypeError(ctx, "Table.grow with non-null value not yet supported");
+  }
+
+  // Grow the table
+  if (!wasm_table_grow(table_data->table, delta, init_value)) {
+    return JS_ThrowRangeError(ctx, "Failed to grow table (maximum exceeded or out of memory)");
+  }
+
+  JSRT_Debug("Table grown successfully: new_size=%u", wasm_table_size(table_data->table));
+
+  // Return old size
+  return JS_NewUint32(ctx, old_size);
+}
+
+// Table.prototype.get(index) method
+static JSValue js_webassembly_table_get(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
+  if (argc < 1) {
+    return JS_ThrowTypeError(ctx, "Table.get requires 1 argument");
+  }
+
+  jsrt_wasm_table_data_t* table_data = JS_GetOpaque(this_val, js_webassembly_table_class_id);
+  if (!table_data) {
+    return JS_ThrowTypeError(ctx, "not a Table object");
+  }
+
+  // Get index parameter
+  uint32_t index;
+  if (JS_ToUint32(ctx, &index, argv[0])) {
+    return JS_EXCEPTION;
+  }
+
+  // Validate index is within bounds
+  wasm_table_size_t size = wasm_table_size(table_data->table);
+  if (index >= size) {
+    return JS_ThrowRangeError(ctx, "Table.get index out of bounds");
+  }
+
+  // Get element from table
+  wasm_ref_t* ref = wasm_table_get(table_data->table, index);
+
+  // For now (Phase 4.1), we return null for uninitialized or function references
+  // TODO: Phase 4.2 - Properly wrap function references and externrefs
+  if (!ref) {
+    return JS_NULL;
+  }
+
+  // For funcref, we'd need to wrap it in an exported function
+  // For externref, we'd need to unwrap the stored JS value
+  // For now, just return null as placeholder
+  JSRT_Debug("Table.get: index=%u, ref=%p (returning null as placeholder)", index, (void*)ref);
+  return JS_NULL;
+}
+
+// Table.prototype.set(index, value) method
+static JSValue js_webassembly_table_set(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
+  if (argc < 2) {
+    return JS_ThrowTypeError(ctx, "Table.set requires 2 arguments");
+  }
+
+  jsrt_wasm_table_data_t* table_data = JS_GetOpaque(this_val, js_webassembly_table_class_id);
+  if (!table_data) {
+    return JS_ThrowTypeError(ctx, "not a Table object");
+  }
+
+  // Get index parameter
+  uint32_t index;
+  if (JS_ToUint32(ctx, &index, argv[0])) {
+    return JS_EXCEPTION;
+  }
+
+  // Validate index is within bounds
+  wasm_table_size_t size = wasm_table_size(table_data->table);
+  if (index >= size) {
+    return JS_ThrowRangeError(ctx, "Table.set index out of bounds");
+  }
+
+  // Get value parameter
+  // For now (Phase 4.1), we only support null values
+  // TODO: Phase 4.2 - Support actual function/externref values
+  if (!JS_IsNull(argv[1]) && !JS_IsUndefined(argv[1])) {
+    return JS_ThrowTypeError(ctx, "Table.set with non-null value not yet supported");
+  }
+
+  // Set table element to null
+  if (!wasm_table_set(table_data->table, index, NULL)) {
+    return JS_ThrowRangeError(ctx, "Failed to set table element");
+  }
+
+  JSRT_Debug("Table.set: index=%u, value=null", index);
+  return JS_UNDEFINED;
+}
+
 // WebAssembly class finalizers
 static void js_webassembly_module_finalizer(JSRuntime* rt, JSValue val) {
   jsrt_wasm_module_data_t* data = JS_GetOpaque(val, js_webassembly_module_class_id);
@@ -1724,6 +1981,31 @@ void JSRT_RuntimeSetupStdWebAssembly(JSRT_Runtime* rt) {
   JS_SetConstructor(rt->ctx, memory_ctor, memory_proto);
   JS_SetClassProto(rt->ctx, js_webassembly_memory_class_id, memory_proto);
   JS_SetPropertyStr(rt->ctx, webassembly, "Memory", memory_ctor);
+
+  // Create Table constructor and prototype
+  JSValue table_ctor = JS_NewCFunction2(rt->ctx, js_webassembly_table_constructor, "Table", 1, JS_CFUNC_constructor, 0);
+  JSValue table_proto = JS_NewObject(rt->ctx);
+  JS_SetPropertyStr(rt->ctx, table_proto, "constructor", JS_DupValue(rt->ctx, table_ctor));
+  JS_DefinePropertyValue(rt->ctx, table_proto, JS_ValueToAtom(rt->ctx, toStringTag_symbol),
+                         JS_NewString(rt->ctx, "WebAssembly.Table"), JS_PROP_CONFIGURABLE);
+
+  // Add Table.prototype.length getter
+  JS_DefinePropertyGetSet(rt->ctx, table_proto, JS_NewAtom(rt->ctx, "length"),
+                          JS_NewCFunction(rt->ctx, js_webassembly_table_length_getter, "get length", 0), JS_UNDEFINED,
+                          JS_PROP_CONFIGURABLE | JS_PROP_ENUMERABLE);
+
+  // Add Table.prototype.grow() method
+  JS_SetPropertyStr(rt->ctx, table_proto, "grow", JS_NewCFunction(rt->ctx, js_webassembly_table_grow, "grow", 2));
+
+  // Add Table.prototype.get() method
+  JS_SetPropertyStr(rt->ctx, table_proto, "get", JS_NewCFunction(rt->ctx, js_webassembly_table_get, "get", 1));
+
+  // Add Table.prototype.set() method
+  JS_SetPropertyStr(rt->ctx, table_proto, "set", JS_NewCFunction(rt->ctx, js_webassembly_table_set, "set", 2));
+
+  JS_SetConstructor(rt->ctx, table_ctor, table_proto);
+  JS_SetClassProto(rt->ctx, js_webassembly_table_class_id, table_proto);
+  JS_SetPropertyStr(rt->ctx, webassembly, "Table", table_ctor);
 
   JS_FreeValue(rt->ctx, toStringTag_symbol);
 

@@ -353,6 +353,32 @@ dev-shell: docker-build
 		--entrypoint /usr/bin/fish \
 		$(DOCKER_IMAGE_NAME):$(DOCKER_TAG)
 
+
+.PHONY: code-server
+code-server: docker-build
+	@echo "Starting code server in development environment..."
+	@echo "Running as current user (UID=$(shell id -u), GID=$(shell id -g))"
+	@echo "Git configured as: $(shell git config user.name) <$(shell git config user.email)>"
+	docker run -it --rm \
+		--user "$(shell id -u):$(shell id -g)" \
+		-v "$(CURDIR):/repo" \
+		-v "/etc/passwd:/etc/passwd:ro" \
+		-v "/etc/group:/etc/group:ro" \
+		-w /repo \
+		--name dev-shell-$(shell basename $(CURDIR)) \
+		-e HOME="/tmp" \
+		-e USER="$(shell whoami)" \
+		-e TERM=$(TERM) \
+		-e GIT_USER_NAME="$(shell git config user.name)" \
+		-e GIT_USER_EMAIL="$(shell git config user.email)" \
+		-e OPENAI_BASE_URL=$(OPENAI_BASE_URL) \
+		-e OPENAI_API_KEY=$(OPENAI_API_KEY) \
+		-e ANTHROPIC_BASE_URL=$(ANTHROPIC_BASE_URL) \
+		-e ANTHROPIC_AUTH_TOKEN=$(ANTHROPIC_AUTH_TOKEN) \
+		-p $(PORT):8080 \
+		--entrypoint /usr/bin/code-server \
+		$(DOCKER_IMAGE_NAME):$(DOCKER_TAG)
+
 .PHONY: dev-shell-attach
 dev-shell-attach:
 	@echo "Attaching to existing development shell session..."

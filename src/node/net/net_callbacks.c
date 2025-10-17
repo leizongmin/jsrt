@@ -508,34 +508,9 @@ void on_shutdown(uv_shutdown_t* req, int status) {
     return;
   }
 
-  JSContext* ctx = conn->ctx;
-
-  // Emit 'end' event if socket object is still valid
-  if (!JS_IsUndefined(conn->socket_obj) && !JS_IsNull(conn->socket_obj)) {
-    JSValue emit = JS_GetPropertyStr(ctx, conn->socket_obj, "emit");
-    if (JS_IsFunction(ctx, emit)) {
-      JSValue args[] = {JS_NewString(ctx, "end")};
-      JS_Call(ctx, emit, conn->socket_obj, 1, args);
-      JS_FreeValue(ctx, args[0]);
-    }
-    JS_FreeValue(ctx, emit);
-
-    // Emit 'close' event
-    JSValue emit_close = JS_GetPropertyStr(ctx, conn->socket_obj, "emit");
-    if (JS_IsFunction(ctx, emit_close)) {
-      JSValue args[] = {JS_NewString(ctx, "close"), JS_NewBool(ctx, false)};
-      JS_Call(ctx, emit_close, conn->socket_obj, 2, args);
-      JS_FreeValue(ctx, args[0]);
-      JS_FreeValue(ctx, args[1]);
-    }
-    JS_FreeValue(ctx, emit_close);
-  }
-
-  // Close the handle after emitting events
-  if (!uv_is_closing((uv_handle_t*)&conn->handle)) {
-    if (conn->close_count == 0) {
-      conn->close_count = 1;
-    }
-    uv_close((uv_handle_t*)&conn->handle, socket_close_callback);
-  }
+  // After shutdown, the peer will receive EOF and handle close on their side
+  // We don't emit events here - they will be emitted when we receive EOF
+  // from the peer or when the connection is fully closed
+  // Just mark that we've shut down our write side
+  conn->connected = false;
 }

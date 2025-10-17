@@ -50,6 +50,12 @@ typedef struct {
   JSValue buffer;         // Current ArrayBuffer (detached on grow)
 } jsrt_wasm_memory_data_t;
 
+// Data structure for WebAssembly.Table
+typedef struct {
+  wasm_table_t* table;  // WASM C API table object
+  JSContext* ctx;       // Context for reference management
+} jsrt_wasm_table_data_t;
+
 // Function import wrapper for JS function imports
 typedef struct {
   char* module_name;    // Module namespace (e.g., "env")
@@ -1540,8 +1546,12 @@ static void js_webassembly_memory_finalizer(JSRuntime* rt, JSValue val) {
 }
 
 static void js_webassembly_table_finalizer(JSRuntime* rt, JSValue val) {
-  void* data = JS_GetOpaque(val, js_webassembly_table_class_id);
+  jsrt_wasm_table_data_t* data = JS_GetOpaque(val, js_webassembly_table_class_id);
   if (data) {
+    // Delete WASM table
+    if (data->table) {
+      wasm_table_delete(data->table);
+    }
     js_free_rt(rt, data);
   }
 }

@@ -2809,5 +2809,53 @@ void JSRT_RuntimeSetupStdWebAssembly(JSRT_Runtime* rt) {
   // Set WebAssembly global
   JS_SetPropertyStr(rt->ctx, rt->global, "WebAssembly", webassembly);
 
+  // Define compileStreaming / instantiateStreaming via JS helper (fallback buffers entire response)
+  const char* wasm_streaming_helper =
+      "(function(){\n"
+      "  const toArrayBuffer = (value) => {\n"
+      "    if (typeof Response !== 'undefined' && value instanceof Response) {\n"
+      "      return value.arrayBuffer();\n"
+      "    }\n"
+      "    if (value && typeof value.arrayBuffer === 'function') {\n"
+      "      return value.arrayBuffer();\n"
+      "    }\n"
+      "    return Promise.resolve(value);\n"
+      "  };\n"
+      "  WebAssembly.compileStreaming = function(source) {\n"
+      "    return Promise.resolve(source)\n"
+      "      .then(toArrayBuffer)\n"
+      "      .then((bytes) => {\n"
+      "        if (!(bytes instanceof ArrayBuffer) && !ArrayBuffer.isView(bytes)) {\n"
+      "          throw new TypeError('WebAssembly.compileStreaming expects a Response or BufferSource');\n"
+      "        }\n"
+      "        return WebAssembly.compile(bytes);\n"
+      "      });\n"
+      "  };\n"
+      "  WebAssembly.instantiateStreaming = function(source, imports) {\n"
+      "    return Promise.resolve(source)\n"
+      "      .then(toArrayBuffer)\n"
+      "      .then((bytes) => {\n"
+      "        if (!(bytes instanceof ArrayBuffer) && !ArrayBuffer.isView(bytes)) {\n"
+      "          throw new TypeError('WebAssembly.instantiateStreaming expects a Response or BufferSource');\n"
+      "        }\n"
+      "        return WebAssembly.instantiate(bytes, imports);\n"
+      "      });\n"
+      "  };\n"
+      "})();\n";
+
+  JSValue streaming_eval = JS_Eval(rt->ctx, wasm_streaming_helper, strlen(wasm_streaming_helper),
+                                   "<webassembly-streaming>", JS_EVAL_TYPE_GLOBAL);
+  if (JS_IsException(streaming_eval)) {
+    JSValue exception = JS_GetException(rt->ctx);
+    const char* msg = JS_ToCString(rt->ctx, exception);
+    JSRT_Debug("Failed to initialize WebAssembly streaming helpers: %s", msg ? msg : "(unknown)");
+    if (msg) {
+      JS_FreeCString(rt->ctx, msg);
+    }
+    JS_FreeValue(rt->ctx, exception);
+  } else {
+    JS_FreeValue(rt->ctx, streaming_eval);
+  }
+
   JSRT_Debug("WebAssembly global object setup completed");
 }

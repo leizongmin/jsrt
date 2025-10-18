@@ -390,11 +390,13 @@ bool JSRT_RuntimeRun(JSRT_Runtime* rt) {
     }
 
     if (uv_loop_alive(rt->uv_loop)) {
+#ifdef DEBUG
       if (counter % 10 == 0) {
-        fprintf(stderr, "[debug] uv_loop still alive counter=%llu\n", (unsigned long long)counter);
+        JSRT_Debug("uv_loop still alive counter=%llu", (unsigned long long)counter);
         uv_print_active_handles(rt->uv_loop, stderr);
         fflush(stderr);
       }
+#endif
       // If we used DEFAULT mode and there are still active handles,
       // it means we processed some events, continue the loop
       continue;
@@ -533,13 +535,21 @@ void JSRT_RuntimeSetCompactNodeMode(JSRT_Runtime* rt, bool enabled) {
 }
 
 static void jsrt_debug_handle_walker(uv_handle_t* handle, void* arg) {
-  FILE* out = (FILE*)arg;
+#ifdef DEBUG
+  (void)arg;  // Unused in release builds
   const char* type_name = uv_handle_type_name(handle->type);
-  fprintf(out, "[debug] active handle type=%s ref=%d closing=%d\n", type_name ? type_name : "unknown",
-          uv_has_ref(handle), uv_is_closing(handle));
+  JSRT_Debug("active handle type=%s ref=%d closing=%d", type_name ? type_name : "unknown", uv_has_ref(handle),
+             uv_is_closing(handle));
+#else
+  (void)handle;
+  (void)arg;
+#endif
 }
 
 static void jsrt_debug_dump_handles(uv_loop_t* loop) {
-  uv_walk(loop, jsrt_debug_handle_walker, stderr);
-  fflush(stderr);
+#ifdef DEBUG
+  uv_walk(loop, jsrt_debug_handle_walker, NULL);
+#else
+  (void)loop;
+#endif
 }

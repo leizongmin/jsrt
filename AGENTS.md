@@ -374,6 +374,103 @@ ASAN_OPTIONS=detect_leaks=1 ./bin/jsrt_m test/module/*.js
 | **Loaders** | `src/module/loaders/` | Format-specific loaders |
 | **Runtime integration** | `src/runtime.c` | Lifecycle management |
 
+## WebAssembly Support
+
+jsrt implements the WebAssembly JavaScript API using WAMR (WebAssembly Micro Runtime) v2.4.1 as the backend.
+
+### Configuration
+
+WAMR is configured for lightweight execution with the following features:
+
+- **Runtime API**: Uses WAMR Runtime API for execution
+- **Module validation**: Support for `WebAssembly.validate()`
+- **Interpreter mode**: Fast startup, minimal memory footprint
+- **AOT disabled**: Ahead-of-time compilation not enabled
+- **Memory**: 4MB stack, 16MB heap per module
+- **WASI**: System calls disabled (standalone JavaScript environment)
+
+### Implemented APIs
+
+✅ **Fully Functional**:
+- `WebAssembly.validate(bytes)` - Bytecode validation
+- `WebAssembly.Module` constructor - Synchronous compilation from bytecode
+- `WebAssembly.Module.exports(module)` - Inspect module exports
+- `WebAssembly.Module.imports(module)` - Inspect module imports
+- `WebAssembly.Module.customSections(module, name)` - Access custom sections
+- `WebAssembly.Instance` constructor - Instantiation with imports
+- `instance.exports` - Access exported functions/memories/tables/globals
+- `WebAssembly.CompileError` - Invalid bytecode errors
+- `WebAssembly.LinkError` - Instantiation/linking errors
+- `WebAssembly.RuntimeError` - Execution errors
+
+⚠️ **Limitations**:
+- **Memory/Table/Global APIs**: WAMR C API limitations prevent standalone object creation (blocked: Phase 2.4-2.6, Phase 4)
+- **Async APIs**: `compile()` and `instantiate()` async variants not implemented (Phase 5)
+- **Streaming APIs**: `compileStreaming()` and `instantiateStreaming()` not implemented (Phase 6)
+- **Validation**: WAMR may accept some invalid modules that should fail per spec
+
+### Testing
+
+```bash
+# Run all WebAssembly unit tests
+make test N=jsrt/test_jsrt_wasm
+make test N=web/webassembly
+
+# Run WebAssembly WPT tests
+make wpt N=wasm
+
+# Memory safety validation with ASAN
+make jsrt_m
+ASAN_OPTIONS=detect_leaks=1 ./bin/jsrt_m test/jsrt/test_jsrt_wasm_*.js
+
+# Test individual example
+./bin/jsrt examples/wasm/hello.js
+./bin/jsrt examples/wasm/exports.js
+./bin/jsrt examples/wasm/imports.js
+./bin/jsrt examples/wasm/errors.js
+```
+
+### Usage Examples
+
+See `examples/wasm/` directory for comprehensive examples:
+
+```javascript
+// Basic validation and module creation
+const bytes = new Uint8Array([0x00, 0x61, 0x73, 0x6d, 0x01, 0x00, 0x00, 0x00]);
+const isValid = WebAssembly.validate(bytes);  // true
+const module = new WebAssembly.Module(bytes);
+const instance = new WebAssembly.Instance(module);
+
+// Inspect module structure
+const exports = WebAssembly.Module.exports(module);
+const imports = WebAssembly.Module.imports(module);
+
+// Error handling
+try {
+  new WebAssembly.Module(invalidBytes);
+} catch (e) {
+  console.log(e instanceof WebAssembly.CompileError); // true
+}
+```
+
+### Key Implementation Files
+
+| Component | Location | Purpose |
+|-----------|----------|---------|
+| **JavaScript API** | `src/std/webassembly.c` | WebAssembly namespace and constructors |
+| **WAMR integration** | `src/wasm/runtime.c` | WAMR runtime initialization and management |
+| **Module system** | `src/wasm/module.c` | Module compilation and caching |
+| **Instance system** | `src/wasm/instance.c` | Instance creation and imports |
+| **Import resolution** | `src/wasm/import.c` | JavaScript ↔ WASM function binding |
+| **Error types** | `src/std/webassembly.c` | CompileError/LinkError/RuntimeError |
+
+### Documentation
+
+- **API Compatibility Matrix**: `docs/webassembly-api-compatibility.md` - Complete API status
+- **Implementation Plan**: `docs/plan/webassembly-plan.md` - Full 8-phase roadmap
+- **Examples**: `examples/wasm/README.md` - Detailed usage examples
+- **Test Suite**: `test/jsrt/test_jsrt_wasm_*.js`, `test/web/webassembly/`
+
 ## Documentation References
 
 Detailed documentation in `.claude/docs/`:

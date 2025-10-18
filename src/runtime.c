@@ -45,6 +45,10 @@ static void jsrt_debug_dump_handles(uv_loop_t* loop);
 
 static void JSRT_RuntimeCloseWalkCallback(uv_handle_t* handle, void* arg) {
   if (!uv_is_closing(handle)) {
+    // Reference the handle before closing to ensure the event loop processes it
+    if (!uv_has_ref(handle)) {
+      uv_ref(handle);
+    }
     uv_close(handle, NULL);
   }
 }
@@ -198,14 +202,24 @@ void JSRT_RuntimeFree(JSRT_Runtime* rt) {
 
   // Now close any remaining handles that weren't managed by finalizers
   // (timers, async handles, etc.)
+  JSRT_Debug("Active handles before uv_walk:");
+  jsrt_debug_dump_handles(rt->uv_loop);
+
   uv_walk(rt->uv_loop, JSRT_RuntimeCloseWalkCallback, NULL);
 
-  // Run the loop again to process close callbacks from uv_walk
+  // Run the loop until it's completely idle
+  // UV_RUN_DEFAULT will process all pending events and return when there's nothing left
   uv_run(rt->uv_loop, UV_RUN_DEFAULT);
+
+  JSRT_Debug("Active handles after final uv_run:");
+  jsrt_debug_dump_handles(rt->uv_loop);
 
   int result = uv_loop_close(rt->uv_loop);
   if (result != 0) {
-    JSRT_Debug("uv_loop_close failed: %s", uv_strerror(result));
+    // Loop couldn't close cleanly - there are handles still closing
+    // This can happen with unreferenced handles that have pending close callbacks
+    // It's safe to ignore this and free the loop anyway
+    JSRT_Debug("uv_loop_close failed (handles still closing): %s", uv_strerror(result));
   }
 
   free(rt->uv_loop);

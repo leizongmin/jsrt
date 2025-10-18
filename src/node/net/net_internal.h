@@ -149,4 +149,7 @@ JSPendingWrite* js_net_connection_detach_pending_writes(JSNetConnection* conn);
 void js_net_connection_free_pending_list(JSPendingWrite* head);
 void js_net_connection_clear_pending_writes(JSNetConnection* conn);
 
+// GC protection helpers (from net_finalizers.c)
+void jsrt_net_remove_active_socket_ref(JSContext* ctx, JSNetConnection* conn);
+
 #endif  // JSRT_NODE_NET_INTERNAL_H

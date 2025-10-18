@@ -130,8 +130,11 @@ JSValue js_server_listen(JSContext* ctx, JSValueConst this_val, int argc, JSValu
 void on_server_close_complete(uv_handle_t* handle) {
   JSNetServer* server = (JSNetServer*)handle->data;
   if (!server || !server->ctx) {
+    JSRT_Debug("on_server_close_complete: server=%p ctx=%p (early return)", server, server ? server->ctx : NULL);
     return;
   }
+
+  JSRT_Debug("on_server_close_complete: server=%p", server);
 
   JSContext* ctx = server->ctx;
 
@@ -322,6 +325,8 @@ JSValue js_server_constructor(JSContext* ctx, JSValueConst new_target, int argc,
   server->close_callback = JS_UNDEFINED;
   server->timer_initialized = false;
   server->callback_timer = NULL;
+
+  JSRT_Debug("js_server_constructor: created server=%p", server);
 
   JS_SetOpaque(obj, server);
 

@@ -297,16 +297,27 @@ void on_connect(uv_connect_t* req, int status) {
     return;
   }
 
+  // Check if socket object is still valid (not freed by GC) BEFORE setting in_callback
+  // If GC happened between connect start and this callback, socket_obj will be JS_UNDEFINED
+  if (JS_IsUndefined(conn->socket_obj) || JS_IsNull(conn->socket_obj)) {
+    JSRT_Debug("on_connect: socket was garbage collected, cleaning up connection");
+    conn->connecting = false;
+    conn->connected = false;
+    // Close the handle to free resources
+    if (!uv_is_closing((uv_handle_t*)&conn->handle)) {
+      if (conn->close_count == 0) {
+        conn->close_count = 1;
+      }
+      conn->handle.data = conn;
+      uv_close((uv_handle_t*)&conn->handle, socket_close_callback);
+    }
+    return;
+  }
+
   // Mark that we're in a callback to prevent finalization
   conn->in_callback = true;
 
   JSContext* ctx = conn->ctx;
-
-  // Check if socket object is still valid (not freed by GC)
-  if (JS_IsUndefined(conn->socket_obj) || JS_IsNull(conn->socket_obj)) {
-    conn->in_callback = false;
-    return;
-  }
 
   if (status == 0) {
     JSRT_Debug("on_connect: connection established");

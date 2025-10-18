@@ -72,12 +72,33 @@ void socket_close_callback(uv_handle_t* handle) {
   if (handle->data) {
     JSNetConnection* conn = (JSNetConnection*)handle->data;
 
+    JSRT_Debug("socket_close_callback: conn=%p close_count=%d", conn, conn->close_count);
+
     conn->close_count--;
     if (conn->close_count == 0) {
       // Defer freeing until after loop closes to avoid use-after-free in uv_walk
+      JSRT_Debug("socket_close_callback: deferring cleanup for conn=%p", conn);
       add_deferred_cleanup(conn, conn->host, conn->encoding);
     }
+  } else {
+    JSRT_Debug("socket_close_callback: handle->data is NULL");
   }
+}
+
+// Helper to remove socket from global properties (prevents GC)
+void jsrt_net_remove_active_socket_ref(JSContext* ctx, JSNetConnection* conn) {
+  if (!ctx || !conn) {
+    return;
+  }
+
+  // Remove the global property that keeps the socket alive
+  char prop_name[64];
+  snprintf(prop_name, sizeof(prop_name), "__active_socket_%p__", (void*)conn);
+  JSValue global = JS_GetGlobalObject(ctx);
+  JSAtom atom = JS_NewAtom(ctx, prop_name);
+  JS_DeleteProperty(ctx, global, atom, 0);
+  JS_FreeAtom(ctx, atom);
+  JS_FreeValue(ctx, global);
 }
 
 // Class finalizers
@@ -87,21 +108,39 @@ void js_socket_finalizer(JSRuntime* rt, JSValue val) {
     return;
   }
 
-  JSRT_Debug("js_socket_finalizer: called for conn=%p connecting=%d connected=%d destroyed=%d in_callback=%d",
-             conn, conn->connecting, conn->connected, conn->destroyed, conn->in_callback);
+  JSRT_Debug("js_socket_finalizer: called for conn=%p connecting=%d connected=%d destroyed=%d in_callback=%d", conn,
+             conn->connecting, conn->connected, conn->destroyed, conn->in_callback);
 
-  // If socket is in a callback OR active (connecting/connected), DON'T finalize
-  // The socket object must stay alive for callbacks and async operations
-  if (conn->in_callback || conn->connecting || conn->connected) {
-    JSRT_Debug("js_socket_finalizer: socket is active, skipping finalization");
+  // Remove from active sockets global properties if present
+  if (conn->ctx) {
+    jsrt_net_remove_active_socket_ref(conn->ctx, conn);
+  }
+
+  // If socket is in a callback, we MUST NOT finalize (callback is using the socket)
+  // Return early and let the callback complete
+  if (conn->in_callback) {
+    JSRT_Debug("js_socket_finalizer: socket is in callback, skipping finalization");
     return;
   }
 
-  // Socket is idle, proceed with full cleanup
+  // If socket is connecting or connected, we MUST NOT finalize yet
+  // There are pending libuv callbacks that will try to use this socket
+  // The socket should only be finalized after it's been properly closed
+  if (conn->connecting || conn->connected) {
+    JSRT_Debug("js_socket_finalizer: socket is connecting/connected, skipping finalization");
+    return;
+  }
+
+  // Socket is being garbage collected
+  // Mark it as unusable for any pending callbacks
   JS_SetOpaque(val, NULL);
 
   // Mark socket object as invalid to prevent use-after-free in callbacks
-  conn->socket_obj = JS_UNDEFINED;
+  // Callbacks will check this and skip their work
+  if (!JS_IsUndefined(conn->socket_obj)) {
+    JS_FreeValueRT(rt, conn->socket_obj);
+    conn->socket_obj = JS_UNDEFINED;
+  }
   if (!JS_IsUndefined(conn->client_request_obj)) {
     JS_FreeValueRT(rt, conn->client_request_obj);
     conn->client_request_obj = JS_UNDEFINED;
@@ -174,47 +213,73 @@ void server_close_callback(uv_handle_t* handle) {
 
 void js_server_finalizer(JSRuntime* rt, JSValue val) {
   JSNetServer* server = JS_GetOpaque(val, js_server_class_id);
-  if (server) {
-    // Mark server object as invalid to prevent use-after-free in callbacks
-    server->server_obj = JS_UNDEFINED;
+  if (!server) {
+    return;
+  }
 
-    // Set close count to number of handles we're closing
-    server->close_count = 0;
+  JSRT_Debug("js_server_finalizer: called for server=%p listening=%d destroyed=%d in_callback=%d", server,
+             server->listening, server->destroyed, server->in_callback);
 
-    // Stop timer if it was initialized
-    if (server->timer_initialized && server->callback_timer) {
-      uv_timer_stop(server->callback_timer);
+  // If server is in a callback, we MUST NOT finalize
+  if (server->in_callback) {
+    JSRT_Debug("js_server_finalizer: server is in callback, skipping finalization");
+    return;
+  }
+
+  // Mark server object as invalid to prevent use-after-free in callbacks
+  server->server_obj = JS_UNDEFINED;
+
+  // Set close count to number of handles we're closing
+  server->close_count = 0;
+
+  // Stop timer if it was initialized
+  if (server->timer_initialized && server->callback_timer) {
+    uv_timer_stop(server->callback_timer);
+  }
+
+  // Only free callbacks if we're NOT in a callback
+  // (callbacks will free themselves when done)
+  if (!server->in_callback) {
+    if (!JS_IsUndefined(server->listen_callback)) {
+      JS_FreeValueRT(rt, server->listen_callback);
+      server->listen_callback = JS_UNDEFINED;
     }
+    if (!JS_IsUndefined(server->close_callback)) {
+      JS_FreeValueRT(rt, server->close_callback);
+      server->close_callback = JS_UNDEFINED;
+    }
+  }
 
-    // Only free callbacks if we're NOT in a callback
-    // (callbacks will free themselves when done)
-    if (!server->in_callback) {
-      if (!JS_IsUndefined(server->listen_callback)) {
-        JS_FreeValueRT(rt, server->listen_callback);
-        server->listen_callback = JS_UNDEFINED;
+  // Close timer only if it was initialized
+  if (server->timer_initialized && server->callback_timer && !uv_is_closing((uv_handle_t*)server->callback_timer)) {
+    server->close_count++;
+    server->callback_timer->data = server;
+    uv_close((uv_handle_t*)server->callback_timer, server_callback_timer_close_callback);
+  }
+
+  // Close server handle if not already closing
+  if (!uv_is_closing((uv_handle_t*)&server->handle)) {
+    server->close_count++;
+    server->handle.data = server;
+    uv_close((uv_handle_t*)&server->handle, server_close_callback);
+  }
+
+  // Defer freeing even if no handles to close, to avoid use-after-free in uv_walk
+  // Exception: if handle is already closing (from explicit server.close()), we can't defer
+  // because the close callback won't fire our server_close_callback
+  if (server->close_count == 0) {
+    bool handle_already_closing = uv_is_closing((uv_handle_t*)&server->handle);
+    if (handle_already_closing) {
+      // Handle is closing from explicit close(), not from finalizer
+      // We can't defer cleanup because server_close_callback won't be called
+      // Just free immediately - the handle will complete its close with on_server_close_complete
+      JSRT_Debug("js_server_finalizer: handle already closing, freeing immediately");
+      if (server->host) {
+        free(server->host);
       }
-      if (!JS_IsUndefined(server->close_callback)) {
-        JS_FreeValueRT(rt, server->close_callback);
-        server->close_callback = JS_UNDEFINED;
-      }
-    }
-
-    // Close timer only if it was initialized
-    if (server->timer_initialized && server->callback_timer && !uv_is_closing((uv_handle_t*)server->callback_timer)) {
-      server->close_count++;
-      server->callback_timer->data = server;
-      uv_close((uv_handle_t*)server->callback_timer, server_callback_timer_close_callback);
-    }
-
-    // Close server handle
-    if (!uv_is_closing((uv_handle_t*)&server->handle)) {
-      server->close_count++;
-      server->handle.data = server;
-      uv_close((uv_handle_t*)&server->handle, server_close_callback);
-    }
-
-    // Defer freeing even if no handles to close, to avoid use-after-free in uv_walk
-    if (server->close_count == 0) {
+      free(server);
+    } else {
+      // Normal path: no handles to close, defer cleanup
       add_deferred_cleanup(server, server->host, NULL);
     }
   }

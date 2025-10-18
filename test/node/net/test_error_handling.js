@@ -438,7 +438,11 @@ test('socket.end(data) sends data before closing', () => {
   }
 
   console.log(`\nTest Results: ${testsPassed} passed, ${testsFailed} failed`);
+
+  // Let event loop exit naturally - don't force process.exit()
+  // Exit code will be 0 if no unhandled exceptions
   if (testsFailed > 0) {
-    process.exit(1);
+    // Throw to set exit code 1
+    throw new Error(`${testsFailed} test(s) failed`);
   }
 })();

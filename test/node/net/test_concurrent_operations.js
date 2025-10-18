@@ -36,8 +36,9 @@ test('basic server and client connection', () => {
 
       client.on('close', () => {
         clearTimeout(timeoutId);
-        server.close();
-        resolve();
+        server.close(() => {
+          resolve();
+        });
       });
 
       client.on('error', (err) => {
@@ -73,14 +74,16 @@ test('server handles multiple connections sequentially', () => {
         if (completedClients >= numClients) {
           clearTimeout(timeoutId);
           server.close(() => {
-            // Use setImmediate to ensure clean event loop state
-            setImmediate(() => resolve());
+            resolve();
           });
           return;
         }
 
         const client = net.connect(port, '127.0.0.1');
         let received = '';
+
+        // Set encoding so data events return strings instead of Buffers
+        client.setEncoding('utf8');
 
         client.on('data', (chunk) => {
           received += chunk;
@@ -178,8 +181,9 @@ test('destroy during connect callback is safe', () => {
     const server = net.createServer((socket) => {
       socket.on('close', () => {
         clearTimeout(timeoutId);
-        server.close();
-        resolve();
+        server.close(() => {
+          resolve();
+        });
       });
     });
 
@@ -193,8 +197,9 @@ test('destroy during connect callback is safe', () => {
       client.on('error', (err) => {
         // Error during destroy is acceptable
         clearTimeout(timeoutId);
-        server.close();
-        resolve();
+        server.close(() => {
+          resolve();
+        });
       });
     });
   });
@@ -390,7 +395,11 @@ test('bidirectional communication works correctly', () => {
   }
 
   console.log(`\nTest Results: ${testsPassed} passed, ${testsFailed} failed`);
+
+  // Let event loop exit naturally - don't force process.exit()
+  // Exit code will be 0 if no unhandled exceptions
   if (testsFailed > 0) {
-    process.exit(1);
+    // Throw to set exit code 1
+    throw new Error(`${testsFailed} test(s) failed`);
   }
 })();

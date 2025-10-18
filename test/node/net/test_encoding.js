@@ -41,8 +41,9 @@ test('setEncoding returns socket for chaining', () => {
       });
 
       client.on('close', () => {
-        server.close();
-        resolve();
+        server.close(() => {
+          resolve();
+        });
       });
 
       client.on('error', (err) => {
@@ -86,8 +87,9 @@ test('data received as string by default or with utf8 encoding', () => {
       });
 
       client.on('close', () => {
-        server.close();
-        resolve();
+        server.close(() => {
+          resolve();
+        });
       });
 
       client.on('error', (err) => {
@@ -139,8 +141,9 @@ test('UTF-8 encoding handles special characters correctly', () => {
       });
 
       client.on('close', () => {
-        server.close();
-        resolve();
+        server.close(() => {
+          resolve();
+        });
       });
 
       client.on('error', (err) => {
@@ -192,8 +195,9 @@ test('write correctly sends UTF-8 encoded data', () => {
       });
 
       client.on('close', () => {
-        server.close();
-        resolve();
+        server.close(() => {
+          resolve();
+        });
       });
 
       client.on('error', (err) => {
@@ -243,8 +247,9 @@ test('multiple writes with encoding work correctly', () => {
       });
 
       client.on('close', () => {
-        server.close();
-        resolve();
+        server.close(() => {
+          resolve();
+        });
       });
 
       client.on('error', (err) => {
@@ -296,8 +301,9 @@ test('encoding can be set after connection is established', () => {
       });
 
       client.on('close', () => {
-        server.close();
-        resolve();
+        server.close(() => {
+          resolve();
+        });
       });
 
       client.on('error', (err) => {
@@ -358,8 +364,9 @@ test('bidirectional UTF-8 communication', () => {
       });
 
       client.on('close', () => {
-        server.close();
-        resolve();
+        server.close(() => {
+          resolve();
+        });
       });
 
       client.on('error', (err) => {
@@ -408,8 +415,9 @@ test('empty strings are handled correctly', () => {
       });
 
       client.on('close', () => {
-        server.close();
-        resolve();
+        server.close(() => {
+          resolve();
+        });
       });
 
       client.on('error', (err) => {
@@ -457,8 +465,9 @@ test('newlines and special characters are preserved', () => {
       });
 
       client.on('close', () => {
-        server.close();
-        resolve();
+        server.close(() => {
+          resolve();
+        });
       });
 
       client.on('error', (err) => {

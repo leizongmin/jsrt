@@ -204,7 +204,9 @@ void on_socket_read(uv_stream_t* stream, ssize_t nread, const uv_buf_t* buf) {
     // Emit 'data' event with the buffer content
     JSValue emit = JS_GetPropertyStr(ctx, conn->socket_obj, "emit");
     if (JS_IsFunction(ctx, emit)) {
-      // Create a string from the buffer data
+      // For now, always return strings to maintain compatibility
+      // TODO: Implement proper Buffer support when encoding is not set
+      // This requires caching the Buffer constructor to avoid module loading during callbacks
       JSValue data = JS_NewStringLen(ctx, buf->base, nread);
       JSValue args[] = {JS_NewString(ctx, "data"), data};
       JSValue result = JS_Call(ctx, emit, conn->socket_obj, 2, args);

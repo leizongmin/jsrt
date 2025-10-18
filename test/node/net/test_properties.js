@@ -247,9 +247,7 @@ test('destroyed property after destroy()', () => {
 function checkTestsComplete() {
   if (pendingTests === 0) {
     console.log(`\nTest Results: ${testsPassed} passed, ${testsFailed} failed`);
-    if (testsFailed > 0) {
-      process.exit(1);
-    }
+    process.exit(testsFailed > 0 ? 1 : 0);
   } else {
     setTimeout(checkTestsComplete, 100);
   }

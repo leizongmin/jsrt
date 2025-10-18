@@ -601,7 +601,7 @@ We welcome contributions! Here's how to get started:
 - Update documentation as needed
 - Ensure `make test`, `make wpt`, and `make clang-format` pass
 - Check WPT compliance for web standard APIs
-- See [CLAUDE.md](CLAUDE.md) for detailed development setup
+- See [AGENTS.md](AGENTS.md) for detailed development setup
 
 ### Good First Issues
 

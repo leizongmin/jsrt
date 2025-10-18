@@ -1575,6 +1575,7 @@ Comprehensive code review and cleanup completed:
 ** Recent Changes
 | Timestamp | Action | Task ID | Details |
 |-----------|--------|---------|---------|
+| 2025-10-18T16:20:00Z | Blocked | 4.x | WAMR v2.4.1 host tables unsupported; Phase 4 tasks remain pending until runtime upgrade or deps patches permitted |
 | 2025-10-18T15:12:00Z | Updated | Dashboard | Progress: 81/220 (37%), Phase 4: 3/34 (9%) - Global API landed |
 | 2025-10-18T15:12:00Z | Completed | 4.6, 4.7, 4.8 | Implemented WebAssembly.Global constructor, value accessors, and valueOf |
 | 2025-10-18T15:15:00Z | Updated | Dashboard | Progress: 78/220 (35%), Phase 8: 4/10 (40%) - +3 tasks completed |

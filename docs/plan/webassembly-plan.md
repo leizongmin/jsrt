@@ -656,7 +656,7 @@ Files: src/std/webassembly.c:787-871
 :INVESTIGATED: 2025-10-17T16:05:00Z
 :BLOCKED_BY: WAMR C API functional limitation
 :DEPS: 1.3
-:BLOCKER_DOC: docs/plan/wasm-phase4-table-blocker.md
+:BLOCKER_DOC: docs/plan/webassembly-plan/wasm-phase4-table-blocker.md
 :NOTE: WAMR C API does not support standalone table creation from host
 :END:
 
@@ -708,7 +708,7 @@ Task 4.1 remains BLOCKED. Reasons:
 4. **get()/set()**: Fail due to size being 0 (all indices out of bounds)
 
 **** Resolution Path
-Options documented in `docs/plan/wasm-phase4-table-blocker.md`:
+Options documented in `docs/plan/webassembly-plan/wasm-phase4-table-blocker.md`:
 1. **Upgrade WAMR** (recommended) - Check if newer versions support standalone tables
 2. **Use Internal APIs** - Bypass C API, use WAMR internals directly
 3. **Defer Implementation** - Document as "not yet implemented"
@@ -1497,3 +1497,18 @@ Optional stretch goals:
 - WPT Tests: /repo/wpt/wasm/jsapi/
 - Existing Implementation: /repo/src/std/webassembly.c
 - WAMR Runtime: /repo/src/wasm/runtime.c
+
+* Related Documents
+
+Detailed implementation plans and blockers are organized in the [[file:webassembly-plan/][webassembly-plan/]] subdirectory:
+
+** Technical Blockers
+- [[file:webassembly-plan/wasm-phase4-table-blocker.md][Task 4.1 Blocker: WAMR C API Standalone Table Limitation]]
+  Documents the WAMR v2.4.1 C API limitation preventing standalone Table object creation (Phase 4, Task 4.1)
+
+** Phase-Specific Plans
+- [[file:webassembly-plan/webassembly-phase3.2b-plan.md][Phase 3.2B: Full Type Support for Function Imports]]
+  Detailed breakdown for implementing f32/f64/i64/BigInt support in function import wrapping
+
+- [[file:webassembly-plan/webassembly-next-tasks.md][Next Immediate Tasks - Detailed Breakdown]]
+  Atomic, executable task breakdowns for current implementation priorities with risk assessment and parallel execution opportunities

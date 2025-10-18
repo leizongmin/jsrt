@@ -68,6 +68,22 @@ WINTERCG_TESTS = {
     ],
     'abort': [
         'dom/abort/abort-signal-any.any.js'
+    ],
+    'wasm': [
+        # Basic interface and validation
+        'wasm/jsapi/interface.any.js',
+        'wasm/jsapi/constructor/validate.any.js',
+        # Module static methods (implemented)
+        'wasm/jsapi/module/constructor.any.js',
+        'wasm/jsapi/module/exports.any.js',
+        'wasm/jsapi/module/imports.any.js',
+        'wasm/jsapi/module/customSections.any.js',
+        # Instance and exports (implemented)
+        'wasm/jsapi/instance/constructor.any.js',
+        'wasm/jsapi/instance/exports.any.js',
+        # Skip Memory/Table/Global tests - not yet implemented
+        # Skip exception/tag tests - not yet implemented
+        # Skip streaming/async tests - not yet implemented
     ]
 }
 

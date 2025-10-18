@@ -1911,13 +1911,18 @@ void JSRT_RuntimeSetupStdWebAssembly(JSRT_Runtime* rt) {
   // Create WebAssembly global object
   JSValue webassembly = JS_NewObject(rt->ctx);
 
-  // Add error constructors
-  JS_SetPropertyStr(rt->ctx, webassembly, "CompileError", JS_DupValue(rt->ctx, webassembly_compile_error_ctor));
-  JS_SetPropertyStr(rt->ctx, webassembly, "LinkError", JS_DupValue(rt->ctx, webassembly_link_error_ctor));
-  JS_SetPropertyStr(rt->ctx, webassembly, "RuntimeError", JS_DupValue(rt->ctx, webassembly_runtime_error_ctor));
+  // Add error constructors (non-enumerable, writable, configurable per spec)
+  JS_DefinePropertyValueStr(rt->ctx, webassembly, "CompileError", JS_DupValue(rt->ctx, webassembly_compile_error_ctor),
+                            JS_PROP_WRITABLE | JS_PROP_CONFIGURABLE);
+  JS_DefinePropertyValueStr(rt->ctx, webassembly, "LinkError", JS_DupValue(rt->ctx, webassembly_link_error_ctor),
+                            JS_PROP_WRITABLE | JS_PROP_CONFIGURABLE);
+  JS_DefinePropertyValueStr(rt->ctx, webassembly, "RuntimeError", JS_DupValue(rt->ctx, webassembly_runtime_error_ctor),
+                            JS_PROP_WRITABLE | JS_PROP_CONFIGURABLE);
 
-  // Add validate function
-  JS_SetPropertyStr(rt->ctx, webassembly, "validate", JS_NewCFunction(rt->ctx, js_webassembly_validate, "validate", 1));
+  // Add validate function (non-enumerable, writable, configurable per spec)
+  JS_DefinePropertyValueStr(rt->ctx, webassembly, "validate",
+                            JS_NewCFunction(rt->ctx, js_webassembly_validate, "validate", 1),
+                            JS_PROP_WRITABLE | JS_PROP_CONFIGURABLE);
 
   // Get Symbol.toStringTag for proper class identification
   JSValue global = JS_GetGlobalObject(rt->ctx);
@@ -1948,11 +1953,11 @@ void JSRT_RuntimeSetupStdWebAssembly(JSRT_Runtime* rt) {
   JS_SetPropertyStr(rt->ctx, module_ctor, "customSections",
                     JS_NewCFunction(rt->ctx, js_webassembly_module_custom_sections, "customSections", 2));
 
-  JS_SetPropertyStr(rt->ctx, webassembly, "Module", module_ctor);
+  JS_DefinePropertyValueStr(rt->ctx, webassembly, "Module", module_ctor, JS_PROP_WRITABLE | JS_PROP_CONFIGURABLE);
 
-  // Create Instance constructor and prototype
+  // Create Instance constructor and prototype (length=1, importObject is optional)
   JSValue instance_ctor =
-      JS_NewCFunction2(rt->ctx, js_webassembly_instance_constructor, "Instance", 2, JS_CFUNC_constructor, 0);
+      JS_NewCFunction2(rt->ctx, js_webassembly_instance_constructor, "Instance", 1, JS_CFUNC_constructor, 0);
   JSValue instance_proto = JS_NewObject(rt->ctx);
   JS_SetPropertyStr(rt->ctx, instance_proto, "constructor", JS_DupValue(rt->ctx, instance_ctor));
   JS_DefinePropertyValue(rt->ctx, instance_proto, JS_ValueToAtom(rt->ctx, toStringTag_symbol),
@@ -1960,7 +1965,7 @@ void JSRT_RuntimeSetupStdWebAssembly(JSRT_Runtime* rt) {
 
   JS_SetConstructor(rt->ctx, instance_ctor, instance_proto);
   JS_SetClassProto(rt->ctx, js_webassembly_instance_class_id, instance_proto);
-  JS_SetPropertyStr(rt->ctx, webassembly, "Instance", instance_ctor);
+  JS_DefinePropertyValueStr(rt->ctx, webassembly, "Instance", instance_ctor, JS_PROP_WRITABLE | JS_PROP_CONFIGURABLE);
 
   // Create Memory constructor and prototype
   JSValue memory_ctor =
@@ -1980,7 +1985,7 @@ void JSRT_RuntimeSetupStdWebAssembly(JSRT_Runtime* rt) {
 
   JS_SetConstructor(rt->ctx, memory_ctor, memory_proto);
   JS_SetClassProto(rt->ctx, js_webassembly_memory_class_id, memory_proto);
-  JS_SetPropertyStr(rt->ctx, webassembly, "Memory", memory_ctor);
+  JS_DefinePropertyValueStr(rt->ctx, webassembly, "Memory", memory_ctor, JS_PROP_WRITABLE | JS_PROP_CONFIGURABLE);
 
   // Create Table constructor and prototype
   JSValue table_ctor = JS_NewCFunction2(rt->ctx, js_webassembly_table_constructor, "Table", 1, JS_CFUNC_constructor, 0);
@@ -2005,7 +2010,7 @@ void JSRT_RuntimeSetupStdWebAssembly(JSRT_Runtime* rt) {
 
   JS_SetConstructor(rt->ctx, table_ctor, table_proto);
   JS_SetClassProto(rt->ctx, js_webassembly_table_class_id, table_proto);
-  JS_SetPropertyStr(rt->ctx, webassembly, "Table", table_ctor);
+  JS_DefinePropertyValueStr(rt->ctx, webassembly, "Table", table_ctor, JS_PROP_WRITABLE | JS_PROP_CONFIGURABLE);
 
   JS_FreeValue(rt->ctx, toStringTag_symbol);
 

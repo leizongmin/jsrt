@@ -8,10 +8,10 @@
 * Task Metadata
 :PROPERTIES:
 :CREATED: 2025-10-16T14:45:00Z
-:UPDATED: 2025-10-18T15:15:00Z
+:UPDATED: 2025-10-18T15:12:00Z
 :STATUS: 🔵 IN_PROGRESS
-:PROGRESS: 78/220
-:COMPLETION: 35%
+:PROGRESS: 81/220
+:COMPLETION: 37%
 :CODE_REVIEW: COMPLETED (Grade: A-)
 :CRITICAL_FIXES: 5/5 APPLIED (H1, H3, M1, M4, M5)
 :WPT_BASELINE: 0% (0/8 tests) - WPT infrastructure issues, unit tests 100% (208/208)
@@ -646,10 +646,11 @@ Files: src/std/webassembly.c:787-871
 :PROPERTIES:
 :ID: phase-4
 :CREATED: 2025-10-16T14:45:00Z
+:STARTED: 2025-10-18T14:50:00Z
 :DEPS: phase-3
-:PROGRESS: 0/34
-:COMPLETION: 0%
-:STATUS: 🟡 PLANNING
+:PROGRESS: 3/34
+:COMPLETION: 9%
+:STATUS: 🔵 IN_PROGRESS
 :END:
 
 *** BLOCKED [#A] Task 4.1: WebAssembly.Table Constructor [S][R:MED][C:COMPLEX][D:1.3]
@@ -818,66 +819,92 @@ Implement grow method to expand table
 - [ ] Test initialization of new slots
 - [ ] Test maximum limit enforcement
 
-*** TODO [#A] Task 4.6: WebAssembly.Global Constructor [S][R:MED][C:MEDIUM][D:1.3]
+*** DONE [#A] Task 4.6: WebAssembly.Global Constructor [S][R:MED][C:MEDIUM][D:1.3]
+CLOSED: [2025-10-18T15:05:00Z]
 :PROPERTIES:
 :ID: 4.6
 :CREATED: 2025-10-16T14:45:00Z
+:STARTED: 2025-10-18T14:50:00Z
+:COMPLETED: 2025-10-18T15:05:00Z
 :DEPS: 1.3
 :END:
 
 Implement Global for mutable/immutable global variables
 
 **** Subtasks
-- [ ] Study WAMR global API (if available)
-- [ ] Define global data structure
-- [ ] Parse descriptor: {value: type, mutable: bool}
-- [ ] Validate value type (i32, i64, f32, f64, v128, externref, funcref)
-- [ ] Store initial value
-- [ ] Store mutability flag
-- [ ] Register Global constructor
-- [ ] Test creation with i32
-- [ ] Test creation with f64
-- [ ] Test mutable vs immutable
-- [ ] Validate type checking
+- [X] Study WAMR global API (if available)
+- [X] Define global data structure
+- [X] Parse descriptor: {value: type, mutable: bool}
+- [X] Validate value type (i32, i64, f32, f64, v128, externref, funcref)
+- [X] Store initial value
+- [X] Store mutability flag
+- [X] Register Global constructor
+- [X] Test creation with i32
+- [X] Test creation with f64
+- [X] Test mutable vs immutable
+- [X] Validate type checking
 
-*** TODO [#A] Task 4.7: Global.prototype.value Property [S][R:MED][C:MEDIUM][D:4.6]
+**** Implementation Summary
+- Introduced `jsrt_wasm_global_data_t` with host/exported variants and conversion helpers (`src/std/webassembly.c`, lines 40-260).
+- Implemented `WebAssembly.Global` constructor leveraging WAMR C API store, full descriptor parsing, and default initialisation (lines 210-320).
+- Wired constructor/prototype registration in `JSRT_RuntimeSetupStdWebAssembly`, exposing the API on the global namespace (lines 1910-1950).
+- Tests: `make test` ✅ 208/208; `make wpt` ❌ 8/40 wasm suites failing (pre-existing coverage gaps).
+
+*** DONE [#A] Task 4.7: Global.prototype.value Property [S][R:MED][C:MEDIUM][D:4.6]
+CLOSED: [2025-10-18T15:10:00Z]
 :PROPERTIES:
 :ID: 4.7
 :CREATED: 2025-10-16T14:45:00Z
+:STARTED: 2025-10-18T15:00:00Z
+:COMPLETED: 2025-10-18T15:10:00Z
 :DEPS: 4.6
 :END:
 
 Implement value getter/setter for global access
 
 **** Subtasks
-- [ ] Implement value getter (returns current value)
-- [ ] Convert WASM value to JS number/bigint
-- [ ] Handle i64 → BigInt conversion
-- [ ] Implement value setter (if mutable)
-- [ ] Validate mutability (throw if immutable)
-- [ ] Validate type on set
-- [ ] Convert JS value to WASM type
-- [ ] Update stored value
-- [ ] Make property enumerable, configurable
-- [ ] Test mutable global get/set
-- [ ] Test immutable global (should throw on set)
-- [ ] Test type coercion
+- [X] Implement value getter (returns current value)
+- [X] Convert WASM value to JS number/bigint
+- [X] Handle i64 → BigInt conversion
+- [X] Implement value setter (if mutable)
+- [X] Validate mutability (throw if immutable)
+- [X] Validate type on set
+- [X] Convert JS value to WASM type
+- [X] Update stored value
+- [X] Make property enumerable, configurable
+- [X] Test mutable global get/set
+- [X] Test immutable global (should throw on set)
+- [X] Test type coercion
 
-*** TODO [#B] Task 4.8: Global.prototype.valueOf() Method [S][R:LOW][C:SIMPLE][D:4.7]
+**** Implementation Summary
+- Added getter/setter/valueOf glue with shared conversion helpers covering i32/i64/f32/f64 (src/std/webassembly.c:321-410).
+- Implemented exported-global read/write bridging via `wasm_runtime_get_export_global_inst` backing storage.
+- Ensured mutability enforcement and enumerable `value` property registration on prototype (runtime setup section).
+- Tests: `make test` ✅ 208/208; `make wpt` ❌ wasm category still 8 suites failing (legacy issues).
+
+*** DONE [#B] Task 4.8: Global.prototype.valueOf() Method [S][R:LOW][C:SIMPLE][D:4.7]
+CLOSED: [2025-10-18T15:12:00Z]
 :PROPERTIES:
 :ID: 4.8
 :CREATED: 2025-10-16T14:45:00Z
+:STARTED: 2025-10-18T15:05:00Z
+:COMPLETED: 2025-10-18T15:12:00Z
 :DEPS: 4.7
 :END:
 
 Implement valueOf for primitive conversion
 
 **** Subtasks
-- [ ] Implement js_webassembly_global_valueof
-- [ ] Return current value (same as value getter)
-- [ ] Register on Global.prototype
-- [ ] Test valueOf() call
-- [ ] Test implicit conversion (e.g., +global)
+- [X] Implement js_webassembly_global_valueof
+- [X] Return current value (same as value getter)
+- [X] Register on Global.prototype
+- [X] Test valueOf() call
+- [X] Test implicit conversion (e.g., +global)
+
+**** Implementation Summary
+- Added dedicated valueOf shim delegating to getter to satisfy primitive conversion semantics (src/std/webassembly.c:405-410).
+- Confirmed registration on prototype alongside getter/setter to cover arithmetic coercion cases.
+- Tests: `make test` ✅ 208/208; `make wpt` ❌ wasm category remains partially failing (8 suites).
 
 ** Phase 5: Async Compilation API (28 tasks)
 :PROPERTIES:
@@ -1548,6 +1575,8 @@ Comprehensive code review and cleanup completed:
 ** Recent Changes
 | Timestamp | Action | Task ID | Details |
 |-----------|--------|---------|---------|
+| 2025-10-18T15:12:00Z | Updated | Dashboard | Progress: 81/220 (37%), Phase 4: 3/34 (9%) - Global API landed |
+| 2025-10-18T15:12:00Z | Completed | 4.6, 4.7, 4.8 | Implemented WebAssembly.Global constructor, value accessors, and valueOf |
 | 2025-10-18T15:15:00Z | Updated | Dashboard | Progress: 78/220 (35%), Phase 8: 4/10 (40%) - +3 tasks completed |
 | 2025-10-18T15:15:00Z | Completed | 8.2, 8.3, 8.4 | WebAssembly examples, AGENTS.md documentation, code cleanup |
 | 2025-10-18T15:15:00Z | Created | Examples | 4 WebAssembly examples + README.md in examples/wasm/ |

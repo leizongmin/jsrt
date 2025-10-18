@@ -56,6 +56,21 @@ typedef struct {
   JSContext* ctx;       // Context for reference management
 } jsrt_wasm_table_data_t;
 
+// Data structure for WebAssembly.Global
+typedef struct {
+  bool is_host;
+  bool is_mutable;
+  wasm_valkind_t kind;
+  JSValue instance_obj;  // Keeps Instance alive for exported globals
+  union {
+    wasm_global_t* host;
+    struct {
+      wasm_module_inst_t instance;
+      wasm_global_inst_t global_inst;
+    } exported;
+  } u;
+} jsrt_wasm_global_data_t;
+
 // Function import wrapper for JS function imports
 typedef struct {
   char* module_name;    // Module namespace (e.g., "env")
@@ -90,6 +105,12 @@ static JSValue webassembly_runtime_error_ctor;
 // Forward declarations
 static JSValue js_webassembly_instance_exports_getter(JSContext* ctx, JSValueConst this_val, int argc,
                                                       JSValueConst* argv);
+
+// Global helpers
+static int jsrt_wasm_global_value_from_js(JSContext* ctx, JSValueConst value, wasm_valkind_t kind, wasm_val_t* out);
+static JSValue jsrt_wasm_global_value_to_js(JSContext* ctx, wasm_valkind_t kind, const wasm_val_t* val);
+static int jsrt_wasm_global_read_exported(const jsrt_wasm_global_data_t* data, wasm_val_t* out);
+static int jsrt_wasm_global_write_exported(const jsrt_wasm_global_data_t* data, const wasm_val_t* val);
 
 // Helper function to create WebAssembly error constructors
 static JSValue create_webassembly_error_constructor(JSContext* ctx, const char* name, JSValue error_proto) {
@@ -975,8 +996,39 @@ static JSValue js_webassembly_instance_exports_getter(JSContext* ctx, JSValueCon
       }
 
       JS_SetOpaque(export_value, func_data);
+    } else if (export_info.kind == WASM_IMPORT_EXPORT_KIND_GLOBAL) {
+      wasm_global_inst_t global_inst;
+      memset(&global_inst, 0, sizeof(global_inst));
+
+      if (!wasm_runtime_get_export_global_inst(instance_data->instance, export_info.name, &global_inst)) {
+        JSRT_Debug("Warning: global '%s' not found in instance", export_info.name);
+        continue;
+      }
+
+      export_value = JS_NewObjectClass(ctx, js_webassembly_global_class_id);
+      if (JS_IsException(export_value)) {
+        JS_FreeValue(ctx, exports);
+        return export_value;
+      }
+
+      jsrt_wasm_global_data_t* global_data = js_malloc(ctx, sizeof(jsrt_wasm_global_data_t));
+      if (!global_data) {
+        JS_FreeValue(ctx, export_value);
+        JS_FreeValue(ctx, exports);
+        return JS_ThrowOutOfMemory(ctx);
+      }
+
+      memset(global_data, 0, sizeof(*global_data));
+      global_data->is_host = false;
+      global_data->is_mutable = global_inst.is_mutable;
+      global_data->kind = global_inst.kind;
+      global_data->instance_obj = JS_DupValue(ctx, this_val);
+      global_data->u.exported.instance = instance_data->instance;
+      global_data->u.exported.global_inst = global_inst;
+
+      JS_SetOpaque(export_value, global_data);
     } else {
-      // Memory, Table, Global not yet implemented - skip for now
+      // Memory and Table exports are handled in future phases
       JSRT_Debug("Skipping non-function export '%s'", export_info.name);
       continue;
     }
@@ -1495,6 +1547,326 @@ static JSValue js_webassembly_memory_grow(JSContext* ctx, JSValueConst this_val,
   return JS_NewUint32(ctx, old_size);
 }
 
+static int jsrt_wasm_global_value_from_js(JSContext* ctx, JSValueConst value, wasm_valkind_t kind, wasm_val_t* out) {
+  if (!out) {
+    return -1;
+  }
+
+  memset(out, 0, sizeof(*out));
+  out->kind = kind;
+
+  switch (kind) {
+    case WASM_I32: {
+      int32_t v;
+      if (JS_ToInt32(ctx, &v, value)) {
+        return -1;
+      }
+      out->of.i32 = v;
+      return 0;
+    }
+    case WASM_I64: {
+      int64_t v;
+      if (JS_ToBigInt64(ctx, &v, value)) {
+        return -1;
+      }
+      out->of.i64 = v;
+      return 0;
+    }
+    case WASM_F32: {
+      double d;
+      if (JS_ToFloat64(ctx, &d, value)) {
+        return -1;
+      }
+      out->of.f32 = (float)d;
+      return 0;
+    }
+    case WASM_F64: {
+      double d;
+      if (JS_ToFloat64(ctx, &d, value)) {
+        return -1;
+      }
+      out->of.f64 = d;
+      return 0;
+    }
+    default:
+      JS_ThrowTypeError(ctx, "Unsupported WebAssembly.Global value type");
+      return -1;
+  }
+}
+
+static JSValue jsrt_wasm_global_value_to_js(JSContext* ctx, wasm_valkind_t kind, const wasm_val_t* val) {
+  if (!val) {
+    return JS_ThrowInternalError(ctx, "Invalid WebAssembly.Global value");
+  }
+
+  switch (kind) {
+    case WASM_I32:
+      return JS_NewInt32(ctx, val->of.i32);
+    case WASM_I64:
+      return JS_NewBigInt64(ctx, val->of.i64);
+    case WASM_F32:
+      return JS_NewFloat64(ctx, (double)val->of.f32);
+    case WASM_F64:
+      return JS_NewFloat64(ctx, val->of.f64);
+    default:
+      return JS_ThrowTypeError(ctx, "Unsupported WebAssembly.Global value type");
+  }
+}
+
+static int jsrt_wasm_global_read_exported(const jsrt_wasm_global_data_t* data, wasm_val_t* out) {
+  if (!data || !out || !data->u.exported.global_inst.global_data) {
+    return -1;
+  }
+
+  out->kind = data->kind;
+  const void* raw = data->u.exported.global_inst.global_data;
+
+  switch (data->kind) {
+    case WASM_I32: {
+      int32_t value;
+      memcpy(&value, raw, sizeof(value));
+      out->of.i32 = value;
+      return 0;
+    }
+    case WASM_I64: {
+      int64_t value;
+      memcpy(&value, raw, sizeof(value));
+      out->of.i64 = value;
+      return 0;
+    }
+    case WASM_F32: {
+      float value;
+      memcpy(&value, raw, sizeof(value));
+      out->of.f32 = value;
+      return 0;
+    }
+    case WASM_F64: {
+      double value;
+      memcpy(&value, raw, sizeof(value));
+      out->of.f64 = value;
+      return 0;
+    }
+    default:
+      return -1;
+  }
+}
+
+static int jsrt_wasm_global_write_exported(const jsrt_wasm_global_data_t* data, const wasm_val_t* val) {
+  if (!data || !val || !data->u.exported.global_inst.global_data) {
+    return -1;
+  }
+
+  void* raw = data->u.exported.global_inst.global_data;
+
+  switch (data->kind) {
+    case WASM_I32: {
+      int32_t value = val->of.i32;
+      memcpy(raw, &value, sizeof(value));
+      return 0;
+    }
+    case WASM_I64: {
+      int64_t value = val->of.i64;
+      memcpy(raw, &value, sizeof(value));
+      return 0;
+    }
+    case WASM_F32: {
+      float value = val->of.f32;
+      memcpy(raw, &value, sizeof(value));
+      return 0;
+    }
+    case WASM_F64: {
+      double value = val->of.f64;
+      memcpy(raw, &value, sizeof(value));
+      return 0;
+    }
+    default:
+      return -1;
+  }
+}
+
+// WebAssembly.Global constructor
+static JSValue js_webassembly_global_constructor(JSContext* ctx, JSValueConst new_target, int argc,
+                                                 JSValueConst* argv) {
+  if (argc < 1) {
+    return JS_ThrowTypeError(ctx, "WebAssembly.Global constructor requires a descriptor argument");
+  }
+
+  JSValueConst descriptor = argv[0];
+  if (!JS_IsObject(descriptor)) {
+    return JS_ThrowTypeError(ctx, "Descriptor must be an object");
+  }
+
+  // Extract value type string
+  JSValue type_val = JS_GetPropertyStr(ctx, descriptor, "value");
+  if (JS_IsException(type_val)) {
+    return type_val;
+  }
+
+  const char* type_str = JS_ToCString(ctx, type_val);
+  JS_FreeValue(ctx, type_val);
+  if (!type_str) {
+    return JS_EXCEPTION;
+  }
+
+  wasm_valkind_t kind;
+  if (strcmp(type_str, "i32") == 0) {
+    kind = WASM_I32;
+  } else if (strcmp(type_str, "i64") == 0) {
+    kind = WASM_I64;
+  } else if (strcmp(type_str, "f32") == 0) {
+    kind = WASM_F32;
+  } else if (strcmp(type_str, "f64") == 0) {
+    kind = WASM_F64;
+  } else {
+    JS_FreeCString(ctx, type_str);
+    return JS_ThrowTypeError(ctx, "Unsupported WebAssembly.Global value type");
+  }
+  JS_FreeCString(ctx, type_str);
+
+  // Extract mutability (default false)
+  bool is_mutable = false;
+  JSValue mutable_val = JS_GetPropertyStr(ctx, descriptor, "mutable");
+  if (JS_IsException(mutable_val)) {
+    return mutable_val;
+  }
+  if (!JS_IsUndefined(mutable_val)) {
+    int flag = JS_ToBool(ctx, mutable_val);
+    JS_FreeValue(ctx, mutable_val);
+    if (flag < 0) {
+      return JS_EXCEPTION;
+    }
+    is_mutable = flag != 0;
+  } else {
+    JS_FreeValue(ctx, mutable_val);
+  }
+
+  // Prepare initial value
+  wasm_val_t initial;
+  memset(&initial, 0, sizeof(initial));
+  initial.kind = kind;
+
+  if (argc >= 2 && !JS_IsUndefined(argv[1])) {
+    if (jsrt_wasm_global_value_from_js(ctx, argv[1], kind, &initial)) {
+      return JS_EXCEPTION;
+    }
+  } else {
+    switch (kind) {
+      case WASM_I32:
+        initial.of.i32 = 0;
+        break;
+      case WASM_I64:
+        initial.of.i64 = 0;
+        break;
+      case WASM_F32:
+        initial.of.f32 = 0.0f;
+        break;
+      case WASM_F64:
+        initial.of.f64 = 0.0;
+        break;
+      default:
+        return JS_ThrowTypeError(ctx, "Unsupported WebAssembly.Global value type");
+    }
+  }
+
+  wasm_valtype_t* valtype = wasm_valtype_new(kind);
+  if (!valtype) {
+    return JS_ThrowInternalError(ctx, "Failed to create global value type");
+  }
+
+  wasm_globaltype_t* global_type = wasm_globaltype_new(valtype, is_mutable ? WASM_VAR : WASM_CONST);
+  if (!global_type) {
+    return JS_ThrowInternalError(ctx, "Failed to create global type");
+  }
+
+  wasm_store_t* store = jsrt_wasm_get_store();
+  if (!store) {
+    wasm_globaltype_delete(global_type);
+    return JS_ThrowInternalError(ctx, "WASM store not initialized");
+  }
+
+  wasm_global_t* global = wasm_global_new(store, global_type, &initial);
+  if (!global) {
+    wasm_globaltype_delete(global_type);
+    return JS_ThrowInternalError(ctx, "Failed to create WebAssembly.Global");
+  }
+
+  JSValue global_obj = JS_NewObjectClass(ctx, js_webassembly_global_class_id);
+  if (JS_IsException(global_obj)) {
+    wasm_global_delete(global);
+    return global_obj;
+  }
+
+  jsrt_wasm_global_data_t* global_data = js_malloc(ctx, sizeof(jsrt_wasm_global_data_t));
+  if (!global_data) {
+    wasm_global_delete(global);
+    JS_FreeValue(ctx, global_obj);
+    return JS_ThrowOutOfMemory(ctx);
+  }
+
+  memset(global_data, 0, sizeof(*global_data));
+  global_data->is_host = true;
+  global_data->is_mutable = is_mutable;
+  global_data->kind = kind;
+  global_data->instance_obj = JS_UNDEFINED;
+  global_data->u.host = global;
+
+  JS_SetOpaque(global_obj, global_data);
+  return global_obj;
+}
+
+static JSValue js_webassembly_global_value_getter(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
+  jsrt_wasm_global_data_t* data = JS_GetOpaque(this_val, js_webassembly_global_class_id);
+  if (!data) {
+    return JS_ThrowTypeError(ctx, "not a Global object");
+  }
+
+  wasm_val_t value;
+  int rc = 0;
+  if (data->is_host) {
+    wasm_global_get(data->u.host, &value);
+  } else {
+    rc = jsrt_wasm_global_read_exported(data, &value);
+  }
+
+  if (rc != 0) {
+    return JS_ThrowInternalError(ctx, "Failed to read WebAssembly.Global value");
+  }
+
+  return jsrt_wasm_global_value_to_js(ctx, data->kind, &value);
+}
+
+static JSValue js_webassembly_global_value_setter(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
+  if (argc < 1) {
+    return JS_UNDEFINED;
+  }
+
+  jsrt_wasm_global_data_t* data = JS_GetOpaque(this_val, js_webassembly_global_class_id);
+  if (!data) {
+    return JS_ThrowTypeError(ctx, "not a Global object");
+  }
+
+  if (!data->is_mutable) {
+    return JS_ThrowTypeError(ctx, "WebAssembly.Global is immutable");
+  }
+
+  wasm_val_t wasm_value;
+  if (jsrt_wasm_global_value_from_js(ctx, argv[0], data->kind, &wasm_value)) {
+    return JS_EXCEPTION;
+  }
+
+  if (data->is_host) {
+    wasm_global_set(data->u.host, &wasm_value);
+  } else if (jsrt_wasm_global_write_exported(data, &wasm_value) != 0) {
+    return JS_ThrowInternalError(ctx, "Failed to write WebAssembly.Global value");
+  }
+
+  return JS_UNDEFINED;
+}
+
+static JSValue js_webassembly_global_value_of(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
+  return js_webassembly_global_value_getter(ctx, this_val, 0, NULL);
+}
+
 // WebAssembly.Table(descriptor) constructor
 static JSValue js_webassembly_table_constructor(JSContext* ctx, JSValueConst new_target, int argc, JSValueConst* argv) {
   if (argc < 1) {
@@ -1814,10 +2186,22 @@ static void js_webassembly_table_finalizer(JSRuntime* rt, JSValue val) {
 }
 
 static void js_webassembly_global_finalizer(JSRuntime* rt, JSValue val) {
-  void* data = JS_GetOpaque(val, js_webassembly_global_class_id);
-  if (data) {
-    js_free_rt(rt, data);
+  jsrt_wasm_global_data_t* data = JS_GetOpaque(val, js_webassembly_global_class_id);
+  if (!data) {
+    return;
   }
+
+  if (data->is_host) {
+    if (data->u.host) {
+      wasm_global_delete(data->u.host);
+    }
+  } else {
+    if (!JS_IsUndefined(data->instance_obj)) {
+      JS_FreeValueRT(rt, data->instance_obj);
+    }
+  }
+
+  js_free_rt(rt, data);
 }
 
 static void js_webassembly_tag_finalizer(JSRuntime* rt, JSValue val) {
@@ -1986,6 +2370,26 @@ void JSRT_RuntimeSetupStdWebAssembly(JSRT_Runtime* rt) {
   JS_SetConstructor(rt->ctx, memory_ctor, memory_proto);
   JS_SetClassProto(rt->ctx, js_webassembly_memory_class_id, memory_proto);
   JS_DefinePropertyValueStr(rt->ctx, webassembly, "Memory", memory_ctor, JS_PROP_WRITABLE | JS_PROP_CONFIGURABLE);
+
+  // Create Global constructor and prototype
+  JSValue global_ctor =
+      JS_NewCFunction2(rt->ctx, js_webassembly_global_constructor, "Global", 1, JS_CFUNC_constructor, 0);
+  JSValue global_proto = JS_NewObject(rt->ctx);
+  JS_SetPropertyStr(rt->ctx, global_proto, "constructor", JS_DupValue(rt->ctx, global_ctor));
+  JS_DefinePropertyValue(rt->ctx, global_proto, JS_ValueToAtom(rt->ctx, toStringTag_symbol),
+                         JS_NewString(rt->ctx, "WebAssembly.Global"), JS_PROP_CONFIGURABLE);
+
+  JS_DefinePropertyGetSet(rt->ctx, global_proto, JS_NewAtom(rt->ctx, "value"),
+                          JS_NewCFunction(rt->ctx, js_webassembly_global_value_getter, "get value", 0),
+                          JS_NewCFunction(rt->ctx, js_webassembly_global_value_setter, "set value", 1),
+                          JS_PROP_CONFIGURABLE | JS_PROP_ENUMERABLE);
+
+  JS_SetPropertyStr(rt->ctx, global_proto, "valueOf",
+                    JS_NewCFunction(rt->ctx, js_webassembly_global_value_of, "valueOf", 0));
+
+  JS_SetConstructor(rt->ctx, global_ctor, global_proto);
+  JS_SetClassProto(rt->ctx, js_webassembly_global_class_id, global_proto);
+  JS_DefinePropertyValueStr(rt->ctx, webassembly, "Global", global_ctor, JS_PROP_WRITABLE | JS_PROP_CONFIGURABLE);
 
   // Create Table constructor and prototype
   JSValue table_ctor = JS_NewCFunction2(rt->ctx, js_webassembly_table_constructor, "Table", 1, JS_CFUNC_constructor, 0);

@@ -284,7 +284,7 @@ docker-build:
 	@echo "✓ Docker image built: $(DOCKER_IMAGE_NAME):$(DOCKER_TAG)"
 
 .PHONY: claude
-claude: docker-build
+claude:
 	@echo "Starting Claude Code development environment in Docker..."
 	@echo "Repository mapped to /repo inside container"
 	@echo "Running as current user (UID=$(shell id -u), GID=$(shell id -g))"
@@ -309,7 +309,7 @@ claude: docker-build
 		/usr/local/bin/entrypoint claude --dangerously-skip-permissions
 
 .PHONY: codex
-codex: docker-build
+codex:
 	@echo "Starting Codex development environment in Docker..."
 	@echo "Repository mapped to /repo inside container"
 	@echo "Running as current user (UID=$(shell id -u), GID=$(shell id -g))"
@@ -334,7 +334,7 @@ codex: docker-build
 		/usr/local/bin/entrypoint codex --dangerously-bypass-approvals-and-sandbox
 
 .PHONY: dev-shell
-dev-shell: docker-build
+dev-shell:
 	@echo "Starting interactive shell in development environment..."
 	@echo "Running as current user (UID=$(shell id -u), GID=$(shell id -g))"
 	@echo "Git configured as: $(shell git config user.name) <$(shell git config user.email)>"
@@ -355,7 +355,7 @@ dev-shell: docker-build
 
 
 .PHONY: code-server
-code-server: docker-build
+code-server:
 	@echo "Starting code server in development environment..."
 	@echo "Running as current user (UID=$(shell id -u), GID=$(shell id -g))"
 	@echo "Git configured as: $(shell git config user.name) <$(shell git config user.email)>"

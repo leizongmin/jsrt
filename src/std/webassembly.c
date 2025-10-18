@@ -5,6 +5,7 @@
 #include <quickjs.h>
 #include <stdlib.h>
 #include <string.h>
+#include <uv.h>
 #include <wasm_c_api.h>
 #include <wasm_export.h>
 
@@ -71,6 +72,23 @@ typedef struct {
   } u;
 } jsrt_wasm_global_data_t;
 
+typedef enum { JSRT_WASM_ASYNC_COMPILE, JSRT_WASM_ASYNC_INSTANTIATE_BYTES } jsrt_wasm_async_kind_t;
+
+typedef struct {
+  uv_work_t req;
+  jsrt_wasm_async_kind_t kind;
+  JSContext* ctx;
+  JSValue resolve_func;
+  JSValue reject_func;
+  JSValue promise;
+  uint8_t* input_bytes;
+  size_t input_size;
+  wasm_module_t compiled_module;
+  int status;
+  char error_message[256];
+  JSValue import_object;
+} jsrt_wasm_async_job_t;
+
 // Function import wrapper for JS function imports
 typedef struct {
   char* module_name;    // Module namespace (e.g., "env")
@@ -103,8 +121,17 @@ static JSValue webassembly_link_error_ctor;
 static JSValue webassembly_runtime_error_ctor;
 
 // Forward declarations
+static JSValue js_webassembly_instance_constructor(JSContext* ctx, JSValueConst new_target, int argc,
+                                                   JSValueConst* argv);
 static JSValue js_webassembly_instance_exports_getter(JSContext* ctx, JSValueConst this_val, int argc,
                                                       JSValueConst* argv);
+static JSValue js_webassembly_compile_async(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv);
+static JSValue js_webassembly_instantiate_async(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv);
+static void jsrt_wasm_async_compile_work(uv_work_t* req);
+static void jsrt_wasm_async_after_work(uv_work_t* req, int status);
+static JSValue jsrt_wasm_create_module_object(JSContext* ctx, wasm_module_t module, const uint8_t* bytes, size_t size);
+static JSValue jsrt_wasm_instantiate_module(JSContext* ctx, JSValue module_obj, JSValue import_obj);
+static JSValue jsrt_wasm_create_compile_error(JSContext* ctx, const char* message);
 
 // Global helpers
 static int jsrt_wasm_global_value_from_js(JSContext* ctx, JSValueConst value, wasm_valkind_t kind, wasm_val_t* out);
@@ -152,6 +179,359 @@ static uint8_t* get_arraybuffer_bytes_safe(JSContext* ctx, JSValueConst val, siz
   bytes = JS_GetArrayBuffer(ctx, size, buffer);
   JS_FreeValue(ctx, buffer);
   return bytes;
+}
+
+static JSValue jsrt_wasm_create_module_object(JSContext* ctx, wasm_module_t module, const uint8_t* bytes, size_t size) {
+  JSValue module_obj = JS_NewObjectClass(ctx, js_webassembly_module_class_id);
+  if (JS_IsException(module_obj)) {
+    if (module) {
+      wasm_runtime_unload(module);
+    }
+    return module_obj;
+  }
+
+  jsrt_wasm_module_data_t* module_data = js_malloc(ctx, sizeof(jsrt_wasm_module_data_t));
+  if (!module_data) {
+    JS_FreeValue(ctx, module_obj);
+    if (module) {
+      wasm_runtime_unload(module);
+    }
+    return JS_ThrowOutOfMemory(ctx);
+  }
+
+  uint8_t* bytes_copy = NULL;
+  if (size > 0) {
+    bytes_copy = js_malloc(ctx, size);
+    if (!bytes_copy) {
+      js_free(ctx, module_data);
+      JS_FreeValue(ctx, module_obj);
+      if (module) {
+        wasm_runtime_unload(module);
+      }
+      return JS_ThrowOutOfMemory(ctx);
+    }
+    memcpy(bytes_copy, bytes, size);
+  }
+
+  module_data->module = module;
+  module_data->wasm_bytes = bytes_copy;
+  module_data->wasm_size = size;
+
+  JS_SetOpaque(module_obj, module_data);
+  return module_obj;
+}
+
+static JSValue jsrt_wasm_create_error(JSContext* ctx, JSValue ctor, const char* name, const char* message) {
+  JSValue error = JS_NewError(ctx);
+  JSValue proto = JS_GetPropertyStr(ctx, ctor, "prototype");
+  if (!JS_IsException(proto)) {
+    JS_SetPrototype(ctx, error, proto);
+  }
+  JS_FreeValue(ctx, proto);
+
+  JS_DefinePropertyValueStr(ctx, error, "name", JS_NewString(ctx, name), JS_PROP_WRITABLE | JS_PROP_CONFIGURABLE);
+  JS_DefinePropertyValueStr(ctx, error, "message", JS_NewString(ctx, message ? message : ""),
+                            JS_PROP_WRITABLE | JS_PROP_CONFIGURABLE);
+  return error;
+}
+
+static JSValue jsrt_wasm_create_compile_error(JSContext* ctx, const char* message) {
+  return jsrt_wasm_create_error(ctx, webassembly_compile_error_ctor, "CompileError", message);
+}
+
+static JSValue jsrt_wasm_instantiate_module(JSContext* ctx, JSValue module_obj, JSValue import_obj) {
+  JSValueConst args[2];
+  int argc = 1;
+  args[0] = module_obj;
+  if (!JS_IsUndefined(import_obj)) {
+    args[1] = import_obj;
+    argc = 2;
+  }
+  return js_webassembly_instance_constructor(ctx, JS_UNDEFINED, argc, args);
+}
+
+static void jsrt_wasm_async_compile_work(uv_work_t* req) {
+  jsrt_wasm_async_job_t* job = (jsrt_wasm_async_job_t*)req->data;
+  job->compiled_module =
+      wasm_runtime_load(job->input_bytes, (uint32_t)job->input_size, job->error_message, sizeof(job->error_message));
+  if (!job->compiled_module) {
+    job->status = -1;
+  }
+}
+
+static void jsrt_wasm_async_after_work(uv_work_t* req, int status) {
+  jsrt_wasm_async_job_t* job = (jsrt_wasm_async_job_t*)req->data;
+  JSContext* ctx = job->ctx;
+
+  if (status != 0 && job->status == 0) {
+    job->status = -1;
+    if (job->error_message[0] == '\0') {
+      snprintf(job->error_message, sizeof(job->error_message), "%s", uv_strerror(status));
+    }
+  }
+
+  if (job->status != 0) {
+    const char* message = job->error_message[0] ? job->error_message : "WebAssembly.compile failed";
+    JSValue error_obj = jsrt_wasm_create_compile_error(ctx, message);
+    JSValue args[1] = {error_obj};
+    JS_Call(ctx, job->reject_func, JS_UNDEFINED, 1, args);
+    JS_FreeValue(ctx, args[0]);
+    if (job->compiled_module) {
+      wasm_runtime_unload(job->compiled_module);
+      job->compiled_module = NULL;
+    }
+  } else {
+    JSValue module_obj = jsrt_wasm_create_module_object(ctx, job->compiled_module, job->input_bytes, job->input_size);
+    if (JS_IsException(module_obj)) {
+      job->compiled_module = NULL;
+      JSValue exception = JS_GetException(ctx);
+      JSValue args[1] = {exception};
+      JS_Call(ctx, job->reject_func, JS_UNDEFINED, 1, args);
+      JS_FreeValue(ctx, args[0]);
+    } else {
+      job->compiled_module = NULL;
+      if (job->kind == JSRT_WASM_ASYNC_COMPILE) {
+        JSValue args[1] = {module_obj};
+        JS_Call(ctx, job->resolve_func, JS_UNDEFINED, 1, args);
+        JS_FreeValue(ctx, args[0]);
+      } else {
+        JSValue instance = jsrt_wasm_instantiate_module(ctx, module_obj, job->import_object);
+        if (JS_IsException(instance)) {
+          JSValue exception = JS_GetException(ctx);
+          JSValue args[1] = {exception};
+          JS_Call(ctx, job->reject_func, JS_UNDEFINED, 1, args);
+          JS_FreeValue(ctx, args[0]);
+          JS_FreeValue(ctx, module_obj);
+        } else {
+          JSValue result = JS_NewObject(ctx);
+          JS_DefinePropertyValueStr(ctx, result, "module", module_obj, JS_PROP_C_W_E);
+          JS_DefinePropertyValueStr(ctx, result, "instance", instance, JS_PROP_C_W_E);
+          JSValue args[1] = {result};
+          JS_Call(ctx, job->resolve_func, JS_UNDEFINED, 1, args);
+          JS_FreeValue(ctx, args[0]);
+        }
+      }
+    }
+  }
+
+  if (!JS_IsUndefined(job->import_object)) {
+    JS_FreeValue(ctx, job->import_object);
+  }
+  JS_FreeValue(ctx, job->resolve_func);
+  JS_FreeValue(ctx, job->reject_func);
+  JS_FreeValue(ctx, job->promise);
+  if (job->input_bytes) {
+    free(job->input_bytes);
+  }
+  if (job->compiled_module) {
+    wasm_runtime_unload(job->compiled_module);
+  }
+  free(job);
+}
+
+static JSValue js_webassembly_compile_async(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
+  if (argc < 1) {
+    return JS_ThrowTypeError(ctx, "WebAssembly.compile requires 1 argument");
+  }
+
+  size_t size;
+  uint8_t* source = get_arraybuffer_bytes_safe(ctx, argv[0], &size);
+  if (!source) {
+    return JS_ThrowTypeError(ctx, "First argument must be a non-detached ArrayBuffer or TypedArray");
+  }
+
+  size_t alloc_size = size > 0 ? size : 1;
+  uint8_t* copy = malloc(alloc_size);
+  if (!copy) {
+    return JS_ThrowOutOfMemory(ctx);
+  }
+  if (size > 0) {
+    memcpy(copy, source, size);
+  } else {
+    copy[0] = 0;
+  }
+
+  JSValue resolving_funcs[2];
+  JSValue promise = JS_NewPromiseCapability(ctx, resolving_funcs);
+  if (JS_IsException(promise)) {
+    free(copy);
+    return promise;
+  }
+
+  jsrt_wasm_async_job_t* job = malloc(sizeof(jsrt_wasm_async_job_t));
+  if (!job) {
+    free(copy);
+    JS_FreeValue(ctx, resolving_funcs[0]);
+    JS_FreeValue(ctx, resolving_funcs[1]);
+    JS_FreeValue(ctx, promise);
+    return JS_ThrowOutOfMemory(ctx);
+  }
+
+  memset(job, 0, sizeof(*job));
+  job->ctx = ctx;
+  job->kind = JSRT_WASM_ASYNC_COMPILE;
+  job->input_bytes = copy;
+  job->input_size = size;
+  job->import_object = JS_UNDEFINED;
+  job->req.data = job;
+  job->resolve_func = JS_DupValue(ctx, resolving_funcs[0]);
+  job->reject_func = JS_DupValue(ctx, resolving_funcs[1]);
+  job->promise = JS_DupValue(ctx, promise);
+  JS_FreeValue(ctx, resolving_funcs[0]);
+  JS_FreeValue(ctx, resolving_funcs[1]);
+
+  JSRuntime* rt = JS_GetRuntime(ctx);
+  JSRT_Runtime* jsrt_rt = (JSRT_Runtime*)JS_GetRuntimeOpaque(rt);
+  if (!jsrt_rt || !jsrt_rt->uv_loop) {
+    JS_FreeValue(ctx, job->resolve_func);
+    JS_FreeValue(ctx, job->reject_func);
+    JS_FreeValue(ctx, job->promise);
+    free(job->input_bytes);
+    free(job);
+    JS_FreeValue(ctx, promise);
+    return JS_ThrowInternalError(ctx, "Event loop not available");
+  }
+
+  int ret = uv_queue_work(jsrt_rt->uv_loop, &job->req, jsrt_wasm_async_compile_work, jsrt_wasm_async_after_work);
+  if (ret != 0) {
+    JS_FreeValue(ctx, job->resolve_func);
+    JS_FreeValue(ctx, job->reject_func);
+    JS_FreeValue(ctx, job->promise);
+    free(job->input_bytes);
+    free(job);
+    JS_FreeValue(ctx, promise);
+    return JS_ThrowInternalError(ctx, "Failed to queue WebAssembly.compile work");
+  }
+
+  return promise;
+}
+
+static JSValue js_webassembly_instantiate_async(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
+  if (argc < 1) {
+    return JS_ThrowTypeError(ctx, "WebAssembly.instantiate requires at least 1 argument");
+  }
+
+  jsrt_wasm_module_data_t* module_data = JS_GetOpaque(argv[0], js_webassembly_module_class_id);
+  if (module_data) {
+    JSValue module_obj = JS_DupValue(ctx, argv[0]);
+    JSValue import_obj = JS_UNDEFINED;
+    if (argc >= 2) {
+      import_obj = JS_DupValue(ctx, argv[1]);
+    }
+
+    JSValue resolving_funcs[2];
+    JSValue promise = JS_NewPromiseCapability(ctx, resolving_funcs);
+    if (JS_IsException(promise)) {
+      JS_FreeValue(ctx, module_obj);
+      if (!JS_IsUndefined(import_obj)) {
+        JS_FreeValue(ctx, import_obj);
+      }
+      return promise;
+    }
+
+    JSValue instance = jsrt_wasm_instantiate_module(ctx, module_obj, import_obj);
+    JS_FreeValue(ctx, module_obj);
+    if (!JS_IsUndefined(import_obj)) {
+      JS_FreeValue(ctx, import_obj);
+    }
+
+    if (JS_IsException(instance)) {
+      JSValue exception = JS_GetException(ctx);
+      JSValue args[1] = {exception};
+      JS_Call(ctx, resolving_funcs[1], JS_UNDEFINED, 1, args);
+      JS_FreeValue(ctx, args[0]);
+    } else {
+      JSValue args[1] = {instance};
+      JS_Call(ctx, resolving_funcs[0], JS_UNDEFINED, 1, args);
+      JS_FreeValue(ctx, args[0]);
+    }
+
+    JS_FreeValue(ctx, resolving_funcs[0]);
+    JS_FreeValue(ctx, resolving_funcs[1]);
+    return promise;
+  }
+
+  size_t size;
+  uint8_t* source = get_arraybuffer_bytes_safe(ctx, argv[0], &size);
+  if (!source) {
+    return JS_ThrowTypeError(ctx,
+                             "First argument must be a WebAssembly.Module or a non-detached ArrayBuffer or TypedArray");
+  }
+
+  size_t alloc_size = size > 0 ? size : 1;
+  uint8_t* copy = malloc(alloc_size);
+  if (!copy) {
+    return JS_ThrowOutOfMemory(ctx);
+  }
+  if (size > 0) {
+    memcpy(copy, source, size);
+  } else {
+    copy[0] = 0;
+  }
+
+  JSValue resolving_funcs[2];
+  JSValue promise = JS_NewPromiseCapability(ctx, resolving_funcs);
+  if (JS_IsException(promise)) {
+    free(copy);
+    return promise;
+  }
+
+  jsrt_wasm_async_job_t* job = malloc(sizeof(jsrt_wasm_async_job_t));
+  if (!job) {
+    free(copy);
+    JS_FreeValue(ctx, resolving_funcs[0]);
+    JS_FreeValue(ctx, resolving_funcs[1]);
+    JS_FreeValue(ctx, promise);
+    return JS_ThrowOutOfMemory(ctx);
+  }
+
+  memset(job, 0, sizeof(*job));
+  job->ctx = ctx;
+  job->kind = JSRT_WASM_ASYNC_INSTANTIATE_BYTES;
+  job->input_bytes = copy;
+  job->input_size = size;
+  job->req.data = job;
+  job->resolve_func = JS_DupValue(ctx, resolving_funcs[0]);
+  job->reject_func = JS_DupValue(ctx, resolving_funcs[1]);
+  job->promise = JS_DupValue(ctx, promise);
+  if (argc >= 2 && !JS_IsUndefined(argv[1])) {
+    job->import_object = JS_DupValue(ctx, argv[1]);
+  } else {
+    job->import_object = JS_UNDEFINED;
+  }
+  JS_FreeValue(ctx, resolving_funcs[0]);
+  JS_FreeValue(ctx, resolving_funcs[1]);
+
+  JSRuntime* rt = JS_GetRuntime(ctx);
+  JSRT_Runtime* jsrt_rt = (JSRT_Runtime*)JS_GetRuntimeOpaque(rt);
+  if (!jsrt_rt || !jsrt_rt->uv_loop) {
+    if (!JS_IsUndefined(job->import_object)) {
+      JS_FreeValue(ctx, job->import_object);
+    }
+    JS_FreeValue(ctx, job->resolve_func);
+    JS_FreeValue(ctx, job->reject_func);
+    JS_FreeValue(ctx, job->promise);
+    free(job->input_bytes);
+    free(job);
+    JS_FreeValue(ctx, promise);
+    return JS_ThrowInternalError(ctx, "Event loop not available");
+  }
+
+  int ret = uv_queue_work(jsrt_rt->uv_loop, &job->req, jsrt_wasm_async_compile_work, jsrt_wasm_async_after_work);
+  if (ret != 0) {
+    if (!JS_IsUndefined(job->import_object)) {
+      JS_FreeValue(ctx, job->import_object);
+    }
+    JS_FreeValue(ctx, job->resolve_func);
+    JS_FreeValue(ctx, job->reject_func);
+    JS_FreeValue(ctx, job->promise);
+    free(job->input_bytes);
+    free(job);
+    JS_FreeValue(ctx, promise);
+    return JS_ThrowInternalError(ctx, "Failed to queue WebAssembly.instantiate work");
+  }
+
+  return promise;
 }
 
 // Helper functions to throw WebAssembly errors
@@ -2306,6 +2686,14 @@ void JSRT_RuntimeSetupStdWebAssembly(JSRT_Runtime* rt) {
   // Add validate function (non-enumerable, writable, configurable per spec)
   JS_DefinePropertyValueStr(rt->ctx, webassembly, "validate",
                             JS_NewCFunction(rt->ctx, js_webassembly_validate, "validate", 1),
+                            JS_PROP_WRITABLE | JS_PROP_CONFIGURABLE);
+
+  // Add compile and instantiate promise-based APIs
+  JS_DefinePropertyValueStr(rt->ctx, webassembly, "compile",
+                            JS_NewCFunction(rt->ctx, js_webassembly_compile_async, "compile", 1),
+                            JS_PROP_WRITABLE | JS_PROP_CONFIGURABLE);
+  JS_DefinePropertyValueStr(rt->ctx, webassembly, "instantiate",
+                            JS_NewCFunction(rt->ctx, js_webassembly_instantiate_async, "instantiate", 2),
                             JS_PROP_WRITABLE | JS_PROP_CONFIGURABLE);
 
   // Get Symbol.toStringTag for proper class identification

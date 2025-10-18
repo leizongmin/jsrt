@@ -132,6 +132,7 @@ JSValue js_socket_connect(JSContext* ctx, JSValueConst this_val, int argc, JSVal
   char prop_name[64];
   snprintf(prop_name, sizeof(prop_name), "__active_socket_%p__", (void*)conn);
   JSValue global = JS_GetGlobalObject(ctx);
+  JSRT_Debug("js_socket_connect: setting global property '%s' for conn=%p", prop_name, conn);
   JS_SetPropertyStr(ctx, global, prop_name, JS_DupValue(ctx, conn->socket_obj));
   JS_FreeValue(ctx, global);
 

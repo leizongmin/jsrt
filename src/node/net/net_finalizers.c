@@ -16,12 +16,14 @@ static void add_deferred_cleanup(void* ptr, char* string1, char* string2) {
   while (current) {
     if (current->ptr == ptr) {
       // Already in list, don't add again
+      JSRT_Debug("add_deferred_cleanup: ptr=%p already in list, skipping", ptr);
       return;
     }
     current = current->next;
   }
 
   // Not in list, add it
+  JSRT_Debug("add_deferred_cleanup: adding ptr=%p string1=%p string2=%p", ptr, string1, string2);
   DeferredCleanup* node = malloc(sizeof(DeferredCleanup));
   if (node) {
     node->ptr = ptr;
@@ -36,13 +38,19 @@ void jsrt_net_cleanup_deferred(void) {
   DeferredCleanup* current = deferred_cleanup_head;
   while (current) {
     DeferredCleanup* next = current->next;
+    JSRT_Debug("jsrt_net_cleanup_deferred: freeing ptr=%p string1=%p string2=%p", current->ptr, current->string1,
+               current->string2);
     if (current->string1) {
+      JSRT_Debug("jsrt_net_cleanup_deferred: freeing string1=%p", current->string1);
       free(current->string1);
     }
     if (current->string2) {
+      JSRT_Debug("jsrt_net_cleanup_deferred: freeing string2=%p", current->string2);
       free(current->string2);
     }
+    JSRT_Debug("jsrt_net_cleanup_deferred: freeing ptr=%p", current->ptr);
     free(current->ptr);
+    JSRT_Debug("jsrt_net_cleanup_deferred: freeing node=%p", current);
     free(current);
     current = next;
   }
@@ -63,6 +71,8 @@ void socket_timeout_timer_close_callback(uv_handle_t* handle) {
     if (conn->close_count == 0) {
       // Defer freeing until after loop closes to avoid use-after-free in uv_walk
       add_deferred_cleanup(conn, conn->host, conn->encoding);
+      // Mark as -1 to indicate cleanup has been deferred
+      conn->close_count = -1;
     }
   }
 }
@@ -79,6 +89,9 @@ void socket_close_callback(uv_handle_t* handle) {
       // Defer freeing until after loop closes to avoid use-after-free in uv_walk
       JSRT_Debug("socket_close_callback: deferring cleanup for conn=%p", conn);
       add_deferred_cleanup(conn, conn->host, conn->encoding);
+      // Mark as -1 to indicate cleanup has been deferred
+      // This prevents finalizer from trying to defer cleanup again
+      conn->close_count = -1;
     }
   } else {
     JSRT_Debug("socket_close_callback: handle->data is NULL");
@@ -96,6 +109,7 @@ void jsrt_net_remove_active_socket_ref(JSContext* ctx, JSNetConnection* conn) {
   snprintf(prop_name, sizeof(prop_name), "__active_socket_%p__", (void*)conn);
   JSValue global = JS_GetGlobalObject(ctx);
   JSAtom atom = JS_NewAtom(ctx, prop_name);
+  JSRT_Debug("jsrt_net_remove_active_socket_ref: removing global property '%s' for conn=%p", prop_name, conn);
   JS_DeleteProperty(ctx, global, atom, 0);
   JS_FreeAtom(ctx, atom);
   JS_FreeValue(ctx, global);
@@ -111,11 +125,6 @@ void js_socket_finalizer(JSRuntime* rt, JSValue val) {
   JSRT_Debug("js_socket_finalizer: called for conn=%p connecting=%d connected=%d destroyed=%d in_callback=%d", conn,
              conn->connecting, conn->connected, conn->destroyed, conn->in_callback);
 
-  // Remove from active sockets global properties if present
-  if (conn->ctx) {
-    jsrt_net_remove_active_socket_ref(conn->ctx, conn);
-  }
-
   // If socket is in a callback, we MUST NOT finalize (callback is using the socket)
   // Return early and let the callback complete
   if (conn->in_callback) {
@@ -129,6 +138,18 @@ void js_socket_finalizer(JSRuntime* rt, JSValue val) {
   if (conn->connecting || conn->connected) {
     JSRT_Debug("js_socket_finalizer: socket is connecting/connected, skipping finalization");
     return;
+  }
+
+  // If close_count is -1, cleanup has already been deferred, skip finalization
+  if (conn->close_count == -1) {
+    JSRT_Debug("js_socket_finalizer: cleanup already deferred for conn=%p, skipping", conn);
+    return;
+  }
+
+  // Remove from active sockets global properties if present
+  // Only do this if we're actually going to finalize
+  if (conn->ctx) {
+    jsrt_net_remove_active_socket_ref(conn->ctx, conn);
   }
 
   // Socket is being garbage collected
@@ -154,6 +175,7 @@ void js_socket_finalizer(JSRuntime* rt, JSValue val) {
 
   // Initialize close_count if not already set (e.g., by destroy())
   if (conn->close_count == 0) {
+    JSRT_Debug("js_socket_finalizer: close_count is 0, initiating cleanup for conn=%p", conn);
     // Close timeout timer if it's initialized
     if (conn->timeout_timer_initialized && conn->timeout_timer) {
       uv_timer_stop(conn->timeout_timer);
@@ -166,7 +188,10 @@ void js_socket_finalizer(JSRuntime* rt, JSValue val) {
     }
 
     // Close socket handle
-    if (!uv_is_closing((uv_handle_t*)&conn->handle)) {
+    bool handle_is_closing = uv_is_closing((uv_handle_t*)&conn->handle);
+    JSRT_Debug("js_socket_finalizer: handle is_closing=%d for conn=%p", handle_is_closing, conn);
+    if (!handle_is_closing) {
+      JSRT_Debug("js_socket_finalizer: closing handle for conn=%p", conn);
       conn->close_count++;
       conn->handle.data = conn;
       uv_close((uv_handle_t*)&conn->handle, socket_close_callback);
@@ -174,8 +199,11 @@ void js_socket_finalizer(JSRuntime* rt, JSValue val) {
 
     // Defer freeing even if no handles to close, to avoid use-after-free in uv_walk
     if (conn->close_count == 0) {
+      JSRT_Debug("js_socket_finalizer: no handles to close, adding to deferred cleanup for conn=%p", conn);
       add_deferred_cleanup(conn, conn->host, conn->encoding);
     }
+  } else {
+    JSRT_Debug("js_socket_finalizer: close_count=%d, cleanup already initiated for conn=%p", conn->close_count, conn);
   }
   // else: destroy() was called, close_count already set, cleanup will happen in callbacks
 }
@@ -194,6 +222,8 @@ void server_callback_timer_close_callback(uv_handle_t* handle) {
     if (server->close_count == 0) {
       // Defer freeing until after loop closes to avoid use-after-free in uv_walk
       add_deferred_cleanup(server, server->host, NULL);
+      // Mark as -1 to indicate cleanup has been deferred
+      server->close_count = -1;
     }
   }
 }
@@ -207,6 +237,8 @@ void server_close_callback(uv_handle_t* handle) {
     if (server->close_count == 0) {
       // Defer freeing until after loop closes to avoid use-after-free in uv_walk
       add_deferred_cleanup(server, server->host, NULL);
+      // Mark as -1 to indicate cleanup has been deferred
+      server->close_count = -1;
     }
   }
 }
@@ -217,12 +249,18 @@ void js_server_finalizer(JSRuntime* rt, JSValue val) {
     return;
   }
 
-  JSRT_Debug("js_server_finalizer: called for server=%p listening=%d destroyed=%d in_callback=%d", server,
-             server->listening, server->destroyed, server->in_callback);
+  JSRT_Debug("js_server_finalizer: called for server=%p listening=%d destroyed=%d in_callback=%d close_count=%d",
+             server, server->listening, server->destroyed, server->in_callback, server->close_count);
 
   // If server is in a callback, we MUST NOT finalize
   if (server->in_callback) {
     JSRT_Debug("js_server_finalizer: server is in callback, skipping finalization");
+    return;
+  }
+
+  // If close_count is -1, cleanup has already been deferred, skip finalization
+  if (server->close_count == -1) {
+    JSRT_Debug("js_server_finalizer: cleanup already deferred for server=%p, skipping", server);
     return;
   }
 

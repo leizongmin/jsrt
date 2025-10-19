@@ -2,16 +2,17 @@
 
 ## Implementation Status
 
-Last Updated: 2025-10-18
+Last Updated: 2025-10-19
 
 ### Namespace & Validation
 | API | Status | Notes |
 |-----|--------|-------|
 | WebAssembly.validate(bytes) | ✅ Implemented | Full validation via WAMR |
-| WebAssembly.compile(bytes) | ❌ Not Implemented | Phase 5 - Async API |
-| WebAssembly.instantiate(...) | ❌ Not Implemented | Phase 5 - Async API |
-| WebAssembly.compileStreaming() | ❌ Not Implemented | Phase 6 - Optional |
-| WebAssembly.instantiateStreaming() | ❌ Not Implemented | Phase 6 - Optional |
+| WebAssembly.compile(bytes) | ✅ Implemented | Async compilation via Promise |
+| WebAssembly.instantiate(bytes, imports) | ✅ Implemented | Returns Promise<{module, instance}> |
+| WebAssembly.instantiate(module, imports) | ✅ Implemented | Returns Promise<Instance> |
+| WebAssembly.compileStreaming(source) | ⚠️ Limited | Fallback: buffers full response, no incremental compilation |
+| WebAssembly.instantiateStreaming(source, imports) | ⚠️ Limited | Fallback: buffers full response, no incremental compilation |
 
 ### WebAssembly.Module
 | API | Status | Notes |
@@ -46,9 +47,10 @@ Last Updated: 2025-10-18
 ### WebAssembly.Global
 | API | Status | Notes |
 |-----|--------|-------|
-| new WebAssembly.Global(descriptor, value) | ❌ Not Implemented | Phase 4 - Planned |
-| global.value | ❌ Not Implemented | Phase 4 - Planned |
-| global.valueOf() | ❌ Not Implemented | Phase 4 - Planned |
+| new WebAssembly.Global(descriptor, value) | 🔴 Blocked | WAMR C API limitation - returns garbage values |
+| global.value (getter) | 🔴 Blocked | Returns uninitialized memory (WAMR limitation) |
+| global.value (setter) | 🔴 Blocked | Cannot set values (WAMR limitation) |
+| global.valueOf() | 🔴 Blocked | Returns garbage values (WAMR limitation) |
 
 ### Error Types
 | API | Status | Notes |
@@ -77,16 +79,28 @@ Last Updated: 2025-10-18
   - `wasm_table_grow()` explicitly blocked for host calls
   - Resolution: Table objects work when exported from WASM instances
 
+- **Global API:** WAMR v2.4.1 C API does not support standalone Global objects (discovered 2025-10-19)
+  - Created Global objects are non-functional - **return garbage values**
+  - `wasm_global_get()` returns uninitialized memory
+  - Initial values passed to `wasm_global_new()` are not accessible
+  - `wasm_global_set()` cannot reliably store values
+  - **Impact:** Tasks 4.6-4.8 reopened as BLOCKED, WPT Global tests 0% pass rate
+  - See: `docs/plan/webassembly-plan/wasm-phase4-global-blocker.md`
+  - Resolution: Global objects may work when exported from WASM instances (not yet tested)
+
 ### Validation Limitations
 - **WAMR validation:** WAMR is more permissive than spec requires
   - Some invalid modules may be accepted
   - Cannot be fixed without WAMR changes or custom validation layer
 
 ### WPT Test Status
-- **Tests run:** 8 test files
-- **Pass rate:** 0% (expected - test infrastructure issues)
-- **Main blocker:** WasmModuleBuilder helper not loading properly
-- **Unit tests:** 100% pass rate (208/208 tests)
+- **Tests run:** 8 test files (wasm/jsapi category)
+- **Pass rate:** 0% (expected - test infrastructure issues + implementation gaps)
+- **Main blockers:**
+  - WasmModuleBuilder helper not loading properly
+  - Memory/Table/Global APIs blocked by WAMR limitations
+- **Unit tests:** 100% pass rate (212/212 tests)
+- **Note:** Global WPT tests not added due to 0% functionality (would add 3 more failing tests)
 
 ## Environment
 

@@ -18,6 +18,7 @@
 extern JSValue JSRT_CreateAssertModule(JSContext* ctx);
 extern JSValue JSRT_CreateFFIModule(JSContext* ctx);
 extern JSValue jsrt_get_process_module(JSContext* ctx);
+extern JSValue JSRT_InitNodeWASI(JSContext* ctx);
 
 /**
  * Check if specifier is a builtin
@@ -82,6 +83,11 @@ static JSValue load_jsrt_module(JSContext* ctx, const char* module_name) {
 
   if (strcmp(module_name, "ffi") == 0) {
     return JSRT_CreateFFIModule(ctx);
+  }
+
+  if (strcmp(module_name, "wasi") == 0) {
+    // WASI is available in both jsrt: and node: namespaces
+    return JSRT_InitNodeWASI(ctx);
   }
 
   return jsrt_module_throw_error(ctx, JSRT_MODULE_NOT_FOUND, "Unknown jsrt module: %s", module_name);

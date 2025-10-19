@@ -4,8 +4,7 @@
 // Use a real WASM file from WPT that we know works
 function createModuleWithFunctionImport() {
   const fs = require('node:fs');
-  const wasmPath =
-    '/repo/wpt/wasm/webapi/esm-integration/resources/wasm-import-func.wasm';
+  const wasmPath = 'test/resources/wasm-import-func.wasm';
   const wasmBytes = fs.readFileSync(wasmPath);
   return new WebAssembly.Module(wasmBytes);
 }

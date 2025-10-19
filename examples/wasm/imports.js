@@ -15,8 +15,7 @@ console.log('=== WebAssembly Imports Example ===\n');
 
 // Load a real WASM file that has imports
 const fs = require('node:fs');
-const wasmPath =
-  '/repo/wpt/wasm/webapi/esm-integration/resources/wasm-import-func.wasm';
+const wasmPath = 'test/resources/wasm-import-func.wasm';
 
 console.log('Step 1: Load WASM file with function import');
 const wasmBytes = fs.readFileSync(wasmPath);

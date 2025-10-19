@@ -725,11 +725,13 @@ WASI defines specific error codes (EBADF, EINVAL, etc.)
 **** Testing Strategy
 Test error code conversion.
 
-*** TODO [#B] Task 3.33: Implement FD table management [P][R:HIGH][C:COMPLEX][D:3.4,2.10]
+*** IN-PROGRESS [#B] Task 3.33: Implement FD table management [P][R:HIGH][C:COMPLEX][D:3.4,2.10]
 :PROPERTIES:
 :ID: 3.33
 :CREATED: 2025-10-16T22:45:00Z
 :DEPS: 3.4,2.10
+:STATUS: 🔵 IN_PROGRESS
+:UPDATED: 2025-10-19T15:06:00Z
 :END:
 
 **** Description
@@ -757,6 +759,9 @@ Manage mapping of WASI FDs to host FDs.
 - [ ] FD allocation/deallocation works
 - [ ] Preopens registered in FD table
 - [ ] stdin/stdout/stderr registered
+
+**** Notes
+- Initial table scaffolding in place: stdio + preopen metadata registered (2025-10-19T15:06:00Z).
 
 **** Testing Strategy
 Test FD table operations.

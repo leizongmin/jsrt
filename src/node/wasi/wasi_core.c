@@ -14,12 +14,17 @@
 #include <stdlib.h>
 #include <string.h>
 #include <sys/stat.h>
+#include "../../../deps/wamr/core/shared/platform/include/platform_wasi_types.h"
 
 // Default values
 #define WASI_DEFAULT_VERSION "preview1"
 #define WASI_DEFAULT_STDIN 0
 #define WASI_DEFAULT_STDOUT 1
 #define WASI_DEFAULT_STDERR 2
+#define WASI_FD_TABLE_INITIAL_CAPACITY 8
+
+static int jsrt_wasi_fd_table_set(jsrt_wasi_t* wasi, uint32_t fd, int host_fd, uint8_t filetype, uint32_t rights_base,
+                                  uint32_t rights_inheriting, uint16_t fd_flags, const jsrt_wasi_preopen_t* preopen);
 
 /**
  * Helper: Duplicate string or return NULL
@@ -479,6 +484,109 @@ void jsrt_wasi_free_options(jsrt_wasi_options_t* options) {
   memset(options, 0, sizeof(jsrt_wasi_options_t));
 }
 
+static int jsrt_wasi_fd_table_ensure(jsrt_wasi_t* wasi, uint32_t fd) {
+  if (fd < wasi->fd_table_capacity) {
+    return 0;
+  }
+
+  size_t new_capacity = wasi->fd_table_capacity ? wasi->fd_table_capacity : WASI_FD_TABLE_INITIAL_CAPACITY;
+  while (fd >= new_capacity) {
+    new_capacity *= 2;
+  }
+
+  jsrt_wasi_fd_entry* new_table = realloc(wasi->fd_table, new_capacity * sizeof(jsrt_wasi_fd_entry));
+  if (!new_table) {
+    return -1;
+  }
+
+  // Zero initialise new slots
+  if (new_capacity > wasi->fd_table_capacity) {
+    size_t old_count = wasi->fd_table_capacity;
+    memset(new_table + old_count, 0, (new_capacity - old_count) * sizeof(jsrt_wasi_fd_entry));
+  }
+
+  wasi->fd_table = new_table;
+  wasi->fd_table_capacity = new_capacity;
+  return 0;
+}
+
+static int jsrt_wasi_fd_table_set(jsrt_wasi_t* wasi, uint32_t fd, int host_fd, uint8_t filetype, uint32_t rights_base,
+                                  uint32_t rights_inheriting, uint16_t fd_flags, const jsrt_wasi_preopen_t* preopen) {
+  if (jsrt_wasi_fd_table_ensure(wasi, fd) < 0) {
+    return -1;
+  }
+
+  jsrt_wasi_fd_entry* entry = &wasi->fd_table[fd];
+  entry->in_use = true;
+  entry->host_fd = host_fd;
+  entry->filetype = filetype;
+  entry->rights_base = rights_base;
+  entry->rights_inheriting = rights_inheriting;
+  entry->fd_flags = fd_flags;
+  entry->preopen = preopen;
+
+  if (fd >= wasi->fd_table_count) {
+    wasi->fd_table_count = fd + 1;
+  }
+
+  return 0;
+}
+
+int jsrt_wasi_init_fd_table(jsrt_wasi_t* wasi) {
+  if (!wasi) {
+    return -1;
+  }
+
+  wasi->fd_table_capacity = 0;
+  wasi->fd_table_count = 0;
+  wasi->fd_table = NULL;
+
+  if (jsrt_wasi_fd_table_ensure(wasi, 2) < 0) {
+    return -1;
+  }
+
+  if (jsrt_wasi_fd_table_set(wasi, 0, wasi->options.stdin_fd, __WASI_FILETYPE_CHARACTER_DEVICE,
+                             __WASI_RIGHT_FD_READ | __WASI_RIGHT_FD_FDSTAT_SET_FLAGS, 0, 0, NULL) < 0) {
+    return -1;
+  }
+
+  if (jsrt_wasi_fd_table_set(wasi, 1, wasi->options.stdout_fd, __WASI_FILETYPE_CHARACTER_DEVICE,
+                             __WASI_RIGHT_FD_WRITE | __WASI_RIGHT_FD_FDSTAT_SET_FLAGS, 0, 0, NULL) < 0) {
+    return -1;
+  }
+
+  if (jsrt_wasi_fd_table_set(wasi, 2, wasi->options.stderr_fd, __WASI_FILETYPE_CHARACTER_DEVICE,
+                             __WASI_RIGHT_FD_WRITE | __WASI_RIGHT_FD_FDSTAT_SET_FLAGS, 0, 0, NULL) < 0) {
+    return -1;
+  }
+
+  for (size_t i = 0; i < wasi->options.preopen_count; i++) {
+    const jsrt_wasi_preopen_t* preopen = &wasi->options.preopens[i];
+    uint32_t fd = 3 + (uint32_t)i;
+    uint32_t rights = __WASI_RIGHT_PATH_OPEN | __WASI_RIGHT_FD_READDIR | __WASI_RIGHT_PATH_FILESTAT_GET |
+                      __WASI_RIGHT_PATH_FILESTAT_SET_TIMES | __WASI_RIGHT_PATH_UNLINK_FILE |
+                      __WASI_RIGHT_PATH_CREATE_DIRECTORY | __WASI_RIGHT_PATH_REMOVE_DIRECTORY;
+    if (jsrt_wasi_fd_table_set(wasi, fd, -1, __WASI_FILETYPE_DIRECTORY, rights, rights, 0, preopen) < 0) {
+      return -1;
+    }
+  }
+
+  return 0;
+}
+
+jsrt_wasi_fd_entry* jsrt_wasi_get_fd(jsrt_wasi_t* wasi, uint32_t fd) {
+  if (!wasi || fd >= wasi->fd_table_capacity) {
+    return NULL;
+  }
+
+  jsrt_wasi_fd_entry* entry = &wasi->fd_table[fd];
+  if (!entry->in_use) {
+    return NULL;
+  }
+
+  return entry;
+}
+
 /**
  * Create WASI instance
  */
@@ -581,6 +689,12 @@ jsrt_wasi_t* jsrt_wasi_new(JSContext* ctx, const jsrt_wasi_options_t* options) {
   wasi->wamr_instance = NULL;
   wasi->exec_env = NULL;
 
+  if (jsrt_wasi_init_fd_table(wasi) < 0) {
+    jsrt_wasi_free(wasi);
+    JS_ThrowOutOfMemory(ctx);
+    return NULL;
+  }
+
   JSRT_Debug("Created WASI instance: version=%s, args=%zu, env=%zu, preopens=%zu", wasi->options.version,
              wasi->options.args_count, wasi->options.env_count, wasi->options.preopen_count);
 
@@ -621,5 +735,6 @@ void jsrt_wasi_free(jsrt_wasi_t* wasi) {
   // The Instance finalizer will clean up the WAMR instance when appropriate.
   // Therefore, we don't (and must not) free wamr_instance here.
 
+  free(wasi->fd_table);
   free(wasi);
 }

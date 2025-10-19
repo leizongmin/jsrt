@@ -8,7 +8,7 @@
 * Task Metadata
 :PROPERTIES:
 :CREATED: 2025-10-16T22:45:00Z
-:UPDATED: 2025-10-19T14:33:00Z
+:UPDATED: 2025-10-19T15:06:00Z
 :STATUS: 🔵 IN_PROGRESS
 :PROGRESS: 59/141
 :COMPLETION: 42%
@@ -129,26 +129,26 @@ See individual phase documents for dependency graphs.
 :CURRENT_PHASE: Phase 3: WASI Import Implementation
 :PROGRESS: 59/141
 :COMPLETION: 42%
-:ACTIVE_TASK: Task 3.14 - Implement path_open sandboxed loaders
-:UPDATED: 2025-10-19T14:33:00Z
+:ACTIVE_TASK: Task 3.33 - Implement FD table management
+:UPDATED: 2025-10-19T15:06:00Z
 :END:
 
 ** Current Status
 - Phase: Phase 3: WASI Import Implementation
 - Progress: 59/141 tasks (42%)
-- Active: Implement path_open sandbox rules (Task 3.14)
+- Active: Build FD table foundations (Task 3.33)
 
 ** Next Up
 High-priority tasks ready to start (Phase 3):
+- [ ] Task 3.33: Implement FD table management
 - [ ] Task 3.14: Implement path_open
 - [ ] Task 3.15: Implement path_filestat_get
 - [ ] Task 3.16: Implement path_create_directory
-- [ ] Task 3.33: Implement FD table management
 
 See [[file:node-wasi-plan/phases/phase3-wasi-imports.md][Phase 3 document]] for details.
 
 ** Parallel Opportunities
-Phase 3 path operations (3.14-3.19) can progress in parallel once FD table groundwork (3.33) starts.
+Phase 3 path operations (3.14-3.19) unlock once FD table groundwork (3.33) stabilises; socket/poll tasks remain queued.
 
 ** Blocking Dependencies
 None - All WebAssembly dependencies are satisfied.
@@ -179,6 +179,7 @@ See: docs/webassembly-api-compatibility.md for details.
 ** Recent Changes
 | Timestamp | Action | Task ID | Details |
 |-----------|--------|---------|---------|
+| 2025-10-19T15:06:00Z | Updated | Task 3.33 | Added fd table scaffolding covering stdio + preopen metadata |
 | 2025-10-19T14:33:00Z | Updated | Phase 3 | Completed fd_tell/fd_fdstat*, clock_res_get, proc_exit logic, and memory validation |
 | 2025-10-19T13:38:53Z | Updated | Phase 2 & 3 | Documented Phase 2 completion, Phase 3 progress, and WASI import safety fix |
 | 2025-10-19T08:00:00Z | Completed | Phase 1 | All 8 research and design tasks completed |

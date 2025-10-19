@@ -11,6 +11,7 @@
 #include <quickjs.h>
 #include <stdbool.h>
 #include <stddef.h>
+#include <stdint.h>
 #include <wasm_export.h>
 
 #ifdef __cplusplus
@@ -25,6 +26,16 @@ typedef struct {
   char* virtual_path;  // Virtual path in WASM (e.g., "/sandbox")
   char* real_path;     // Real filesystem path (e.g., "/tmp/wasm")
 } jsrt_wasi_preopen_t;
+
+typedef struct {
+  bool in_use;
+  int host_fd;
+  uint32_t rights_base;
+  uint32_t rights_inheriting;
+  uint16_t fd_flags;
+  uint8_t filetype;
+  const jsrt_wasi_preopen_t* preopen;  // Non-NULL for preopened directories
+} jsrt_wasi_fd_entry;
 
 /**
  * WASI options structure
@@ -82,6 +93,11 @@ typedef struct {
   int exit_code;          // Exit code from _start (if return_on_exit=true)
   bool exit_requested;    // proc_exit invoked during execution
   bool memory_validated;  // Default memory export present
+
+  // File descriptor table
+  jsrt_wasi_fd_entry* fd_table;
+  size_t fd_table_capacity;
+  size_t fd_table_count;
 } jsrt_wasi_t;
 
 /**
@@ -112,6 +128,9 @@ int jsrt_wasi_parse_options(JSContext* ctx, JSValue options_obj, jsrt_wasi_optio
  * @param options Options structure to free
  */
 void jsrt_wasi_free_options(jsrt_wasi_options_t* options);
+
+int jsrt_wasi_init_fd_table(jsrt_wasi_t* wasi);
+jsrt_wasi_fd_entry* jsrt_wasi_get_fd(jsrt_wasi_t* wasi, uint32_t fd);
 
 /**
  * Get import object for WebAssembly.Instance

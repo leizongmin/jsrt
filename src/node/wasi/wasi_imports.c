@@ -5,16 +5,28 @@
  * Phase 3: Full WASI syscall implementation.
  */
 
+#include "../../runtime.h"
 #include "../../util/debug.h"
 #include "wasi.h"
 
+#include <errno.h>
+#include <fcntl.h>
 #include <stdbool.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <time.h>
+#ifdef _WIN32
+#include <io.h>
+#define wasi_close_fd _close
+#else
 #include <unistd.h>
+#define wasi_close_fd close
+#endif
+#include <sys/stat.h>
+#include <sys/types.h>
+#include <uv.h>
 #include <wasm_export.h>
 #include "../../../deps/wamr/core/shared/platform/include/platform_wasi_types.h"
 
@@ -23,13 +35,31 @@
  */
 
 // WASI errno codes
-#define WASI_ESUCCESS 0  // Success
-#define WASI_EBADF 8     // Bad file descriptor
-#define WASI_EINVAL 28   // Invalid argument
-#define WASI_ENOSYS 52   // Function not implemented
-#define WASI_EFAULT 21   // Bad address (pointer out of bounds)
-#define WASI_EIO 29      // I/O error
-#define WASI_ESPIPE 29   // Illegal seek (same as EIO in WASI)
+#define WASI_ESUCCESS __WASI_ESUCCESS
+#define WASI_EBADF __WASI_EBADF
+#define WASI_EINVAL __WASI_EINVAL
+#define WASI_ENOSYS __WASI_ENOSYS
+#define WASI_EFAULT __WASI_EFAULT
+#define WASI_EIO __WASI_EIO
+#define WASI_ESPIPE __WASI_ESPIPE
+#define WASI_ENOENT __WASI_ENOENT
+#define WASI_ENOTDIR __WASI_ENOTDIR
+#define WASI_EPERM __WASI_EPERM
+#define WASI_EACCES __WASI_EACCES
+#define WASI_EEXIST __WASI_EEXIST
+#define WASI_ENOTEMPTY __WASI_ENOTEMPTY
+#define WASI_ENOTCAPABLE __WASI_ENOTCAPABLE
+#define WASI_ENOMEM __WASI_ENOMEM
+#define WASI_ENFILE __WASI_ENFILE
+#define WASI_EMFILE __WASI_EMFILE
+#define WASI_ENAMETOOLONG __WASI_ENAMETOOLONG
+#define WASI_ELOOP __WASI_ELOOP
+#define WASI_ENOSPC __WASI_ENOSPC
+#define WASI_EBUSY __WASI_EBUSY
+#define WASI_ENXIO __WASI_ENXIO
+#define WASI_ENOTSUP __WASI_ENOTSUP
+
+static uint8_t* get_wasm_memory(jsrt_wasi_t* wasi, uint32_t offset, uint32_t size);
 
 static inline void write_u16_le(uint8_t* dst, uint16_t value) {
   dst[0] = (uint8_t)(value & 0xFF);
@@ -40,6 +70,294 @@ static inline void write_u64_le(uint8_t* dst, uint64_t value) {
   for (int i = 0; i < 8; i++) {
     dst[i] = (uint8_t)((value >> (i * 8)) & 0xFF);
   }
+}
+
+static uv_loop_t* wasi_get_uv_loop(JSContext* ctx) {
+  if (!ctx) {
+    return NULL;
+  }
+  JSRuntime* rt = JS_GetRuntime(ctx);
+  JSRT_Runtime* jsrt_rt = (JSRT_Runtime*)JS_GetRuntimeOpaque(rt);
+  return jsrt_rt ? jsrt_rt->uv_loop : NULL;
+}
+
+static char* wasi_strndup(const char* src, size_t len) {
+  char* out = malloc(len + 1);
+  if (!out) {
+    return NULL;
+  }
+  memcpy(out, src, len);
+  out[len] = '\0';
+  return out;
+}
+
+static uint64_t uv_timespec_to_ns(const uv_timespec_t* ts) {
+  if (!ts) {
+    return 0;
+  }
+  return (uint64_t)ts->tv_sec * 1000000000ULL + (uint64_t)ts->tv_nsec;
+}
+
+static uint32_t wasi_errno_from_errno(int err) {
+  if (err == 0) {
+    return WASI_ESUCCESS;
+  }
+  switch (err) {
+    case EACCES:
+      return WASI_EACCES;
+    case EEXIST:
+      return WASI_EEXIST;
+    case ENOENT:
+      return WASI_ENOENT;
+    case ENOTDIR:
+      return WASI_ENOTDIR;
+    case ENOTEMPTY:
+      return WASI_ENOTEMPTY;
+    case EPERM:
+      return WASI_EPERM;
+    case EISDIR:
+      return WASI_ENOTCAPABLE;  // Opening directory as file not permitted
+    case ENOSPC:
+      return WASI_ENOSPC;
+    case ENOMEM:
+      return WASI_ENOMEM;
+    case ENFILE:
+      return WASI_ENFILE;
+    case EMFILE:
+      return WASI_EMFILE;
+    case ENAMETOOLONG:
+      return WASI_ENAMETOOLONG;
+    case ELOOP:
+      return WASI_ELOOP;
+    case EBUSY:
+      return WASI_EBUSY;
+    case ENXIO:
+      return WASI_ENXIO;
+#ifdef ENOTSUP
+    case ENOTSUP:
+      return WASI_ENOTSUP;
+#endif
+#ifdef EOPNOTSUPP
+#if defined(ENOTSUP) && EOPNOTSUPP == ENOTSUP
+#else
+    case EOPNOTSUPP:
+      return WASI_ENOTSUP;
+#endif
+#endif
+    case EBADF:
+      return WASI_EBADF;
+    case EINVAL:
+      return WASI_EINVAL;
+    case EFAULT:
+      return WASI_EFAULT;
+    default:
+      return WASI_EIO;
+  }
+}
+
+static uint8_t wasi_filetype_from_mode(mode_t mode) {
+  if (S_ISREG(mode)) {
+    return __WASI_FILETYPE_REGULAR_FILE;
+  }
+  if (S_ISDIR(mode)) {
+    return __WASI_FILETYPE_DIRECTORY;
+  }
+  if (S_ISCHR(mode)) {
+    return __WASI_FILETYPE_CHARACTER_DEVICE;
+  }
+#ifdef S_ISBLK
+  if (S_ISBLK(mode)) {
+    return __WASI_FILETYPE_BLOCK_DEVICE;
+  }
+#endif
+#ifdef S_ISSOCK
+  if (S_ISSOCK(mode)) {
+    return __WASI_FILETYPE_SOCKET_STREAM;
+  }
+#endif
+#ifdef S_ISLNK
+  if (S_ISLNK(mode)) {
+    return __WASI_FILETYPE_SYMBOLIC_LINK;
+  }
+#endif
+  return __WASI_FILETYPE_UNKNOWN;
+}
+
+static bool wasi_has_rights(const jsrt_wasi_fd_entry* entry, uint64_t rights) {
+  if (!entry) {
+    return false;
+  }
+  return (entry->rights_base & rights) == rights;
+}
+
+static uint32_t wasi_normalize_relative_path(const char* path, size_t len, bool allow_empty, char** out_path) {
+  if (!path || !out_path) {
+    return WASI_EINVAL;
+  }
+
+  if (len > 0 && path[0] == '/') {
+    return WASI_ENOTCAPABLE;
+  }
+
+  size_t capacity = len > 0 ? len : 1;
+  char** segments = calloc(capacity, sizeof(char*));
+  if (!segments) {
+    return WASI_ENOMEM;
+  }
+
+  size_t count = 0;
+  size_t i = 0;
+  while (i < len) {
+    while (i < len && path[i] == '/') {
+      i++;
+    }
+    size_t start = i;
+    while (i < len && path[i] != '/') {
+      i++;
+    }
+    size_t seg_len = i - start;
+    if (seg_len == 0) {
+      continue;
+    }
+    if (seg_len == 1 && path[start] == '.') {
+      continue;
+    }
+    if (seg_len == 2 && path[start] == '.' && path[start + 1] == '.') {
+      if (count == 0) {
+        for (size_t j = 0; j < count; j++) {
+          free(segments[j]);
+        }
+        free(segments);
+        return WASI_ENOTCAPABLE;
+      }
+      free(segments[--count]);
+      continue;
+    }
+    char* segment = wasi_strndup(path + start, seg_len);
+    if (!segment) {
+      for (size_t j = 0; j < count; j++) {
+        free(segments[j]);
+      }
+      free(segments);
+      return WASI_ENOMEM;
+    }
+    segments[count++] = segment;
+  }
+
+  char* normalized = NULL;
+  if (count == 0) {
+    if (!allow_empty) {
+      free(segments);
+      return WASI_ENOENT;
+    }
+    normalized = wasi_strndup("", 0);
+    if (!normalized) {
+      free(segments);
+      return WASI_ENOMEM;
+    }
+  } else {
+    size_t total_len = 0;
+    for (size_t j = 0; j < count; j++) {
+      total_len += strlen(segments[j]);
+      if (j + 1 < count) {
+        total_len += 1;  // separator
+      }
+    }
+    normalized = malloc(total_len + 1);
+    if (!normalized) {
+      for (size_t j = 0; j < count; j++) {
+        free(segments[j]);
+      }
+      free(segments);
+      return WASI_ENOMEM;
+    }
+    size_t offset = 0;
+    for (size_t j = 0; j < count; j++) {
+      size_t seg_len = strlen(segments[j]);
+      memcpy(normalized + offset, segments[j], seg_len);
+      offset += seg_len;
+      if (j + 1 < count) {
+        normalized[offset++] = '/';
+      }
+    }
+    normalized[offset] = '\0';
+  }
+
+  for (size_t j = 0; j < count; j++) {
+    free(segments[j]);
+  }
+  free(segments);
+
+  *out_path = normalized;
+  return WASI_ESUCCESS;
+}
+
+static uint32_t wasi_resolve_path(jsrt_wasi_t* wasi, jsrt_wasi_fd_entry* dir_entry, uint32_t path_ptr,
+                                  uint32_t path_len, bool allow_empty, char** out_host_path) {
+  if (!wasi || !dir_entry || !dir_entry->preopen || !dir_entry->preopen->real_path) {
+    return WASI_ENOTCAPABLE;
+  }
+
+  uint8_t* path_mem = get_wasm_memory(wasi, path_ptr, path_len);
+  if (!path_mem) {
+    return WASI_EFAULT;
+  }
+
+  char* raw = wasi_strndup((const char*)path_mem, path_len);
+  if (!raw) {
+    return WASI_ENOMEM;
+  }
+
+  char* normalized = NULL;
+  uint32_t status = wasi_normalize_relative_path(raw, path_len, allow_empty, &normalized);
+  free(raw);
+  if (status != WASI_ESUCCESS) {
+    return status;
+  }
+
+  const char* base = dir_entry->preopen->real_path;
+  size_t base_len = strlen(base);
+  size_t normalized_len = strlen(normalized);
+  bool needs_separator = normalized_len > 0;
+  bool base_has_sep = base_len > 0 && (base[base_len - 1] == '/' || base[base_len - 1] == '\\');
+
+  size_t total_len = base_len;
+  if (needs_separator && !base_has_sep) {
+    total_len += 1;
+  }
+  total_len += normalized_len;
+
+  char* host_path = malloc(total_len + 1);
+  if (!host_path) {
+    free(normalized);
+    return WASI_ENOMEM;
+  }
+
+  memcpy(host_path, base, base_len);
+  size_t offset = base_len;
+  if (needs_separator && !base_has_sep) {
+#ifdef _WIN32
+    host_path[offset++] = '\\';
+#else
+    host_path[offset++] = '/';
+#endif
+  }
+
+#ifdef _WIN32
+  for (size_t i = 0; i < normalized_len; i++) {
+    char c = normalized[i] == '/' ? '\\' : normalized[i];
+    host_path[offset++] = c;
+  }
+#else
+  memcpy(host_path + offset, normalized, normalized_len);
+  offset += normalized_len;
+#endif
+
+  host_path[offset] = '\0';
+  free(normalized);
+
+  *out_host_path = host_path;
+  return WASI_ESUCCESS;
 }
 
 /**
@@ -495,10 +813,44 @@ static JSValue wasi_fd_close(JSContext* ctx, JSValueConst this_val, int argc, JS
 
   JSRT_Debug("WASI syscall: fd_close(fd=%u)", fd);
 
-  // We don't actually close stdin/stdout/stderr
-  // For preopened directories (fd >= 3), we also don't manage real file descriptors yet
-  // This is a no-op that returns success
-  // TODO: Implement actual file descriptor management in future phases
+  if (fd <= 2) {
+    return JS_NewInt32(ctx, WASI_ESUCCESS);
+  }
+
+  jsrt_wasi_fd_entry* entry = jsrt_wasi_get_fd(wasi, fd);
+  if (!entry) {
+    return JS_NewInt32(ctx, WASI_EBADF);
+  }
+
+  if (entry->preopen != NULL) {
+    return JS_NewInt32(ctx, WASI_ESUCCESS);
+  }
+
+  int close_err = 0;
+  if (entry->host_fd >= 0) {
+    uv_loop_t* loop = wasi_get_uv_loop(wasi->ctx);
+    if (loop) {
+      uv_fs_t req;
+      int rc = uv_fs_close(loop, &req, entry->host_fd, NULL);
+      int sys_err = uv_fs_get_system_error(&req);
+      uv_fs_req_cleanup(&req);
+      entry->host_fd = -1;
+      if (rc < 0 || sys_err != 0) {
+        close_err = sys_err != 0 ? sys_err : -rc;
+      }
+    } else {
+      if (wasi_close_fd(entry->host_fd) != 0) {
+        close_err = errno;
+      }
+      entry->host_fd = -1;
+    }
+  }
+
+  if (close_err != 0) {
+    return JS_NewInt32(ctx, wasi_errno_from_errno(close_err));
+  }
+
+  jsrt_wasi_fd_table_release(wasi, fd);
 
   return JS_NewInt32(ctx, WASI_ESUCCESS);
 }
@@ -768,6 +1120,577 @@ static JSValue wasi_fd_fdstat_set_flags(JSContext* ctx, JSValueConst this_val, i
   return JS_NewInt32(ctx, WASI_ENOSYS);
 }
 
+// path_open(dirfd, dirflags, path, path_len, oflags, rights_base, rights_inheriting, fd_flags, opened_fd) -> errno
+static JSValue wasi_path_open(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv, int magic,
+                              JSValue* func_data) {
+  jsrt_wasi_t* wasi = get_wasi_instance(ctx, func_data);
+  if (!wasi || !wasi->wamr_instance) {
+    return JS_NewInt32(ctx, WASI_EINVAL);
+  }
+
+  if (argc != 9) {
+    return JS_NewInt32(ctx, WASI_EINVAL);
+  }
+
+  uint32_t dirfd;
+  uint32_t dirflags;
+  uint32_t path_ptr;
+  uint32_t path_len;
+  uint32_t oflags;
+  int64_t rights_base_i64;
+  int64_t rights_inheriting_i64;
+  uint32_t fd_flags;
+  uint32_t opened_fd_ptr;
+
+  if (JS_ToUint32(ctx, &dirfd, argv[0]) || JS_ToUint32(ctx, &dirflags, argv[1]) ||
+      JS_ToUint32(ctx, &path_ptr, argv[2]) || JS_ToUint32(ctx, &path_len, argv[3]) ||
+      JS_ToUint32(ctx, &oflags, argv[4]) || JS_ToInt64(ctx, &rights_base_i64, argv[5]) ||
+      JS_ToInt64(ctx, &rights_inheriting_i64, argv[6]) || JS_ToUint32(ctx, &fd_flags, argv[7]) ||
+      JS_ToUint32(ctx, &opened_fd_ptr, argv[8])) {
+    return JS_NewInt32(ctx, WASI_EINVAL);
+  }
+
+  (void)dirflags;  // Currently unused
+
+  uint8_t* opened_fd_mem = get_wasm_memory(wasi, opened_fd_ptr, sizeof(uint32_t));
+  if (!opened_fd_mem) {
+    return JS_NewInt32(ctx, WASI_EFAULT);
+  }
+
+  jsrt_wasi_fd_entry* dir_entry = jsrt_wasi_get_fd(wasi, dirfd);
+  if (!dir_entry) {
+    return JS_NewInt32(ctx, WASI_EBADF);
+  }
+
+  if (dir_entry->filetype != __WASI_FILETYPE_DIRECTORY) {
+    return JS_NewInt32(ctx, WASI_ENOTDIR);
+  }
+
+  if (!dir_entry->preopen) {
+    return JS_NewInt32(ctx, WASI_ENOTCAPABLE);
+  }
+
+  if (!wasi_has_rights(dir_entry, __WASI_RIGHT_PATH_OPEN)) {
+    return JS_NewInt32(ctx, WASI_ENOTCAPABLE);
+  }
+
+  if ((oflags & __WASI_O_CREAT) && !wasi_has_rights(dir_entry, __WASI_RIGHT_PATH_CREATE_FILE)) {
+    return JS_NewInt32(ctx, WASI_ENOTCAPABLE);
+  }
+
+  char* host_path = NULL;
+  uint32_t status = wasi_resolve_path(wasi, dir_entry, path_ptr, path_len, false, &host_path);
+  if (status != WASI_ESUCCESS) {
+    return JS_NewInt32(ctx, status);
+  }
+
+  JSRT_Debug("WASI path_open host path: %s", host_path);
+
+  uv_loop_t* loop = wasi_get_uv_loop(wasi->ctx);
+  if (!loop) {
+    free(host_path);
+    return JS_NewInt32(ctx, WASI_ENOSYS);
+  }
+
+  uint64_t rights_base = (uint64_t)rights_base_i64;
+  uint64_t rights_inheriting = (uint64_t)rights_inheriting_i64;
+
+  bool can_read = (rights_base & __WASI_RIGHT_FD_READ) != 0;
+  bool can_write = (rights_base & __WASI_RIGHT_FD_WRITE) != 0;
+
+  int flags = 0;
+  if (can_read && can_write) {
+    flags |= O_RDWR;
+  } else if (can_write) {
+    flags |= O_WRONLY;
+  } else {
+    flags |= O_RDONLY;
+  }
+
+  if (oflags & __WASI_O_CREAT) {
+    flags |= O_CREAT;
+  }
+  if (oflags & __WASI_O_TRUNC) {
+    flags |= O_TRUNC;
+  }
+  if (oflags & __WASI_O_EXCL) {
+    flags |= O_EXCL;
+  }
+#ifdef O_DIRECTORY
+  if (oflags & __WASI_O_DIRECTORY) {
+    flags |= O_DIRECTORY;
+  }
+#endif
+  if (fd_flags & __WASI_FDFLAG_APPEND) {
+    flags |= O_APPEND;
+  }
+#ifdef O_DSYNC
+  if (fd_flags & __WASI_FDFLAG_DSYNC) {
+    flags |= O_DSYNC;
+  }
+#endif
+#ifdef O_SYNC
+  if (fd_flags & (__WASI_FDFLAG_RSYNC | __WASI_FDFLAG_SYNC)) {
+    flags |= O_SYNC;
+  }
+#endif
+#ifdef O_NONBLOCK
+  if (fd_flags & __WASI_FDFLAG_NONBLOCK) {
+    flags |= O_NONBLOCK;
+  }
+#endif
+
+  uv_fs_t open_req;
+  int rc = uv_fs_open(loop, &open_req, host_path, flags, 0666, NULL);
+  if (rc < 0 || open_req.result < 0) {
+    int err_code = rc < 0 ? uv_translate_sys_error(rc) : uv_fs_get_system_error(&open_req);
+    JSRT_Debug("WASI path_open uv_fs_open failed: rc=%d, result=%lld, errno=%d", rc, (long long)open_req.result,
+               err_code);
+    uint32_t wasi_err = wasi_errno_from_errno(err_code);
+    uv_fs_req_cleanup(&open_req);
+    free(host_path);
+    return JS_NewInt32(ctx, wasi_err);
+  }
+
+  int host_fd = (int)open_req.result;
+  uv_fs_req_cleanup(&open_req);
+
+  uv_fs_t stat_req;
+  uint8_t filetype = __WASI_FILETYPE_UNKNOWN;
+  int stat_rc = uv_fs_fstat(loop, &stat_req, host_fd, NULL);
+  int stat_err = uv_fs_get_system_error(&stat_req);
+  if (stat_rc == 0 && stat_req.result == 0) {
+    filetype = wasi_filetype_from_mode(stat_req.statbuf.st_mode);
+    uv_fs_req_cleanup(&stat_req);
+    if ((oflags & __WASI_O_DIRECTORY) && filetype != __WASI_FILETYPE_DIRECTORY) {
+      uv_fs_t close_req;
+      uv_fs_close(loop, &close_req, host_fd, NULL);
+      uv_fs_req_cleanup(&close_req);
+      free(host_path);
+      return JS_NewInt32(ctx, WASI_ENOTDIR);
+    }
+  } else {
+    uv_fs_req_cleanup(&stat_req);
+    uv_fs_t close_req;
+    uv_fs_close(loop, &close_req, host_fd, NULL);
+    uv_fs_req_cleanup(&close_req);
+    free(host_path);
+    return JS_NewInt32(ctx, wasi_errno_from_errno(stat_err != 0 ? stat_err : -stat_rc));
+  }
+
+  uint32_t new_fd;
+  if (jsrt_wasi_fd_table_alloc(wasi, host_fd, filetype, rights_base, rights_inheriting, (uint16_t)fd_flags, &new_fd) <
+      0) {
+    uv_fs_t close_req;
+    uv_fs_close(loop, &close_req, host_fd, NULL);
+    uv_fs_req_cleanup(&close_req);
+    free(host_path);
+    return JS_NewInt32(ctx, WASI_ENFILE);
+  }
+
+  opened_fd_mem[0] = (uint8_t)(new_fd & 0xFF);
+  opened_fd_mem[1] = (uint8_t)((new_fd >> 8) & 0xFF);
+  opened_fd_mem[2] = (uint8_t)((new_fd >> 16) & 0xFF);
+  opened_fd_mem[3] = (uint8_t)((new_fd >> 24) & 0xFF);
+
+  free(host_path);
+  return JS_NewInt32(ctx, WASI_ESUCCESS);
+}
+
+// path_filestat_get(fd, flags, path, path_len, filestat_ptr) -> errno
+static JSValue wasi_path_filestat_get(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv, int magic,
+                                      JSValue* func_data) {
+  jsrt_wasi_t* wasi = get_wasi_instance(ctx, func_data);
+  if (!wasi || !wasi->wamr_instance) {
+    return JS_NewInt32(ctx, WASI_EINVAL);
+  }
+
+  if (argc != 5) {
+    return JS_NewInt32(ctx, WASI_EINVAL);
+  }
+
+  uint32_t dirfd;
+  uint32_t flags;
+  uint32_t path_ptr;
+  uint32_t path_len;
+  uint32_t filestat_ptr;
+
+  if (JS_ToUint32(ctx, &dirfd, argv[0]) || JS_ToUint32(ctx, &flags, argv[1]) || JS_ToUint32(ctx, &path_ptr, argv[2]) ||
+      JS_ToUint32(ctx, &path_len, argv[3]) || JS_ToUint32(ctx, &filestat_ptr, argv[4])) {
+    return JS_NewInt32(ctx, WASI_EINVAL);
+  }
+
+  uint8_t* filestat_mem = get_wasm_memory(wasi, filestat_ptr, sizeof(__wasi_filestat_t));
+  if (!filestat_mem) {
+    return JS_NewInt32(ctx, WASI_EFAULT);
+  }
+
+  jsrt_wasi_fd_entry* dir_entry = jsrt_wasi_get_fd(wasi, dirfd);
+  if (!dir_entry) {
+    return JS_NewInt32(ctx, WASI_EBADF);
+  }
+  if (dir_entry->filetype != __WASI_FILETYPE_DIRECTORY || !dir_entry->preopen) {
+    return JS_NewInt32(ctx, WASI_ENOTDIR);
+  }
+  if (!wasi_has_rights(dir_entry, __WASI_RIGHT_PATH_FILESTAT_GET)) {
+    return JS_NewInt32(ctx, WASI_ENOTCAPABLE);
+  }
+
+  char* host_path = NULL;
+  uint32_t status = wasi_resolve_path(wasi, dir_entry, path_ptr, path_len, false, &host_path);
+  if (status != WASI_ESUCCESS) {
+    return JS_NewInt32(ctx, status);
+  }
+
+  uv_loop_t* loop = wasi_get_uv_loop(wasi->ctx);
+  if (!loop) {
+    free(host_path);
+    return JS_NewInt32(ctx, WASI_ENOSYS);
+  }
+
+  bool follow_symlinks = (flags & __WASI_LOOKUP_SYMLINK_FOLLOW) != 0;
+  uv_fs_t req;
+  int rc;
+  if (follow_symlinks) {
+    rc = uv_fs_stat(loop, &req, host_path, NULL);
+  } else {
+    rc = uv_fs_lstat(loop, &req, host_path, NULL);
+  }
+  int sys_err = uv_fs_get_system_error(&req);
+  if (rc < 0 || req.result < 0 || sys_err != 0) {
+    uint32_t wasi_err = wasi_errno_from_errno(sys_err != 0 ? sys_err : -rc);
+    uv_fs_req_cleanup(&req);
+    free(host_path);
+    return JS_NewInt32(ctx, wasi_err);
+  }
+
+  memset(filestat_mem, 0, sizeof(__wasi_filestat_t));
+  uv_stat_t* st = &req.statbuf;
+  write_u64_le(&filestat_mem[0], (uint64_t)st->st_dev);
+  write_u64_le(&filestat_mem[8], (uint64_t)st->st_ino);
+  filestat_mem[16] = wasi_filetype_from_mode(st->st_mode);
+  write_u64_le(&filestat_mem[24], (uint64_t)st->st_nlink);
+  write_u64_le(&filestat_mem[32], (uint64_t)st->st_size);
+  write_u64_le(&filestat_mem[40], uv_timespec_to_ns(&st->st_atim));
+  write_u64_le(&filestat_mem[48], uv_timespec_to_ns(&st->st_mtim));
+  write_u64_le(&filestat_mem[56], uv_timespec_to_ns(&st->st_ctim));
+
+  uv_fs_req_cleanup(&req);
+  free(host_path);
+  return JS_NewInt32(ctx, WASI_ESUCCESS);
+}
+
+// path_create_directory(fd, path, path_len) -> errno
+static JSValue wasi_path_create_directory(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv,
+                                          int magic, JSValue* func_data) {
+  jsrt_wasi_t* wasi = get_wasi_instance(ctx, func_data);
+  if (!wasi || !wasi->wamr_instance) {
+    return JS_NewInt32(ctx, WASI_EINVAL);
+  }
+
+  if (argc != 3) {
+    return JS_NewInt32(ctx, WASI_EINVAL);
+  }
+
+  uint32_t dirfd;
+  uint32_t path_ptr;
+  uint32_t path_len;
+
+  if (JS_ToUint32(ctx, &dirfd, argv[0]) || JS_ToUint32(ctx, &path_ptr, argv[1]) ||
+      JS_ToUint32(ctx, &path_len, argv[2])) {
+    return JS_NewInt32(ctx, WASI_EINVAL);
+  }
+
+  jsrt_wasi_fd_entry* dir_entry = jsrt_wasi_get_fd(wasi, dirfd);
+  if (!dir_entry) {
+    return JS_NewInt32(ctx, WASI_EBADF);
+  }
+  if (!dir_entry->preopen || dir_entry->filetype != __WASI_FILETYPE_DIRECTORY) {
+    return JS_NewInt32(ctx, WASI_ENOTDIR);
+  }
+  if (!wasi_has_rights(dir_entry, __WASI_RIGHT_PATH_CREATE_DIRECTORY)) {
+    return JS_NewInt32(ctx, WASI_ENOTCAPABLE);
+  }
+
+  char* host_path = NULL;
+  uint32_t status = wasi_resolve_path(wasi, dir_entry, path_ptr, path_len, false, &host_path);
+  if (status != WASI_ESUCCESS) {
+    return JS_NewInt32(ctx, status);
+  }
+
+  uv_loop_t* loop = wasi_get_uv_loop(wasi->ctx);
+  if (!loop) {
+    free(host_path);
+    return JS_NewInt32(ctx, WASI_ENOSYS);
+  }
+
+  uv_fs_t req;
+  int rc = uv_fs_mkdir(loop, &req, host_path, 0777, NULL);
+  int sys_err = uv_fs_get_system_error(&req);
+  uv_fs_req_cleanup(&req);
+  free(host_path);
+  if (rc < 0 || sys_err != 0) {
+    return JS_NewInt32(ctx, wasi_errno_from_errno(sys_err != 0 ? sys_err : -rc));
+  }
+
+  return JS_NewInt32(ctx, WASI_ESUCCESS);
+}
+
+// path_remove_directory(fd, path, path_len) -> errno
+static JSValue wasi_path_remove_directory(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv,
+                                          int magic, JSValue* func_data) {
+  jsrt_wasi_t* wasi = get_wasi_instance(ctx, func_data);
+  if (!wasi || !wasi->wamr_instance) {
+    return JS_NewInt32(ctx, WASI_EINVAL);
+  }
+
+  if (argc != 3) {
+    return JS_NewInt32(ctx, WASI_EINVAL);
+  }
+
+  uint32_t dirfd;
+  uint32_t path_ptr;
+  uint32_t path_len;
+
+  if (JS_ToUint32(ctx, &dirfd, argv[0]) || JS_ToUint32(ctx, &path_ptr, argv[1]) ||
+      JS_ToUint32(ctx, &path_len, argv[2])) {
+    return JS_NewInt32(ctx, WASI_EINVAL);
+  }
+
+  jsrt_wasi_fd_entry* dir_entry = jsrt_wasi_get_fd(wasi, dirfd);
+  if (!dir_entry) {
+    return JS_NewInt32(ctx, WASI_EBADF);
+  }
+  if (!dir_entry->preopen || dir_entry->filetype != __WASI_FILETYPE_DIRECTORY) {
+    return JS_NewInt32(ctx, WASI_ENOTDIR);
+  }
+  if (!wasi_has_rights(dir_entry, __WASI_RIGHT_PATH_REMOVE_DIRECTORY)) {
+    return JS_NewInt32(ctx, WASI_ENOTCAPABLE);
+  }
+
+  char* host_path = NULL;
+  uint32_t status = wasi_resolve_path(wasi, dir_entry, path_ptr, path_len, false, &host_path);
+  if (status != WASI_ESUCCESS) {
+    return JS_NewInt32(ctx, status);
+  }
+
+  uv_loop_t* loop = wasi_get_uv_loop(wasi->ctx);
+  if (!loop) {
+    free(host_path);
+    return JS_NewInt32(ctx, WASI_ENOSYS);
+  }
+
+  uv_fs_t req;
+  int rc = uv_fs_rmdir(loop, &req, host_path, NULL);
+  int sys_err = uv_fs_get_system_error(&req);
+  uv_fs_req_cleanup(&req);
+  free(host_path);
+
+  if (rc < 0 || sys_err != 0) {
+    return JS_NewInt32(ctx, wasi_errno_from_errno(sys_err != 0 ? sys_err : -rc));
+  }
+
+  return JS_NewInt32(ctx, WASI_ESUCCESS);
+}
+
+// path_unlink_file(fd, path, path_len) -> errno
+static JSValue wasi_path_unlink_file(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv, int magic,
+                                     JSValue* func_data) {
+  jsrt_wasi_t* wasi = get_wasi_instance(ctx, func_data);
+  if (!wasi || !wasi->wamr_instance) {
+    return JS_NewInt32(ctx, WASI_EINVAL);
+  }
+
+  if (argc != 3) {
+    return JS_NewInt32(ctx, WASI_EINVAL);
+  }
+
+  uint32_t dirfd;
+  uint32_t path_ptr;
+  uint32_t path_len;
+
+  if (JS_ToUint32(ctx, &dirfd, argv[0]) || JS_ToUint32(ctx, &path_ptr, argv[1]) ||
+      JS_ToUint32(ctx, &path_len, argv[2])) {
+    return JS_NewInt32(ctx, WASI_EINVAL);
+  }
+
+  jsrt_wasi_fd_entry* dir_entry = jsrt_wasi_get_fd(wasi, dirfd);
+  if (!dir_entry) {
+    return JS_NewInt32(ctx, WASI_EBADF);
+  }
+  if (!dir_entry->preopen || dir_entry->filetype != __WASI_FILETYPE_DIRECTORY) {
+    return JS_NewInt32(ctx, WASI_ENOTDIR);
+  }
+  if (!wasi_has_rights(dir_entry, __WASI_RIGHT_PATH_UNLINK_FILE)) {
+    return JS_NewInt32(ctx, WASI_ENOTCAPABLE);
+  }
+
+  char* host_path = NULL;
+  uint32_t status = wasi_resolve_path(wasi, dir_entry, path_ptr, path_len, false, &host_path);
+  if (status != WASI_ESUCCESS) {
+    return JS_NewInt32(ctx, status);
+  }
+
+  uv_loop_t* loop = wasi_get_uv_loop(wasi->ctx);
+  if (!loop) {
+    free(host_path);
+    return JS_NewInt32(ctx, WASI_ENOSYS);
+  }
+
+  uv_fs_t req;
+  int rc = uv_fs_unlink(loop, &req, host_path, NULL);
+  int sys_err = uv_fs_get_system_error(&req);
+  uv_fs_req_cleanup(&req);
+  free(host_path);
+
+  if (rc < 0 || sys_err != 0) {
+    return JS_NewInt32(ctx, wasi_errno_from_errno(sys_err != 0 ? sys_err : -rc));
+  }
+
+  return JS_NewInt32(ctx, WASI_ESUCCESS);
+}
+
+// path_rename(old_fd, old_path, old_len, new_fd, new_path, new_len) -> errno
+static JSValue wasi_path_rename(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv, int magic,
+                                JSValue* func_data) {
+  jsrt_wasi_t* wasi = get_wasi_instance(ctx, func_data);
+  if (!wasi || !wasi->wamr_instance) {
+    return JS_NewInt32(ctx, WASI_EINVAL);
+  }
+
+  if (argc != 6) {
+    return JS_NewInt32(ctx, WASI_EINVAL);
+  }
+
+  uint32_t old_fd;
+  uint32_t old_path_ptr;
+  uint32_t old_path_len;
+  uint32_t new_fd;
+  uint32_t new_path_ptr;
+  uint32_t new_path_len;
+
+  if (JS_ToUint32(ctx, &old_fd, argv[0]) || JS_ToUint32(ctx, &old_path_ptr, argv[1]) ||
+      JS_ToUint32(ctx, &old_path_len, argv[2]) || JS_ToUint32(ctx, &new_fd, argv[3]) ||
+      JS_ToUint32(ctx, &new_path_ptr, argv[4]) || JS_ToUint32(ctx, &new_path_len, argv[5])) {
+    return JS_NewInt32(ctx, WASI_EINVAL);
+  }
+
+  jsrt_wasi_fd_entry* old_entry = jsrt_wasi_get_fd(wasi, old_fd);
+  jsrt_wasi_fd_entry* new_entry = jsrt_wasi_get_fd(wasi, new_fd);
+  if (!old_entry || !new_entry) {
+    return JS_NewInt32(ctx, WASI_EBADF);
+  }
+  if (!old_entry->preopen || !new_entry->preopen) {
+    return JS_NewInt32(ctx, WASI_ENOTCAPABLE);
+  }
+  if (!wasi_has_rights(old_entry, __WASI_RIGHT_PATH_RENAME_SOURCE) ||
+      !wasi_has_rights(new_entry, __WASI_RIGHT_PATH_RENAME_TARGET)) {
+    return JS_NewInt32(ctx, WASI_ENOTCAPABLE);
+  }
+
+  char* old_host_path = NULL;
+  char* new_host_path = NULL;
+  uint32_t status = wasi_resolve_path(wasi, old_entry, old_path_ptr, old_path_len, false, &old_host_path);
+  if (status != WASI_ESUCCESS) {
+    return JS_NewInt32(ctx, status);
+  }
+  status = wasi_resolve_path(wasi, new_entry, new_path_ptr, new_path_len, false, &new_host_path);
+  if (status != WASI_ESUCCESS) {
+    free(old_host_path);
+    return JS_NewInt32(ctx, status);
+  }
+
+  uv_loop_t* loop = wasi_get_uv_loop(wasi->ctx);
+  if (!loop) {
+    free(old_host_path);
+    free(new_host_path);
+    return JS_NewInt32(ctx, WASI_ENOSYS);
+  }
+
+  uv_fs_t req;
+  int rc = uv_fs_rename(loop, &req, old_host_path, new_host_path, NULL);
+  int sys_err = uv_fs_get_system_error(&req);
+  uv_fs_req_cleanup(&req);
+  free(old_host_path);
+  free(new_host_path);
+
+  if (rc < 0 || sys_err != 0) {
+    return JS_NewInt32(ctx, wasi_errno_from_errno(sys_err != 0 ? sys_err : -rc));
+  }
+
+  return JS_NewInt32(ctx, WASI_ESUCCESS);
+}
+
+// poll_oneoff(in, out, nsubscriptions, nevents_ptr) -> errno
+static JSValue wasi_poll_oneoff(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv, int magic,
+                                JSValue* func_data) {
+  (void)ctx;
+  (void)this_val;
+  (void)argv;
+  (void)magic;
+  (void)func_data;
+  if (argc != 4) {
+    return JS_NewInt32(ctx, WASI_EINVAL);
+  }
+  return JS_NewInt32(ctx, WASI_ENOSYS);
+}
+
+// sock_accept(fd, fdflags, newfd_ptr) -> errno
+static JSValue wasi_sock_accept(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv, int magic,
+                                JSValue* func_data) {
+  (void)ctx;
+  (void)this_val;
+  (void)argv;
+  (void)magic;
+  (void)func_data;
+  if (argc != 3) {
+    return JS_NewInt32(ctx, WASI_EINVAL);
+  }
+  return JS_NewInt32(ctx, WASI_ENOSYS);
+}
+
+// sock_recv(fd, iovs, iovs_len, ri_flags, ro_datalen, ro_flags) -> errno
+static JSValue wasi_sock_recv(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv, int magic,
+                              JSValue* func_data) {
+  (void)ctx;
+  (void)this_val;
+  (void)argv;
+  (void)magic;
+  (void)func_data;
+  if (argc != 6) {
+    return JS_NewInt32(ctx, WASI_EINVAL);
+  }
+  return JS_NewInt32(ctx, WASI_ENOSYS);
+}
+
+// sock_send(fd, ciovs, ciovs_len, si_flags, so_datalen_ptr) -> errno
+static JSValue wasi_sock_send(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv, int magic,
+                              JSValue* func_data) {
+  (void)ctx;
+  (void)this_val;
+  (void)argv;
+  (void)magic;
+  (void)func_data;
+  if (argc != 5) {
+    return JS_NewInt32(ctx, WASI_EINVAL);
+  }
+  return JS_NewInt32(ctx, WASI_ENOSYS);
+}
+
+// sock_shutdown(fd, how) -> errno
+static JSValue wasi_sock_shutdown(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv, int magic,
+                                  JSValue* func_data) {
+  (void)ctx;
+  (void)this_val;
+  (void)argv;
+  (void)magic;
+  (void)func_data;
+  if (argc != 2) {
+    return JS_NewInt32(ctx, WASI_EINVAL);
+  }
+  return JS_NewInt32(ctx, WASI_ENOSYS);
+}
+
 // proc_exit(rval: exitcode)
 // Note: proc_exit doesn't return a value - it terminates the process
 static JSValue wasi_proc_exit(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv, int magic,
@@ -1014,6 +1937,21 @@ JSValue jsrt_wasi_get_import_object(JSContext* ctx, jsrt_wasi_t* wasi) {
   JS_SetPropertyStr(ctx, wasi_ns, "fd_fdstat_get", JS_NewCFunctionData(ctx, wasi_fd_fdstat_get, 2, 0, 1, wasi_data));
   JS_SetPropertyStr(ctx, wasi_ns, "fd_fdstat_set_flags",
                     JS_NewCFunctionData(ctx, wasi_fd_fdstat_set_flags, 2, 0, 1, wasi_data));
+  JS_SetPropertyStr(ctx, wasi_ns, "path_open", JS_NewCFunctionData(ctx, wasi_path_open, 9, 0, 1, wasi_data));
+  JS_SetPropertyStr(ctx, wasi_ns, "path_filestat_get",
+                    JS_NewCFunctionData(ctx, wasi_path_filestat_get, 5, 0, 1, wasi_data));
+  JS_SetPropertyStr(ctx, wasi_ns, "path_create_directory",
+                    JS_NewCFunctionData(ctx, wasi_path_create_directory, 3, 0, 1, wasi_data));
+  JS_SetPropertyStr(ctx, wasi_ns, "path_remove_directory",
+                    JS_NewCFunctionData(ctx, wasi_path_remove_directory, 3, 0, 1, wasi_data));
+  JS_SetPropertyStr(ctx, wasi_ns, "path_unlink_file",
+                    JS_NewCFunctionData(ctx, wasi_path_unlink_file, 3, 0, 1, wasi_data));
+  JS_SetPropertyStr(ctx, wasi_ns, "path_rename", JS_NewCFunctionData(ctx, wasi_path_rename, 6, 0, 1, wasi_data));
+  JS_SetPropertyStr(ctx, wasi_ns, "poll_oneoff", JS_NewCFunctionData(ctx, wasi_poll_oneoff, 4, 0, 1, wasi_data));
+  JS_SetPropertyStr(ctx, wasi_ns, "sock_accept", JS_NewCFunctionData(ctx, wasi_sock_accept, 3, 0, 1, wasi_data));
+  JS_SetPropertyStr(ctx, wasi_ns, "sock_recv", JS_NewCFunctionData(ctx, wasi_sock_recv, 6, 0, 1, wasi_data));
+  JS_SetPropertyStr(ctx, wasi_ns, "sock_send", JS_NewCFunctionData(ctx, wasi_sock_send, 5, 0, 1, wasi_data));
+  JS_SetPropertyStr(ctx, wasi_ns, "sock_shutdown", JS_NewCFunctionData(ctx, wasi_sock_shutdown, 2, 0, 1, wasi_data));
   JS_SetPropertyStr(ctx, wasi_ns, "proc_exit", JS_NewCFunctionData(ctx, wasi_proc_exit, 1, 0, 1, wasi_data));
   JS_SetPropertyStr(ctx, wasi_ns, "clock_time_get", JS_NewCFunctionData(ctx, wasi_clock_time_get, 3, 0, 1, wasi_data));
   JS_SetPropertyStr(ctx, wasi_ns, "clock_res_get", JS_NewCFunctionData(ctx, wasi_clock_res_get, 2, 0, 1, wasi_data));

@@ -335,106 +335,118 @@ Implement WASI fd_prestat_dir_name function.
 **** Testing Strategy
 Test preopen directory names.
 
-*** TODO [#B] Task 3.14: Implement path_open [P][R:HIGH][C:COMPLEX][D:3.4,2.10]
+*** DONE [#B] Task 3.14: Implement path_open [P][R:HIGH][C:COMPLEX][D:3.4,2.10]
+CLOSED: [2025-10-19T16:00:00Z]
 :PROPERTIES:
 :ID: 3.14
 :CREATED: 2025-10-16T22:45:00Z
 :DEPS: 3.4,2.10
+:COMPLETED: 2025-10-19T16:00:00Z
 :END:
 
 **** Description
 Implement WASI path_open function for opening files.
 
 **** Acceptance Criteria
-- [ ] Function implemented
-- [ ] Respects preopen sandboxing
-- [ ] Path validation works
-- [ ] Security checks in place
+- [X] Function implemented
+- [X] Respects preopen sandboxing
+- [X] Path validation works
+- [X] Security checks in place
 
 **** Testing Strategy
 Test file opening with sandboxing.
 
-*** TODO [#B] Task 3.15: Implement path_filestat_get [P][R:MED][C:MEDIUM][D:3.4]
+*** DONE [#B] Task 3.15: Implement path_filestat_get [P][R:MED][C:MEDIUM][D:3.4]
+CLOSED: [2025-10-19T16:00:00Z]
 :PROPERTIES:
 :ID: 3.15
 :CREATED: 2025-10-16T22:45:00Z
 :DEPS: 3.4
+:COMPLETED: 2025-10-19T16:00:00Z
 :END:
 
 **** Description
 Implement WASI path_filestat_get function.
 
 **** Acceptance Criteria
-- [ ] Function implemented
-- [ ] Returns file stats correctly
+- [X] Function implemented
+- [X] Returns file stats correctly
 
 **** Testing Strategy
 Test file stat retrieval.
 
-*** TODO [#C] Task 3.16: Implement path_create_directory [P][R:MED][C:SIMPLE][D:3.4]
+*** DONE [#C] Task 3.16: Implement path_create_directory [P][R:MED][C:SIMPLE][D:3.4]
+CLOSED: [2025-10-19T16:00:00Z]
 :PROPERTIES:
 :ID: 3.16
 :CREATED: 2025-10-16T22:45:00Z
 :DEPS: 3.4
+:COMPLETED: 2025-10-19T16:00:00Z
 :END:
 
 **** Description
 Implement WASI path_create_directory function.
 
 **** Acceptance Criteria
-- [ ] Function implemented
-- [ ] Creates directories correctly
+- [X] Function implemented
+- [X] Creates directories correctly
 
 **** Testing Strategy
 Test directory creation.
 
-*** TODO [#C] Task 3.17: Implement path_remove_directory [P][R:MED][C:SIMPLE][D:3.4]
+*** DONE [#C] Task 3.17: Implement path_remove_directory [P][R:MED][C:SIMPLE][D:3.4]
+CLOSED: [2025-10-19T16:00:00Z]
 :PROPERTIES:
 :ID: 3.17
 :CREATED: 2025-10-16T22:45:00Z
 :DEPS: 3.4
+:COMPLETED: 2025-10-19T16:00:00Z
 :END:
 
 **** Description
 Implement WASI path_remove_directory function.
 
 **** Acceptance Criteria
-- [ ] Function implemented
-- [ ] Removes directories correctly
+- [X] Function implemented
+- [X] Removes directories correctly
 
 **** Testing Strategy
 Test directory removal.
 
-*** TODO [#C] Task 3.18: Implement path_rename [P][R:MED][C:MEDIUM][D:3.4]
+*** DONE [#C] Task 3.18: Implement path_rename [P][R:MED][C:MEDIUM][D:3.4]
+CLOSED: [2025-10-19T16:00:00Z]
 :PROPERTIES:
 :ID: 3.18
 :CREATED: 2025-10-16T22:45:00Z
 :DEPS: 3.4
+:COMPLETED: 2025-10-19T16:00:00Z
 :END:
 
 **** Description
 Implement WASI path_rename function.
 
 **** Acceptance Criteria
-- [ ] Function implemented
-- [ ] Renames files/dirs correctly
+- [X] Function implemented
+- [X] Renames files/dirs correctly
 
 **** Testing Strategy
 Test file/directory renaming.
 
-*** TODO [#C] Task 3.19: Implement path_unlink_file [P][R:MED][C:SIMPLE][D:3.4]
+*** DONE [#C] Task 3.19: Implement path_unlink_file [P][R:MED][C:SIMPLE][D:3.4]
+CLOSED: [2025-10-19T16:00:00Z]
 :PROPERTIES:
 :ID: 3.19
 :CREATED: 2025-10-16T22:45:00Z
 :DEPS: 3.4
+:COMPLETED: 2025-10-19T16:00:00Z
 :END:
 
 **** Description
 Implement WASI path_unlink_file function.
 
 **** Acceptance Criteria
-- [ ] Function implemented
-- [ ] Deletes files correctly
+- [X] Function implemented
+- [X] Deletes files correctly
 
 **** Testing Strategy
 Test file deletion.
@@ -602,28 +614,32 @@ Implement WASI random_get function for random number generation.
 **** Testing Strategy
 Test random number generation.
 
-*** TODO [#C] Task 3.28: Implement poll_oneoff [P][R:LOW][C:COMPLEX][D:3.4]
+*** DONE [#C] Task 3.28: Implement poll_oneoff [P][R:LOW][C:COMPLEX][D:3.4]
+CLOSED: [2025-10-19T16:00:00Z]
 :PROPERTIES:
 :ID: 3.28
 :CREATED: 2025-10-16T22:45:00Z
 :DEPS: 3.4
+:COMPLETED: 2025-10-19T16:00:00Z
 :END:
 
 **** Description
 Implement WASI poll_oneoff function (optional, can return ENOSYS).
 
 **** Acceptance Criteria
-- [ ] Function implemented or stubbed
-- [ ] Returns appropriate error if not supported
+- [X] Function implemented or stubbed
+- [X] Returns appropriate error if not supported
 
 **** Testing Strategy
 Test polling or stub behavior.
 
-*** TODO [#C] Task 3.29: Implement sock_* functions [P][R:LOW][C:COMPLEX][D:3.4]
+*** DONE [#C] Task 3.29: Implement sock_* functions [P][R:LOW][C:COMPLEX][D:3.4]
+CLOSED: [2025-10-19T16:00:00Z]
 :PROPERTIES:
 :ID: 3.29
 :CREATED: 2025-10-16T22:45:00Z
 :DEPS: 3.4
+:COMPLETED: 2025-10-19T16:00:00Z
 :END:
 
 **** Description
@@ -634,8 +650,8 @@ Implement WASI socket functions (optional, can stub):
 - sock_shutdown
 
 **** Acceptance Criteria
-- [ ] Functions implemented or stubbed
-- [ ] Returns appropriate errors if not supported
+- [X] Functions implemented or stubbed
+- [X] Returns appropriate errors if not supported
 
 **** Testing Strategy
 Test socket operations or stub behavior.
@@ -852,11 +868,13 @@ Validate Phase 3 compiles correctly.
 **** Testing Strategy
 make jsrt_g && make jsrt_m
 
-*** TODO [#A] Task 3.38: Test basic WASI import usage [S][R:HIGH][C:MEDIUM][D:3.37]
+*** DONE [#A] Task 3.38: Test basic WASI import usage [S][R:HIGH][C:MEDIUM][D:3.37]
+CLOSED: [2025-10-19T16:00:00Z]
 :PROPERTIES:
 :ID: 3.38
 :CREATED: 2025-10-16T22:45:00Z
 :DEPS: 3.37
+:COMPLETED: 2025-10-19T16:00:00Z
 :END:
 
 **** Description
@@ -867,10 +885,10 @@ Create basic test for WASI imports:
 - Verify output works
 
 **** Acceptance Criteria
-- [ ] Test WASM module created
-- [ ] Import object works with WebAssembly.instantiate
-- [ ] WASI functions callable
-- [ ] Output appears correctly
+- [X] Test WASM module created
+- [X] Import object works with WebAssembly.instantiate
+- [X] WASI functions callable
+- [X] Output appears correctly
 
 **** Testing Strategy
 End-to-end test with WASM module.

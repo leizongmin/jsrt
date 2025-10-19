@@ -14,6 +14,13 @@
 #include <stdlib.h>
 #include <string.h>
 #include <sys/stat.h>
+#ifdef _WIN32
+#include <io.h>
+#define JSRT_CLOSE _close
+#else
+#include <unistd.h>
+#define JSRT_CLOSE close
+#endif
 #include "../../../deps/wamr/core/shared/platform/include/platform_wasi_types.h"
 
 // Default values
@@ -23,8 +30,8 @@
 #define WASI_DEFAULT_STDERR 2
 #define WASI_FD_TABLE_INITIAL_CAPACITY 8
 
-static int jsrt_wasi_fd_table_set(jsrt_wasi_t* wasi, uint32_t fd, int host_fd, uint8_t filetype, uint32_t rights_base,
-                                  uint32_t rights_inheriting, uint16_t fd_flags, const jsrt_wasi_preopen_t* preopen);
+static int jsrt_wasi_fd_table_set(jsrt_wasi_t* wasi, uint32_t fd, int host_fd, uint8_t filetype, uint64_t rights_base,
+                                  uint64_t rights_inheriting, uint16_t fd_flags, const jsrt_wasi_preopen_t* preopen);
 
 /**
  * Helper: Duplicate string or return NULL
@@ -510,8 +517,8 @@ static int jsrt_wasi_fd_table_ensure(jsrt_wasi_t* wasi, uint32_t fd) {
   return 0;
 }
 
-static int jsrt_wasi_fd_table_set(jsrt_wasi_t* wasi, uint32_t fd, int host_fd, uint8_t filetype, uint32_t rights_base,
-                                  uint32_t rights_inheriting, uint16_t fd_flags, const jsrt_wasi_preopen_t* preopen) {
+static int jsrt_wasi_fd_table_set(jsrt_wasi_t* wasi, uint32_t fd, int host_fd, uint8_t filetype, uint64_t rights_base,
+                                  uint64_t rights_inheriting, uint16_t fd_flags, const jsrt_wasi_preopen_t* preopen) {
   if (jsrt_wasi_fd_table_ensure(wasi, fd) < 0) {
     return -1;
   }
@@ -563,9 +570,11 @@ int jsrt_wasi_init_fd_table(jsrt_wasi_t* wasi) {
   for (size_t i = 0; i < wasi->options.preopen_count; i++) {
     const jsrt_wasi_preopen_t* preopen = &wasi->options.preopens[i];
     uint32_t fd = 3 + (uint32_t)i;
-    uint32_t rights = __WASI_RIGHT_PATH_OPEN | __WASI_RIGHT_FD_READDIR | __WASI_RIGHT_PATH_FILESTAT_GET |
+    uint64_t rights = __WASI_RIGHT_PATH_OPEN | __WASI_RIGHT_FD_READDIR | __WASI_RIGHT_PATH_FILESTAT_GET |
                       __WASI_RIGHT_PATH_FILESTAT_SET_TIMES | __WASI_RIGHT_PATH_UNLINK_FILE |
-                      __WASI_RIGHT_PATH_CREATE_DIRECTORY | __WASI_RIGHT_PATH_REMOVE_DIRECTORY;
+                      __WASI_RIGHT_PATH_CREATE_FILE | __WASI_RIGHT_PATH_CREATE_DIRECTORY |
+                      __WASI_RIGHT_PATH_REMOVE_DIRECTORY | __WASI_RIGHT_PATH_RENAME_SOURCE |
+                      __WASI_RIGHT_PATH_RENAME_TARGET;
     if (jsrt_wasi_fd_table_set(wasi, fd, -1, __WASI_FILETYPE_DIRECTORY, rights, rights, 0, preopen) < 0) {
       return -1;
     }
@@ -585,6 +594,58 @@ jsrt_wasi_fd_entry* jsrt_wasi_get_fd(jsrt_wasi_t* wasi, uint32_t fd) {
   }
 
   return entry;
+}
+
+int jsrt_wasi_fd_table_alloc(jsrt_wasi_t* wasi, int host_fd, uint8_t filetype, uint64_t rights_base,
+                             uint64_t rights_inheriting, uint16_t fd_flags, uint32_t* out_fd) {
+  if (!wasi || !out_fd) {
+    return -1;
+  }
+
+  // Try to reuse an existing free slot first
+  for (uint32_t i = 0; i < wasi->fd_table_count; i++) {
+    if (!wasi->fd_table[i].in_use) {
+      if (jsrt_wasi_fd_table_set(wasi, i, host_fd, filetype, rights_base, rights_inheriting, fd_flags, NULL) < 0) {
+        return -1;
+      }
+      *out_fd = i;
+      return 0;
+    }
+  }
+
+  // Allocate a new slot at the end
+  uint32_t fd = wasi->fd_table_count;
+  if (jsrt_wasi_fd_table_set(wasi, fd, host_fd, filetype, rights_base, rights_inheriting, fd_flags, NULL) < 0) {
+    return -1;
+  }
+
+  *out_fd = fd;
+  return 0;
+}
+
+int jsrt_wasi_fd_table_release(jsrt_wasi_t* wasi, uint32_t fd) {
+  if (!wasi || fd >= wasi->fd_table_capacity) {
+    return -1;
+  }
+
+  jsrt_wasi_fd_entry* entry = &wasi->fd_table[fd];
+  if (!entry->in_use || entry->preopen != NULL) {
+    return -1;
+  }
+
+  entry->in_use = false;
+  entry->host_fd = -1;
+  entry->rights_base = 0;
+  entry->rights_inheriting = 0;
+  entry->fd_flags = 0;
+  entry->filetype = __WASI_FILETYPE_UNKNOWN;
+
+  // Trim fd_table_count if the highest entries are free
+  while (wasi->fd_table_count > 0 && !wasi->fd_table[wasi->fd_table_count - 1].in_use) {
+    wasi->fd_table_count--;
+  }
+
+  return 0;
 }
 
 /**
@@ -735,6 +796,16 @@ void jsrt_wasi_free(jsrt_wasi_t* wasi) {
   // The Instance finalizer will clean up the WAMR instance when appropriate.
   // Therefore, we don't (and must not) free wamr_instance here.
 
-  free(wasi->fd_table);
+  if (wasi->fd_table) {
+    for (size_t i = 0; i < wasi->fd_table_count; i++) {
+      jsrt_wasi_fd_entry* entry = &wasi->fd_table[i];
+      if (entry->in_use && entry->preopen == NULL && entry->host_fd >= 0) {
+        JSRT_Debug("Closing WASI fd %zu (host fd %d)", i, entry->host_fd);
+        JSRT_CLOSE(entry->host_fd);
+        entry->host_fd = -1;
+      }
+    }
+    free(wasi->fd_table);
+  }
   free(wasi);
 }

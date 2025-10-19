@@ -30,8 +30,8 @@ typedef struct {
 typedef struct {
   bool in_use;
   int host_fd;
-  uint32_t rights_base;
-  uint32_t rights_inheriting;
+  uint64_t rights_base;
+  uint64_t rights_inheriting;
   uint16_t fd_flags;
   uint8_t filetype;
   const jsrt_wasi_preopen_t* preopen;  // Non-NULL for preopened directories
@@ -131,6 +131,9 @@ void jsrt_wasi_free_options(jsrt_wasi_options_t* options);
 
 int jsrt_wasi_init_fd_table(jsrt_wasi_t* wasi);
 jsrt_wasi_fd_entry* jsrt_wasi_get_fd(jsrt_wasi_t* wasi, uint32_t fd);
+int jsrt_wasi_fd_table_alloc(jsrt_wasi_t* wasi, int host_fd, uint8_t filetype, uint64_t rights_base,
+                             uint64_t rights_inheriting, uint16_t fd_flags, uint32_t* out_fd);
+int jsrt_wasi_fd_table_release(jsrt_wasi_t* wasi, uint32_t fd);
 
 /**
  * Get import object for WebAssembly.Instance

@@ -8,14 +8,14 @@
 * Task Metadata
 :PROPERTIES:
 :CREATED: 2025-10-16T22:45:00Z
-:UPDATED: 2025-10-19T15:06:00Z
+:UPDATED: 2025-10-19T16:00:00Z
 :STATUS: 🔵 IN_PROGRESS
-:PROGRESS: 59/141
-:COMPLETION: 42%
+:PROGRESS: 68/141
+:COMPLETION: 48%
 :WASM_DEPENDENCIES: ✅ VERIFIED - All required APIs functional (2025-10-19)
 :WASM_BLOCKERS: NONE - Standalone Memory/Table/Global not needed by WASI
 :PHASE3_SYSCALLS: 🟢 COMPLETE - 13/13 syscalls implemented (100%) (ctx fix + zero-preopen handling 2025-10-19)
-:PHASE3_STATUS: 🔵 IN_PROGRESS (2025-10-19) - 26/38 tasks complete; focus shifts to path/poll/socket coverage
+:PHASE3_STATUS: 🔵 IN_PROGRESS (2025-10-19) - 35/38 tasks complete; remaining work: finalize import documentation setup (Tasks 3.1, 3.2) and close-out reporting
 :PHASE3_CAPABILITIES: args, env, stdio, preopens, time, random, proc_exit
 :ASAN_VALIDATION: ✅ CLEAN - No leaks or memory errors
 :END:
@@ -102,7 +102,7 @@ See [[file:node-wasi-plan/phases/phase7-documentation.md][Phase 7: Documentation
 |-------|-------|------------|--------|
 | Phase 1 | 8 | Research & Design | ✅ COMPLETED |
 | Phase 2 | 25 | Core Infrastructure | ✅ COMPLETED |
-| Phase 3 | 38 | WASI Import Implementation | 🔵 IN_PROGRESS |
+| Phase 3 | 38 | WASI Import Implementation | 🔵 IN_PROGRESS (35/38) |
 | Phase 4 | 18 | Module Integration | 🟡 TODO |
 | Phase 5 | 15 | Lifecycle Methods | 🟡 TODO |
 | Phase 6 | 27 | Testing & Validation | 🟡 TODO |
@@ -179,6 +179,7 @@ See: docs/webassembly-api-compatibility.md for details.
 ** Recent Changes
 | Timestamp | Action | Task ID | Details |
 |-----------|--------|---------|---------|
+| 2025-10-19T16:00:00Z | Completed | Tasks 3.14-3.19, 3.28-3.29, 3.38 | Implemented path_* syscalls, poll/socket stubs, and added integration test coverage |
 | 2025-10-19T15:06:00Z | Updated | Task 3.33 | Added fd table scaffolding covering stdio + preopen metadata |
 | 2025-10-19T14:33:00Z | Updated | Phase 3 | Completed fd_tell/fd_fdstat*, clock_res_get, proc_exit logic, and memory validation |
 | 2025-10-19T13:38:53Z | Updated | Phase 2 & 3 | Documented Phase 2 completion, Phase 3 progress, and WASI import safety fix |
@@ -194,7 +195,7 @@ See: docs/webassembly-api-compatibility.md for details.
 - Critical path: Phase 1 → Phase 2 → Phase 3 → Phase 4 → Phase 5 → Phase 6 → Phase 7
 - Parallel opportunities: Many tasks within each phase can run in parallel
 - Testing is integrated throughout (not just Phase 6)
-- Pending work: expand path operations, FD table/rights management, and socket/poll support (Tasks 3.14-3.19, 3.33, 3.28-3.29)
+- Pending work: document import coverage (Tasks 3.1-3.2) and finalize residual reporting for Phase 3
 
 * Implementation Notes
 

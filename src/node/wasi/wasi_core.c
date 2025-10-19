@@ -610,8 +610,11 @@ void jsrt_wasi_free(jsrt_wasi_t* wasi) {
     wasm_runtime_destroy_exec_env(wasi->exec_env);
   }
 
-  // Note: wamr_instance is owned by JavaScript WebAssembly.Instance,
-  // so we don't free it here
+  // Note: wamr_instance is owned by JavaScript WebAssembly.Instance object.
+  // We hold a strong reference via wasi->wasm_instance (JS_DupValue above),
+  // which prevents the Instance from being GC'd while this WASI object is alive.
+  // The Instance finalizer will clean up the WAMR instance when appropriate.
+  // Therefore, we don't (and must not) free wamr_instance here.
 
   free(wasi);
 }

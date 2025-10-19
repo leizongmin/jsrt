@@ -3036,3 +3036,21 @@ void JSRT_RuntimeSetupStdWebAssembly(JSRT_Runtime* rt) {
 
   JSRT_Debug("WebAssembly global object setup completed");
 }
+
+/**
+ * Extract WAMR instance from WebAssembly.Instance JavaScript object
+ * Helper function for WASI and other modules that need to access the WAMR instance
+ */
+wasm_module_inst_t jsrt_webassembly_get_instance(JSContext* ctx, JSValue instance_obj) {
+  if (JS_IsUndefined(instance_obj) || JS_IsNull(instance_obj)) {
+    return NULL;
+  }
+
+  // Get opaque data from Instance object
+  jsrt_wasm_instance_data_t* instance_data = JS_GetOpaque(instance_obj, js_webassembly_instance_class_id);
+  if (!instance_data) {
+    return NULL;
+  }
+
+  return instance_data->instance;
+}

@@ -21,7 +21,7 @@ JSValue js_fs_fchmod_sync(JSContext* ctx, JSValueConst this_val, int argc, JSVal
 #ifdef _WIN32
   // Windows doesn't have fchmod, use _chmod with file path from fd
   // This is a limitation - we'll return an error for now
-  return JS_ThrowError(ctx, "fchmod is not supported on Windows");
+  return JS_ThrowTypeError(ctx, "fchmod is not supported on Windows");
 #else
   if (fchmod(fd, mode) < 0) {
     return JS_Throw(ctx, create_fs_error(ctx, errno, "fchmod", NULL));
@@ -54,7 +54,7 @@ JSValue js_fs_fchown_sync(JSContext* ctx, JSValueConst this_val, int argc, JSVal
 
 #ifdef _WIN32
   // Windows doesn't have the concept of file ownership like Unix
-  return JS_ThrowError(ctx, "fchown is not supported on Windows");
+  return JS_ThrowTypeError(ctx, "fchown is not supported on Windows");
 #else
   if (fchown(fd, (uid_t)uid, (gid_t)gid) < 0) {
     return JS_Throw(ctx, create_fs_error(ctx, errno, "fchown", NULL));
@@ -90,7 +90,7 @@ JSValue js_fs_lchown_sync(JSContext* ctx, JSValueConst this_val, int argc, JSVal
 #ifdef _WIN32
   // Windows doesn't have the concept of file ownership like Unix
   JS_FreeCString(ctx, path);
-  return JS_ThrowError(ctx, "lchown is not supported on Windows");
+  return JS_ThrowTypeError(ctx, "lchown is not supported on Windows");
 #else
   if (lchown(path, (uid_t)uid, (gid_t)gid) < 0) {
     JSValue error = create_fs_error(ctx, errno, "lchown", path);
@@ -172,7 +172,7 @@ JSValue js_fs_lutimes_sync(JSContext* ctx, JSValueConst this_val, int argc, JSVa
 #ifdef _WIN32
   // Windows doesn't have lutimes
   JS_FreeCString(ctx, path);
-  return JS_ThrowError(ctx, "lutimes is not supported on Windows");
+  return JS_ThrowTypeError(ctx, "lutimes is not supported on Windows");
 #else
   // Use utimensat with AT_SYMLINK_NOFOLLOW flag
   struct timespec times[2];

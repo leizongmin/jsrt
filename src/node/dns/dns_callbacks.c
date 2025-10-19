@@ -1,4 +1,9 @@
+#ifdef _WIN32
+#include <winsock2.h>
+#include <ws2tcpip.h>
+#else
 #include <arpa/inet.h>
+#endif
 #include "dns_internal.h"
 
 static bool is_documentation_ipv4(uint32_t addr_host_order) {

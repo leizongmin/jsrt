@@ -1,6 +1,12 @@
 #include <limits.h>
 #include "fs_common.h"
 
+// Windows compatibility: lstat doesn't exist, use stat instead
+#ifdef _WIN32
+#define lstat stat
+#define S_ISLNK(m) (0)  // No symbolic links on Windows
+#endif
+
 // Internal helper function to remove directory recursively with depth tracking
 static int rmdir_recursive_internal(const char* path, int depth) {
   // Protect against excessively deep directory trees
@@ -143,7 +149,8 @@ static int copydir_recursive_internal(JSContext* ctx, const char* src, const cha
         // Copy permissions
         chmod(dest_path, st.st_mode & 0777);
       } else if (S_ISLNK(st.st_mode)) {
-        // Copy symlink
+#ifndef _WIN32
+        // Copy symlink (not supported on Windows)
         char link_target[PATH_MAX];
         ssize_t len = readlink(src_path, link_target, sizeof(link_target) - 1);
         if (len >= 0) {
@@ -154,6 +161,7 @@ static int copydir_recursive_internal(JSContext* ctx, const char* src, const cha
         } else {
           result = -1;
         }
+#endif
       }
     } else {
       result = -1;
@@ -335,7 +343,8 @@ JSValue js_fs_cp_sync(JSContext* ctx, JSValueConst this_val, int argc, JSValueCo
       chmod(dest, src_st.st_mode & 0777);
     }
   } else if (S_ISLNK(src_st.st_mode)) {
-    // Copy symlink
+#ifndef _WIN32
+    // Copy symlink (not supported on Windows)
     char link_target[PATH_MAX];
     ssize_t len = readlink(src, link_target, sizeof(link_target) - 1);
     if (len >= 0) {
@@ -346,6 +355,7 @@ JSValue js_fs_cp_sync(JSContext* ctx, JSValueConst this_val, int argc, JSValueCo
     } else {
       result = -1;
     }
+#endif
   }
 
   if (result != 0) {

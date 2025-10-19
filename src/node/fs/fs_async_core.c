@@ -822,7 +822,7 @@ JSValue js_fs_fchmod_async(JSContext* ctx, JSValueConst this_val, int argc, JSVa
 // fs.lchmod(path, mode, callback) - True async (Unix only)
 JSValue js_fs_lchmod_async(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
 #ifdef _WIN32
-  return JS_ThrowError(ctx, "lchmod is not supported on Windows");
+  return JS_ThrowTypeError(ctx, "lchmod is not supported on Windows");
 #else
   if (argc < 3) {
     return JS_ThrowTypeError(ctx, "lchmod requires path, mode, and callback");
@@ -879,7 +879,7 @@ JSValue js_fs_lchmod_async(JSContext* ctx, JSValueConst this_val, int argc, JSVa
 // fs.chown(path, uid, gid, callback) - True async
 JSValue js_fs_chown_async(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
 #ifdef _WIN32
-  return JS_ThrowError(ctx, "chown is not supported on Windows");
+  return JS_ThrowTypeError(ctx, "chown is not supported on Windows");
 #else
   if (argc < 4) {
     return JS_ThrowTypeError(ctx, "chown requires path, uid, gid, and callback");
@@ -934,7 +934,7 @@ JSValue js_fs_chown_async(JSContext* ctx, JSValueConst this_val, int argc, JSVal
 // fs.fchown(fd, uid, gid, callback) - True async
 JSValue js_fs_fchown_async(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
 #ifdef _WIN32
-  return JS_ThrowError(ctx, "fchown is not supported on Windows");
+  return JS_ThrowTypeError(ctx, "fchown is not supported on Windows");
 #else
   if (argc < 4) {
     return JS_ThrowTypeError(ctx, "fchown requires fd, uid, gid, and callback");
@@ -982,7 +982,7 @@ JSValue js_fs_fchown_async(JSContext* ctx, JSValueConst this_val, int argc, JSVa
 // fs.lchown(path, uid, gid, callback) - True async
 JSValue js_fs_lchown_async(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
 #ifdef _WIN32
-  return JS_ThrowError(ctx, "lchown is not supported on Windows");
+  return JS_ThrowTypeError(ctx, "lchown is not supported on Windows");
 #else
   if (argc < 4) {
     return JS_ThrowTypeError(ctx, "lchown requires path, uid, gid, and callback");

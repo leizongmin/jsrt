@@ -63,7 +63,12 @@ JSValue js_fs_lstat_sync(JSContext* ctx, JSValueConst this_val, int argc, JSValu
   }
 
   struct stat st;
+#ifdef _WIN32
+  // Windows doesn't have lstat, use stat instead
+  if (stat(path, &st) != 0) {
+#else
   if (lstat(path, &st) != 0) {
+#endif
     JSValue error = create_fs_error(ctx, errno, "lstat", path);
     JS_FreeCString(ctx, path);
     return JS_Throw(ctx, error);

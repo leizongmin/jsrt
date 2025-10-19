@@ -14,82 +14,88 @@
  * Stub WASI syscall implementations (Phase 3 will implement these)
  */
 
+// WASI errno codes
+#define WASI_ESUCCESS 0  // Success
+#define WASI_ENOSYS 52   // Function not implemented
+
 // args_get(argv: ptr, argv_buf: ptr) -> errno
 static JSValue wasi_args_get(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
-  JSRT_Debug("WASI syscall: args_get (stub)");
-  return JS_NewInt32(ctx, 0);  // ESUCCESS
+  JSRT_Debug("WASI syscall: args_get (stub - returning ENOSYS)");
+  return JS_NewInt32(ctx, WASI_ENOSYS);  // Not implemented
 }
 
 // args_sizes_get(argc: ptr, argv_buf_size: ptr) -> errno
 static JSValue wasi_args_sizes_get(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
-  JSRT_Debug("WASI syscall: args_sizes_get (stub)");
-  return JS_NewInt32(ctx, 0);  // ESUCCESS
+  JSRT_Debug("WASI syscall: args_sizes_get (stub - returning ENOSYS)");
+  return JS_NewInt32(ctx, WASI_ENOSYS);  // Not implemented
 }
 
 // environ_get(environ: ptr, environ_buf: ptr) -> errno
 static JSValue wasi_environ_get(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
-  JSRT_Debug("WASI syscall: environ_get (stub)");
-  return JS_NewInt32(ctx, 0);  // ESUCCESS
+  JSRT_Debug("WASI syscall: environ_get (stub - returning ENOSYS)");
+  return JS_NewInt32(ctx, WASI_ENOSYS);  // Not implemented
 }
 
 // environ_sizes_get(environc: ptr, environ_buf_size: ptr) -> errno
 static JSValue wasi_environ_sizes_get(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
-  JSRT_Debug("WASI syscall: environ_sizes_get (stub)");
-  return JS_NewInt32(ctx, 0);  // ESUCCESS
+  JSRT_Debug("WASI syscall: environ_sizes_get (stub - returning ENOSYS)");
+  return JS_NewInt32(ctx, WASI_ENOSYS);  // Not implemented
 }
 
 // fd_write(fd: fd, iovs: ptr, iovs_len: size, nwritten: ptr) -> errno
 static JSValue wasi_fd_write(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
-  JSRT_Debug("WASI syscall: fd_write (stub)");
-  return JS_NewInt32(ctx, 0);  // ESUCCESS
+  JSRT_Debug("WASI syscall: fd_write (stub - returning ENOSYS)");
+  return JS_NewInt32(ctx, WASI_ENOSYS);  // Not implemented
 }
 
 // fd_read(fd: fd, iovs: ptr, iovs_len: size, nread: ptr) -> errno
 static JSValue wasi_fd_read(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
-  JSRT_Debug("WASI syscall: fd_read (stub)");
-  return JS_NewInt32(ctx, 0);  // ESUCCESS
+  JSRT_Debug("WASI syscall: fd_read (stub - returning ENOSYS)");
+  return JS_NewInt32(ctx, WASI_ENOSYS);  // Not implemented
 }
 
 // fd_close(fd: fd) -> errno
 static JSValue wasi_fd_close(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
-  JSRT_Debug("WASI syscall: fd_close (stub)");
-  return JS_NewInt32(ctx, 0);  // ESUCCESS
+  JSRT_Debug("WASI syscall: fd_close (stub - returning ENOSYS)");
+  return JS_NewInt32(ctx, WASI_ENOSYS);  // Not implemented
 }
 
 // fd_seek(fd: fd, offset: filedelta, whence: whence, newoffset: ptr) -> errno
 static JSValue wasi_fd_seek(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
-  JSRT_Debug("WASI syscall: fd_seek (stub)");
-  return JS_NewInt32(ctx, 0);  // ESUCCESS
+  JSRT_Debug("WASI syscall: fd_seek (stub - returning ENOSYS)");
+  return JS_NewInt32(ctx, WASI_ENOSYS);  // Not implemented
 }
 
 // fd_prestat_get(fd: fd, buf: ptr) -> errno
 static JSValue wasi_fd_prestat_get(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
-  JSRT_Debug("WASI syscall: fd_prestat_get (stub)");
-  return JS_NewInt32(ctx, 0);  // ESUCCESS
+  JSRT_Debug("WASI syscall: fd_prestat_get (stub - returning ENOSYS)");
+  return JS_NewInt32(ctx, WASI_ENOSYS);  // Not implemented
 }
 
 // fd_prestat_dir_name(fd: fd, path: ptr, path_len: size) -> errno
 static JSValue wasi_fd_prestat_dir_name(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
-  JSRT_Debug("WASI syscall: fd_prestat_dir_name (stub)");
-  return JS_NewInt32(ctx, 0);  // ESUCCESS
+  JSRT_Debug("WASI syscall: fd_prestat_dir_name (stub - returning ENOSYS)");
+  return JS_NewInt32(ctx, WASI_ENOSYS);  // Not implemented
 }
 
 // proc_exit(rval: exitcode)
+// Note: proc_exit doesn't return a value - it terminates the process
 static JSValue wasi_proc_exit(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
-  JSRT_Debug("WASI syscall: proc_exit (stub)");
+  JSRT_Debug("WASI syscall: proc_exit (stub - no-op)");
+  // proc_exit should terminate, but in stub mode we just return
   return JS_UNDEFINED;
 }
 
 // clock_time_get(id: clockid, precision: timestamp, time: ptr) -> errno
 static JSValue wasi_clock_time_get(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
-  JSRT_Debug("WASI syscall: clock_time_get (stub)");
-  return JS_NewInt32(ctx, 0);  // ESUCCESS
+  JSRT_Debug("WASI syscall: clock_time_get (stub - returning ENOSYS)");
+  return JS_NewInt32(ctx, WASI_ENOSYS);  // Not implemented
 }
 
 // random_get(buf: ptr, buf_len: size) -> errno
 static JSValue wasi_random_get(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
-  JSRT_Debug("WASI syscall: random_get (stub)");
-  return JS_NewInt32(ctx, 0);  // ESUCCESS
+  JSRT_Debug("WASI syscall: random_get (stub - returning ENOSYS)");
+  return JS_NewInt32(ctx, WASI_ENOSYS);  // Not implemented
 }
 
 /**

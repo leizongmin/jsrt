@@ -46,9 +46,7 @@ try {
   console.log('❌ Test 3 failed: should have thrown');
 } catch (error) {
   assert.ok(error instanceof TypeError, 'Should throw TypeError');
-  console.log(
-    '✅ Test 3 passed: Constructor fails with any element type'
-  );
+  console.log('✅ Test 3 passed: Constructor fails with any element type');
 }
 
 console.log('\n========================================');

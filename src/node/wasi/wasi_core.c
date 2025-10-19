@@ -355,6 +355,13 @@ int jsrt_wasi_parse_options(JSContext* ctx, JSValue options_obj, jsrt_wasi_optio
       jsrt_wasi_free_options(options);
       return -1;
     }
+    // Validate FD is non-negative
+    if (fd < 0) {
+      JS_FreeValue(ctx, stdin_val);
+      jsrt_wasi_free_options(options);
+      JS_ThrowTypeError(ctx, "stdin file descriptor must be non-negative");
+      return -1;
+    }
     options->stdin_fd = fd;
   }
   JS_FreeValue(ctx, stdin_val);
@@ -368,6 +375,13 @@ int jsrt_wasi_parse_options(JSContext* ctx, JSValue options_obj, jsrt_wasi_optio
       jsrt_wasi_free_options(options);
       return -1;
     }
+    // Validate FD is non-negative
+    if (fd < 0) {
+      JS_FreeValue(ctx, stdout_val);
+      jsrt_wasi_free_options(options);
+      JS_ThrowTypeError(ctx, "stdout file descriptor must be non-negative");
+      return -1;
+    }
     options->stdout_fd = fd;
   }
   JS_FreeValue(ctx, stdout_val);
@@ -379,6 +393,13 @@ int jsrt_wasi_parse_options(JSContext* ctx, JSValue options_obj, jsrt_wasi_optio
     if (JS_ToInt32(ctx, &fd, stderr_val) < 0) {
       JS_FreeValue(ctx, stderr_val);
       jsrt_wasi_free_options(options);
+      return -1;
+    }
+    // Validate FD is non-negative
+    if (fd < 0) {
+      JS_FreeValue(ctx, stderr_val);
+      jsrt_wasi_free_options(options);
+      JS_ThrowTypeError(ctx, "stderr file descriptor must be non-negative");
       return -1;
     }
     options->stderr_fd = fd;
@@ -477,6 +498,12 @@ jsrt_wasi_t* jsrt_wasi_new(JSContext* ctx, const jsrt_wasi_options_t* options) {
   wasi->options.stderr_fd = options->stderr_fd;
   wasi->options.return_on_exit = options->return_on_exit;
   wasi->options.version = safe_strdup(options->version);
+  // Check for allocation failure
+  if (!wasi->options.version && options->version) {
+    jsrt_wasi_free(wasi);
+    JS_ThrowOutOfMemory(ctx);
+    return NULL;
+  }
 
   // Copy args
   if (options->args_count > 0) {
@@ -489,6 +516,12 @@ jsrt_wasi_t* jsrt_wasi_new(JSContext* ctx, const jsrt_wasi_options_t* options) {
     wasi->options.args_count = options->args_count;
     for (size_t i = 0; i < options->args_count; i++) {
       wasi->options.args[i] = safe_strdup(options->args[i]);
+      // Check for allocation failure (safe_strdup returns NULL if input is NULL or allocation fails)
+      if (!wasi->options.args[i] && options->args[i]) {
+        jsrt_wasi_free(wasi);
+        JS_ThrowOutOfMemory(ctx);
+        return NULL;
+      }
     }
   }
 
@@ -503,6 +536,12 @@ jsrt_wasi_t* jsrt_wasi_new(JSContext* ctx, const jsrt_wasi_options_t* options) {
     wasi->options.env_count = options->env_count;
     for (size_t i = 0; i < options->env_count; i++) {
       wasi->options.env[i] = safe_strdup(options->env[i]);
+      // Check for allocation failure
+      if (!wasi->options.env[i] && options->env[i]) {
+        jsrt_wasi_free(wasi);
+        JS_ThrowOutOfMemory(ctx);
+        return NULL;
+      }
     }
   }
 
@@ -518,6 +557,13 @@ jsrt_wasi_t* jsrt_wasi_new(JSContext* ctx, const jsrt_wasi_options_t* options) {
     for (size_t i = 0; i < options->preopen_count; i++) {
       wasi->options.preopens[i].virtual_path = safe_strdup(options->preopens[i].virtual_path);
       wasi->options.preopens[i].real_path = safe_strdup(options->preopens[i].real_path);
+      // Check for allocation failure
+      if ((!wasi->options.preopens[i].virtual_path && options->preopens[i].virtual_path) ||
+          (!wasi->options.preopens[i].real_path && options->preopens[i].real_path)) {
+        jsrt_wasi_free(wasi);
+        JS_ThrowOutOfMemory(ctx);
+        return NULL;
+      }
     }
   }
 

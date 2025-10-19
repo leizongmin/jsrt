@@ -32,9 +32,7 @@ try {
     error.message.includes('exported'),
     'Should mention exported memories'
   );
-  console.log(
-    '✅ Test 2 passed: Error message mentions exported memories'
-  );
+  console.log('✅ Test 2 passed: Error message mentions exported memories');
 }
 
 // Test 3: Constructor fails regardless of parameters

@@ -46,9 +46,17 @@ typedef struct {
 
 // Data structure for WebAssembly.Memory
 typedef struct {
-  wasm_memory_t* memory;  // WASM C API memory object
-  JSContext* ctx;         // Context for buffer management
-  JSValue buffer;         // Current ArrayBuffer (detached on grow)
+  bool is_host;          // true = host-created (non-functional), false = instance-exported (functional)
+  JSContext* ctx;        // Context for buffer management
+  JSValue buffer;        // Current ArrayBuffer (detached on grow)
+  JSValue instance_obj;  // Keeps Instance alive for exported memories
+  union {
+    wasm_memory_t* host;  // WASM C API memory object (non-functional)
+    struct {
+      wasm_module_inst_t instance;     // Instance for Runtime API access
+      wasm_memory_inst_t memory_inst;  // Memory instance from Runtime API
+    } exported;
+  } u;
 } jsrt_wasm_memory_data_t;
 
 // Data structure for WebAssembly.Table
@@ -1407,9 +1415,39 @@ static JSValue js_webassembly_instance_exports_getter(JSContext* ctx, JSValueCon
       global_data->u.exported.global_inst = global_inst;
 
       JS_SetOpaque(export_value, global_data);
+    } else if (export_info.kind == WASM_IMPORT_EXPORT_KIND_MEMORY) {
+      // Get exported memory instance from Runtime API
+      wasm_memory_inst_t memory_inst = wasm_runtime_get_default_memory(instance_data->instance);
+      if (!memory_inst) {
+        JSRT_Debug("Warning: memory '%s' not found in instance", export_info.name);
+        continue;
+      }
+
+      export_value = JS_NewObjectClass(ctx, js_webassembly_memory_class_id);
+      if (JS_IsException(export_value)) {
+        JS_FreeValue(ctx, exports);
+        return export_value;
+      }
+
+      jsrt_wasm_memory_data_t* memory_data = js_malloc(ctx, sizeof(jsrt_wasm_memory_data_t));
+      if (!memory_data) {
+        JS_FreeValue(ctx, export_value);
+        JS_FreeValue(ctx, exports);
+        return JS_ThrowOutOfMemory(ctx);
+      }
+
+      memset(memory_data, 0, sizeof(*memory_data));
+      memory_data->is_host = false;  // Instance-exported memory
+      memory_data->ctx = ctx;
+      memory_data->buffer = JS_UNDEFINED;  // Will be created on first access
+      memory_data->instance_obj = JS_DupValue(ctx, this_val);
+      memory_data->u.exported.instance = instance_data->instance;
+      memory_data->u.exported.memory_inst = memory_inst;
+
+      JS_SetOpaque(export_value, memory_data);
     } else {
-      // Memory and Table exports are handled in future phases
-      JSRT_Debug("Skipping non-function export '%s'", export_info.name);
+      // Table exports will be handled next
+      JSRT_Debug("Skipping non-function/non-memory/non-global export '%s'", export_info.name);
       continue;
     }
 
@@ -1762,6 +1800,18 @@ static JSValue js_webassembly_module_custom_sections(JSContext* ctx, JSValueCons
 // WebAssembly.Memory(descriptor) constructor
 static JSValue js_webassembly_memory_constructor(JSContext* ctx, JSValueConst new_target, int argc,
                                                  JSValueConst* argv) {
+  // NOTE: Standalone Memory constructor is not supported due to WAMR C API limitation.
+  // Host-created memories do not have functional buffer access.
+  // Use memories exported from WASM module instances instead.
+  return JS_ThrowTypeError(ctx,
+                           "WebAssembly.Memory constructor not supported. "
+                           "Use memories exported from WASM module instances instead. "
+                           "Example: instance.exports.mem.buffer");
+
+  // Original implementation below - non-functional due to WAMR C API limitation
+  // The C API does not support standalone host-created Memory objects.
+  // Only instance-exported memories work correctly via the Runtime API.
+#if 0
   if (argc < 1) {
     return JS_ThrowTypeError(ctx, "WebAssembly.Memory constructor requires 1 argument");
   }
@@ -1853,6 +1903,7 @@ static JSValue js_webassembly_memory_constructor(JSContext* ctx, JSValueConst ne
 
   JSRT_Debug("WebAssembly.Memory created successfully");
   return memory_obj;
+#endif  // 0 - Disabled due to WAMR C API limitation
 }
 
 // Memory.prototype.buffer getter
@@ -1868,11 +1919,28 @@ static JSValue js_webassembly_memory_buffer_getter(JSContext* ctx, JSValueConst 
     return JS_DupValue(ctx, memory_data->buffer);
   }
 
-  // Create new ArrayBuffer from memory data
-  byte_t* data = wasm_memory_data(memory_data->memory);
-  size_t size = wasm_memory_data_size(memory_data->memory);
+  // Get memory data pointer and size
+  byte_t* data = NULL;
+  size_t size = 0;
 
-  JSRT_Debug("Creating ArrayBuffer view: data=%p, size=%zu", (void*)data, size);
+  if (memory_data->is_host) {
+    // Host-created memory using C API (non-functional)
+    data = wasm_memory_data(memory_data->u.host);
+    size = wasm_memory_data_size(memory_data->u.host);
+  } else {
+    // Instance-exported memory using Runtime API (functional)
+    data = (byte_t*)wasm_memory_get_base_address(memory_data->u.exported.memory_inst);
+    uint64_t page_count = wasm_memory_get_cur_page_count(memory_data->u.exported.memory_inst);
+    uint64_t bytes_per_page = wasm_memory_get_bytes_per_page(memory_data->u.exported.memory_inst);
+    size = page_count * bytes_per_page;
+    JSRT_Debug("  page_count=%lu, bytes_per_page=%lu", page_count, bytes_per_page);
+  }
+
+  JSRT_Debug("Creating ArrayBuffer view: data=%p, size=%zu, is_host=%d", (void*)data, size, memory_data->is_host);
+
+  if (!data) {
+    return JS_ThrowInternalError(ctx, "Failed to get memory data");
+  }
 
   // Create ArrayBuffer that references the WASM memory (not a copy)
   JSValue buffer = JS_NewArrayBuffer(ctx, data, size, NULL, NULL, false);
@@ -1903,10 +1971,21 @@ static JSValue js_webassembly_memory_grow(JSContext* ctx, JSValueConst this_val,
     return JS_EXCEPTION;
   }
 
-  // Get current size (in pages)
-  wasm_memory_pages_t old_size = wasm_memory_size(memory_data->memory);
+  // Get current size (in pages) and grow memory
+  uint32_t old_size;
+  bool success;
 
-  JSRT_Debug("Memory.grow: old_size=%u pages, delta=%u pages", old_size, delta);
+  if (memory_data->is_host) {
+    // Host-created memory using C API
+    old_size = wasm_memory_size(memory_data->u.host);
+    JSRT_Debug("Memory.grow (host): old_size=%u pages, delta=%u pages", old_size, delta);
+    success = wasm_memory_grow(memory_data->u.host, delta);
+  } else {
+    // Instance-exported memory using Runtime API
+    old_size = (uint32_t)wasm_memory_get_cur_page_count(memory_data->u.exported.memory_inst);
+    JSRT_Debug("Memory.grow (exported): old_size=%u pages, delta=%u pages", old_size, delta);
+    success = wasm_runtime_enlarge_memory(memory_data->u.exported.instance, delta);
+  }
 
   // Detach old buffer (per WebAssembly spec)
   if (!JS_IsUndefined(memory_data->buffer)) {
@@ -1916,12 +1995,11 @@ static JSValue js_webassembly_memory_grow(JSContext* ctx, JSValueConst this_val,
     memory_data->buffer = JS_UNDEFINED;
   }
 
-  // Grow the memory
-  if (!wasm_memory_grow(memory_data->memory, delta)) {
+  if (!success) {
     return JS_ThrowRangeError(ctx, "Failed to grow memory (maximum exceeded or out of memory)");
   }
 
-  JSRT_Debug("Memory grown successfully: new_size=%u pages", wasm_memory_size(memory_data->memory));
+  JSRT_Debug("Memory grown successfully to %u pages", old_size + delta);
 
   // Return old size
   return JS_NewUint32(ctx, old_size);
@@ -2067,6 +2145,16 @@ static int jsrt_wasm_global_write_exported(const jsrt_wasm_global_data_t* data, 
 // WebAssembly.Global constructor
 static JSValue js_webassembly_global_constructor(JSContext* ctx, JSValueConst new_target, int argc,
                                                  JSValueConst* argv) {
+  // NOTE: Standalone Global constructor is not supported due to WAMR C API limitation.
+  // Only globals exported from WASM instances work correctly.
+  // See: docs/plan/webassembly-plan/wasm-phase4-global-blocker.md
+  return JS_ThrowTypeError(ctx,
+                           "WebAssembly.Global constructor not supported. "
+                           "Use globals exported from WASM module instances instead. "
+                           "Example: instance.exports.myGlobal.value");
+
+  // Original implementation below - non-functional due to WAMR limitation
+#if 0
   if (argc < 1) {
     return JS_ThrowTypeError(ctx, "WebAssembly.Global constructor requires a descriptor argument");
   }
@@ -2192,6 +2280,7 @@ static JSValue js_webassembly_global_constructor(JSContext* ctx, JSValueConst ne
 
   JS_SetOpaque(global_obj, global_data);
   return global_obj;
+#endif  // 0 - Disabled due to WAMR C API limitation
 }
 
 static JSValue js_webassembly_global_value_getter(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
@@ -2252,6 +2341,18 @@ static JSValue js_webassembly_global_value_of(JSContext* ctx, JSValueConst this_
 
 // WebAssembly.Table(descriptor) constructor
 static JSValue js_webassembly_table_constructor(JSContext* ctx, JSValueConst new_target, int argc, JSValueConst* argv) {
+  // NOTE: Standalone Table constructor is not supported due to WAMR C API limitation.
+  // Host-created tables do not have functional get/set/grow operations.
+  // Use tables exported from WASM module instances instead.
+  return JS_ThrowTypeError(ctx,
+                           "WebAssembly.Table constructor not supported. "
+                           "Use tables exported from WASM module instances instead. "
+                           "Example: instance.exports.table.get(0)");
+
+  // Original implementation below - non-functional due to WAMR C API limitation
+  // The C API does not support standalone host-created Table objects.
+  // Only instance-exported tables work correctly via the Runtime API.
+#if 0
   if (argc < 1) {
     return JS_ThrowTypeError(ctx, "WebAssembly.Table constructor requires 1 argument");
   }
@@ -2375,6 +2476,7 @@ static JSValue js_webassembly_table_constructor(JSContext* ctx, JSValueConst new
 
   JSRT_Debug("WebAssembly.Table created successfully");
   return table_obj;
+#endif  // 0 - Disabled due to WAMR C API limitation
 }
 
 // Table.prototype.length getter
@@ -2549,10 +2651,15 @@ static void js_webassembly_memory_finalizer(JSRuntime* rt, JSValue val) {
     if (!JS_IsUndefined(data->buffer)) {
       JS_FreeValueRT(rt, data->buffer);
     }
-    // Delete WASM memory
-    if (data->memory) {
-      wasm_memory_delete(data->memory);
+    // Free instance object reference (keeps instance alive for exported memories)
+    if (!JS_IsUndefined(data->instance_obj)) {
+      JS_FreeValueRT(rt, data->instance_obj);
     }
+    // Delete WASM memory (only for host-created memories)
+    if (data->is_host && data->u.host) {
+      wasm_memory_delete(data->u.host);
+    }
+    // Note: exported memories are owned by the instance, no cleanup needed
     js_free_rt(rt, data);
   }
 }

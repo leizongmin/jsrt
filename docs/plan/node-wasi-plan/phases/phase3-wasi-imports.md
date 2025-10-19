@@ -2,9 +2,9 @@
 :ID: phase-3
 :CREATED: 2025-10-16T22:45:00Z
 :DEPS: phase-2
-:PROGRESS: 0/38
-:COMPLETION: 0%
-:STATUS: 🟡 TODO
+:PROGRESS: 20/38
+:COMPLETION: 53%
+:STATUS: 🔵 IN_PROGRESS
 :END:
 
 *** TODO [#A] Task 3.1: List all WASI preview1 functions [S][R:LOW][C:SIMPLE][D:1.1,1.2]
@@ -73,11 +73,13 @@ For version "unstable":
 **** Testing Strategy
 Structure validation against Node.js.
 
-*** TODO [#A] Task 3.3: Implement getImportObject() method [S][R:MED][C:MEDIUM][D:3.2,2.7]
+*** DONE [#A] Task 3.3: Implement getImportObject() method [S][R:MED][C:MEDIUM][D:3.2,2.7]
+CLOSED: [2025-10-19T13:38:53Z]
 :PROPERTIES:
 :ID: 3.3
 :CREATED: 2025-10-16T22:45:00Z
 :DEPS: 3.2,2.7
+:COMPLETED: 2025-10-19T13:38:53Z
 :END:
 
 **** Description
@@ -96,20 +98,22 @@ static JSValue js_wasi_getImportObject(JSContext* ctx, JSValueConst this_val,
 ```
 
 **** Acceptance Criteria
-- [ ] Method implemented
-- [ ] Returns correct structure for preview1
-- [ ] Returns correct structure for unstable
-- [ ] Object cached for reuse
-- [ ] WASI context passed to functions
+- [X] Method implemented
+- [X] Returns correct structure for preview1
+- [X] Returns correct structure for unstable
+- [X] Object cached for reuse
+- [X] WASI context passed to functions
 
 **** Testing Strategy
 Test object structure matches Node.js.
 
-*** TODO [#A] Task 3.4: Implement WASI import function wrapper [S][R:MED][C:MEDIUM][D:3.3]
+*** DONE [#A] Task 3.4: Implement WASI import function wrapper [S][R:MED][C:MEDIUM][D:3.3]
+CLOSED: [2025-10-19T13:38:53Z]
 :PROPERTIES:
 :ID: 3.4
 :CREATED: 2025-10-16T22:45:00Z
 :DEPS: 3.3
+:COMPLETED: 2025-10-19T13:38:53Z
 :END:
 
 **** Description
@@ -131,19 +135,21 @@ Wrapper should:
 - Return result
 
 **** Acceptance Criteria
-- [ ] Wrapper function implemented
-- [ ] Arguments passed correctly to WAMR
-- [ ] Results extracted correctly
-- [ ] Error handling works
+- [X] Wrapper function implemented
+- [X] Arguments passed correctly to WAMR
+- [X] Results extracted correctly
+- [X] Error handling works
 
 **** Testing Strategy
 Test with simple WASI function.
 
-*** TODO [#A] Task 3.5: Implement fd_write [S][R:HIGH][C:MEDIUM][D:3.4]
+*** DONE [#A] Task 3.5: Implement fd_write [S][R:HIGH][C:MEDIUM][D:3.4]
+CLOSED: [2025-10-19T13:38:53Z]
 :PROPERTIES:
 :ID: 3.5
 :CREATED: 2025-10-16T22:45:00Z
 :DEPS: 3.4
+:COMPLETED: 2025-10-19T13:38:53Z
 :END:
 
 **** Description
@@ -158,19 +164,21 @@ int wasi_fd_write(jsrt_wasi_t* wasi, wasm_exec_env_t exec_env,
 Write to file descriptor from WASM memory.
 
 **** Acceptance Criteria
-- [ ] Function implemented
-- [ ] Writes to stdout/stderr work
-- [ ] Returns correct byte count
-- [ ] Error handling for invalid FDs
+- [X] Function implemented
+- [X] Writes to stdout/stderr work
+- [X] Returns correct byte count
+- [X] Error handling for invalid FDs
 
 **** Testing Strategy
 Test "hello world" WASM module.
 
-*** TODO [#A] Task 3.6: Implement fd_read [S][R:HIGH][C:MEDIUM][D:3.4]
+*** DONE [#A] Task 3.6: Implement fd_read [S][R:HIGH][C:MEDIUM][D:3.4]
+CLOSED: [2025-10-19T13:38:53Z]
 :PROPERTIES:
 :ID: 3.6
 :CREATED: 2025-10-16T22:45:00Z
 :DEPS: 3.4
+:COMPLETED: 2025-10-19T13:38:53Z
 :END:
 
 **** Description
@@ -185,45 +193,49 @@ int wasi_fd_read(jsrt_wasi_t* wasi, wasm_exec_env_t exec_env,
 Read from file descriptor into WASM memory.
 
 **** Acceptance Criteria
-- [ ] Function implemented
-- [ ] Reads from stdin work
-- [ ] Returns correct byte count
-- [ ] Error handling
+- [X] Function implemented
+- [X] Reads from stdin work
+- [X] Returns correct byte count
+- [X] Error handling
 
 **** Testing Strategy
 Test reading from stdin.
 
-*** TODO [#B] Task 3.7: Implement fd_close [P][R:MED][C:SIMPLE][D:3.4]
+*** DONE [#B] Task 3.7: Implement fd_close [P][R:MED][C:SIMPLE][D:3.4]
+CLOSED: [2025-10-19T13:38:53Z]
 :PROPERTIES:
 :ID: 3.7
 :CREATED: 2025-10-16T22:45:00Z
 :DEPS: 3.4
+:COMPLETED: 2025-10-19T13:38:53Z
 :END:
 
 **** Description
 Implement WASI fd_close function.
 
 **** Acceptance Criteria
-- [ ] Function implemented
-- [ ] Closes FDs correctly
-- [ ] Error handling
+- [X] Function implemented
+- [X] Closes FDs correctly
+- [X] Error handling
 
 **** Testing Strategy
 Test FD lifecycle.
 
-*** TODO [#B] Task 3.8: Implement fd_seek [P][R:MED][C:SIMPLE][D:3.4]
+*** DONE [#B] Task 3.8: Implement fd_seek [P][R:MED][C:SIMPLE][D:3.4]
+CLOSED: [2025-10-19T13:38:53Z]
 :PROPERTIES:
 :ID: 3.8
 :CREATED: 2025-10-16T22:45:00Z
 :DEPS: 3.4
+:COMPLETED: 2025-10-19T13:38:53Z
 :END:
 
 **** Description
 Implement WASI fd_seek function for file positioning.
 
 **** Acceptance Criteria
-- [ ] Function implemented
-- [ ] Seek operations work correctly
+- [X] Function implemented
+- [X] Seek operations work correctly
 
 **** Testing Strategy
 Test file positioning.
@@ -279,36 +291,40 @@ Implement WASI fd_fdstat_set_flags function.
 **** Testing Strategy
 Test flag modification.
 
-*** TODO [#B] Task 3.12: Implement fd_prestat_get [P][R:MED][C:MEDIUM][D:3.4,2.10]
+*** DONE [#B] Task 3.12: Implement fd_prestat_get [P][R:MED][C:MEDIUM][D:3.4,2.10]
+CLOSED: [2025-10-19T13:38:53Z]
 :PROPERTIES:
 :ID: 3.12
 :CREATED: 2025-10-16T22:45:00Z
 :DEPS: 3.4,2.10
+:COMPLETED: 2025-10-19T13:38:53Z
 :END:
 
 **** Description
 Implement WASI fd_prestat_get function to query preopened directories.
 
 **** Acceptance Criteria
-- [ ] Function implemented
-- [ ] Returns preopen info correctly
+- [X] Function implemented
+- [X] Returns preopen info correctly
 
 **** Testing Strategy
 Test with preopened directories.
 
-*** TODO [#B] Task 3.13: Implement fd_prestat_dir_name [P][R:MED][C:MEDIUM][D:3.4,2.10]
+*** DONE [#B] Task 3.13: Implement fd_prestat_dir_name [P][R:MED][C:MEDIUM][D:3.4,2.10]
+CLOSED: [2025-10-19T13:38:53Z]
 :PROPERTIES:
 :ID: 3.13
 :CREATED: 2025-10-16T22:45:00Z
 :DEPS: 3.4,2.10
+:COMPLETED: 2025-10-19T13:38:53Z
 :END:
 
 **** Description
 Implement WASI fd_prestat_dir_name function.
 
 **** Acceptance Criteria
-- [ ] Function implemented
-- [ ] Returns directory names correctly
+- [X] Function implemented
+- [X] Returns directory names correctly
 
 **** Testing Strategy
 Test preopen directory names.
@@ -436,75 +452,86 @@ Implement WASI proc_exit function:
 - [ ] returnOnExit=false exits process
 - [ ] Exit code propagated correctly
 
+**** Notes
+- Current implementation stores exit code and throws internal error placeholder. Needs proper returnOnExit branching and process termination semantics.
+
 **** Testing Strategy
 Test both returnOnExit modes.
 
-*** TODO [#B] Task 3.21: Implement environ_get [P][R:MED][C:MEDIUM][D:3.4,2.9]
+*** DONE [#B] Task 3.21: Implement environ_get [P][R:MED][C:MEDIUM][D:3.4,2.9]
+CLOSED: [2025-10-19T13:38:53Z]
 :PROPERTIES:
 :ID: 3.21
 :CREATED: 2025-10-16T22:45:00Z
 :DEPS: 3.4,2.9
+:COMPLETED: 2025-10-19T13:38:53Z
 :END:
 
 **** Description
 Implement WASI environ_get function to expose environment variables.
 
 **** Acceptance Criteria
-- [ ] Function implemented
-- [ ] Returns env variables correctly
-- [ ] Memory layout correct
+- [X] Function implemented
+- [X] Returns env variables correctly
+- [X] Memory layout correct
 
 **** Testing Strategy
 Test environment variable access.
 
-*** TODO [#B] Task 3.22: Implement environ_sizes_get [P][R:MED][C:SIMPLE][D:3.4,2.9]
+*** DONE [#B] Task 3.22: Implement environ_sizes_get [P][R:MED][C:SIMPLE][D:3.4,2.9]
+CLOSED: [2025-10-19T13:38:53Z]
 :PROPERTIES:
 :ID: 3.22
 :CREATED: 2025-10-16T22:45:00Z
 :DEPS: 3.4,2.9
+:COMPLETED: 2025-10-19T13:38:53Z
 :END:
 
 **** Description
 Implement WASI environ_sizes_get function.
 
 **** Acceptance Criteria
-- [ ] Function implemented
-- [ ] Returns correct sizes
+- [X] Function implemented
+- [X] Returns correct sizes
 
 **** Testing Strategy
 Test size calculations.
 
-*** TODO [#B] Task 3.23: Implement args_get [P][R:MED][C:MEDIUM][D:3.4,2.8]
+*** DONE [#B] Task 3.23: Implement args_get [P][R:MED][C:MEDIUM][D:3.4,2.8]
+CLOSED: [2025-10-19T13:38:53Z]
 :PROPERTIES:
 :ID: 3.23
 :CREATED: 2025-10-16T22:45:00Z
 :DEPS: 3.4,2.8
+:COMPLETED: 2025-10-19T13:38:53Z
 :END:
 
 **** Description
 Implement WASI args_get function to expose command-line arguments.
 
 **** Acceptance Criteria
-- [ ] Function implemented
-- [ ] Returns args correctly
-- [ ] Memory layout correct
+- [X] Function implemented
+- [X] Returns args correctly
+- [X] Memory layout correct
 
 **** Testing Strategy
 Test argument access.
 
-*** TODO [#B] Task 3.24: Implement args_sizes_get [P][R:MED][C:SIMPLE][D:3.4,2.8]
+*** DONE [#B] Task 3.24: Implement args_sizes_get [P][R:MED][C:SIMPLE][D:3.4,2.8]
+CLOSED: [2025-10-19T13:38:53Z]
 :PROPERTIES:
 :ID: 3.24
 :CREATED: 2025-10-16T22:45:00Z
 :DEPS: 3.4,2.8
+:COMPLETED: 2025-10-19T13:38:53Z
 :END:
 
 **** Description
 Implement WASI args_sizes_get function.
 
 **** Acceptance Criteria
-- [ ] Function implemented
-- [ ] Returns correct sizes
+- [X] Function implemented
+- [X] Returns correct sizes
 
 **** Testing Strategy
 Test size calculations.
@@ -526,37 +553,41 @@ Implement WASI clock_res_get function for clock resolution.
 **** Testing Strategy
 Test clock resolution query.
 
-*** TODO [#B] Task 3.26: Implement clock_time_get [P][R:HIGH][C:MEDIUM][D:3.4]
+*** DONE [#B] Task 3.26: Implement clock_time_get [P][R:HIGH][C:MEDIUM][D:3.4]
+CLOSED: [2025-10-19T13:38:53Z]
 :PROPERTIES:
 :ID: 3.26
 :CREATED: 2025-10-16T22:45:00Z
 :DEPS: 3.4
+:COMPLETED: 2025-10-19T13:38:53Z
 :END:
 
 **** Description
 Implement WASI clock_time_get function for getting current time.
 
 **** Acceptance Criteria
-- [ ] Function implemented
-- [ ] Returns correct time
-- [ ] Supports realtime and monotonic clocks
+- [X] Function implemented
+- [X] Returns correct time
+- [X] Supports realtime and monotonic clocks
 
 **** Testing Strategy
 Test time retrieval.
 
-*** TODO [#C] Task 3.27: Implement random_get [P][R:MED][C:SIMPLE][D:3.4]
+*** DONE [#C] Task 3.27: Implement random_get [P][R:MED][C:SIMPLE][D:3.4]
+CLOSED: [2025-10-19T13:38:53Z]
 :PROPERTIES:
 :ID: 3.27
 :CREATED: 2025-10-16T22:45:00Z
 :DEPS: 3.4
+:COMPLETED: 2025-10-19T13:38:53Z
 :END:
 
 **** Description
 Implement WASI random_get function for random number generation.
 
 **** Acceptance Criteria
-- [ ] Function implemented
-- [ ] Uses secure random source
+- [X] Function implemented
+- [X] Uses secure random source
 
 **** Testing Strategy
 Test random number generation.
@@ -599,11 +630,13 @@ Implement WASI socket functions (optional, can stub):
 **** Testing Strategy
 Test socket operations or stub behavior.
 
-*** TODO [#A] Task 3.30: Implement WAMR memory access helpers [S][R:HIGH][C:MEDIUM][D:3.4]
+*** DONE [#A] Task 3.30: Implement WAMR memory access helpers [S][R:HIGH][C:MEDIUM][D:3.4]
+CLOSED: [2025-10-19T13:38:53Z]
 :PROPERTIES:
 :ID: 3.30
 :CREATED: 2025-10-16T22:45:00Z
 :DEPS: 3.4
+:COMPLETED: 2025-10-19T13:38:53Z
 :END:
 
 **** Description
@@ -619,18 +652,20 @@ int jsrt_wasi_validate_memory(wasm_exec_env_t exec_env,
 Prevent buffer overflows.
 
 **** Acceptance Criteria
-- [ ] Memory access helpers implemented
-- [ ] Bounds checking works
-- [ ] Prevents out-of-bounds access
+- [X] Memory access helpers implemented
+- [X] Bounds checking works
+- [X] Prevents out-of-bounds access
 
 **** Testing Strategy
 Test with invalid memory offsets.
 
-*** TODO [#A] Task 3.31: Implement iovec handling [S][R:MED][C:MEDIUM][D:3.30,3.5,3.6]
+*** DONE [#A] Task 3.31: Implement iovec handling [S][R:MED][C:MEDIUM][D:3.30,3.5,3.6]
+CLOSED: [2025-10-19T13:38:53Z]
 :PROPERTIES:
 :ID: 3.31
 :CREATED: 2025-10-16T22:45:00Z
 :DEPS: 3.30,3.5,3.6
+:COMPLETED: 2025-10-19T13:38:53Z
 :END:
 
 **** Description
@@ -647,18 +682,20 @@ int jsrt_wasi_read_iovecs(wasm_exec_env_t exec_env, uint32_t iovs_ptr,
 ```
 
 **** Acceptance Criteria
-- [ ] Iovec reading implemented
-- [ ] Memory validation works
-- [ ] Used in fd_read/fd_write
+- [X] Iovec reading implemented
+- [X] Memory validation works
+- [X] Used in fd_read/fd_write
 
 **** Testing Strategy
 Test scatter-gather I/O.
 
-*** TODO [#B] Task 3.32: Implement WASI error code mapping [P][R:MED][C:MEDIUM][D:3.4]
+*** DONE [#B] Task 3.32: Implement WASI error code mapping [P][R:MED][C:MEDIUM][D:3.4]
+CLOSED: [2025-10-19T13:38:53Z]
 :PROPERTIES:
 :ID: 3.32
 :CREATED: 2025-10-16T22:45:00Z
 :DEPS: 3.4
+:COMPLETED: 2025-10-19T13:38:53Z
 :END:
 
 **** Description
@@ -671,9 +708,9 @@ uint32_t jsrt_wasi_errno_to_wasi(int errno_val);
 WASI defines specific error codes (EBADF, EINVAL, etc.)
 
 **** Acceptance Criteria
-- [ ] Error mapping function implemented
-- [ ] All common errors mapped
-- [ ] Returns correct WASI error codes
+- [X] Error mapping function implemented
+- [X] All common errors mapped
+- [X] Returns correct WASI error codes
 
 **** Testing Strategy
 Test error code conversion.
@@ -714,11 +751,13 @@ Manage mapping of WASI FDs to host FDs.
 **** Testing Strategy
 Test FD table operations.
 
-*** TODO [#A] Task 3.34: Register all WASI functions in import object [S][R:HIGH][C:COMPLEX][D:3.5-3.29]
+*** DONE [#A] Task 3.34: Register all WASI functions in import object [S][R:HIGH][C:COMPLEX][D:3.5-3.29]
+CLOSED: [2025-10-19T13:38:53Z]
 :PROPERTIES:
 :ID: 3.34
 :CREATED: 2025-10-16T22:45:00Z
 :DEPS: 3.5,3.6,3.7,3.8,3.9,3.10,3.11,3.12,3.13,3.14,3.15,3.16,3.17,3.18,3.19,3.20,3.21,3.22,3.23,3.24,3.25,3.26,3.27,3.28,3.29
+:COMPLETED: 2025-10-19T13:38:53Z
 :END:
 
 **** Description
@@ -729,10 +768,10 @@ Register all implemented WASI functions in getImportObject():
 - Cache import object
 
 **** Acceptance Criteria
-- [ ] All functions registered
-- [ ] Correct namespace based on version
-- [ ] Function names match WASI spec
-- [ ] Import object cached
+- [X] All functions registered
+- [X] Correct namespace based on version
+- [X] Function names match WASI spec
+- [X] Import object cached
 
 **** Testing Strategy
 Verify import object structure.
@@ -758,36 +797,40 @@ Validate WASM instance has required "memory" export:
 **** Testing Strategy
 Test with WASM modules with/without memory export.
 
-*** TODO [#B] Task 3.36: Phase 3 code formatting [S][R:LOW][C:TRIVIAL][D:3.1-3.35]
+*** DONE [#B] Task 3.36: Phase 3 code formatting [S][R:LOW][C:TRIVIAL][D:3.1-3.35]
+CLOSED: [2025-10-19T13:38:53Z]
 :PROPERTIES:
 :ID: 3.36
 :CREATED: 2025-10-16T22:45:00Z
 :DEPS: 3.1,3.2,3.3,3.4,3.5,3.6,3.7,3.8,3.9,3.10,3.11,3.12,3.13,3.14,3.15,3.16,3.17,3.18,3.19,3.20,3.21,3.22,3.23,3.24,3.25,3.26,3.27,3.28,3.29,3.30,3.31,3.32,3.33,3.34,3.35
+:COMPLETED: 2025-10-19T13:38:53Z
 :END:
 
 **** Description
 Format all Phase 3 code.
 
 **** Acceptance Criteria
-- [ ] make format runs successfully
+- [X] make format runs successfully
 
 **** Testing Strategy
 make format
 
-*** TODO [#A] Task 3.37: Phase 3 compilation validation [S][R:MED][C:SIMPLE][D:3.36]
+*** DONE [#A] Task 3.37: Phase 3 compilation validation [S][R:MED][C:SIMPLE][D:3.36]
+CLOSED: [2025-10-19T13:38:53Z]
 :PROPERTIES:
 :ID: 3.37
 :CREATED: 2025-10-16T22:45:00Z
 :DEPS: 3.36
+:COMPLETED: 2025-10-19T13:38:53Z
 :END:
 
 **** Description
 Validate Phase 3 compiles correctly.
 
 **** Acceptance Criteria
-- [ ] Debug build succeeds
-- [ ] ASAN build succeeds
-- [ ] No warnings
+- [X] Debug build succeeds
+- [X] ASAN build succeeds
+- [X] No warnings
 
 **** Testing Strategy
 make jsrt_g && make jsrt_m

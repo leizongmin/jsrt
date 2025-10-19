@@ -201,12 +201,15 @@ static int parse_preopens_object(JSContext* ctx, JSValue preopens_obj, jsrt_wasi
     return -1;
   }
 
-  // Allocate preopens array
-  jsrt_wasi_preopen_t* preopens = calloc(count, sizeof(jsrt_wasi_preopen_t));
-  if (!preopens) {
-    js_free(ctx, props);
-    JS_ThrowOutOfMemory(ctx);
-    return -1;
+  jsrt_wasi_preopen_t* preopens = NULL;
+  if (count > 0) {
+    // Allocate preopens array
+    preopens = calloc(count, sizeof(jsrt_wasi_preopen_t));
+    if (!preopens) {
+      js_free(ctx, props);
+      JS_ThrowOutOfMemory(ctx);
+      return -1;
+    }
   }
 
   // Parse each entry

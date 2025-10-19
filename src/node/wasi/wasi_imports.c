@@ -21,25 +21,25 @@
  */
 
 // WASI errno codes
-#define WASI_ESUCCESS 0   // Success
-#define WASI_EBADF 8      // Bad file descriptor
-#define WASI_EINVAL 28    // Invalid argument
-#define WASI_ENOSYS 52    // Function not implemented
-#define WASI_EFAULT 21    // Bad address (pointer out of bounds)
-#define WASI_EIO 29       // I/O error
-#define WASI_ESPIPE 29    // Illegal seek (same as EIO in WASI)
+#define WASI_ESUCCESS 0  // Success
+#define WASI_EBADF 8     // Bad file descriptor
+#define WASI_EINVAL 28   // Invalid argument
+#define WASI_ENOSYS 52   // Function not implemented
+#define WASI_EFAULT 21   // Bad address (pointer out of bounds)
+#define WASI_EIO 29      // I/O error
+#define WASI_ESPIPE 29   // Illegal seek (same as EIO in WASI)
 
 /**
  * Helper: Get WASI instance from function's opaque data
  * Syscalls use JS_NewCFunctionData to capture WASI instance pointer
  */
-static inline jsrt_wasi_t* get_wasi_instance(JSValue* func_data) {
-  if (!func_data) {
+static inline jsrt_wasi_t* get_wasi_instance(JSContext* ctx, JSValue* func_data) {
+  if (!ctx || !func_data) {
     return NULL;
   }
   // func_data[0] contains raw pointer encoded as int64
   int64_t ptr_val;
-  if (JS_ToInt64(NULL, &ptr_val, func_data[0])) {
+  if (JS_ToInt64(ctx, &ptr_val, func_data[0]) < 0) {
     return NULL;
   }
   return (jsrt_wasi_t*)(uintptr_t)ptr_val;
@@ -69,8 +69,8 @@ static uint8_t* get_wasm_memory(jsrt_wasi_t* wasi, uint32_t offset, uint32_t siz
 
 // args_get(argv: ptr, argv_buf: ptr) -> errno
 static JSValue wasi_args_get(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv, int magic,
-                              JSValue* func_data) {
-  jsrt_wasi_t* wasi = get_wasi_instance(func_data);
+                             JSValue* func_data) {
+  jsrt_wasi_t* wasi = get_wasi_instance(ctx, func_data);
   if (!wasi || !wasi->wamr_instance) {
     JSRT_Debug("WASI syscall: args_get - no WAMR instance");
     return JS_NewInt32(ctx, WASI_EINVAL);
@@ -95,7 +95,8 @@ static JSValue wasi_args_get(JSContext* ctx, JSValueConst this_val, int argc, JS
   }
 
   // Get pointers to WASM memory
-  uint8_t* argv_array = get_wasm_memory(wasi, argv_ptr, wasi->options.args_count * 4);  // Array of pointers (4 bytes each)
+  uint8_t* argv_array =
+      get_wasm_memory(wasi, argv_ptr, wasi->options.args_count * 4);  // Array of pointers (4 bytes each)
   uint8_t* argv_buf = get_wasm_memory(wasi, argv_buf_ptr, total_size);
 
   if (!argv_array || !argv_buf) {
@@ -127,8 +128,8 @@ static JSValue wasi_args_get(JSContext* ctx, JSValueConst this_val, int argc, JS
 
 // args_sizes_get(argc: ptr, argv_buf_size: ptr) -> errno
 static JSValue wasi_args_sizes_get(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv, int magic,
-                                    JSValue* func_data) {
-  jsrt_wasi_t* wasi = get_wasi_instance(func_data);
+                                   JSValue* func_data) {
+  jsrt_wasi_t* wasi = get_wasi_instance(ctx, func_data);
   if (!wasi || !wasi->wamr_instance) {
     JSRT_Debug("WASI syscall: args_sizes_get - no WAMR instance");
     return JS_NewInt32(ctx, WASI_EINVAL);
@@ -180,8 +181,8 @@ static JSValue wasi_args_sizes_get(JSContext* ctx, JSValueConst this_val, int ar
 
 // environ_get(environ: ptr, environ_buf: ptr) -> errno
 static JSValue wasi_environ_get(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv, int magic,
-                                 JSValue* func_data) {
-  jsrt_wasi_t* wasi = get_wasi_instance(func_data);
+                                JSValue* func_data) {
+  jsrt_wasi_t* wasi = get_wasi_instance(ctx, func_data);
   if (!wasi || !wasi->wamr_instance) {
     JSRT_Debug("WASI syscall: environ_get - no WAMR instance");
     return JS_NewInt32(ctx, WASI_EINVAL);
@@ -238,8 +239,8 @@ static JSValue wasi_environ_get(JSContext* ctx, JSValueConst this_val, int argc,
 
 // environ_sizes_get(environc: ptr, environ_buf_size: ptr) -> errno
 static JSValue wasi_environ_sizes_get(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv, int magic,
-                                       JSValue* func_data) {
-  jsrt_wasi_t* wasi = get_wasi_instance(func_data);
+                                      JSValue* func_data) {
+  jsrt_wasi_t* wasi = get_wasi_instance(ctx, func_data);
   if (!wasi || !wasi->wamr_instance) {
     JSRT_Debug("WASI syscall: environ_sizes_get - no WAMR instance");
     return JS_NewInt32(ctx, WASI_EINVAL);
@@ -291,14 +292,14 @@ static JSValue wasi_environ_sizes_get(JSContext* ctx, JSValueConst this_val, int
 
 // WASI iovec structure (in WASM memory)
 typedef struct {
-  uint32_t buf;   // Pointer to buffer
-  uint32_t len;   // Buffer length
+  uint32_t buf;  // Pointer to buffer
+  uint32_t len;  // Buffer length
 } wasi_iovec_t;
 
 // fd_write(fd: fd, iovs: ptr, iovs_len: size, nwritten: ptr) -> errno
 static JSValue wasi_fd_write(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv, int magic,
-                              JSValue* func_data) {
-  jsrt_wasi_t* wasi = get_wasi_instance(func_data);
+                             JSValue* func_data) {
+  jsrt_wasi_t* wasi = get_wasi_instance(ctx, func_data);
   if (!wasi || !wasi->wamr_instance) {
     JSRT_Debug("WASI syscall: fd_write - no WAMR instance");
     return JS_NewInt32(ctx, WASI_EINVAL);
@@ -341,10 +342,10 @@ static JSValue wasi_fd_write(JSContext* ctx, JSValueConst this_val, int argc, JS
   size_t total_written = 0;
   for (uint32_t i = 0; i < iovs_len; i++) {
     // Parse iovec (little-endian)
-    uint32_t buf_ptr = iovs_mem[i * 8 + 0] | (iovs_mem[i * 8 + 1] << 8) | (iovs_mem[i * 8 + 2] << 16) |
-                       (iovs_mem[i * 8 + 3] << 24);
-    uint32_t buf_len = iovs_mem[i * 8 + 4] | (iovs_mem[i * 8 + 5] << 8) | (iovs_mem[i * 8 + 6] << 16) |
-                       (iovs_mem[i * 8 + 7] << 24);
+    uint32_t buf_ptr =
+        iovs_mem[i * 8 + 0] | (iovs_mem[i * 8 + 1] << 8) | (iovs_mem[i * 8 + 2] << 16) | (iovs_mem[i * 8 + 3] << 24);
+    uint32_t buf_len =
+        iovs_mem[i * 8 + 4] | (iovs_mem[i * 8 + 5] << 8) | (iovs_mem[i * 8 + 6] << 16) | (iovs_mem[i * 8 + 7] << 24);
 
     if (buf_len == 0) {
       continue;
@@ -378,8 +379,8 @@ static JSValue wasi_fd_write(JSContext* ctx, JSValueConst this_val, int argc, JS
 
 // fd_read(fd: fd, iovs: ptr, iovs_len: size, nread: ptr) -> errno
 static JSValue wasi_fd_read(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv, int magic,
-                             JSValue* func_data) {
-  jsrt_wasi_t* wasi = get_wasi_instance(func_data);
+                            JSValue* func_data) {
+  jsrt_wasi_t* wasi = get_wasi_instance(ctx, func_data);
   if (!wasi || !wasi->wamr_instance) {
     JSRT_Debug("WASI syscall: fd_read - no WAMR instance");
     return JS_NewInt32(ctx, WASI_EINVAL);
@@ -420,10 +421,10 @@ static JSValue wasi_fd_read(JSContext* ctx, JSValueConst this_val, int argc, JSV
   size_t total_read = 0;
   for (uint32_t i = 0; i < iovs_len; i++) {
     // Parse iovec (little-endian)
-    uint32_t buf_ptr = iovs_mem[i * 8 + 0] | (iovs_mem[i * 8 + 1] << 8) | (iovs_mem[i * 8 + 2] << 16) |
-                       (iovs_mem[i * 8 + 3] << 24);
-    uint32_t buf_len = iovs_mem[i * 8 + 4] | (iovs_mem[i * 8 + 5] << 8) | (iovs_mem[i * 8 + 6] << 16) |
-                       (iovs_mem[i * 8 + 7] << 24);
+    uint32_t buf_ptr =
+        iovs_mem[i * 8 + 0] | (iovs_mem[i * 8 + 1] << 8) | (iovs_mem[i * 8 + 2] << 16) | (iovs_mem[i * 8 + 3] << 24);
+    uint32_t buf_len =
+        iovs_mem[i * 8 + 4] | (iovs_mem[i * 8 + 5] << 8) | (iovs_mem[i * 8 + 6] << 16) | (iovs_mem[i * 8 + 7] << 24);
 
     if (buf_len == 0) {
       continue;
@@ -462,8 +463,8 @@ static JSValue wasi_fd_read(JSContext* ctx, JSValueConst this_val, int argc, JSV
 
 // fd_close(fd: fd) -> errno
 static JSValue wasi_fd_close(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv, int magic,
-                              JSValue* func_data) {
-  jsrt_wasi_t* wasi = get_wasi_instance(func_data);
+                             JSValue* func_data) {
+  jsrt_wasi_t* wasi = get_wasi_instance(ctx, func_data);
   if (!wasi) {
     JSRT_Debug("WASI syscall: fd_close - no WASI instance");
     return JS_NewInt32(ctx, WASI_EINVAL);
@@ -496,8 +497,8 @@ static JSValue wasi_fd_close(JSContext* ctx, JSValueConst this_val, int argc, JS
 
 // fd_seek(fd: fd, offset: filedelta, whence: whence, newoffset: ptr) -> errno
 static JSValue wasi_fd_seek(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv, int magic,
-                             JSValue* func_data) {
-  jsrt_wasi_t* wasi = get_wasi_instance(func_data);
+                            JSValue* func_data) {
+  jsrt_wasi_t* wasi = get_wasi_instance(ctx, func_data);
   if (!wasi || !wasi->wamr_instance) {
     JSRT_Debug("WASI syscall: fd_seek - no WAMR instance");
     return JS_NewInt32(ctx, WASI_EINVAL);
@@ -512,13 +513,13 @@ static JSValue wasi_fd_seek(JSContext* ctx, JSValueConst this_val, int argc, JSV
   int64_t offset;
   uint32_t whence, newoffset_ptr;
 
-  if (JS_ToUint32(ctx, &fd, argv[0]) || JS_ToInt64(ctx, &offset, argv[1]) ||
-      JS_ToUint32(ctx, &whence, argv[2]) || JS_ToUint32(ctx, &newoffset_ptr, argv[3])) {
+  if (JS_ToUint32(ctx, &fd, argv[0]) || JS_ToInt64(ctx, &offset, argv[1]) || JS_ToUint32(ctx, &whence, argv[2]) ||
+      JS_ToUint32(ctx, &newoffset_ptr, argv[3])) {
     return JS_NewInt32(ctx, WASI_EINVAL);
   }
 
-  JSRT_Debug("WASI syscall: fd_seek(fd=%u, offset=%lld, whence=%u, newoffset=%u)",
-             fd, (long long)offset, whence, newoffset_ptr);
+  JSRT_Debug("WASI syscall: fd_seek(fd=%u, offset=%lld, whence=%u, newoffset=%u)", fd, (long long)offset, whence,
+             newoffset_ptr);
 
   // stdin/stdout/stderr are not seekable
   if (fd <= 2) {
@@ -539,8 +540,8 @@ static JSValue wasi_fd_seek(JSContext* ctx, JSValueConst this_val, int argc, JSV
 // fd_prestat_get(fd: fd, buf: ptr) -> errno
 // Returns prestat structure: { type: u8, name_len: u32 }
 static JSValue wasi_fd_prestat_get(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv, int magic,
-                                    JSValue* func_data) {
-  jsrt_wasi_t* wasi = get_wasi_instance(func_data);
+                                   JSValue* func_data) {
+  jsrt_wasi_t* wasi = get_wasi_instance(ctx, func_data);
   if (!wasi || !wasi->wamr_instance) {
     JSRT_Debug("WASI syscall: fd_prestat_get - no WAMR instance");
     return JS_NewInt32(ctx, WASI_EINVAL);
@@ -569,8 +570,8 @@ static JSValue wasi_fd_prestat_get(JSContext* ctx, JSValueConst this_val, int ar
 
   // Check if this FD is a valid preopen
   if (preopen_idx >= wasi->options.preopen_count) {
-    JSRT_Debug("WASI syscall: fd_prestat_get - fd %u out of range (only %zu preopens)",
-               fd, wasi->options.preopen_count);
+    JSRT_Debug("WASI syscall: fd_prestat_get - fd %u out of range (only %zu preopens)", fd,
+               wasi->options.preopen_count);
     return JS_NewInt32(ctx, WASI_EBADF);
   }
 
@@ -588,25 +589,24 @@ static JSValue wasi_fd_prestat_get(JSContext* ctx, JSValueConst this_val, int ar
   size_t name_len = strlen(preopen->virtual_path);
 
   // Write prestat structure (little-endian)
-  buf[0] = WASI_PREOPENTYPE_DIR;  // type: directory
-  buf[1] = 0;  // padding
-  buf[2] = 0;  // padding
-  buf[3] = 0;  // padding
+  buf[0] = WASI_PREOPENTYPE_DIR;    // type: directory
+  buf[1] = 0;                       // padding
+  buf[2] = 0;                       // padding
+  buf[3] = 0;                       // padding
   buf[4] = (name_len >> 0) & 0xFF;  // name_len (u32)
   buf[5] = (name_len >> 8) & 0xFF;
   buf[6] = (name_len >> 16) & 0xFF;
   buf[7] = (name_len >> 24) & 0xFF;
 
-  JSRT_Debug("WASI syscall: fd_prestat_get - fd %u is preopen '%s' (len=%zu)",
-             fd, preopen->virtual_path, name_len);
+  JSRT_Debug("WASI syscall: fd_prestat_get - fd %u is preopen '%s' (len=%zu)", fd, preopen->virtual_path, name_len);
 
   return JS_NewInt32(ctx, WASI_ESUCCESS);
 }
 
 // fd_prestat_dir_name(fd: fd, path: ptr, path_len: size) -> errno
 static JSValue wasi_fd_prestat_dir_name(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv, int magic,
-                                         JSValue* func_data) {
-  jsrt_wasi_t* wasi = get_wasi_instance(func_data);
+                                        JSValue* func_data) {
+  jsrt_wasi_t* wasi = get_wasi_instance(ctx, func_data);
   if (!wasi || !wasi->wamr_instance) {
     JSRT_Debug("WASI syscall: fd_prestat_dir_name - no WAMR instance");
     return JS_NewInt32(ctx, WASI_EINVAL);
@@ -618,8 +618,7 @@ static JSValue wasi_fd_prestat_dir_name(JSContext* ctx, JSValueConst this_val, i
   }
 
   uint32_t fd, path_ptr, path_len;
-  if (JS_ToUint32(ctx, &fd, argv[0]) || JS_ToUint32(ctx, &path_ptr, argv[1]) ||
-      JS_ToUint32(ctx, &path_len, argv[2])) {
+  if (JS_ToUint32(ctx, &fd, argv[0]) || JS_ToUint32(ctx, &path_ptr, argv[1]) || JS_ToUint32(ctx, &path_len, argv[2])) {
     return JS_NewInt32(ctx, WASI_EINVAL);
   }
 
@@ -668,8 +667,8 @@ static JSValue wasi_fd_prestat_dir_name(JSContext* ctx, JSValueConst this_val, i
 // proc_exit(rval: exitcode)
 // Note: proc_exit doesn't return a value - it terminates the process
 static JSValue wasi_proc_exit(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv, int magic,
-                               JSValue* func_data) {
-  jsrt_wasi_t* wasi = get_wasi_instance(func_data);
+                              JSValue* func_data) {
+  jsrt_wasi_t* wasi = get_wasi_instance(ctx, func_data);
 
   // Get exit code argument
   uint32_t exit_code = 0;
@@ -697,8 +696,8 @@ static JSValue wasi_proc_exit(JSContext* ctx, JSValueConst this_val, int argc, J
 
 // clock_time_get(id: clockid, precision: timestamp, time: ptr) -> errno
 static JSValue wasi_clock_time_get(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv, int magic,
-                                    JSValue* func_data) {
-  jsrt_wasi_t* wasi = get_wasi_instance(func_data);
+                                   JSValue* func_data) {
+  jsrt_wasi_t* wasi = get_wasi_instance(ctx, func_data);
   if (!wasi || !wasi->wamr_instance) {
     JSRT_Debug("WASI syscall: clock_time_get - no WAMR instance");
     return JS_NewInt32(ctx, WASI_EINVAL);
@@ -773,8 +772,8 @@ static JSValue wasi_clock_time_get(JSContext* ctx, JSValueConst this_val, int ar
 
 // random_get(buf: ptr, buf_len: size) -> errno
 static JSValue wasi_random_get(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv, int magic,
-                                JSValue* func_data) {
-  jsrt_wasi_t* wasi = get_wasi_instance(func_data);
+                               JSValue* func_data) {
+  jsrt_wasi_t* wasi = get_wasi_instance(ctx, func_data);
   if (!wasi || !wasi->wamr_instance) {
     JSRT_Debug("WASI syscall: random_get - no WAMR instance");
     return JS_NewInt32(ctx, WASI_EINVAL);

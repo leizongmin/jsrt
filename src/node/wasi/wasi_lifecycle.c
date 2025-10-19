@@ -4,6 +4,7 @@
  * Implementation of start() and initialize() methods for WASI instances.
  */
 
+#include "../../std/webassembly.h"
 #include "../../util/debug.h"
 #include "wasi.h"
 
@@ -54,8 +55,28 @@ JSValue jsrt_wasi_start(JSContext* ctx, jsrt_wasi_t* wasi, JSValue instance) {
     return JS_ThrowTypeError(ctx, "WebAssembly.Instance missing _start export");
   }
 
-  // Store instance reference
+  // Store instance reference (keep it alive)
   wasi->wasm_instance = JS_DupValue(ctx, instance);
+
+  // Extract WAMR instance from WebAssembly.Instance
+  wasi->wamr_instance = jsrt_webassembly_get_instance(ctx, instance);
+  if (!wasi->wamr_instance) {
+    JS_FreeValue(ctx, wasi->wasm_instance);
+    wasi->wasm_instance = JS_UNDEFINED;
+    return JS_ThrowTypeError(ctx, "Failed to extract WAMR instance from WebAssembly.Instance");
+  }
+
+  // Create WAMR execution environment
+  // Stack size: 64KB (typical for WASI applications)
+  wasi->exec_env = wasm_runtime_create_exec_env(wasi->wamr_instance, 65536);
+  if (!wasi->exec_env) {
+    JS_FreeValue(ctx, wasi->wasm_instance);
+    wasi->wasm_instance = JS_UNDEFINED;
+    wasi->wamr_instance = NULL;
+    return JS_ThrowInternalError(ctx, "Failed to create WASM execution environment");
+  }
+
+  JSRT_Debug("WAMR instance extracted and execution environment created");
 
   // Call _start()
   JSRT_Debug("Calling WASI _start()");
@@ -140,8 +161,28 @@ JSValue jsrt_wasi_initialize(JSContext* ctx, jsrt_wasi_t* wasi, JSValue instance
     return JS_ThrowTypeError(ctx, "WebAssembly.Instance missing _initialize export");
   }
 
-  // Store instance reference
+  // Store instance reference (keep it alive)
   wasi->wasm_instance = JS_DupValue(ctx, instance);
+
+  // Extract WAMR instance from WebAssembly.Instance
+  wasi->wamr_instance = jsrt_webassembly_get_instance(ctx, instance);
+  if (!wasi->wamr_instance) {
+    JS_FreeValue(ctx, wasi->wasm_instance);
+    wasi->wasm_instance = JS_UNDEFINED;
+    return JS_ThrowTypeError(ctx, "Failed to extract WAMR instance from WebAssembly.Instance");
+  }
+
+  // Create WAMR execution environment
+  // Stack size: 64KB (typical for WASI applications)
+  wasi->exec_env = wasm_runtime_create_exec_env(wasi->wamr_instance, 65536);
+  if (!wasi->exec_env) {
+    JS_FreeValue(ctx, wasi->wasm_instance);
+    wasi->wasm_instance = JS_UNDEFINED;
+    wasi->wamr_instance = NULL;
+    return JS_ThrowInternalError(ctx, "Failed to create WASM execution environment");
+  }
+
+  JSRT_Debug("WAMR instance extracted and execution environment created");
 
   // Call _initialize()
   JSRT_Debug("Calling WASI _initialize()");

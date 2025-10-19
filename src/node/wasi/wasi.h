@@ -66,11 +66,14 @@ typedef struct {
   jsrt_wasi_options_t options;
 
   // WAMR integration
-  wasm_module_inst_t wamr_instance;  // WAMR instance (set on start/initialize)
-  wasm_exec_env_t exec_env;          // WAMR execution environment
+  // Lifetime model: wasm_instance (JS object) owns the WAMR instance.
+  // We hold a strong reference (JS_DupValue) to prevent GC while WASI is alive.
+  // The Instance finalizer handles WAMR cleanup when both are garbage collected.
+  wasm_module_inst_t wamr_instance;  // WAMR instance extracted from wasm_instance
+  wasm_exec_env_t exec_env;          // WAMR execution environment (created in start/initialize)
 
   // JavaScript objects
-  JSValue wasm_instance;  // WebAssembly.Instance (JS object)
+  JSValue wasm_instance;  // WebAssembly.Instance (JS object, strong reference)
   JSValue import_object;  // Cached import object from getImportObject()
 
   // State tracking

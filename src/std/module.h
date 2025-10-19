@@ -17,6 +17,13 @@ char* JSRT_StdModuleNormalize(JSContext* ctx, const char* module_base_name, cons
 // Initialize CommonJS support (require, module.exports, exports)
 void JSRT_StdCommonJSInit(JSRT_Runtime* rt);
 
+// Set the entry module path for CommonJS require stack traces
+void JSRT_StdCommonJSSetEntryPath(const char* path);
+
+// Build message/stack strings for module-not-found errors (caller frees)
+void JSRT_StdModuleBuildNotFoundStrings(const char* module_display, const char* require_display,
+                                        bool include_require_section, char** message_out, char** stack_out);
+
 // Cleanup module system with context
 void JSRT_StdModuleCleanup(JSContext* ctx);
 

@@ -1061,6 +1061,167 @@ static size_t module_cache_capacity = 0;
 
 // Current module path context for relative require resolution
 static char* current_module_path = NULL;
+static char* entry_module_path = NULL;
+
+static int get_not_found_strings(const char* module_display, const char* require_display, bool include_require_section,
+                                 char** message_out, char** stack_out) {
+  if (!message_out || !stack_out)
+    return -1;
+
+  if (!module_display)
+    module_display = "<unknown module>";
+
+  const char* message_fmt = "Cannot find module '%s'";
+  int message_len = snprintf(NULL, 0, message_fmt, module_display);
+  if (message_len < 0)
+    return -1;
+
+  char* message = malloc((size_t)message_len + 1);
+  if (!message)
+    return -1;
+  snprintf(message, (size_t)message_len + 1, message_fmt, module_display);
+
+  const char* stack_fmt_no_require =
+      "Error: %s\n"
+      "{\n"
+      "  code: 'MODULE_NOT_FOUND',\n"
+      "  requireStack: []\n"
+      "}\n";
+
+  const char* stack_fmt_with_require =
+      "Error: %s\n"
+      "Require stack:\n"
+      "- %s\n"
+      "\n"
+      "{\n"
+      "  code: 'MODULE_NOT_FOUND',\n"
+      "  requireStack: [ '%s' ]\n"
+      "}\n";
+
+  const char* stack_fmt = include_require_section ? stack_fmt_with_require : stack_fmt_no_require;
+  int stack_len;
+  if (include_require_section && require_display) {
+    stack_len = snprintf(NULL, 0, stack_fmt, message, require_display, require_display);
+  } else {
+    stack_len = snprintf(NULL, 0, stack_fmt, message);
+  }
+
+  if (stack_len < 0) {
+    free(message);
+    return -1;
+  }
+
+  char* stack = malloc((size_t)stack_len + 1);
+  if (!stack) {
+    free(message);
+    return -1;
+  }
+
+  if (include_require_section && require_display) {
+    snprintf(stack, (size_t)stack_len + 1, stack_fmt, message, require_display, require_display);
+  } else {
+    snprintf(stack, (size_t)stack_len + 1, stack_fmt, message);
+  }
+
+  *message_out = message;
+  *stack_out = stack;
+  return 0;
+}
+
+void JSRT_StdModuleBuildNotFoundStrings(const char* module_display, const char* require_display,
+                                        bool include_require_section, char** message_out, char** stack_out) {
+  if (message_out)
+    *message_out = NULL;
+  if (stack_out)
+    *stack_out = NULL;
+
+  if (!message_out || !stack_out)
+    return;
+
+  if (get_not_found_strings(module_display, require_display, include_require_section, message_out, stack_out) != 0) {
+    if (*message_out) {
+      free(*message_out);
+      *message_out = NULL;
+    }
+    if (*stack_out) {
+      free(*stack_out);
+      *stack_out = NULL;
+    }
+  }
+}
+
+static JSValue js_throw_module_not_found(JSContext* ctx, const char* module_name, const char* require_path) {
+  const char* require_display = "<jsrt>";
+  if (require_path && require_path[0]) {
+    require_display = require_path;
+  } else if (entry_module_path && entry_module_path[0]) {
+    require_display = entry_module_path;
+  }
+  char* message = NULL;
+  char* stack = NULL;
+  JSRT_StdModuleBuildNotFoundStrings(module_name, require_display, true, &message, &stack);
+  if (!message || !stack) {
+    free(message);
+    free(stack);
+    return JS_ThrowReferenceError(ctx, "Cannot find module '%s'", module_name);
+  }
+
+  JSValue error_obj = JS_NewError(ctx);
+  if (JS_IsException(error_obj)) {
+    free(message);
+    free(stack);
+    return JS_EXCEPTION;
+  }
+
+  if (JS_DefinePropertyValueStr(ctx, error_obj, "message", JS_NewString(ctx, message), JS_PROP_C_W_E) < 0) {
+    JS_FreeValue(ctx, error_obj);
+    free(message);
+    free(stack);
+    return JS_EXCEPTION;
+  }
+
+  JSValue require_stack = JS_NewArray(ctx);
+  if (JS_IsException(require_stack)) {
+    JS_FreeValue(ctx, error_obj);
+    free(message);
+    free(stack);
+    return JS_EXCEPTION;
+  }
+
+  if (JS_SetPropertyUint32(ctx, require_stack, 0, JS_NewString(ctx, require_display)) < 0) {
+    JS_FreeValue(ctx, require_stack);
+    JS_FreeValue(ctx, error_obj);
+    free(message);
+    free(stack);
+    return JS_EXCEPTION;
+  }
+
+  if (JS_DefinePropertyValueStr(ctx, error_obj, "requireStack", require_stack, JS_PROP_C_W_E) < 0) {
+    JS_FreeValue(ctx, error_obj);
+    free(message);
+    free(stack);
+    return JS_EXCEPTION;
+  }
+
+  if (JS_DefinePropertyValueStr(ctx, error_obj, "code", JS_NewString(ctx, "MODULE_NOT_FOUND"), JS_PROP_C_W_E) < 0) {
+    JS_FreeValue(ctx, error_obj);
+    free(message);
+    free(stack);
+    return JS_EXCEPTION;
+  }
+
+  if (JS_DefinePropertyValueStr(ctx, error_obj, "stack", JS_NewString(ctx, stack), JS_PROP_C_W_E) < 0) {
+    JS_FreeValue(ctx, error_obj);
+    free(message);
+    free(stack);
+    return JS_EXCEPTION;
+  }
+
+  free(message);
+  free(stack);
+
+  return JS_Throw(ctx, error_obj);
+}
 
 static JSValue get_cached_module(JSContext* ctx, const char* name) {
   for (size_t i = 0; i < module_cache_size; i++) {
@@ -1226,11 +1387,12 @@ static JSValue js_require(JSContext* ctx, JSValueConst this_val, int argc, JSVal
   // Load and evaluate the file
   JSRT_ReadFileResult file_result = JSRT_ReadFile(final_path);
   if (file_result.error != JSRT_READ_FILE_OK) {
+    JSValue thrown = js_throw_module_not_found(ctx, module_name, effective_module_path);
     JS_FreeCString(ctx, module_name);
     free(final_path);
     free(esm_context_path);
     JSRT_ReadFileResultFree(&file_result);
-    return JS_ThrowReferenceError(ctx, "Cannot find module '%s'", module_name);
+    return thrown;
   }
 
   // Create isolated module context
@@ -1330,6 +1492,17 @@ void JSRT_StdCommonJSInit(JSRT_Runtime* rt) {
   JS_FreeValue(rt->ctx, global);
 }
 
+void JSRT_StdCommonJSSetEntryPath(const char* path) {
+  if (entry_module_path) {
+    free(entry_module_path);
+    entry_module_path = NULL;
+  }
+
+  if (path) {
+    entry_module_path = strdup(path);
+  }
+}
+
 // Module cache cleanup function
 void JSRT_StdModuleCleanup(JSContext* ctx) {
   if (module_cache) {
@@ -1343,5 +1516,13 @@ void JSRT_StdModuleCleanup(JSContext* ctx) {
     module_cache = NULL;
     module_cache_size = 0;
     module_cache_capacity = 0;
+  }
+  if (current_module_path) {
+    free(current_module_path);
+    current_module_path = NULL;
+  }
+  if (entry_module_path) {
+    free(entry_module_path);
+    entry_module_path = NULL;
   }
 }

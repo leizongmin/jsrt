@@ -15,6 +15,7 @@
 
 #include "build.h"
 #include "runtime.h"
+#include "std/module.h"
 #include "util/file.h"
 #include "util/http_client.h"
 
@@ -116,6 +117,15 @@ int JSRT_CmdRunFile(const char* filename, bool compact_node, int argc, char** ar
   JSRT_ReadFileResult file = JSRT_ReadFileResultDefault();
   JSRT_EvalResult res = JSRT_EvalResultDefault();
   JSRT_EvalResult res2 = JSRT_EvalResultDefault();
+  char* entry_path = NULL;
+
+  if (is_url(filename)) {
+    JSRT_StdCommonJSSetEntryPath(NULL);
+  } else {
+    entry_path = jsrt_cli_resolve_path(filename);
+    const char* path_to_set = entry_path ? entry_path : filename;
+    JSRT_StdCommonJSSetEntryPath(path_to_set);
+  }
 
   // Check if filename is a URL and handle accordingly
   if (is_url(filename)) {
@@ -154,6 +164,9 @@ end:
   JSRT_EvalResultFree(&res2);
   JSRT_EvalResultFree(&res);
   JSRT_ReadFileResultFree(&file);
+  if (entry_path) {
+    free(entry_path);
+  }
   JSRT_RuntimeFree(rt);
   return ret;
 }
@@ -624,16 +637,19 @@ static void print_module_not_found_error(const char* filename) {
 
   const char* display = resolved ? resolved : filename;
 
-  fprintf(stderr, "jsrt:internal/modules/cjs/loader:1404\n");
-  fprintf(stderr, "  throw err;\n");
-  fprintf(stderr, "  ^\n\n");
-  fprintf(stderr, "Error: Cannot find module '%s'\n", display);
-  fprintf(stderr, "    at Function._resolveFilename (jsrt:internal/modules/cjs/loader:1401:15)\n");
-  fprintf(stderr, "    at jsrt:internal/main/run_main_module:36:49 {\n");
-  fprintf(stderr, "  code: 'MODULE_NOT_FOUND',\n");
-  fprintf(stderr, "  requireStack: []\n");
-  fprintf(stderr, "}\n\n");
+  char* message = NULL;
+  char* stack = NULL;
+  JSRT_StdModuleBuildNotFoundStrings(display, NULL, false, &message, &stack);
+
+  if (stack) {
+    fprintf(stderr, "%s\n\n", stack);
+  } else {
+    fprintf(stderr, "Error: Cannot find module '%s'\n\n", display);
+  }
+
   fprintf(stderr, "jsrt v%s\n", jsrt_get_version_string());
 
+  free(message);
+  free(stack);
   free(resolved);
 }

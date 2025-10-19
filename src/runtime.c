@@ -258,17 +258,163 @@ void JSRT_EvalResultFree(JSRT_EvalResult* res) {
   }
 }
 
+static bool jsrt_append_str(char** buf, size_t* capacity, size_t* length, const char* text) {
+  if (!text)
+    text = "";
+  size_t add = strlen(text);
+  if (*length + add + 1 > *capacity) {
+    size_t new_capacity = *capacity ? *capacity : 128;
+    while (new_capacity < *length + add + 1) {
+      new_capacity *= 2;
+    }
+    char* new_buf = realloc(*buf, new_capacity);
+    if (!new_buf)
+      return false;
+    *buf = new_buf;
+    *capacity = new_capacity;
+  }
+  memcpy(*buf + *length, text, add);
+  *length += add;
+  (*buf)[*length] = '\0';
+  return true;
+}
+
+static bool jsrt_append_char(char** buf, size_t* capacity, size_t* length, char c) {
+  char tmp[2] = {c, '\0'};
+  return jsrt_append_str(buf, capacity, length, tmp);
+}
+
 char* JSRT_RuntimeGetExceptionString(JSRT_Runtime* rt, JSValue e) {
   const char* error = JS_ToCString(rt->ctx, e);
   char str[2048];
 
+  bool handled_module_not_found = false;
+  char* module_str = NULL;
+  size_t module_cap = 0;
+  size_t module_len = 0;
+
+  JSValue code_val = JS_GetPropertyStr(rt->ctx, e, "code");
+  if (JS_IsString(code_val)) {
+    const char* code = JS_ToCString(rt->ctx, code_val);
+    if (code && strcmp(code, "MODULE_NOT_FOUND") == 0) {
+      JSValue require_stack_val = JS_GetPropertyStr(rt->ctx, e, "requireStack");
+      uint32_t require_len = 0;
+      bool has_require_stack = false;
+      if (!JS_IsUndefined(require_stack_val) && !JS_IsNull(require_stack_val)) {
+        JSValue len_val = JS_GetPropertyStr(rt->ctx, require_stack_val, "length");
+        if (!JS_IsException(len_val)) {
+          if (JS_ToUint32(rt->ctx, &require_len, len_val) >= 0) {
+            has_require_stack = require_len > 0;
+          }
+        }
+        JS_FreeValue(rt->ctx, len_val);
+      }
+
+      char** entries = NULL;
+      if (has_require_stack) {
+        entries = calloc(require_len, sizeof(char*));
+        if (!entries) {
+          require_len = 0;
+          has_require_stack = false;
+        }
+      }
+
+      if (has_require_stack) {
+        for (uint32_t i = 0; i < require_len; i++) {
+          JSValue item = JS_GetPropertyUint32(rt->ctx, require_stack_val, i);
+          if (JS_IsString(item)) {
+            const char* entry = JS_ToCString(rt->ctx, item);
+            entries[i] = entry ? strdup(entry) : NULL;
+            JS_FreeCString(rt->ctx, entry);
+          }
+          JS_FreeValue(rt->ctx, item);
+          if (!entries[i]) {
+            entries[i] = strdup("<unknown>");
+          }
+        }
+      }
+
+      const char* error_line = error ? error : "Error";
+      handled_module_not_found = jsrt_append_str(&module_str, &module_cap, &module_len, error_line);
+
+      if (handled_module_not_found && has_require_stack) {
+        handled_module_not_found =
+            handled_module_not_found && jsrt_append_str(&module_str, &module_cap, &module_len, "\nRequire stack:\n");
+        for (uint32_t i = 0; handled_module_not_found && i < require_len; i++) {
+          handled_module_not_found =
+              jsrt_append_str(&module_str, &module_cap, &module_len, "- ") &&
+              jsrt_append_str(&module_str, &module_cap, &module_len, entries[i] ? entries[i] : "<unknown>") &&
+              jsrt_append_char(&module_str, &module_cap, &module_len, '\n');
+        }
+      }
+
+      if (handled_module_not_found) {
+        if (has_require_stack) {
+          handled_module_not_found = jsrt_append_str(&module_str, &module_cap, &module_len,
+                                                     "\n{\n  code: 'MODULE_NOT_FOUND',\n  requireStack: [ ");
+          for (uint32_t i = 0; handled_module_not_found && i < require_len; i++) {
+            if (i > 0)
+              handled_module_not_found =
+                  handled_module_not_found && jsrt_append_str(&module_str, &module_cap, &module_len, ", ");
+            handled_module_not_found =
+                handled_module_not_found && jsrt_append_char(&module_str, &module_cap, &module_len, '\'') &&
+                jsrt_append_str(&module_str, &module_cap, &module_len, entries[i] ? entries[i] : "<unknown>") &&
+                jsrt_append_char(&module_str, &module_cap, &module_len, '\'');
+          }
+          if (handled_module_not_found) {
+            handled_module_not_found = jsrt_append_str(&module_str, &module_cap, &module_len, " ]\n}\n");
+          }
+        } else {
+          handled_module_not_found = jsrt_append_str(&module_str, &module_cap, &module_len,
+                                                     "\n{\n  code: 'MODULE_NOT_FOUND',\n  requireStack: []\n}\n");
+        }
+      }
+
+      if (!handled_module_not_found && module_str) {
+        free(module_str);
+        module_str = NULL;
+      }
+
+      if (entries) {
+        for (uint32_t i = 0; i < require_len; i++) {
+          free(entries[i]);
+        }
+        free(entries);
+      }
+
+      JS_FreeValue(rt->ctx, require_stack_val);
+    }
+    JS_FreeCString(rt->ctx, code);
+  }
+  JS_FreeValue(rt->ctx, code_val);
+
+  if (handled_module_not_found && module_str) {
+    JS_FreeCString(rt->ctx, error);
+    JSRT_Debug("get exception string: str=%s", module_str);
+    return module_str;
+  }
+
   JSValue stack_val = JS_GetPropertyStr(rt->ctx, e, "stack");
   if (JS_IsString(stack_val)) {
     const char* stack = JS_ToCString(rt->ctx, stack_val);
-    snprintf(str, sizeof(str), "%s\n%s", error, stack);
+    if (stack) {
+      if (error) {
+        size_t error_len = strlen(error);
+        if (error_len > 0 && strncmp(stack, error, error_len) == 0 &&
+            (stack[error_len] == '\n' || stack[error_len] == '\0')) {
+          snprintf(str, sizeof(str), "%s", stack);
+        } else {
+          snprintf(str, sizeof(str), "%s\n%s", error, stack);
+        }
+      } else {
+        snprintf(str, sizeof(str), "%s", stack);
+      }
+    } else {
+      snprintf(str, sizeof(str), "%s", error ? error : "");
+    }
     JS_FreeCString(rt->ctx, stack);
   } else {
-    snprintf(str, sizeof(str), "%s", error);
+    snprintf(str, sizeof(str), "%s", error ? error : "");
   }
 
   JS_FreeCString(rt->ctx, error);

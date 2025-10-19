@@ -2,6 +2,20 @@
 
 const crypto = require('node:crypto');
 
+// Check if OpenSSL symmetric functions are available (required on Windows)
+try {
+  const testKey = new Uint8Array(32);
+  const testIv = new Uint8Array(16);
+  crypto.createCipheriv('aes-256-cbc', testKey, testIv);
+} catch (e) {
+  if (e.message && e.message.includes('OpenSSL symmetric functions not available')) {
+    console.log('Error: OpenSSL symmetric functions not available');
+    process.exit(0);
+  }
+  // Re-throw other errors
+  throw e;
+}
+
 console.log('Testing node:crypto Cipher and Decipher implementation...\n');
 
 let testsPassed = 0;

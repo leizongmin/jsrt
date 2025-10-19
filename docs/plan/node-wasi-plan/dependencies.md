@@ -44,6 +44,47 @@
   - Runtime configuration
   - Memory management
 
+### WebAssembly API Requirements (Updated 2025-10-19)
+
+**Required APIs for WASI (All ✅ Functional):**
+
+1. **Exported Memory Access** - instance.exports.mem.buffer
+   - Status: ✅ FULLY FUNCTIONAL
+   - Used for: Reading/writing WASM instance memory in WASI system calls
+   - Tasks: 3.35 (memory export validation), 5.6 (memory validation)
+
+2. **Memory Growth** - instance.exports.mem.grow(delta)
+   - Status: ✅ FULLY FUNCTIONAL
+   - Used for: Growing WASM memory for fd_write, fd_read operations
+
+3. **Module Compilation** - new WebAssembly.Module(bytes)
+   - Status: ✅ FULLY FUNCTIONAL
+   - Used for: Creating WASM modules from .wasm files in WASI constructor
+
+4. **Instance Creation** - new WebAssembly.Instance(module, imports)
+   - Status: ✅ FULLY FUNCTIONAL
+   - Used for: Instantiating WASM with WASI import object
+
+**Blocked APIs (NOT Needed by WASI):**
+
+1. **Standalone Memory Constructor** - new WebAssembly.Memory({initial: N})
+   - Status: ❌ BLOCKED (WAMR C API limitation)
+   - Impact: NONE - WASI only consumes exported memories
+
+2. **Standalone Table Constructor** - new WebAssembly.Table({...})
+   - Status: ❌ BLOCKED (WAMR C API limitation)
+   - Impact: NONE - WASI doesn't use Table objects
+
+3. **Standalone Global Constructor** - new WebAssembly.Global({...})
+   - Status: ❌ BLOCKED (WAMR C API limitation)
+   - Impact: NONE - WASI doesn't use Global objects
+
+**Conclusion:**
+✅ All required WebAssembly APIs are functional
+✅ No blockers for WASI implementation
+
+See: docs/webassembly-api-compatibility.md for full details.
+
 ### Module System
 
 - **src/module/loaders/builtin_loader.c**

@@ -61,8 +61,16 @@ typedef struct {
 
 // Data structure for WebAssembly.Table
 typedef struct {
-  wasm_table_t* table;  // WASM C API table object
-  JSContext* ctx;       // Context for reference management
+  bool is_host;          // true = host-created (non-functional), false = instance-exported (functional)
+  JSContext* ctx;        // Context for reference management
+  JSValue instance_obj;  // Keeps Instance alive for exported tables
+  union {
+    wasm_table_t* host;  // WASM C API table object (non-functional)
+    struct {
+      wasm_module_inst_t instance;   // Instance for Runtime API access
+      wasm_table_inst_t table_inst;  // Table instance from Runtime API
+    } exported;
+  } u;
 } jsrt_wasm_table_data_t;
 
 // Data structure for WebAssembly.Global
@@ -1445,9 +1453,38 @@ static JSValue js_webassembly_instance_exports_getter(JSContext* ctx, JSValueCon
       memory_data->u.exported.memory_inst = memory_inst;
 
       JS_SetOpaque(export_value, memory_data);
+    } else if (export_info.kind == WASM_IMPORT_EXPORT_KIND_TABLE) {
+      // Get exported table instance from Runtime API
+      wasm_table_inst_t table_inst;
+      if (!wasm_runtime_get_export_table_inst(instance_data->instance, export_info.name, &table_inst)) {
+        JSRT_Debug("Warning: table '%s' not found in instance", export_info.name);
+        continue;
+      }
+
+      export_value = JS_NewObjectClass(ctx, js_webassembly_table_class_id);
+      if (JS_IsException(export_value)) {
+        JS_FreeValue(ctx, exports);
+        return export_value;
+      }
+
+      jsrt_wasm_table_data_t* table_data = js_malloc(ctx, sizeof(jsrt_wasm_table_data_t));
+      if (!table_data) {
+        JS_FreeValue(ctx, export_value);
+        JS_FreeValue(ctx, exports);
+        return JS_ThrowOutOfMemory(ctx);
+      }
+
+      memset(table_data, 0, sizeof(*table_data));
+      table_data->is_host = false;  // Instance-exported table
+      table_data->ctx = ctx;
+      table_data->instance_obj = JS_DupValue(ctx, this_val);
+      table_data->u.exported.instance = instance_data->instance;
+      table_data->u.exported.table_inst = table_inst;
+
+      JS_SetOpaque(export_value, table_data);
     } else {
-      // Table exports will be handled next
-      JSRT_Debug("Skipping non-function/non-memory/non-global export '%s'", export_info.name);
+      // Unknown export kind
+      JSRT_Debug("Skipping unknown export kind %d for '%s'", export_info.kind, export_info.name);
       continue;
     }
 
@@ -2486,7 +2523,16 @@ static JSValue js_webassembly_table_length_getter(JSContext* ctx, JSValueConst t
     return JS_ThrowTypeError(ctx, "not a Table object");
   }
 
-  wasm_table_size_t size = wasm_table_size(table_data->table);
+  uint32_t size;
+  if (table_data->is_host) {
+    // Host-created table using C API
+    size = wasm_table_size(table_data->u.host);
+  } else {
+    // Exported table - read size directly from table_inst structure
+    size = table_data->u.exported.table_inst.cur_size;
+  }
+
+  JSRT_Debug("Table.length: size=%u, is_host=%d", size, table_data->is_host);
   return JS_NewUint32(ctx, size);
 }
 
@@ -2507,10 +2553,16 @@ static JSValue js_webassembly_table_grow(JSContext* ctx, JSValueConst this_val, 
     return JS_EXCEPTION;
   }
 
-  // Get current size
-  wasm_table_size_t old_size = wasm_table_size(table_data->table);
+  // For exported tables, WAMR doesn't provide a grow API at the Runtime level
+  // We can only grow host-created tables via C API
+  if (!table_data->is_host) {
+    return JS_ThrowTypeError(ctx, "Table.grow not supported for exported tables (WAMR limitation)");
+  }
 
-  JSRT_Debug("Table.grow: old_size=%u, delta=%u", old_size, delta);
+  // Get current size
+  wasm_table_size_t old_size = wasm_table_size(table_data->u.host);
+
+  JSRT_Debug("Table.grow (host): old_size=%u, delta=%u", old_size, delta);
 
   // Get optional value parameter (default to NULL for uninitialized)
   // For now, we only support NULL (Phase 4.1 - basic Table support)
@@ -2521,11 +2573,11 @@ static JSValue js_webassembly_table_grow(JSContext* ctx, JSValueConst this_val, 
   }
 
   // Grow the table
-  if (!wasm_table_grow(table_data->table, delta, init_value)) {
+  if (!wasm_table_grow(table_data->u.host, delta, init_value)) {
     return JS_ThrowRangeError(ctx, "Failed to grow table (maximum exceeded or out of memory)");
   }
 
-  JSRT_Debug("Table grown successfully: new_size=%u", wasm_table_size(table_data->table));
+  JSRT_Debug("Table grown successfully: new_size=%u", wasm_table_size(table_data->u.host));
 
   // Return old size
   return JS_NewUint32(ctx, old_size);
@@ -2548,14 +2600,19 @@ static JSValue js_webassembly_table_get(JSContext* ctx, JSValueConst this_val, i
     return JS_EXCEPTION;
   }
 
+  // For exported tables, get/set operations are not supported by WAMR
+  if (!table_data->is_host) {
+    return JS_ThrowTypeError(ctx, "Table.get not supported for exported tables (WAMR limitation)");
+  }
+
   // Validate index is within bounds
-  wasm_table_size_t size = wasm_table_size(table_data->table);
+  wasm_table_size_t size = wasm_table_size(table_data->u.host);
   if (index >= size) {
     return JS_ThrowRangeError(ctx, "Table.get index out of bounds");
   }
 
   // Get element from table
-  wasm_ref_t* ref = wasm_table_get(table_data->table, index);
+  wasm_ref_t* ref = wasm_table_get(table_data->u.host, index);
 
   // For now (Phase 4.1), we return null for uninitialized or function references
   // TODO: Phase 4.2 - Properly wrap function references and externrefs
@@ -2566,7 +2623,7 @@ static JSValue js_webassembly_table_get(JSContext* ctx, JSValueConst this_val, i
   // For funcref, we'd need to wrap it in an exported function
   // For externref, we'd need to unwrap the stored JS value
   // For now, just return null as placeholder
-  JSRT_Debug("Table.get: index=%u, ref=%p (returning null as placeholder)", index, (void*)ref);
+  JSRT_Debug("Table.get (host): index=%u, ref=%p (returning null as placeholder)", index, (void*)ref);
   return JS_NULL;
 }
 
@@ -2587,8 +2644,13 @@ static JSValue js_webassembly_table_set(JSContext* ctx, JSValueConst this_val, i
     return JS_EXCEPTION;
   }
 
+  // For exported tables, get/set operations are not supported by WAMR
+  if (!table_data->is_host) {
+    return JS_ThrowTypeError(ctx, "Table.set not supported for exported tables (WAMR limitation)");
+  }
+
   // Validate index is within bounds
-  wasm_table_size_t size = wasm_table_size(table_data->table);
+  wasm_table_size_t size = wasm_table_size(table_data->u.host);
   if (index >= size) {
     return JS_ThrowRangeError(ctx, "Table.set index out of bounds");
   }
@@ -2601,11 +2663,11 @@ static JSValue js_webassembly_table_set(JSContext* ctx, JSValueConst this_val, i
   }
 
   // Set table element to null
-  if (!wasm_table_set(table_data->table, index, NULL)) {
+  if (!wasm_table_set(table_data->u.host, index, NULL)) {
     return JS_ThrowRangeError(ctx, "Failed to set table element");
   }
 
-  JSRT_Debug("Table.set: index=%u, value=null", index);
+  JSRT_Debug("Table.set (host): index=%u, value=null", index);
   return JS_UNDEFINED;
 }
 
@@ -2667,10 +2729,15 @@ static void js_webassembly_memory_finalizer(JSRuntime* rt, JSValue val) {
 static void js_webassembly_table_finalizer(JSRuntime* rt, JSValue val) {
   jsrt_wasm_table_data_t* data = JS_GetOpaque(val, js_webassembly_table_class_id);
   if (data) {
-    // Delete WASM table
-    if (data->table) {
-      wasm_table_delete(data->table);
+    // Free instance object reference (keeps instance alive for exported tables)
+    if (!JS_IsUndefined(data->instance_obj)) {
+      JS_FreeValueRT(rt, data->instance_obj);
     }
+    // Delete WASM table (only for host-created tables)
+    if (data->is_host && data->u.host) {
+      wasm_table_delete(data->u.host);
+    }
+    // Note: exported tables are owned by the instance, no cleanup needed
     js_free_rt(rt, data);
   }
 }

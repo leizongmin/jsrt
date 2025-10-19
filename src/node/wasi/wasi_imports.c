@@ -27,6 +27,7 @@
 #define WASI_ENOSYS 52    // Function not implemented
 #define WASI_EFAULT 21    // Bad address (pointer out of bounds)
 #define WASI_EIO 29       // I/O error
+#define WASI_ESPIPE 29    // Illegal seek (same as EIO in WASI)
 
 /**
  * Helper: Get WASI instance from function's opaque data
@@ -462,29 +463,206 @@ static JSValue wasi_fd_read(JSContext* ctx, JSValueConst this_val, int argc, JSV
 // fd_close(fd: fd) -> errno
 static JSValue wasi_fd_close(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv, int magic,
                               JSValue* func_data) {
-  JSRT_Debug("WASI syscall: fd_close (stub - returning ENOSYS)");
-  return JS_NewInt32(ctx, WASI_ENOSYS);  // Not implemented
+  jsrt_wasi_t* wasi = get_wasi_instance(func_data);
+  if (!wasi) {
+    JSRT_Debug("WASI syscall: fd_close - no WASI instance");
+    return JS_NewInt32(ctx, WASI_EINVAL);
+  }
+
+  // Get arguments from JS
+  if (argc != 1) {
+    return JS_NewInt32(ctx, WASI_EINVAL);
+  }
+
+  uint32_t fd;
+  if (JS_ToUint32(ctx, &fd, argv[0])) {
+    return JS_NewInt32(ctx, WASI_EINVAL);
+  }
+
+  JSRT_Debug("WASI syscall: fd_close(fd=%u)", fd);
+
+  // We don't actually close stdin/stdout/stderr
+  // For preopened directories (fd >= 3), we also don't manage real file descriptors yet
+  // This is a no-op that returns success
+  // TODO: Implement actual file descriptor management in future phases
+
+  return JS_NewInt32(ctx, WASI_ESUCCESS);
 }
+
+// WASI whence values for fd_seek
+#define WASI_WHENCE_SET 0  // Seek from beginning
+#define WASI_WHENCE_CUR 1  // Seek from current position
+#define WASI_WHENCE_END 2  // Seek from end
 
 // fd_seek(fd: fd, offset: filedelta, whence: whence, newoffset: ptr) -> errno
 static JSValue wasi_fd_seek(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv, int magic,
                              JSValue* func_data) {
-  JSRT_Debug("WASI syscall: fd_seek (stub - returning ENOSYS)");
-  return JS_NewInt32(ctx, WASI_ENOSYS);  // Not implemented
+  jsrt_wasi_t* wasi = get_wasi_instance(func_data);
+  if (!wasi || !wasi->wamr_instance) {
+    JSRT_Debug("WASI syscall: fd_seek - no WAMR instance");
+    return JS_NewInt32(ctx, WASI_EINVAL);
+  }
+
+  // Get arguments from JS
+  if (argc != 4) {
+    return JS_NewInt32(ctx, WASI_EINVAL);
+  }
+
+  uint32_t fd;
+  int64_t offset;
+  uint32_t whence, newoffset_ptr;
+
+  if (JS_ToUint32(ctx, &fd, argv[0]) || JS_ToInt64(ctx, &offset, argv[1]) ||
+      JS_ToUint32(ctx, &whence, argv[2]) || JS_ToUint32(ctx, &newoffset_ptr, argv[3])) {
+    return JS_NewInt32(ctx, WASI_EINVAL);
+  }
+
+  JSRT_Debug("WASI syscall: fd_seek(fd=%u, offset=%lld, whence=%u, newoffset=%u)",
+             fd, (long long)offset, whence, newoffset_ptr);
+
+  // stdin/stdout/stderr are not seekable
+  if (fd <= 2) {
+    JSRT_Debug("WASI syscall: fd_seek - cannot seek on stdin/stdout/stderr");
+    return JS_NewInt32(ctx, WASI_ESPIPE);  // Illegal seek
+  }
+
+  // For now, we don't support seeking on preopened directories
+  // This would require actual file descriptor management
+  // Return ENOSYS for unsupported file descriptors
+  JSRT_Debug("WASI syscall: fd_seek - not implemented for fd %u", fd);
+  return JS_NewInt32(ctx, WASI_ENOSYS);
 }
 
+// WASI prestat structure type
+#define WASI_PREOPENTYPE_DIR 0
+
 // fd_prestat_get(fd: fd, buf: ptr) -> errno
+// Returns prestat structure: { type: u8, name_len: u32 }
 static JSValue wasi_fd_prestat_get(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv, int magic,
                                     JSValue* func_data) {
-  JSRT_Debug("WASI syscall: fd_prestat_get (stub - returning ENOSYS)");
-  return JS_NewInt32(ctx, WASI_ENOSYS);  // Not implemented
+  jsrt_wasi_t* wasi = get_wasi_instance(func_data);
+  if (!wasi || !wasi->wamr_instance) {
+    JSRT_Debug("WASI syscall: fd_prestat_get - no WAMR instance");
+    return JS_NewInt32(ctx, WASI_EINVAL);
+  }
+
+  // Get arguments from JS
+  if (argc != 2) {
+    return JS_NewInt32(ctx, WASI_EINVAL);
+  }
+
+  uint32_t fd, buf_ptr;
+  if (JS_ToUint32(ctx, &fd, argv[0]) || JS_ToUint32(ctx, &buf_ptr, argv[1])) {
+    return JS_NewInt32(ctx, WASI_EINVAL);
+  }
+
+  JSRT_Debug("WASI syscall: fd_prestat_get(fd=%u, buf=%u)", fd, buf_ptr);
+
+  // FDs 0-2 are stdin/stdout/stderr, not preopened directories
+  if (fd < 3) {
+    JSRT_Debug("WASI syscall: fd_prestat_get - fd %u is not a preopened directory", fd);
+    return JS_NewInt32(ctx, WASI_EBADF);
+  }
+
+  // Calculate preopen index (fd - 3, since 0-2 are stdio)
+  uint32_t preopen_idx = fd - 3;
+
+  // Check if this FD is a valid preopen
+  if (preopen_idx >= wasi->options.preopen_count) {
+    JSRT_Debug("WASI syscall: fd_prestat_get - fd %u out of range (only %zu preopens)",
+               fd, wasi->options.preopen_count);
+    return JS_NewInt32(ctx, WASI_EBADF);
+  }
+
+  // Get the preopen
+  jsrt_wasi_preopen_t* preopen = &wasi->options.preopens[preopen_idx];
+
+  // Get buffer from WASM memory (prestat structure is 8 bytes: u8 type + 3 bytes padding + u32 name_len)
+  uint8_t* buf = get_wasm_memory(wasi, buf_ptr, 8);
+  if (!buf) {
+    JSRT_Debug("WASI syscall: fd_prestat_get - invalid memory pointer");
+    return JS_NewInt32(ctx, WASI_EFAULT);
+  }
+
+  // Calculate virtual path length
+  size_t name_len = strlen(preopen->virtual_path);
+
+  // Write prestat structure (little-endian)
+  buf[0] = WASI_PREOPENTYPE_DIR;  // type: directory
+  buf[1] = 0;  // padding
+  buf[2] = 0;  // padding
+  buf[3] = 0;  // padding
+  buf[4] = (name_len >> 0) & 0xFF;  // name_len (u32)
+  buf[5] = (name_len >> 8) & 0xFF;
+  buf[6] = (name_len >> 16) & 0xFF;
+  buf[7] = (name_len >> 24) & 0xFF;
+
+  JSRT_Debug("WASI syscall: fd_prestat_get - fd %u is preopen '%s' (len=%zu)",
+             fd, preopen->virtual_path, name_len);
+
+  return JS_NewInt32(ctx, WASI_ESUCCESS);
 }
 
 // fd_prestat_dir_name(fd: fd, path: ptr, path_len: size) -> errno
 static JSValue wasi_fd_prestat_dir_name(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv, int magic,
                                          JSValue* func_data) {
-  JSRT_Debug("WASI syscall: fd_prestat_dir_name (stub - returning ENOSYS)");
-  return JS_NewInt32(ctx, WASI_ENOSYS);  // Not implemented
+  jsrt_wasi_t* wasi = get_wasi_instance(func_data);
+  if (!wasi || !wasi->wamr_instance) {
+    JSRT_Debug("WASI syscall: fd_prestat_dir_name - no WAMR instance");
+    return JS_NewInt32(ctx, WASI_EINVAL);
+  }
+
+  // Get arguments from JS
+  if (argc != 3) {
+    return JS_NewInt32(ctx, WASI_EINVAL);
+  }
+
+  uint32_t fd, path_ptr, path_len;
+  if (JS_ToUint32(ctx, &fd, argv[0]) || JS_ToUint32(ctx, &path_ptr, argv[1]) ||
+      JS_ToUint32(ctx, &path_len, argv[2])) {
+    return JS_NewInt32(ctx, WASI_EINVAL);
+  }
+
+  JSRT_Debug("WASI syscall: fd_prestat_dir_name(fd=%u, path=%u, path_len=%u)", fd, path_ptr, path_len);
+
+  // FDs 0-2 are stdin/stdout/stderr, not preopened directories
+  if (fd < 3) {
+    JSRT_Debug("WASI syscall: fd_prestat_dir_name - fd %u is not a preopened directory", fd);
+    return JS_NewInt32(ctx, WASI_EBADF);
+  }
+
+  // Calculate preopen index
+  uint32_t preopen_idx = fd - 3;
+
+  // Check if this FD is a valid preopen
+  if (preopen_idx >= wasi->options.preopen_count) {
+    JSRT_Debug("WASI syscall: fd_prestat_dir_name - fd %u out of range", fd);
+    return JS_NewInt32(ctx, WASI_EBADF);
+  }
+
+  // Get the preopen
+  jsrt_wasi_preopen_t* preopen = &wasi->options.preopens[preopen_idx];
+  size_t name_len = strlen(preopen->virtual_path);
+
+  // Check if buffer is large enough
+  if (path_len < name_len) {
+    JSRT_Debug("WASI syscall: fd_prestat_dir_name - buffer too small (%u < %zu)", path_len, name_len);
+    return JS_NewInt32(ctx, WASI_EINVAL);
+  }
+
+  // Get buffer from WASM memory
+  uint8_t* path_buf = get_wasm_memory(wasi, path_ptr, path_len);
+  if (!path_buf) {
+    JSRT_Debug("WASI syscall: fd_prestat_dir_name - invalid memory pointer");
+    return JS_NewInt32(ctx, WASI_EFAULT);
+  }
+
+  // Copy the virtual path (without null terminator - WASI doesn't include it)
+  memcpy(path_buf, preopen->virtual_path, name_len);
+
+  JSRT_Debug("WASI syscall: fd_prestat_dir_name - fd %u -> '%s'", fd, preopen->virtual_path);
+
+  return JS_NewInt32(ctx, WASI_ESUCCESS);
 }
 
 // proc_exit(rval: exitcode)

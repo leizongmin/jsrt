@@ -84,13 +84,18 @@ This limitation is **identical to the Table blocker** (Task 4.1, documented in `
 ✅ **Works:**
 - Creating global objects (no errors)
 - Accessing global metadata (type, mutability)
-- Globals exported from a WASM module instance (not yet implemented)
+- **Globals exported from a WASM module instance** ✅ VERIFIED WORKING
+  - Tested 2025-10-19: Exported globals work perfectly
+  - `instance.exports.myGlobal.value` returns correct values
+  - `global.value = newValue` sets values correctly
+  - Uses WAMR Runtime API (not C API)
+  - See: `target/tmp/test_exported_global.js`
 
 ❌ **Doesn't Work:**
 - Creating functional standalone globals with `wasm_global_new()`
 - Getting/setting values of host-created globals
 - Reading initial values passed to constructor
-- All WPT Global tests (0% pass rate)
+- All WPT Global constructor tests (0% pass rate)
 
 ## Impact
 
@@ -146,15 +151,29 @@ Document as "not yet implemented" until WAMR support available:
 
 **Risk**: Feature incompleteness, applications cannot use globals
 
-### Option 4: Implement via Module Exports (Partial Solution)
+### Option 4: Implement via Module Exports ✅ **ALREADY WORKING**
 
-Only support globals that are exported from WASM modules:
-- Remove standalone Global constructor
-- Add support in Instance.exports for global exports
-- Use WAMR Runtime API to access instance globals
-- Document that standalone globals are not supported
+**Status Update (2025-10-19)**: Exported globals already work perfectly!
 
-**Risk**: Incomplete spec compliance, limited use cases
+Current implementation:
+- ✅ Instance.exports correctly wraps exported globals (line 1388-1409)
+- ✅ Uses WAMR Runtime API (`wasm_runtime_get_export_global_inst`)
+- ✅ `global.value` getter/setter fully functional
+- ✅ `global.valueOf()` works correctly
+- ✅ Tested and verified with instance-exported globals
+
+**What's missing:**
+- ❌ Standalone `new WebAssembly.Global()` constructor (blocked by WAMR)
+- ❌ Passing Global objects as imports to instances
+- ❌ WPT tests that require standalone constructor
+
+**Recommendation:**
+- Document that standalone Global constructor is not supported
+- Keep exported global functionality (it works)
+- Throw explicit error from constructor instead of returning garbage
+- Update API compatibility matrix to clarify working vs blocked scenarios
+
+**Risk**: Incomplete spec compliance, but practical use cases (exported globals) work
 
 ## Recommended Action
 

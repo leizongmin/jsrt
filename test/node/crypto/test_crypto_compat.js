@@ -18,6 +18,19 @@ try {
   throw e;
 }
 
+// Check if EC crypto is available (required on Windows for ECDH operations)
+try {
+  const ecdh = crypto.createECDH('prime256v1');
+  ecdh.generateKeys();
+} catch (e) {
+  if (e.message && e.message.includes('Failed to initialize EC crypto')) {
+    console.log('Error: OpenSSL symmetric functions not available');
+    process.exit(0);
+  }
+  // Re-throw other errors
+  throw e;
+}
+
 console.log(
   'Testing node:crypto comprehensive compatibility and integration...\n'
 );

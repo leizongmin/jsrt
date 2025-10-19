@@ -10,13 +10,13 @@
 :CREATED: 2025-10-16T22:45:00Z
 :UPDATED: 2025-10-19T16:00:00Z
 :STATUS: 🔵 IN_PROGRESS
-:PROGRESS: 68/141
-:COMPLETION: 48%
+:PROGRESS: 71/141
+:COMPLETION: 50%
 :WASM_DEPENDENCIES: ✅ VERIFIED - All required APIs functional (2025-10-19)
 :WASM_BLOCKERS: NONE - Standalone Memory/Table/Global not needed by WASI
-:PHASE3_SYSCALLS: 🟢 COMPLETE - 13/13 syscalls implemented (100%) (ctx fix + zero-preopen handling 2025-10-19)
-:PHASE3_STATUS: 🔵 IN_PROGRESS (2025-10-19) - 35/38 tasks complete; remaining work: finalize import documentation setup (Tasks 3.1, 3.2) and close-out reporting
-:PHASE3_CAPABILITIES: args, env, stdio, preopens, time, random, proc_exit
+:PHASE3_SYSCALLS: 🟢 COMPLETE - 13/13 core syscalls implemented with path/FD extensions validated (2025-10-19)
+:PHASE3_STATUS: ✅ COMPLETED (2025-10-19) - 38/38 tasks complete; optional advanced FD/path features scheduled for later phases
+:PHASE3_CAPABILITIES: args, env, stdio, preopens, path fs, time, random, proc_exit, ENOSYS stubs for poll/socket
 :ASAN_VALIDATION: ✅ CLEAN - No leaks or memory errors
 :END:
 
@@ -102,7 +102,7 @@ See [[file:node-wasi-plan/phases/phase7-documentation.md][Phase 7: Documentation
 |-------|-------|------------|--------|
 | Phase 1 | 8 | Research & Design | ✅ COMPLETED |
 | Phase 2 | 25 | Core Infrastructure | ✅ COMPLETED |
-| Phase 3 | 38 | WASI Import Implementation | 🔵 IN_PROGRESS (35/38) |
+| Phase 3 | 38 | WASI Import Implementation | ✅ COMPLETED (2025-10-19) |
 | Phase 4 | 18 | Module Integration | 🟡 TODO |
 | Phase 5 | 15 | Lifecycle Methods | 🟡 TODO |
 | Phase 6 | 27 | Testing & Validation | 🟡 TODO |
@@ -120,35 +120,34 @@ See individual phase documents for dependency graphs.
 
 ** High-Risk Areas
 
-- Phase 3 (38 tasks): WASI import implementation - most complex
-- Security: Sandboxing and path validation (Tasks 2.10, 3.14, 6.8)
-- WAMR integration: Complexity in native binding (Tasks 2.14, 3.4, 3.30)
+- Phase 4 focus: Module integration and lifecycle wiring introduce new complexity
+- Security: Sandboxing and path validation (Tasks 2.10, 4.5, 6.8)
+- WAMR integration: Native binding coordination (Tasks 2.14, 3.4, 3.30)
 
 * 🚀 Execution Dashboard
 :PROPERTIES:
-:CURRENT_PHASE: Phase 3: WASI Import Implementation
-:PROGRESS: 59/141
-:COMPLETION: 42%
-:ACTIVE_TASK: Task 3.33 - Implement FD table management
-:UPDATED: 2025-10-19T15:06:00Z
+:CURRENT_PHASE: Phase 4: Module Integration
+:PROGRESS: 71/141
+:COMPLETION: 50%
+:ACTIVE_TASK: Task 4.1 - Add WASI module to node_modules registry
+:UPDATED: 2025-10-19T16:00:00Z
 :END:
 
 ** Current Status
-- Phase: Phase 3: WASI Import Implementation
-- Progress: 59/141 tasks (42%)
-- Active: Build FD table foundations (Task 3.33)
+- Phase: Phase 4: Module Integration
+- Progress: 71/141 tasks (50%)
+- Active: Bootstrap builtin module plumbing (Task 4.1)
 
 ** Next Up
-High-priority tasks ready to start (Phase 3):
-- [ ] Task 3.33: Implement FD table management
-- [ ] Task 3.14: Implement path_open
-- [ ] Task 3.15: Implement path_filestat_get
-- [ ] Task 3.16: Implement path_create_directory
+High-priority tasks ready to start (Phase 4):
+- [ ] Task 4.1: Add WASI module to node_modules registry
+- [ ] Task 4.2: Implement CommonJS module initializer
+- [ ] Task 4.3: Implement ES Module initializer
 
-See [[file:node-wasi-plan/phases/phase3-wasi-imports.md][Phase 3 document]] for details.
+See [[file:node-wasi-plan/phases/phase4-module-integration.md][Phase 4 document]] for details.
 
 ** Parallel Opportunities
-Phase 3 path operations (3.14-3.19) unlock once FD table groundwork (3.33) stabilises; socket/poll tasks remain queued.
+Phase 4 will focus on wiring the WASI module into the loader and polishing lifecycle APIs now that FD/path foundations are complete.
 
 ** Blocking Dependencies
 None - All WebAssembly dependencies are satisfied.
@@ -166,7 +165,7 @@ None - All WebAssembly dependencies are satisfied.
 See: docs/webassembly-api-compatibility.md for details.
 
 ** Risk Areas
-- High complexity in Phase 3 (WASI import implementation - 38 tasks)
+- Upcoming complexity in Phase 4 (module integration and lifecycle wiring)
 - Security critical: sandboxing and path validation
 - WAMR integration complexity
 
@@ -182,6 +181,7 @@ See: docs/webassembly-api-compatibility.md for details.
 | 2025-10-19T16:00:00Z | Completed | Tasks 3.14-3.19, 3.28-3.29, 3.38 | Implemented path_* syscalls, poll/socket stubs, and added integration test coverage |
 | 2025-10-19T15:06:00Z | Updated | Task 3.33 | Added fd table scaffolding covering stdio + preopen metadata |
 | 2025-10-19T14:33:00Z | Updated | Phase 3 | Completed fd_tell/fd_fdstat*, clock_res_get, proc_exit logic, and memory validation |
+| 2025-10-19T16:00:00Z | Completed | Tasks 3.1, 3.2, 3.33 | Catalogued WASI syscall coverage, finalized FD table management, and refreshed plan metadata |
 | 2025-10-19T13:38:53Z | Updated | Phase 2 & 3 | Documented Phase 2 completion, Phase 3 progress, and WASI import safety fix |
 | 2025-10-19T08:00:00Z | Completed | Phase 1 | All 8 research and design tasks completed |
 | 2025-10-19T08:00:00Z | Created | Research | Comprehensive research notes in research-notes.md |
@@ -195,7 +195,7 @@ See: docs/webassembly-api-compatibility.md for details.
 - Critical path: Phase 1 → Phase 2 → Phase 3 → Phase 4 → Phase 5 → Phase 6 → Phase 7
 - Parallel opportunities: Many tasks within each phase can run in parallel
 - Testing is integrated throughout (not just Phase 6)
-- Pending work: document import coverage (Tasks 3.1-3.2) and finalize residual reporting for Phase 3
+- Pending work: kick off Phase 4 module integration (tasks 4.1–4.3) and align lifecycle APIs
 
 * Implementation Notes
 

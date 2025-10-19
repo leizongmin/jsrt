@@ -7,11 +7,13 @@
 :STATUS: 🔵 IN_PROGRESS
 :END:
 
-*** TODO [#A] Task 3.1: List all WASI preview1 functions [S][R:LOW][C:SIMPLE][D:1.1,1.2]
+*** DONE [#A] Task 3.1: List all WASI preview1 functions [S][R:LOW][C:SIMPLE][D:1.1,1.2]
+CLOSED: [2025-10-19T16:00:00Z]
 :PROPERTIES:
 :ID: 3.1
 :CREATED: 2025-10-16T22:45:00Z
 :DEPS: 1.1,1.2
+:COMPLETED: 2025-10-19T16:00:00Z
 :END:
 
 **** Description
@@ -27,19 +29,40 @@ Create comprehensive list of all WASI preview1 functions to implement:
 Reference: https://github.com/WebAssembly/WASI/blob/main/legacy/preview1/docs.md
 
 **** Acceptance Criteria
-- [ ] Complete list of ~50+ WASI functions
-- [ ] Grouped by category
-- [ ] Priority assigned (required vs optional)
-- [ ] WAMR support status documented
+- [X] Complete list of ~50+ WASI functions
+- [X] Grouped by category
+- [X] Priority assigned (required vs optional)
+- [X] WAMR support status documented
+
+**** Function Inventory (Preview1)
+| Category | Functions | Priority | Implementation Status | WAMR Support |
+|----------|-----------|----------|------------------------|---------------|
+| Arguments & Environment | `args_get`, `args_sizes_get`, `environ_get`, `environ_sizes_get` | Required | Implemented (Phase 3) | ✅ |
+| Process Control | `proc_exit`, `proc_raise` | Required | `proc_exit` implemented; `proc_raise` planned Phase 4 | `proc_exit` ✅, `proc_raise` ↩︎ TBD |
+| Clocks & Timers | `clock_res_get`, `clock_time_get` | Required | Implemented (Phase 3) | ✅ |
+| Random | `random_get` | Required | Implemented (Phase 3) | ✅ |
+| FD Core | `fd_close`, `fd_read`, `fd_write`, `fd_seek`, `fd_tell`, `fd_fdstat_get`, `fd_fdstat_set_flags`, `fd_prestat_get`, `fd_prestat_dir_name` | Required | Implemented / partially stubbed where spec allows (e.g., `fd_seek` for non-regular FDs) | ✅ |
+| FD Advanced | `fd_pread`, `fd_pwrite`, `fd_readdir`, `fd_fdstat_set_rights`, `fd_filestat_get`, `fd_filestat_set_size`, `fd_filestat_set_times`, `fd_datasync`, `fd_sync`, `fd_advise`, `fd_allocate`, `fd_renumber` | Optional (Phase 4 focus) | Pending | ✅ |
+| Path Core | `path_open`, `path_filestat_get`, `path_create_directory`, `path_remove_directory`, `path_rename`, `path_unlink_file` | Required | Implemented (Phase 3) | ✅ |
+| Path Advanced | `path_filestat_set_times`, `path_readlink`, `path_link`, `path_symlink` | Optional | Pending | ✅ |
+| Polling | `poll_oneoff` | Optional | Stubbed (returns `ENOSYS`) | ✅ |
+| Sockets | `sock_recv`, `sock_send`, `sock_shutdown` | Optional | Stubbed (returns `ENOSYS`) | ✅ |
+| Scheduling | `sched_yield` | Required | Planned (Phase 4) | ✅ |
+
+**** Notes
+- Function coverage reconciled against `uvwasi` bindings to confirm backend availability.
+- Optional items are scheduled for subsequent phases; stubs ensure spec-compliant error codes until implemented.
 
 **** Testing Strategy
 Documentation review.
 
-*** TODO [#A] Task 3.2: Design import object structure [S][R:MED][C:MEDIUM][D:3.1,1.1]
+*** DONE [#A] Task 3.2: Design import object structure [S][R:MED][C:MEDIUM][D:3.1,1.1]
+CLOSED: [2025-10-19T16:00:00Z]
 :PROPERTIES:
 :ID: 3.2
 :CREATED: 2025-10-16T22:45:00Z
 :DEPS: 3.1,1.1
+:COMPLETED: 2025-10-19T16:00:00Z
 :END:
 
 **** Description
@@ -66,9 +89,16 @@ For version "unstable":
 ```
 
 **** Acceptance Criteria
-- [ ] Object structure defined
-- [ ] Version-based namespacing designed
-- [ ] Function signature strategy defined
+- [X] Object structure defined
+- [X] Version-based namespacing designed
+- [X] Function signature strategy defined
+
+**** Design Summary
+- Import objects are materialized once per WASI instance and cached on `wasi->import_object` to align with Node.js semantics.
+- Namespace selection mirrors Node: `options.version === "unstable"` maps functions under `wasi_unstable`; all other cases expose `wasi_snapshot_preview1`.
+- Each WASI syscall is exposed via `JS_NewCFunctionData`, capturing the native `jsrt_wasi_t*` pointer to preserve instance context across callbacks.
+- Exported functions include implemented, stubbed (ENOSYS), and future optional APIs so that downstream modules observe the complete namespace expected by Node.js' `node:wasi` implementation.
+- Signature mapping follows Node/WASI preview1 conventions (integers for pointers/lengths, ENOSYS for unsupported operations), ensuring compatibility with modules compiled against the standard WASI bindings.
 
 **** Testing Strategy
 Structure validation against Node.js.
@@ -741,13 +771,13 @@ WASI defines specific error codes (EBADF, EINVAL, etc.)
 **** Testing Strategy
 Test error code conversion.
 
-*** IN-PROGRESS [#B] Task 3.33: Implement FD table management [P][R:HIGH][C:COMPLEX][D:3.4,2.10]
+*** DONE [#B] Task 3.33: Implement FD table management [P][R:HIGH][C:COMPLEX][D:3.4,2.10]
+CLOSED: [2025-10-19T16:00:00Z]
 :PROPERTIES:
 :ID: 3.33
 :CREATED: 2025-10-16T22:45:00Z
 :DEPS: 3.4,2.10
-:STATUS: 🔵 IN_PROGRESS
-:UPDATED: 2025-10-19T15:06:00Z
+:COMPLETED: 2025-10-19T16:00:00Z
 :END:
 
 **** Description
@@ -755,29 +785,34 @@ Implement file descriptor table for WASI:
 
 ```c
 typedef struct {
-  int host_fd;           // Host OS file descriptor
-  uint32_t rights_base;  // WASI rights
-  uint32_t rights_inheriting;
-  char* preopen_path;    // If this is a preopen
-} wasi_fd_entry_t;
+  bool in_use;
+  int host_fd;
+  uint64_t rights_base;
+  uint64_t rights_inheriting;
+  uint16_t fd_flags;
+  uint8_t filetype;
+  const jsrt_wasi_preopen_t* preopen;
+} jsrt_wasi_fd_entry;
 
 typedef struct {
-  wasi_fd_entry_t* entries;
+  jsrt_wasi_fd_entry* entries;
   size_t capacity;
   size_t count;
-} wasi_fd_table_t;
+} jsrt_wasi_fd_table;
 ```
 
 Manage mapping of WASI FDs to host FDs.
 
 **** Acceptance Criteria
-- [ ] FD table data structure implemented
-- [ ] FD allocation/deallocation works
-- [ ] Preopens registered in FD table
-- [ ] stdin/stdout/stderr registered
+- [X] FD table data structure implemented
+- [X] FD allocation/deallocation works
+- [X] Preopens registered in FD table
+- [X] stdin/stdout/stderr registered
 
 **** Notes
-- Initial table scaffolding in place: stdio + preopen metadata registered (2025-10-19T15:06:00Z).
+- Added `jsrt_wasi_fd_table_alloc`/`jsrt_wasi_fd_table_release` helpers for safe reuse of descriptor slots.
+- Rights promotion to 64-bit aligns with WASI spec and prevents overflow when combining capabilities.
+- Preopen directories now inherit full path rights set; dynamic allocations close host descriptors during teardown.
 
 **** Testing Strategy
 Test FD table operations.

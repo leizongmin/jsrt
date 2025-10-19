@@ -9,10 +9,18 @@
 #include "wasi.h"
 
 #include <string.h>
+#include <wasm_export.h>
 
 /**
  * Start WASI instance (call _start export)
  */
+static JSValue jsrt_wasi_missing_memory(JSContext* ctx, jsrt_wasi_t* wasi) {
+  JS_FreeValue(ctx, wasi->wasm_instance);
+  wasi->wasm_instance = JS_UNDEFINED;
+  wasi->wamr_instance = NULL;
+  return JS_ThrowTypeError(ctx, "WebAssembly.Instance missing exported memory for WASI");
+}
+
 JSValue jsrt_wasi_start(JSContext* ctx, jsrt_wasi_t* wasi, JSValue instance) {
   if (!wasi) {
     return JS_ThrowTypeError(ctx, "Invalid WASI instance");
@@ -66,6 +74,15 @@ JSValue jsrt_wasi_start(JSContext* ctx, jsrt_wasi_t* wasi, JSValue instance) {
     return JS_ThrowTypeError(ctx, "Failed to extract WAMR instance from WebAssembly.Instance");
   }
 
+  if (!wasi->memory_validated) {
+    wasm_memory_inst_t memory = wasm_runtime_get_default_memory(wasi->wamr_instance);
+    if (!memory) {
+      JS_FreeValue(ctx, start_fn);
+      return jsrt_wasi_missing_memory(ctx, wasi);
+    }
+    wasi->memory_validated = true;
+  }
+
   // Create WAMR execution environment
   // Stack size: 64KB (typical for WASI applications)
   wasi->exec_env = wasm_runtime_create_exec_env(wasi->wamr_instance, 65536);
@@ -80,16 +97,25 @@ JSValue jsrt_wasi_start(JSContext* ctx, jsrt_wasi_t* wasi, JSValue instance) {
 
   // Call _start()
   JSRT_Debug("Calling WASI _start()");
+  wasi->exit_requested = false;
   JSValue result = JS_Call(ctx, start_fn, JS_UNDEFINED, 0, NULL);
   JS_FreeValue(ctx, start_fn);
 
   if (JS_IsException(result)) {
-    // _start() threw an exception
+    JSValue exception = JS_GetException(ctx);
+    if (wasi->exit_requested && wasi->options.return_on_exit) {
+      JS_FreeValue(ctx, exception);
+      wasi->exit_requested = false;
+      wasi->started = true;
+      return JS_NewInt32(ctx, wasi->exit_code);
+    }
+    JS_Throw(ctx, exception);
     return JS_EXCEPTION;
   }
 
   // Mark as started
   wasi->started = true;
+  wasi->exit_requested = false;
 
   // Get exit code (if _start returned one)
   // In WASI, _start typically doesn't return a value, but we handle it anyway
@@ -105,10 +131,6 @@ JSValue jsrt_wasi_start(JSContext* ctx, jsrt_wasi_t* wasi, JSValue instance) {
 
   // Handle exit behavior
   if (!wasi->options.return_on_exit) {
-    // Call process.exit(exit_code)
-    // For now, we just return undefined
-    // TODO: Implement actual process.exit() call in Phase 5
-    JSRT_Debug("returnOnExit=false: would call process.exit(%d)", exit_code);
     return JS_UNDEFINED;
   }
 
@@ -172,6 +194,15 @@ JSValue jsrt_wasi_initialize(JSContext* ctx, jsrt_wasi_t* wasi, JSValue instance
     return JS_ThrowTypeError(ctx, "Failed to extract WAMR instance from WebAssembly.Instance");
   }
 
+  if (!wasi->memory_validated) {
+    wasm_memory_inst_t memory = wasm_runtime_get_default_memory(wasi->wamr_instance);
+    if (!memory) {
+      JS_FreeValue(ctx, init_fn);
+      return jsrt_wasi_missing_memory(ctx, wasi);
+    }
+    wasi->memory_validated = true;
+  }
+
   // Create WAMR execution environment
   // Stack size: 64KB (typical for WASI applications)
   wasi->exec_env = wasm_runtime_create_exec_env(wasi->wamr_instance, 65536);
@@ -186,11 +217,19 @@ JSValue jsrt_wasi_initialize(JSContext* ctx, jsrt_wasi_t* wasi, JSValue instance
 
   // Call _initialize()
   JSRT_Debug("Calling WASI _initialize()");
+  wasi->exit_requested = false;
   JSValue result = JS_Call(ctx, init_fn, JS_UNDEFINED, 0, NULL);
   JS_FreeValue(ctx, init_fn);
 
   if (JS_IsException(result)) {
-    // _initialize() threw an exception
+    JSValue exception = JS_GetException(ctx);
+    if (wasi->exit_requested && wasi->options.return_on_exit) {
+      JS_FreeValue(ctx, exception);
+      wasi->exit_requested = false;
+      wasi->initialized = true;
+      return JS_NewInt32(ctx, wasi->exit_code);
+    }
+    JS_Throw(ctx, exception);
     return JS_EXCEPTION;
   }
 
@@ -198,6 +237,7 @@ JSValue jsrt_wasi_initialize(JSContext* ctx, jsrt_wasi_t* wasi, JSValue instance
 
   // Mark as initialized
   wasi->initialized = true;
+  wasi->exit_requested = false;
 
   JSRT_Debug("WASI _initialize() completed");
 

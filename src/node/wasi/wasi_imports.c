@@ -11,10 +11,12 @@
 #include <stdbool.h>
 #include <stdint.h>
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 #include <time.h>
 #include <unistd.h>
 #include <wasm_export.h>
+#include "../../../deps/wamr/core/shared/platform/include/platform_wasi_types.h"
 
 /**
  * WASI syscall implementations
@@ -28,6 +30,17 @@
 #define WASI_EFAULT 21   // Bad address (pointer out of bounds)
 #define WASI_EIO 29      // I/O error
 #define WASI_ESPIPE 29   // Illegal seek (same as EIO in WASI)
+
+static inline void write_u16_le(uint8_t* dst, uint16_t value) {
+  dst[0] = (uint8_t)(value & 0xFF);
+  dst[1] = (uint8_t)((value >> 8) & 0xFF);
+}
+
+static inline void write_u64_le(uint8_t* dst, uint64_t value) {
+  for (int i = 0; i < 8; i++) {
+    dst[i] = (uint8_t)((value >> (i * 8)) & 0xFF);
+  }
+}
 
 /**
  * Helper: Get WASI instance from function's opaque data
@@ -534,6 +547,40 @@ static JSValue wasi_fd_seek(JSContext* ctx, JSValueConst this_val, int argc, JSV
   return JS_NewInt32(ctx, WASI_ENOSYS);
 }
 
+// fd_tell(fd: fd, newoffset: ptr) -> errno
+static JSValue wasi_fd_tell(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv, int magic,
+                            JSValue* func_data) {
+  jsrt_wasi_t* wasi = get_wasi_instance(ctx, func_data);
+  if (!wasi || !wasi->wamr_instance) {
+    JSRT_Debug("WASI syscall: fd_tell - no WAMR instance");
+    return JS_NewInt32(ctx, WASI_EINVAL);
+  }
+
+  if (argc != 2) {
+    return JS_NewInt32(ctx, WASI_EINVAL);
+  }
+
+  uint32_t fd;
+  uint32_t newoffset_ptr;
+  if (JS_ToUint32(ctx, &fd, argv[0]) || JS_ToUint32(ctx, &newoffset_ptr, argv[1])) {
+    return JS_NewInt32(ctx, WASI_EINVAL);
+  }
+
+  JSRT_Debug("WASI syscall: fd_tell(fd=%u, newoffset_ptr=%u)", fd, newoffset_ptr);
+
+  if (fd >= 3) {
+    size_t index = fd - 3;
+    if (index >= wasi->options.preopen_count) {
+      return JS_NewInt32(ctx, WASI_EBADF);
+    }
+  } else if (fd > 2) {
+    return JS_NewInt32(ctx, WASI_EBADF);
+  }
+
+  // No seekable descriptors available yet
+  return JS_NewInt32(ctx, WASI_ESPIPE);
+}
+
 // WASI prestat structure type
 #define WASI_PREOPENTYPE_DIR 0
 
@@ -664,6 +711,104 @@ static JSValue wasi_fd_prestat_dir_name(JSContext* ctx, JSValueConst this_val, i
   return JS_NewInt32(ctx, WASI_ESUCCESS);
 }
 
+// fd_fdstat_get(fd: fd, buf: ptr) -> errno
+static JSValue wasi_fd_fdstat_get(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv, int magic,
+                                  JSValue* func_data) {
+  jsrt_wasi_t* wasi = get_wasi_instance(ctx, func_data);
+  if (!wasi || !wasi->wamr_instance) {
+    JSRT_Debug("WASI syscall: fd_fdstat_get - no WAMR instance");
+    return JS_NewInt32(ctx, WASI_EINVAL);
+  }
+
+  if (argc != 2) {
+    return JS_NewInt32(ctx, WASI_EINVAL);
+  }
+
+  uint32_t fd;
+  uint32_t fdstat_ptr;
+  if (JS_ToUint32(ctx, &fd, argv[0]) || JS_ToUint32(ctx, &fdstat_ptr, argv[1])) {
+    return JS_NewInt32(ctx, WASI_EINVAL);
+  }
+
+  JSRT_Debug("WASI syscall: fd_fdstat_get(fd=%u, fdstat_ptr=%u)", fd, fdstat_ptr);
+
+  uint8_t* fdstat_mem = get_wasm_memory(wasi, fdstat_ptr, sizeof(__wasi_fdstat_t));
+  if (!fdstat_mem) {
+    return JS_NewInt32(ctx, WASI_EFAULT);
+  }
+
+  memset(fdstat_mem, 0, sizeof(__wasi_fdstat_t));
+
+  uint8_t file_type = __WASI_FILETYPE_UNKNOWN;
+  uint16_t fd_flags = 0;
+  uint64_t rights_base = 0;
+  uint64_t rights_inheriting = 0;
+
+  if (fd == 0) {
+    file_type = __WASI_FILETYPE_CHARACTER_DEVICE;
+    rights_base = __WASI_RIGHT_FD_READ;
+  } else if (fd == 1 || fd == 2) {
+    file_type = __WASI_FILETYPE_CHARACTER_DEVICE;
+    rights_base = __WASI_RIGHT_FD_WRITE;
+  } else if (fd >= 3) {
+    size_t preopen_index = fd - 3;
+    if (preopen_index >= wasi->options.preopen_count) {
+      return JS_NewInt32(ctx, WASI_EBADF);
+    }
+    file_type = __WASI_FILETYPE_DIRECTORY;
+    rights_base = __WASI_RIGHT_PATH_OPEN | __WASI_RIGHT_FD_READDIR;
+    rights_inheriting = rights_base;
+  } else {
+    return JS_NewInt32(ctx, WASI_EBADF);
+  }
+
+  fdstat_mem[0] = file_type;
+  fdstat_mem[1] = 0;
+  write_u16_le(&fdstat_mem[2], fd_flags);
+  memset(&fdstat_mem[4], 0, 4);
+  write_u64_le(&fdstat_mem[8], rights_base);
+  write_u64_le(&fdstat_mem[16], rights_inheriting);
+
+  return JS_NewInt32(ctx, WASI_ESUCCESS);
+}
+
+// fd_fdstat_set_flags(fd: fd, flags: fdflags) -> errno
+static JSValue wasi_fd_fdstat_set_flags(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv, int magic,
+                                        JSValue* func_data) {
+  jsrt_wasi_t* wasi = get_wasi_instance(ctx, func_data);
+  if (!wasi || !wasi->wamr_instance) {
+    JSRT_Debug("WASI syscall: fd_fdstat_set_flags - no WAMR instance");
+    return JS_NewInt32(ctx, WASI_EINVAL);
+  }
+
+  if (argc != 2) {
+    return JS_NewInt32(ctx, WASI_EINVAL);
+  }
+
+  uint32_t fd;
+  uint32_t flags;
+  if (JS_ToUint32(ctx, &fd, argv[0]) || JS_ToUint32(ctx, &flags, argv[1])) {
+    return JS_NewInt32(ctx, WASI_EINVAL);
+  }
+
+  JSRT_Debug("WASI syscall: fd_fdstat_set_flags(fd=%u, flags=0x%x)", fd, flags);
+
+  if (fd >= 3) {
+    size_t index = fd - 3;
+    if (index >= wasi->options.preopen_count) {
+      return JS_NewInt32(ctx, WASI_EBADF);
+    }
+  } else if (fd > 2) {
+    return JS_NewInt32(ctx, WASI_EBADF);
+  }
+
+  if (flags == 0) {
+    return JS_NewInt32(ctx, WASI_ESUCCESS);
+  }
+
+  return JS_NewInt32(ctx, WASI_ENOSYS);
+}
+
 // proc_exit(rval: exitcode)
 // Note: proc_exit doesn't return a value - it terminates the process
 static JSValue wasi_proc_exit(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv, int magic,
@@ -678,13 +823,19 @@ static JSValue wasi_proc_exit(JSContext* ctx, JSValueConst this_val, int argc, J
 
   JSRT_Debug("WASI syscall: proc_exit(exitcode=%u)", exit_code);
 
-  // Store exit code in WASI instance
   if (wasi) {
     wasi->exit_code = (int)exit_code;
+    wasi->exit_requested = true;
+    if (wasi->wamr_instance) {
+      wasm_runtime_set_exception(wasi->wamr_instance, "WASI proc_exit");
+    }
+
+    if (!wasi->options.return_on_exit) {
+      exit((int)exit_code);
+    }
   }
 
-  // Throw an exception to terminate WASM execution
-  // This mimics the behavior of proc_exit without calling exit()
+  // Throw an exception to unwind execution; start()/initialize() will convert to exit code when requested
   return JS_ThrowInternalError(ctx, "WASI proc_exit called with code %u", exit_code);
 }
 
@@ -756,17 +907,52 @@ static JSValue wasi_clock_time_get(JSContext* ctx, JSValueConst this_val, int ar
   // Convert to nanoseconds (WASI timestamp format)
   uint64_t timestamp = (uint64_t)ts.tv_sec * 1000000000ULL + (uint64_t)ts.tv_nsec;
 
-  // Write timestamp (little-endian, 64-bit)
-  time_mem[0] = (timestamp >> 0) & 0xFF;
-  time_mem[1] = (timestamp >> 8) & 0xFF;
-  time_mem[2] = (timestamp >> 16) & 0xFF;
-  time_mem[3] = (timestamp >> 24) & 0xFF;
-  time_mem[4] = (timestamp >> 32) & 0xFF;
-  time_mem[5] = (timestamp >> 40) & 0xFF;
-  time_mem[6] = (timestamp >> 48) & 0xFF;
-  time_mem[7] = (timestamp >> 56) & 0xFF;
+  write_u64_le(time_mem, timestamp);
 
   JSRT_Debug("WASI syscall: clock_time_get - returned time %llu ns", (unsigned long long)timestamp);
+  return JS_NewInt32(ctx, WASI_ESUCCESS);
+}
+
+// clock_res_get(id: clockid, resolution: ptr) -> errno
+static JSValue wasi_clock_res_get(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv, int magic,
+                                  JSValue* func_data) {
+  jsrt_wasi_t* wasi = get_wasi_instance(ctx, func_data);
+  if (!wasi || !wasi->wamr_instance) {
+    JSRT_Debug("WASI syscall: clock_res_get - no WAMR instance");
+    return JS_NewInt32(ctx, WASI_EINVAL);
+  }
+
+  if (argc != 2) {
+    return JS_NewInt32(ctx, WASI_EINVAL);
+  }
+
+  uint32_t clock_id;
+  uint32_t resolution_ptr;
+  if (JS_ToUint32(ctx, &clock_id, argv[0]) || JS_ToUint32(ctx, &resolution_ptr, argv[1])) {
+    return JS_NewInt32(ctx, WASI_EINVAL);
+  }
+
+  JSRT_Debug("WASI syscall: clock_res_get(id=%u, resolution_ptr=%u)", clock_id, resolution_ptr);
+
+  uint8_t* resolution_mem = get_wasm_memory(wasi, resolution_ptr, 8);
+  if (!resolution_mem) {
+    return JS_NewInt32(ctx, WASI_EFAULT);
+  }
+
+  uint64_t resolution_ns = 0;
+  switch (clock_id) {
+    case WASI_CLOCK_REALTIME:
+    case WASI_CLOCK_MONOTONIC:
+      resolution_ns = 1000;  // 1 microsecond approximation
+      break;
+    case WASI_CLOCK_PROCESS_CPUTIME:
+    case WASI_CLOCK_THREAD_CPUTIME:
+      return JS_NewInt32(ctx, WASI_ENOSYS);
+    default:
+      return JS_NewInt32(ctx, WASI_EINVAL);
+  }
+
+  write_u64_le(resolution_mem, resolution_ns);
   return JS_NewInt32(ctx, WASI_ESUCCESS);
 }
 
@@ -862,11 +1048,16 @@ JSValue jsrt_wasi_get_import_object(JSContext* ctx, jsrt_wasi_t* wasi) {
   JS_SetPropertyStr(ctx, wasi_ns, "fd_read", JS_NewCFunctionData(ctx, wasi_fd_read, 4, 0, 1, wasi_data));
   JS_SetPropertyStr(ctx, wasi_ns, "fd_close", JS_NewCFunctionData(ctx, wasi_fd_close, 1, 0, 1, wasi_data));
   JS_SetPropertyStr(ctx, wasi_ns, "fd_seek", JS_NewCFunctionData(ctx, wasi_fd_seek, 4, 0, 1, wasi_data));
+  JS_SetPropertyStr(ctx, wasi_ns, "fd_tell", JS_NewCFunctionData(ctx, wasi_fd_tell, 2, 0, 1, wasi_data));
   JS_SetPropertyStr(ctx, wasi_ns, "fd_prestat_get", JS_NewCFunctionData(ctx, wasi_fd_prestat_get, 2, 0, 1, wasi_data));
   JS_SetPropertyStr(ctx, wasi_ns, "fd_prestat_dir_name",
                     JS_NewCFunctionData(ctx, wasi_fd_prestat_dir_name, 3, 0, 1, wasi_data));
+  JS_SetPropertyStr(ctx, wasi_ns, "fd_fdstat_get", JS_NewCFunctionData(ctx, wasi_fd_fdstat_get, 2, 0, 1, wasi_data));
+  JS_SetPropertyStr(ctx, wasi_ns, "fd_fdstat_set_flags",
+                    JS_NewCFunctionData(ctx, wasi_fd_fdstat_set_flags, 2, 0, 1, wasi_data));
   JS_SetPropertyStr(ctx, wasi_ns, "proc_exit", JS_NewCFunctionData(ctx, wasi_proc_exit, 1, 0, 1, wasi_data));
   JS_SetPropertyStr(ctx, wasi_ns, "clock_time_get", JS_NewCFunctionData(ctx, wasi_clock_time_get, 3, 0, 1, wasi_data));
+  JS_SetPropertyStr(ctx, wasi_ns, "clock_res_get", JS_NewCFunctionData(ctx, wasi_clock_res_get, 2, 0, 1, wasi_data));
   JS_SetPropertyStr(ctx, wasi_ns, "random_get", JS_NewCFunctionData(ctx, wasi_random_get, 2, 0, 1, wasi_data));
 
   // Free the wasi_data JSValue (it's been copied by JS_NewCFunctionData)

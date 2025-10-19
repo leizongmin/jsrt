@@ -8,14 +8,14 @@
 * Task Metadata
 :PROPERTIES:
 :CREATED: 2025-10-16T22:45:00Z
-:UPDATED: 2025-10-19T13:38:53Z
+:UPDATED: 2025-10-19T14:33:00Z
 :STATUS: 🔵 IN_PROGRESS
-:PROGRESS: 53/141
-:COMPLETION: 38%
+:PROGRESS: 59/141
+:COMPLETION: 42%
 :WASM_DEPENDENCIES: ✅ VERIFIED - All required APIs functional (2025-10-19)
 :WASM_BLOCKERS: NONE - Standalone Memory/Table/Global not needed by WASI
 :PHASE3_SYSCALLS: 🟢 COMPLETE - 13/13 syscalls implemented (100%) (ctx fix + zero-preopen handling 2025-10-19)
-:PHASE3_STATUS: 🔵 IN_PROGRESS (2025-10-19) - 20/38 tasks complete; pending FD table & path ops
+:PHASE3_STATUS: 🔵 IN_PROGRESS (2025-10-19) - 26/38 tasks complete; focus shifts to path/poll/socket coverage
 :PHASE3_CAPABILITIES: args, env, stdio, preopens, time, random, proc_exit
 :ASAN_VALIDATION: ✅ CLEAN - No leaks or memory errors
 :END:
@@ -127,28 +127,28 @@ See individual phase documents for dependency graphs.
 * 🚀 Execution Dashboard
 :PROPERTIES:
 :CURRENT_PHASE: Phase 3: WASI Import Implementation
-:PROGRESS: 53/141
-:COMPLETION: 38%
-:ACTIVE_TASK: Task 3.20 - Implement proc_exit returnOnExit handling
-:UPDATED: 2025-10-19T13:38:53Z
+:PROGRESS: 59/141
+:COMPLETION: 42%
+:ACTIVE_TASK: Task 3.14 - Implement path_open sandboxed loaders
+:UPDATED: 2025-10-19T14:33:00Z
 :END:
 
 ** Current Status
 - Phase: Phase 3: WASI Import Implementation
-- Progress: 53/141 tasks (38%)
-- Active: Finalize proc_exit semantics (Task 3.20)
+- Progress: 59/141 tasks (42%)
+- Active: Implement path_open sandbox rules (Task 3.14)
 
 ** Next Up
 High-priority tasks ready to start (Phase 3):
-- [ ] Task 3.9: Implement fd_tell
-- [ ] Task 3.10: Implement fd_fdstat_get
-- [ ] Task 3.11: Implement fd_fdstat_set_flags
-- [ ] Task 3.20: Implement proc_exit returnOnExit behavior
+- [ ] Task 3.14: Implement path_open
+- [ ] Task 3.15: Implement path_filestat_get
+- [ ] Task 3.16: Implement path_create_directory
+- [ ] Task 3.33: Implement FD table management
 
 See [[file:node-wasi-plan/phases/phase3-wasi-imports.md][Phase 3 document]] for details.
 
 ** Parallel Opportunities
-Phase 3 tasks 3.9-3.11 can proceed in parallel with 3.25 and 3.35 once import infrastructure is stable.
+Phase 3 path operations (3.14-3.19) can progress in parallel once FD table groundwork (3.33) starts.
 
 ** Blocking Dependencies
 None - All WebAssembly dependencies are satisfied.
@@ -179,6 +179,7 @@ See: docs/webassembly-api-compatibility.md for details.
 ** Recent Changes
 | Timestamp | Action | Task ID | Details |
 |-----------|--------|---------|---------|
+| 2025-10-19T14:33:00Z | Updated | Phase 3 | Completed fd_tell/fd_fdstat*, clock_res_get, proc_exit logic, and memory validation |
 | 2025-10-19T13:38:53Z | Updated | Phase 2 & 3 | Documented Phase 2 completion, Phase 3 progress, and WASI import safety fix |
 | 2025-10-19T08:00:00Z | Completed | Phase 1 | All 8 research and design tasks completed |
 | 2025-10-19T08:00:00Z | Created | Research | Comprehensive research notes in research-notes.md |
@@ -192,7 +193,7 @@ See: docs/webassembly-api-compatibility.md for details.
 - Critical path: Phase 1 → Phase 2 → Phase 3 → Phase 4 → Phase 5 → Phase 6 → Phase 7
 - Parallel opportunities: Many tasks within each phase can run in parallel
 - Testing is integrated throughout (not just Phase 6)
-- Pending work: implement fd_tell/fd_fdstat*, proc_exit returnOnExit, and memory export validation (Tasks 3.9-3.11, 3.20, 3.25, 3.35)
+- Pending work: expand path operations, FD table/rights management, and socket/poll support (Tasks 3.14-3.19, 3.33, 3.28-3.29)
 
 * Implementation Notes
 

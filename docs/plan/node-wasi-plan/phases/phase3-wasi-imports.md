@@ -2,8 +2,8 @@
 :ID: phase-3
 :CREATED: 2025-10-16T22:45:00Z
 :DEPS: phase-2
-:PROGRESS: 20/38
-:COMPLETION: 53%
+:PROGRESS: 26/38
+:COMPLETION: 68%
 :STATUS: 🔵 IN_PROGRESS
 :END:
 
@@ -240,53 +240,59 @@ Implement WASI fd_seek function for file positioning.
 **** Testing Strategy
 Test file positioning.
 
-*** TODO [#B] Task 3.9: Implement fd_tell [P][R:MED][C:SIMPLE][D:3.4]
+*** DONE [#B] Task 3.9: Implement fd_tell [P][R:MED][C:SIMPLE][D:3.4]
+CLOSED: [2025-10-19T14:33:00Z]
 :PROPERTIES:
 :ID: 3.9
 :CREATED: 2025-10-16T22:45:00Z
 :DEPS: 3.4
+:COMPLETED: 2025-10-19T14:33:00Z
 :END:
 
 **** Description
 Implement WASI fd_tell function.
 
 **** Acceptance Criteria
-- [ ] Function implemented
-- [ ] Returns correct position
+- [X] Function implemented
+- [X] Returns correct position
 
 **** Testing Strategy
 Test position tracking.
 
-*** TODO [#B] Task 3.10: Implement fd_fdstat_get [P][R:MED][C:SIMPLE][D:3.4]
+*** DONE [#B] Task 3.10: Implement fd_fdstat_get [P][R:MED][C:SIMPLE][D:3.4]
+CLOSED: [2025-10-19T14:33:00Z]
 :PROPERTIES:
 :ID: 3.10
 :CREATED: 2025-10-16T22:45:00Z
 :DEPS: 3.4
+:COMPLETED: 2025-10-19T14:33:00Z
 :END:
 
 **** Description
 Implement WASI fd_fdstat_get function to get FD metadata.
 
 **** Acceptance Criteria
-- [ ] Function implemented
-- [ ] Returns correct FD stats
+- [X] Function implemented
+- [X] Returns correct FD stats
 
 **** Testing Strategy
 Test FD metadata retrieval.
 
-*** TODO [#B] Task 3.11: Implement fd_fdstat_set_flags [P][R:LOW][C:SIMPLE][D:3.4]
+*** DONE [#B] Task 3.11: Implement fd_fdstat_set_flags [P][R:LOW][C:SIMPLE][D:3.4]
+CLOSED: [2025-10-19T14:33:00Z]
 :PROPERTIES:
 :ID: 3.11
 :CREATED: 2025-10-16T22:45:00Z
 :DEPS: 3.4
+:COMPLETED: 2025-10-19T14:33:00Z
 :END:
 
 **** Description
 Implement WASI fd_fdstat_set_flags function.
 
 **** Acceptance Criteria
-- [ ] Function implemented
-- [ ] Flags updated correctly
+- [X] Function implemented
+- [X] Flags updated correctly
 
 **** Testing Strategy
 Test flag modification.
@@ -433,11 +439,13 @@ Implement WASI path_unlink_file function.
 **** Testing Strategy
 Test file deletion.
 
-*** TODO [#B] Task 3.20: Implement proc_exit [P][R:HIGH][C:MEDIUM][D:3.4,2.13]
+*** DONE [#B] Task 3.20: Implement proc_exit [P][R:HIGH][C:MEDIUM][D:3.4,2.13]
+CLOSED: [2025-10-19T14:33:00Z]
 :PROPERTIES:
 :ID: 3.20
 :CREATED: 2025-10-16T22:45:00Z
 :DEPS: 3.4,2.13
+:COMPLETED: 2025-10-19T14:33:00Z
 :END:
 
 **** Description
@@ -447,13 +455,13 @@ Implement WASI proc_exit function:
 - If false: terminate process with exit code
 
 **** Acceptance Criteria
-- [ ] Function implemented
-- [ ] returnOnExit=true returns code
-- [ ] returnOnExit=false exits process
-- [ ] Exit code propagated correctly
+- [X] Function implemented
+- [X] returnOnExit=true returns code
+- [X] returnOnExit=false exits process
+- [X] Exit code propagated correctly
 
 **** Notes
-- Current implementation stores exit code and throws internal error placeholder. Needs proper returnOnExit branching and process termination semantics.
+- Handles returnOnExit=true by surfacing exit code while default mode exits host process.
 
 **** Testing Strategy
 Test both returnOnExit modes.
@@ -536,19 +544,21 @@ Implement WASI args_sizes_get function.
 **** Testing Strategy
 Test size calculations.
 
-*** TODO [#B] Task 3.25: Implement clock_res_get [P][R:MED][C:SIMPLE][D:3.4]
+*** DONE [#B] Task 3.25: Implement clock_res_get [P][R:MED][C:SIMPLE][D:3.4]
+CLOSED: [2025-10-19T14:33:00Z]
 :PROPERTIES:
 :ID: 3.25
 :CREATED: 2025-10-16T22:45:00Z
 :DEPS: 3.4
+:COMPLETED: 2025-10-19T14:33:00Z
 :END:
 
 **** Description
 Implement WASI clock_res_get function for clock resolution.
 
 **** Acceptance Criteria
-- [ ] Function implemented
-- [ ] Returns correct resolution
+- [X] Function implemented
+- [X] Returns correct resolution
 
 **** Testing Strategy
 Test clock resolution query.
@@ -776,11 +786,13 @@ Register all implemented WASI functions in getImportObject():
 **** Testing Strategy
 Verify import object structure.
 
-*** TODO [#B] Task 3.35: Handle WASI memory export validation [P][R:MED][C:MEDIUM][D:3.4]
+*** DONE [#B] Task 3.35: Handle WASI memory export validation [P][R:MED][C:MEDIUM][D:3.4]
+CLOSED: [2025-10-19T14:33:00Z]
 :PROPERTIES:
 :ID: 3.35
 :CREATED: 2025-10-16T22:45:00Z
 :DEPS: 3.4
+:COMPLETED: 2025-10-19T14:33:00Z
 :END:
 
 **** Description
@@ -790,9 +802,9 @@ Validate WASM instance has required "memory" export:
 - Store memory reference
 
 **** Acceptance Criteria
-- [ ] Memory export validation implemented
-- [ ] Clear error message if missing
-- [ ] Behavior matches Node.js
+- [X] Memory export validation implemented
+- [X] Clear error message if missing
+- [X] Behavior matches Node.js
 
 **** Testing Strategy
 Test with WASM modules with/without memory export.

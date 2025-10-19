@@ -77,9 +77,11 @@ typedef struct {
   JSValue import_object;  // Cached import object from getImportObject()
 
   // State tracking
-  bool started;      // Has start() been called?
-  bool initialized;  // Has initialize() been called?
-  int exit_code;     // Exit code from _start (if return_on_exit=true)
+  bool started;           // Has start() been called?
+  bool initialized;       // Has initialize() been called?
+  int exit_code;          // Exit code from _start (if return_on_exit=true)
+  bool exit_requested;    // proc_exit invoked during execution
+  bool memory_validated;  // Default memory export present
 } jsrt_wasi_t;
 
 /**

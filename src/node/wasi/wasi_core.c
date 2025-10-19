@@ -576,6 +576,8 @@ jsrt_wasi_t* jsrt_wasi_new(JSContext* ctx, const jsrt_wasi_options_t* options) {
   wasi->started = false;
   wasi->initialized = false;
   wasi->exit_code = 0;
+  wasi->exit_requested = false;
+  wasi->memory_validated = false;
   wasi->wamr_instance = NULL;
   wasi->exec_env = NULL;
 

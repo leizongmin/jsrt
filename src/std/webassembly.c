@@ -2201,6 +2201,9 @@ static JSValue js_webassembly_global_value_getter(JSContext* ctx, JSValueConst t
   }
 
   wasm_val_t value;
+  memset(&value, 0, sizeof(value));
+  value.kind = data->kind;
+
   int rc = 0;
   if (data->is_host) {
     wasm_global_get(data->u.host, &value);

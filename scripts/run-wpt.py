@@ -81,7 +81,7 @@ WINTERCG_TESTS = {
         # Instance and exports (implemented)
         'wasm/jsapi/instance/constructor.any.js',
         'wasm/jsapi/instance/exports.any.js',
-        # Skip Memory/Table/Global tests - not yet implemented
+        # Skip Memory/Table/Global tests - blocked by WAMR C API limitations
         # Skip exception/tag tests - not yet implemented
         # Skip streaming/async tests - not yet implemented
     ]

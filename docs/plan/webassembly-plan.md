@@ -8,15 +8,16 @@
 * Task Metadata
 :PROPERTIES:
 :CREATED: 2025-10-16T14:45:00Z
-:UPDATED: 2025-10-18T15:48:00Z
+:UPDATED: 2025-10-19T01:30:00Z
 :STATUS: 🔵 IN_PROGRESS
-:PROGRESS: 86/220
+:PROGRESS: 83/220
 :COMPLETION: 38%
 :CODE_REVIEW: COMPLETED (Grade: A-)
 :CRITICAL_FIXES: 5/5 APPLIED (H1, H3, M1, M4, M5)
 :WPT_BASELINE: 0% (0/8 tests) - WPT infrastructure issues, unit tests 100% (210/210)
 :ASAN_VALIDATION: ✅ CLEAN - No leaks, no use-after-free, no overflows
 :API_COMPATIBILITY_MATRIX: ✅ CREATED - docs/webassembly-api-compatibility.md
+:PHASE4_BLOCKER: Tasks 4.6-4.8 REOPENED - Global implementation non-functional (WAMR limitation)
 :END:
 
 * Status Update Guidelines
@@ -517,6 +518,11 @@ Wrap JavaScript functions as WASM-callable imports
 - [ ] Handle multi-value returns
 - [ ] Support multiple module namespaces
 
+**** Investigation Update (2025-10-18)
+- Attempted to extend current native import bridge to use WAMR's `wasm_runtime_register_natives_raw` so we can control type conversion manually, but WAMR refused to link the host functions (still reported "unlinked import function").
+- Revisited non-raw registration (`wasm_runtime_register_natives`) with custom signature strings; WAMR still expects C functions with fixed signatures, so our generic trampoline signature (exec_env, argv*, argc) is incompatible for non-i32 types.
+- Conclusion: Without generating per-signature C stubs or deeper integration with WAMR's import resolver, Phase 3.2B remains blocked. Captured blocker in `webassembly-plan/webassembly-phase3.2b-plan.md` for future work.
+
 **** Implementation Summary (Phase 3.2A)
 - **Native Function Trampoline**: `jsrt_wasm_import_func_trampoline()`
   - Bridges WASM → JS function calls
@@ -647,10 +653,13 @@ Files: src/std/webassembly.c:787-871
 :ID: phase-4
 :CREATED: 2025-10-16T14:45:00Z
 :STARTED: 2025-10-18T14:50:00Z
+:INVESTIGATED: 2025-10-19T01:25:00Z
 :DEPS: phase-3
-:PROGRESS: 3/34
-:COMPLETION: 9%
-:STATUS: 🔵 IN_PROGRESS
+:PROGRESS: 0/34
+:COMPLETION: 0%
+:STATUS: 🔴 BLOCKED
+:BLOCKED_BY: WAMR C API limitations for both Table and Global
+:NOTE: Tasks 4.1 (Table) and 4.6-4.8 (Global) blocked - host objects non-functional
 :END:
 
 *** BLOCKED [#A] Task 4.1: WebAssembly.Table Constructor [S][R:MED][C:COMPLEX][D:1.3]
@@ -819,14 +828,18 @@ Implement grow method to expand table
 - [ ] Test initialization of new slots
 - [ ] Test maximum limit enforcement
 
-*** DONE [#A] Task 4.6: WebAssembly.Global Constructor [S][R:MED][C:MEDIUM][D:1.3]
-CLOSED: [2025-10-18T15:05:00Z]
+*** BLOCKED [#A] Task 4.6: WebAssembly.Global Constructor [S][R:MED][C:MEDIUM][D:1.3]
+REOPENED: [2025-10-19T01:25:00Z]
 :PROPERTIES:
 :ID: 4.6
 :CREATED: 2025-10-16T14:45:00Z
 :STARTED: 2025-10-18T14:50:00Z
 :COMPLETED: 2025-10-18T15:05:00Z
+:REOPENED: 2025-10-19T01:25:00Z
+:BLOCKED_BY: WAMR C API functional limitation
+:BLOCKER_DOC: docs/plan/webassembly-plan/wasm-phase4-global-blocker.md
 :DEPS: 1.3
+:NOTE: Implementation completed but non-functional - returns garbage values
 :END:
 
 Implement Global for mutable/immutable global variables
@@ -850,14 +863,17 @@ Implement Global for mutable/immutable global variables
 - Wired constructor/prototype registration in `JSRT_RuntimeSetupStdWebAssembly`, exposing the API on the global namespace (lines 1910-1950).
 - Tests: `make test` ✅ 208/208; `make wpt` ❌ 8/40 wasm suites failing (pre-existing coverage gaps).
 
-*** DONE [#A] Task 4.7: Global.prototype.value Property [S][R:MED][C:MEDIUM][D:4.6]
-CLOSED: [2025-10-18T15:10:00Z]
+*** BLOCKED [#A] Task 4.7: Global.prototype.value Property [S][R:MED][C:MEDIUM][D:4.6]
+REOPENED: [2025-10-19T01:25:00Z]
 :PROPERTIES:
 :ID: 4.7
 :CREATED: 2025-10-16T14:45:00Z
 :STARTED: 2025-10-18T15:00:00Z
 :COMPLETED: 2025-10-18T15:10:00Z
+:REOPENED: 2025-10-19T01:25:00Z
+:BLOCKED_BY: Task 4.6 (WAMR C API limitation)
 :DEPS: 4.6
+:NOTE: Getter/setter implemented but returns/stores garbage values
 :END:
 
 Implement value getter/setter for global access
@@ -882,14 +898,17 @@ Implement value getter/setter for global access
 - Ensured mutability enforcement and enumerable `value` property registration on prototype (runtime setup section).
 - Tests: `make test` ✅ 208/208; `make wpt` ❌ wasm category still 8 suites failing (legacy issues).
 
-*** DONE [#B] Task 4.8: Global.prototype.valueOf() Method [S][R:LOW][C:SIMPLE][D:4.7]
-CLOSED: [2025-10-18T15:12:00Z]
+*** BLOCKED [#B] Task 4.8: Global.prototype.valueOf() Method [S][R:LOW][C:SIMPLE][D:4.7]
+REOPENED: [2025-10-19T01:25:00Z]
 :PROPERTIES:
 :ID: 4.8
 :CREATED: 2025-10-16T14:45:00Z
 :STARTED: 2025-10-18T15:05:00Z
 :COMPLETED: 2025-10-18T15:12:00Z
+:REOPENED: 2025-10-19T01:25:00Z
+:BLOCKED_BY: Task 4.7 (WAMR C API limitation)
 :DEPS: 4.7
+:NOTE: valueOf implemented but returns garbage values
 :END:
 
 Implement valueOf for primitive conversion
@@ -1335,24 +1354,68 @@ Enable and fix Table-specific tests
 - [ ] Fix grow behavior
 - [ ] Verify all Table tests pass
 
-*** TODO [#B] Task 7.9: Add Global WPT Tests [P][R:MED][C:MEDIUM][D:4.8]
+*** BLOCKED [#B] Task 7.9: Add Global WPT Tests [P][R:MED][C:MEDIUM][D:4.8]
 :PROPERTIES:
 :ID: 7.9
 :CREATED: 2025-10-16T14:45:00Z
+:INVESTIGATED: 2025-10-19T01:20:00Z
+:BLOCKED_BY: Tasks 4.6-4.8 (WAMR C API Global limitation)
+:BLOCKER_DOC: docs/plan/webassembly-plan/wasm-phase4-global-blocker.md
 :DEPS: 4.8
+:NOTE: Tests added but 0% pass rate - discovered Global implementation is non-functional
 :END:
 
 Enable and fix Global-specific tests
 
+**** Investigation Results (2025-10-19)
+Attempted to add Global WPT tests but discovered critical blocker:
+1. ✅ Added 3 Global WPT test files to run-wpt.py
+2. ✅ Ran tests: 11 total, 0 passed, 11 failed (0.0% pass rate)
+3. ❌ CRITICAL: All Global value operations return garbage/uninitialized memory
+4. ❌ Root cause: WAMR C API globals are non-functional (same as Table/Memory)
+5. ✅ Documented blocker in wasm-phase4-global-blocker.md
+6. ✅ Reopened Tasks 4.6-4.8 as BLOCKED
+
+**** Test Failures
+- wasm/jsapi/global/constructor.any.js: 128+ failures
+- wasm/jsapi/global/value-get-set.any.js: 191+ failures
+- wasm/jsapi/global/valueOf.any.js: 1 failure
+- All failures due to value operations returning garbage instead of actual values
+
+**** WAMR C API Global Limitations (CONFIRMED)
+**Issue**: Host-created globals are non-functional
+- `wasm_global_new()` creates objects but values are not accessible
+- `wasm_global_get()` returns uninitialized/garbage memory
+- Initial values passed to constructor are lost
+- Identical to Table blocker (Task 4.1) and Memory blocker (Task 2.4-2.6)
+
+**** Decision: REMAIN BLOCKED
+Task 7.9 remains BLOCKED until Tasks 4.6-4.8 are unblocked.
+
+**** False Completion Discovery
+Tasks 4.6-4.8 were marked DONE on 2025-10-18 **without proper validation**:
+- NO Global-specific unit tests existed
+- Only structural/metadata was tested, not value operations
+- Implementation was never validated with actual get/set operations
+- WPT tests immediately revealed 0% functionality
+
+**** Lesson Learned
+**Never mark tasks DONE without comprehensive functional tests.**
+This blocker would have been discovered immediately if:
+1. Unit tests included actual value read/write operations
+2. WPT tests were run during implementation (not deferred to Phase 7)
+3. Implementation was validated against spec, not just compiled successfully
+
 **** Subtasks
-- [ ] Add wasm/jsapi/global/constructor.any.js
-- [ ] Add wasm/jsapi/global/value-get-set.any.js
-- [ ] Add wasm/jsapi/global/valueOf.any.js
-- [ ] Run and document failures
-- [ ] Fix constructor validation
-- [ ] Fix value property behavior
-- [ ] Fix mutability enforcement
-- [ ] Verify all Global tests pass
+- [X] Add wasm/jsapi/global/constructor.any.js (added but tests fail)
+- [X] Add wasm/jsapi/global/value-get-set.any.js (added but tests fail)
+- [X] Add wasm/jsapi/global/valueOf.any.js (added but tests fail)
+- [X] Run and document failures (0/11 tests passing)
+- [X] Document blocker (wasm-phase4-global-blocker.md)
+- [ ] Fix constructor validation (BLOCKED - WAMR limitation)
+- [ ] Fix value property behavior (BLOCKED - WAMR limitation)
+- [ ] Fix mutability enforcement (BLOCKED - WAMR limitation)
+- [ ] Verify all Global tests pass (BLOCKED - waiting for unblock)
 
 *** DONE [#A] Task 7.10: Validate with AddressSanitizer [P][R:MED][C:MEDIUM][D:7.9]
 CLOSED: [2025-10-18T14:00:00Z]
@@ -1564,22 +1627,23 @@ Comprehensive code review and cleanup completed:
 
 * 🚀 Execution Dashboard
 :PROPERTIES:
-:CURRENT_PHASE: Phase 8 - Documentation & Polish
-:PROGRESS: 78/220
-:COMPLETION: 35%
-:ACTIVE_TASK: Phase 8 Tasks 8.2-8.4 complete (Examples + Docs + Cleanup)
-:UPDATED: 2025-10-18T15:15:00Z
+:CURRENT_PHASE: Phase 7 - WPT Integration & Testing
+:PROGRESS: 83/220
+:COMPLETION: 38%
+:ACTIVE_TASK: Task 7.9 investigated - discovered Phase 4 Global blocker
+:UPDATED: 2025-10-19T01:30:00Z
 :END:
 
 ** Current Status
+- Phase: Phase 4 - Table & Global (BLOCKED, 0% - 0/34 tasks) 🔴 CRITICAL
 - Phase: Phase 7 - WPT Integration & Testing (IN_PROGRESS, 20% - 7/35 tasks)
-- Phase: Phase 8 - Documentation & Polish (IN_PROGRESS, 40% - 4/10 tasks) ⬆️
-- Progress: 78/220 tasks (35%) ⬆️ +3 tasks
-- Active: Phase 8 - Examples created, AGENTS.md updated, code cleanup complete
-- Blocked: Phase 2 Tasks 2.4-2.6 (Memory API - WAMR limitation), Phase 4 (Table API - WAMR limitation)
+- Phase: Phase 8 - Documentation & Polish (IN_PROGRESS, 40% - 4/10 tasks)
+- Progress: 83/220 tasks (38%) - 3 tasks REOPENED as BLOCKED ⚠️
+- Active: Task 7.9 investigation complete - Global blocker documented
+- Blocked: Phase 2 (Memory 2.4-2.6), Phase 4 (Table 4.1, Global 4.6-4.8) - all WAMR C API limitations
 - Completed Phases: Phase 1 ✓ (100% - Infrastructure & Error Types)
 - Partially Complete: Phase 2 (52% - Module API except Memory), Phase 3 (42% - Instance & Exports i32 support)
-- Recent: Phase 8.2-8.4 ✓ (WebAssembly examples, AGENTS.md docs, code cleanup)
+- Recent: Phase 4 Tasks 4.6-4.8 REOPENED - implementation non-functional (2025-10-19)
 
 ** Execution Strategy
 - Phases 1-5 are SEQUENTIAL (each depends on previous)
@@ -1617,6 +1681,7 @@ Comprehensive code review and cleanup completed:
 ** Recent Changes
 | Timestamp | Action | Task ID | Details |
 |-----------|--------|---------|---------|
+| 2025-10-18T17:25:00Z | Blocked | 3.2B | WAMR native registration requires per-signature C stubs; generic trampoline approach cannot support f32/f64/i64 without deeper integration |
 | 2025-10-18T15:57:00Z | Completed | 6.2 | Added JS fallback instantiateStreaming helper + tests |
 | 2025-10-18T15:55:00Z | Completed | 6.1 | Added JS fallback compileStreaming helper + tests |
 | 2025-10-18T16:20:00Z | Blocked | 4.x | WAMR v2.4.1 host tables unsupported; Phase 4 tasks remain pending until runtime upgrade or deps patches permitted |

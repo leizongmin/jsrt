@@ -39,6 +39,7 @@ static char* jsrt_realpath(const char* path, char* resolved_path) {
 #include "../util/path.h"
 #include "assert.h"
 #include "ffi.h"
+extern JSValue JSRT_InitNodeWASI(JSContext* ctx);
 
 // ==== Cross-platform Path Handling Functions ====
 
@@ -1312,6 +1313,17 @@ static JSValue js_require(JSContext* ctx, JSValueConst this_val, int argc, JSVal
 
     if (strcmp(std_module, "ffi") == 0) {
       JSValue result = JSRT_CreateFFIModule(ctx);
+      JS_FreeCString(ctx, module_name);
+      free(esm_context_path);
+      return result;
+    }
+
+    if (strcmp(std_module, "wasi") == 0) {
+#ifdef JSRT_NODE_COMPAT
+      JSValue result = JSRT_LoadNodeModuleCommonJS(ctx, "wasi");
+#else
+      JSValue result = JSRT_InitNodeWASI(ctx);
+#endif
       JS_FreeCString(ctx, module_name);
       free(esm_context_path);
       return result;

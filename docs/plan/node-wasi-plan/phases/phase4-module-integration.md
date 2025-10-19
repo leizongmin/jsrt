@@ -2,16 +2,18 @@
 :ID: phase-4
 :CREATED: 2025-10-16T22:45:00Z
 :DEPS: phase-3
-:PROGRESS: 0/18
-:COMPLETION: 0%
-:STATUS: 🟡 TODO
+:PROGRESS: 6/18
+:COMPLETION: 33%
+:STATUS: 🔵 IN_PROGRESS
 :END:
 
-*** TODO [#A] Task 4.1: Add WASI module to node_modules.c registry [S][R:MED][C:SIMPLE][D:2.7,3.3]
+*** DONE [#A] Task 4.1: Add WASI module to node_modules.c registry [S][R:MED][C:SIMPLE][D:2.7,3.3]
+CLOSED: [2025-10-19T16:52:00Z]
 :PROPERTIES:
 :ID: 4.1
 :CREATED: 2025-10-16T22:45:00Z
 :DEPS: 2.7,3.3
+:COMPLETED: 2025-10-19T16:52:00Z
 :END:
 
 **** Description
@@ -26,18 +28,23 @@ static NodeModuleEntry node_modules[] = {
 ```
 
 **** Acceptance Criteria
-- [ ] WASI entry added to node_modules array
-- [ ] No dependencies listed (WASI has no module deps)
-- [ ] Compiles successfully
+- [X] WASI entry added to node_modules array
+- [X] No dependencies listed (WASI has no module deps)
+- [X] Compiles successfully
+
+**** Notes
+- Entry present at `src/node/node_modules.c` (no dependencies) since earlier Phase work; validated via new loader tests.
 
 **** Testing Strategy
 Build test.
 
-*** TODO [#A] Task 4.2: Implement CommonJS module initializer [S][R:MED][C:MEDIUM][D:4.1,2.7]
+*** DONE [#A] Task 4.2: Implement CommonJS module initializer [S][R:MED][C:MEDIUM][D:4.1,2.7]
+CLOSED: [2025-10-19T16:52:00Z]
 :PROPERTIES:
 :ID: 4.2
 :CREATED: 2025-10-16T22:45:00Z
 :DEPS: 4.1,2.7
+:COMPLETED: 2025-10-19T16:52:00Z
 :END:
 
 **** Description
@@ -52,18 +59,23 @@ JSValue JSRT_InitNodeWasi(JSContext* ctx) {
 ```
 
 **** Acceptance Criteria
-- [ ] Function implemented in wasi_core.c
-- [ ] Returns exports object
-- [ ] WASI constructor available
+- [X] Function implemented in wasi_module.c (JSRT_InitNodeWASI)
+- [X] Returns exports object
+- [X] WASI constructor available
+
+**** Notes
+- Verified by `test/module/wasi/test_wasi_loader.js` which instantiates `new WASI({})` via `require('node:wasi')`.
 
 **** Testing Strategy
 Test: const WASI = require('node:wasi').WASI;
 
-*** TODO [#A] Task 4.3: Implement ES Module initializer [S][R:MED][C:MEDIUM][D:4.1,2.7]
+*** DONE [#A] Task 4.3: Implement ES Module initializer [S][R:MED][C:MEDIUM][D:4.1,2.7]
+CLOSED: [2025-10-19T16:52:00Z]
 :PROPERTIES:
 :ID: 4.3
 :CREATED: 2025-10-16T22:45:00Z
 :DEPS: 4.1,2.7
+:COMPLETED: 2025-10-19T16:52:00Z
 :END:
 
 **** Description
@@ -80,18 +92,23 @@ int js_node_wasi_init(JSContext* ctx, JSModuleDef* m) {
 ```
 
 **** Acceptance Criteria
-- [ ] Function implemented
-- [ ] Named export "WASI" available
-- [ ] Default export available
+- [X] Function implemented
+- [X] Named export "WASI" available
+- [X] Default export available
+
+**** Notes
+- Confirmed by `test/module/wasi/test_wasi_loader.mjs` (ESM named/default imports).
 
 **** Testing Strategy
 Test: import { WASI } from 'node:wasi';
 
-*** TODO [#A] Task 4.4: Add WASI module exports in node_modules.c [S][R:LOW][C:SIMPLE][D:4.3]
+*** DONE [#A] Task 4.4: Add WASI module exports in node_modules.c [S][R:LOW][C:SIMPLE][D:4.3]
+CLOSED: [2025-10-19T16:52:00Z]
 :PROPERTIES:
 :ID: 4.4
 :CREATED: 2025-10-16T22:45:00Z
 :DEPS: 4.3
+:COMPLETED: 2025-10-19T16:52:00Z
 :END:
 
 **** Description
@@ -105,17 +122,22 @@ Add WASI export registration in JSRT_LoadNodeModule:
 ```
 
 **** Acceptance Criteria
-- [ ] Export registration added
-- [ ] Compiles successfully
+- [X] Export registration added
+- [X] Compiles successfully
+
+**** Notes
+- Node ES module loader registers `WASI` and `default` exports; validated via ESM loader test.
 
 **** Testing Strategy
 Build test.
 
-*** TODO [#A] Task 4.5: Enable dual protocol support (node:wasi + jsrt:wasi) [S][R:LOW][C:SIMPLE][D:4.2,4.3]
+*** DONE [#A] Task 4.5: Enable dual protocol support (node:wasi + jsrt:wasi) [S][R:LOW][C:SIMPLE][D:4.2,4.3]
+CLOSED: [2025-10-19T16:52:00Z]
 :PROPERTIES:
 :ID: 4.5
 :CREATED: 2025-10-16T22:45:00Z
 :DEPS: 4.2,4.3
+:COMPLETED: 2025-10-19T16:52:00Z
 :END:
 
 **** Description
@@ -124,18 +146,24 @@ Ensure WASI works with both protocols:
 - Test both require('node:wasi') and require('jsrt:wasi')
 
 **** Acceptance Criteria
-- [ ] node:wasi works
-- [ ] jsrt:wasi works
-- [ ] Both return same WASI class
+- [X] node:wasi works
+- [X] jsrt:wasi works
+- [X] Both return same WASI class
+
+**** Notes
+- `load_jsrt_module` now reuses the Node module loader; `js_require` recognizes `jsrt:wasi`.
+- `test/module/wasi/test_wasi_loader.js` asserts both protocols share cached exports and constructor identity.
 
 **** Testing Strategy
 Test both protocols.
 
-*** TODO [#B] Task 4.6: Implement module caching for WASI [P][R:LOW][C:SIMPLE][D:4.2]
+*** DONE [#B] Task 4.6: Implement module caching for WASI [P][R:LOW][C:SIMPLE][D:4.2]
+CLOSED: [2025-10-19T16:52:00Z]
 :PROPERTIES:
 :ID: 4.6
 :CREATED: 2025-10-16T22:45:00Z
 :DEPS: 4.2
+:COMPLETED: 2025-10-19T16:52:00Z
 :END:
 
 **** Description
@@ -144,8 +172,11 @@ Ensure WASI module is cached properly:
 - Test multiple require() calls return same module
 
 **** Acceptance Criteria
-- [ ] WASI module cached correctly
-- [ ] Multiple requires return same object
+- [X] WASI module cached correctly
+- [X] Multiple requires return same object
+
+**** Notes
+- Covered by `test/module/wasi/test_wasi_loader.js`, which verifies repeated `require('node:wasi')` shares the same exports object.
 
 **** Testing Strategy
 Test repeated requires.

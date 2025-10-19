@@ -10,8 +10,8 @@
 :CREATED: 2025-10-16T22:45:00Z
 :UPDATED: 2025-10-19T16:00:00Z
 :STATUS: 🔵 IN_PROGRESS
-:PROGRESS: 71/141
-:COMPLETION: 50%
+:PROGRESS: 77/141
+:COMPLETION: 55%
 :WASM_DEPENDENCIES: ✅ VERIFIED - All required APIs functional (2025-10-19)
 :WASM_BLOCKERS: NONE - Standalone Memory/Table/Global not needed by WASI
 :PHASE3_SYSCALLS: 🟢 COMPLETE - 13/13 core syscalls implemented with path/FD extensions validated (2025-10-19)
@@ -129,25 +129,25 @@ See individual phase documents for dependency graphs.
 :CURRENT_PHASE: Phase 4: Module Integration
 :PROGRESS: 71/141
 :COMPLETION: 50%
-:ACTIVE_TASK: Task 4.1 - Add WASI module to node_modules registry
-:UPDATED: 2025-10-19T16:00:00Z
+:ACTIVE_TASK: Task 4.7 - Add WASI-specific error codes
+:UPDATED: 2025-10-19T16:52:00Z
 :END:
 
 ** Current Status
 - Phase: Phase 4: Module Integration
-- Progress: 71/141 tasks (50%)
-- Active: Bootstrap builtin module plumbing (Task 4.1)
+- Progress: 77/141 tasks (55%)
+- Active: Harden WASI error handling (Task 4.7)
 
 ** Next Up
 High-priority tasks ready to start (Phase 4):
-- [ ] Task 4.1: Add WASI module to node_modules registry
-- [ ] Task 4.2: Implement CommonJS module initializer
-- [ ] Task 4.3: Implement ES Module initializer
+- [ ] Task 4.7: Add WASI-specific error codes
+- [ ] Task 4.8: Implement validation for required WASM exports
+- [ ] Task 4.9: (next) Integrate lifecycle error mapping
 
 See [[file:node-wasi-plan/phases/phase4-module-integration.md][Phase 4 document]] for details.
 
 ** Parallel Opportunities
-Phase 4 will focus on wiring the WASI module into the loader and polishing lifecycle APIs now that FD/path foundations are complete.
+Phase 4 now moves on to lifecycle validation and error mapping; module loader plumbing is in place.
 
 ** Blocking Dependencies
 None - All WebAssembly dependencies are satisfied.
@@ -181,6 +181,7 @@ See: docs/webassembly-api-compatibility.md for details.
 | 2025-10-19T16:00:00Z | Completed | Tasks 3.14-3.19, 3.28-3.29, 3.38 | Implemented path_* syscalls, poll/socket stubs, and added integration test coverage |
 | 2025-10-19T15:06:00Z | Updated | Task 3.33 | Added fd table scaffolding covering stdio + preopen metadata |
 | 2025-10-19T14:33:00Z | Updated | Phase 3 | Completed fd_tell/fd_fdstat*, clock_res_get, proc_exit logic, and memory validation |
+| 2025-10-19T16:52:00Z | Updated | Phase 4 | Established loader aliases/tests (Tasks 4.1-4.6) and kicked off error-handling work |
 | 2025-10-19T16:00:00Z | Completed | Tasks 3.1, 3.2, 3.33 | Catalogued WASI syscall coverage, finalized FD table management, and refreshed plan metadata |
 | 2025-10-19T13:38:53Z | Updated | Phase 2 & 3 | Documented Phase 2 completion, Phase 3 progress, and WASI import safety fix |
 | 2025-10-19T08:00:00Z | Completed | Phase 1 | All 8 research and design tasks completed |
@@ -195,7 +196,7 @@ See: docs/webassembly-api-compatibility.md for details.
 - Critical path: Phase 1 → Phase 2 → Phase 3 → Phase 4 → Phase 5 → Phase 6 → Phase 7
 - Parallel opportunities: Many tasks within each phase can run in parallel
 - Testing is integrated throughout (not just Phase 6)
-- Pending work: kick off Phase 4 module integration (tasks 4.1–4.3) and align lifecycle APIs
+- Pending work: advance Phase 4 error/lifecycle tasks (4.7–4.10) and prepare for lifecycle method integration
 
 * Implementation Notes
 

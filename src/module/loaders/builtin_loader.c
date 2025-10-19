@@ -67,6 +67,8 @@ char* jsrt_extract_builtin_name(const char* specifier) {
   return strdup(colon + 1);
 }
 
+static JSValue load_node_module(JSContext* ctx, const char* module_name);
+
 /**
  * Load jsrt: module
  */
@@ -87,7 +89,11 @@ static JSValue load_jsrt_module(JSContext* ctx, const char* module_name) {
 
   if (strcmp(module_name, "wasi") == 0) {
     // WASI is available in both jsrt: and node: namespaces
+#ifdef JSRT_NODE_COMPAT
+    return load_node_module(ctx, "wasi");
+#else
     return JSRT_InitNodeWASI(ctx);
+#endif
   }
 
   return jsrt_module_throw_error(ctx, JSRT_MODULE_NOT_FOUND, "Unknown jsrt module: %s", module_name);

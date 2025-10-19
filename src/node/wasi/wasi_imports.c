@@ -12,6 +12,7 @@
 #include <stdint.h>
 #include <stdio.h>
 #include <string.h>
+#include <time.h>
 #include <unistd.h>
 #include <wasm_export.h>
 
@@ -377,8 +378,85 @@ static JSValue wasi_fd_write(JSContext* ctx, JSValueConst this_val, int argc, JS
 // fd_read(fd: fd, iovs: ptr, iovs_len: size, nread: ptr) -> errno
 static JSValue wasi_fd_read(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv, int magic,
                              JSValue* func_data) {
-  JSRT_Debug("WASI syscall: fd_read (stub - returning ENOSYS)");
-  return JS_NewInt32(ctx, WASI_ENOSYS);  // Not implemented
+  jsrt_wasi_t* wasi = get_wasi_instance(func_data);
+  if (!wasi || !wasi->wamr_instance) {
+    JSRT_Debug("WASI syscall: fd_read - no WAMR instance");
+    return JS_NewInt32(ctx, WASI_EINVAL);
+  }
+
+  // Get arguments from JS
+  if (argc != 4) {
+    return JS_NewInt32(ctx, WASI_EINVAL);
+  }
+
+  uint32_t fd, iovs_ptr, iovs_len, nread_ptr;
+  if (JS_ToUint32(ctx, &fd, argv[0]) || JS_ToUint32(ctx, &iovs_ptr, argv[1]) || JS_ToUint32(ctx, &iovs_len, argv[2]) ||
+      JS_ToUint32(ctx, &nread_ptr, argv[3])) {
+    return JS_NewInt32(ctx, WASI_EINVAL);
+  }
+
+  JSRT_Debug("WASI syscall: fd_read(fd=%u, iovs=%u, iovs_len=%u, nread=%u)", fd, iovs_ptr, iovs_len, nread_ptr);
+
+  // Check FD validity
+  int host_fd = -1;
+  if (fd == 0) {
+    host_fd = wasi->options.stdin_fd;
+  } else {
+    JSRT_Debug("WASI syscall: fd_read - unsupported fd %u", fd);
+    return JS_NewInt32(ctx, WASI_EBADF);
+  }
+
+  // Get iovs array from WASM memory
+  uint8_t* iovs_mem = get_wasm_memory(wasi, iovs_ptr, iovs_len * 8);  // Each iovec is 8 bytes
+  uint8_t* nread_mem = get_wasm_memory(wasi, nread_ptr, 4);
+
+  if (!iovs_mem || !nread_mem) {
+    JSRT_Debug("WASI syscall: fd_read - invalid memory pointers");
+    return JS_NewInt32(ctx, WASI_EFAULT);
+  }
+
+  // Read each iovec
+  size_t total_read = 0;
+  for (uint32_t i = 0; i < iovs_len; i++) {
+    // Parse iovec (little-endian)
+    uint32_t buf_ptr = iovs_mem[i * 8 + 0] | (iovs_mem[i * 8 + 1] << 8) | (iovs_mem[i * 8 + 2] << 16) |
+                       (iovs_mem[i * 8 + 3] << 24);
+    uint32_t buf_len = iovs_mem[i * 8 + 4] | (iovs_mem[i * 8 + 5] << 8) | (iovs_mem[i * 8 + 6] << 16) |
+                       (iovs_mem[i * 8 + 7] << 24);
+
+    if (buf_len == 0) {
+      continue;
+    }
+
+    // Get buffer from WASM memory
+    uint8_t* buf = get_wasm_memory(wasi, buf_ptr, buf_len);
+    if (!buf) {
+      JSRT_Debug("WASI syscall: fd_read - invalid buffer pointer");
+      return JS_NewInt32(ctx, WASI_EFAULT);
+    }
+
+    // Read from host FD
+    ssize_t bytes_read = read(host_fd, buf, buf_len);
+    if (bytes_read < 0) {
+      JSRT_Debug("WASI syscall: fd_read - read failed");
+      return JS_NewInt32(ctx, WASI_EIO);
+    }
+    total_read += bytes_read;
+
+    // If we got less than requested, stop (EOF or would block)
+    if ((size_t)bytes_read < buf_len) {
+      break;
+    }
+  }
+
+  // Write total bytes read (little-endian)
+  nread_mem[0] = (total_read >> 0) & 0xFF;
+  nread_mem[1] = (total_read >> 8) & 0xFF;
+  nread_mem[2] = (total_read >> 16) & 0xFF;
+  nread_mem[3] = (total_read >> 24) & 0xFF;
+
+  JSRT_Debug("WASI syscall: fd_read - read %zu bytes from fd %u", total_read, fd);
+  return JS_NewInt32(ctx, WASI_ESUCCESS);
 }
 
 // fd_close(fd: fd) -> errno
@@ -413,23 +491,153 @@ static JSValue wasi_fd_prestat_dir_name(JSContext* ctx, JSValueConst this_val, i
 // Note: proc_exit doesn't return a value - it terminates the process
 static JSValue wasi_proc_exit(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv, int magic,
                                JSValue* func_data) {
-  JSRT_Debug("WASI syscall: proc_exit (stub - no-op)");
-  // proc_exit should terminate, but in stub mode we just return
-  return JS_UNDEFINED;
+  jsrt_wasi_t* wasi = get_wasi_instance(func_data);
+
+  // Get exit code argument
+  uint32_t exit_code = 0;
+  if (argc >= 1) {
+    JS_ToUint32(ctx, &exit_code, argv[0]);
+  }
+
+  JSRT_Debug("WASI syscall: proc_exit(exitcode=%u)", exit_code);
+
+  // Store exit code in WASI instance
+  if (wasi) {
+    wasi->exit_code = (int)exit_code;
+  }
+
+  // Throw an exception to terminate WASM execution
+  // This mimics the behavior of proc_exit without calling exit()
+  return JS_ThrowInternalError(ctx, "WASI proc_exit called with code %u", exit_code);
 }
+
+// WASI clock IDs
+#define WASI_CLOCK_REALTIME 0
+#define WASI_CLOCK_MONOTONIC 1
+#define WASI_CLOCK_PROCESS_CPUTIME 2
+#define WASI_CLOCK_THREAD_CPUTIME 3
 
 // clock_time_get(id: clockid, precision: timestamp, time: ptr) -> errno
 static JSValue wasi_clock_time_get(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv, int magic,
                                     JSValue* func_data) {
-  JSRT_Debug("WASI syscall: clock_time_get (stub - returning ENOSYS)");
-  return JS_NewInt32(ctx, WASI_ENOSYS);  // Not implemented
+  jsrt_wasi_t* wasi = get_wasi_instance(func_data);
+  if (!wasi || !wasi->wamr_instance) {
+    JSRT_Debug("WASI syscall: clock_time_get - no WAMR instance");
+    return JS_NewInt32(ctx, WASI_EINVAL);
+  }
+
+  // Get arguments from JS
+  if (argc != 3) {
+    return JS_NewInt32(ctx, WASI_EINVAL);
+  }
+
+  uint32_t clock_id, precision_lo, precision_hi, time_ptr;
+  if (JS_ToUint32(ctx, &clock_id, argv[0])) {
+    return JS_NewInt32(ctx, WASI_EINVAL);
+  }
+  // precision is a 64-bit timestamp, but we'll ignore it for now
+  if (JS_ToUint32(ctx, &time_ptr, argv[2])) {
+    return JS_NewInt32(ctx, WASI_EINVAL);
+  }
+
+  JSRT_Debug("WASI syscall: clock_time_get(id=%u, time=%u)", clock_id, time_ptr);
+
+  // Get time pointer from WASM memory
+  uint8_t* time_mem = get_wasm_memory(wasi, time_ptr, 8);  // 64-bit timestamp
+  if (!time_mem) {
+    JSRT_Debug("WASI syscall: clock_time_get - invalid memory pointer");
+    return JS_NewInt32(ctx, WASI_EFAULT);
+  }
+
+  // Get current time based on clock ID
+  struct timespec ts;
+  clockid_t posix_clock_id;
+
+  switch (clock_id) {
+    case WASI_CLOCK_REALTIME:
+      posix_clock_id = CLOCK_REALTIME;
+      break;
+    case WASI_CLOCK_MONOTONIC:
+      posix_clock_id = CLOCK_MONOTONIC;
+      break;
+    case WASI_CLOCK_PROCESS_CPUTIME:
+      posix_clock_id = CLOCK_PROCESS_CPUTIME_ID;
+      break;
+    case WASI_CLOCK_THREAD_CPUTIME:
+      posix_clock_id = CLOCK_THREAD_CPUTIME_ID;
+      break;
+    default:
+      JSRT_Debug("WASI syscall: clock_time_get - invalid clock_id %u", clock_id);
+      return JS_NewInt32(ctx, WASI_EINVAL);
+  }
+
+  if (clock_gettime(posix_clock_id, &ts) != 0) {
+    JSRT_Debug("WASI syscall: clock_time_get - clock_gettime failed");
+    return JS_NewInt32(ctx, WASI_EIO);
+  }
+
+  // Convert to nanoseconds (WASI timestamp format)
+  uint64_t timestamp = (uint64_t)ts.tv_sec * 1000000000ULL + (uint64_t)ts.tv_nsec;
+
+  // Write timestamp (little-endian, 64-bit)
+  time_mem[0] = (timestamp >> 0) & 0xFF;
+  time_mem[1] = (timestamp >> 8) & 0xFF;
+  time_mem[2] = (timestamp >> 16) & 0xFF;
+  time_mem[3] = (timestamp >> 24) & 0xFF;
+  time_mem[4] = (timestamp >> 32) & 0xFF;
+  time_mem[5] = (timestamp >> 40) & 0xFF;
+  time_mem[6] = (timestamp >> 48) & 0xFF;
+  time_mem[7] = (timestamp >> 56) & 0xFF;
+
+  JSRT_Debug("WASI syscall: clock_time_get - returned time %llu ns", (unsigned long long)timestamp);
+  return JS_NewInt32(ctx, WASI_ESUCCESS);
 }
 
 // random_get(buf: ptr, buf_len: size) -> errno
 static JSValue wasi_random_get(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv, int magic,
                                 JSValue* func_data) {
-  JSRT_Debug("WASI syscall: random_get (stub - returning ENOSYS)");
-  return JS_NewInt32(ctx, WASI_ENOSYS);  // Not implemented
+  jsrt_wasi_t* wasi = get_wasi_instance(func_data);
+  if (!wasi || !wasi->wamr_instance) {
+    JSRT_Debug("WASI syscall: random_get - no WAMR instance");
+    return JS_NewInt32(ctx, WASI_EINVAL);
+  }
+
+  // Get arguments from JS
+  if (argc != 2) {
+    return JS_NewInt32(ctx, WASI_EINVAL);
+  }
+
+  uint32_t buf_ptr, buf_len;
+  if (JS_ToUint32(ctx, &buf_ptr, argv[0]) || JS_ToUint32(ctx, &buf_len, argv[1])) {
+    return JS_NewInt32(ctx, WASI_EINVAL);
+  }
+
+  JSRT_Debug("WASI syscall: random_get(buf=%u, buf_len=%u)", buf_ptr, buf_len);
+
+  // Get buffer from WASM memory
+  uint8_t* buf = get_wasm_memory(wasi, buf_ptr, buf_len);
+  if (!buf) {
+    JSRT_Debug("WASI syscall: random_get - invalid memory pointer");
+    return JS_NewInt32(ctx, WASI_EFAULT);
+  }
+
+  // Read random bytes from /dev/urandom
+  FILE* urandom = fopen("/dev/urandom", "rb");
+  if (!urandom) {
+    JSRT_Debug("WASI syscall: random_get - failed to open /dev/urandom");
+    return JS_NewInt32(ctx, WASI_EIO);
+  }
+
+  size_t bytes_read = fread(buf, 1, buf_len, urandom);
+  fclose(urandom);
+
+  if (bytes_read != buf_len) {
+    JSRT_Debug("WASI syscall: random_get - failed to read enough random bytes");
+    return JS_NewInt32(ctx, WASI_EIO);
+  }
+
+  JSRT_Debug("WASI syscall: random_get - generated %u random bytes", buf_len);
+  return JS_NewInt32(ctx, WASI_ESUCCESS);
 }
 
 /**

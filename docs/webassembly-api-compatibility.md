@@ -26,23 +26,28 @@ Last Updated: 2025-10-19
 | API | Status | Notes |
 |-----|--------|-------|
 | new WebAssembly.Instance(module, imports) | ✅ Implemented | i32 function imports only |
-| instance.exports | ✅ Implemented | Function exports (i32 only) |
+| instance.exports | ✅ Implemented | Functions (i32), Memory, Table (partial) |
+| instance.exports.function | ✅ Implemented | i32 type support only |
+| instance.exports.memory | ✅ Implemented | Exported Memory fully functional (2025-10-19) |
+| instance.exports.table | ⚠️ Limited | Exported Table: length ✅, get/set/grow ❌ (2025-10-19) |
 
 ### WebAssembly.Memory
 | API | Status | Notes |
 |-----|--------|-------|
-| new WebAssembly.Memory(descriptor) | ⚠️ Limited | Works but WAMR C API limitations |
-| memory.buffer | ⚠️ Limited | Returns ArrayBuffer (size may be 0) |
-| memory.grow(delta) | ⚠️ Limited | WAMR blocks host-side growth |
+| new WebAssembly.Memory(descriptor) | 🔴 Blocked | Constructor throws helpful TypeError (2025-10-19) |
+| memory.buffer | ✅ Implemented | **Exported memories only** - returns ArrayBuffer |
+| memory.grow(delta) | ✅ Implemented | **Exported memories only** - via wasm_runtime_enlarge_memory |
+| **Workaround** | ✅ Available | Use `instance.exports.mem` instead of constructor |
 
 ### WebAssembly.Table
 | API | Status | Notes |
 |-----|--------|-------|
-| new WebAssembly.Table(descriptor) | ⚠️ Limited | Works but WAMR C API limitations |
-| table.length | ⚠️ Limited | May return 0 due to WAMR limitation |
-| table.get(index) | ⚠️ Limited | WAMR limitation |
-| table.set(index, value) | ⚠️ Limited | WAMR limitation |
-| table.grow(delta, value) | ⚠️ Limited | WAMR blocks host-side growth |
+| new WebAssembly.Table(descriptor) | 🔴 Blocked | Constructor throws helpful TypeError (2025-10-19) |
+| table.length | ✅ Implemented | **Exported tables only** - reads table_inst.cur_size |
+| table.get(index) | 🔴 Blocked | Not supported for exported tables (WAMR Runtime API limitation) |
+| table.set(index, value) | 🔴 Blocked | Not supported for exported tables (WAMR Runtime API limitation) |
+| table.grow(delta, value) | 🔴 Blocked | Not supported for exported tables (WAMR Runtime API limitation) |
+| **Workaround** | ⚠️ Partial | Use `instance.exports.table.length` - get/set/grow unavailable |
 
 ### WebAssembly.Global
 | API | Status | Notes |
@@ -71,13 +76,21 @@ Last Updated: 2025-10-19
   - Created Memory objects have no accessible data region
   - `wasm_memory_data_size()` returns 0 for host-created memories
   - `wasm_memory_grow()` explicitly blocked for host calls
-  - Resolution: Memory objects work when exported from WASM instances
+  - **✅ Resolution (2025-10-19):** Exported Memory fully functional via Runtime API
+    - Constructor throws helpful TypeError with usage example
+    - `instance.exports.mem.buffer` returns ArrayBuffer (wasm_memory_get_base_address)
+    - `instance.exports.mem.grow()` works (wasm_runtime_enlarge_memory)
+    - Tests: test/web/webassembly/test_web_wasm_exported_memory.js (2 tests passing)
 
 - **Table API:** WAMR v2.4.1 C API does not support standalone Table objects
   - Created Table objects are non-functional
   - `wasm_table_size()` returns 0 for host-created tables
   - `wasm_table_grow()` explicitly blocked for host calls
-  - Resolution: Table objects work when exported from WASM instances
+  - **⚠️ Partial Resolution (2025-10-19):** Exported Table partially functional via Runtime API
+    - Constructor throws helpful TypeError with usage example
+    - `instance.exports.table.length` works (reads table_inst.cur_size)
+    - ❌ get/set/grow not available (WAMR Runtime API lacks these functions)
+    - Tests: test/web/webassembly/test_web_wasm_exported_table.js (1 test passing)
 
 - **Global API:** WAMR v2.4.1 C API does not support standalone Global objects (discovered 2025-10-19)
   - Created Global objects are non-functional - **return garbage values**
@@ -98,9 +111,12 @@ Last Updated: 2025-10-19
 - **Pass rate:** 0% (expected - test infrastructure issues + implementation gaps)
 - **Main blockers:**
   - WasmModuleBuilder helper not loading properly
-  - Memory/Table/Global APIs blocked by WAMR limitations
-- **Unit tests:** 100% pass rate (212/212 tests)
-- **Note:** Global WPT tests not added due to 0% functionality (would add 3 more failing tests)
+  - Standalone Memory/Table/Global constructors blocked by WAMR limitations
+- **Unit tests:** 100% pass rate (215/215 tests) - Updated 2025-10-19
+  - Exported Memory tests: 2 passing (test_web_wasm_exported_memory.js)
+  - Exported Table tests: 1 passing (test_web_wasm_exported_table.js)
+  - Constructor error handling: 6 tests (Memory/Table/Global)
+- **Note:** WPT tests require standalone constructors; exported objects tested via unit tests
 
 ## Environment
 
@@ -123,12 +139,13 @@ Last Updated: 2025-10-19
 
 ### Completed Phases
 - ✅ **Phase 1:** Infrastructure & Error Types (100%)
-- ✅ **Phase 2:** Core Module API - Partial (52% - Memory blocked)
-- ✅ **Phase 3:** Instance & Exports - Partial (42% - i32 support only)
-- ⏸️ **Phase 4:** Table & Global - Blocked by WAMR limitations
+- ✅ **Phase 2:** Core Module API - Partial (52% - standalone Memory blocked)
+- ✅ **Phase 3:** Instance & Exports - Partial (42% - i32 functions + exported Memory/Table)
+- ⚠️ **Phase 4:** Table & Global - Partial (3% - exported Table.length only)
 
 ### In Progress
-- 🔵 **Phase 7:** WPT Integration & Testing (11% complete)
+- 🔵 **Phase 7:** WPT Integration & Testing (20% complete)
+- 🔵 **Phase 8:** Documentation & Polish (40% complete)
 
 ### Planned
 - **Phase 3.2B:** Full type support (f32/f64/i64/BigInt)
@@ -173,25 +190,88 @@ try {
 }
 ```
 
+### Exported Memory/Table Examples (Updated 2025-10-19)
+
+```javascript
+// ✅ Exported Memory - FULLY FUNCTIONAL
+// WASM module with exported memory: (module (memory (export "mem") 1))
+const wasmBytesWithMemory = new Uint8Array([
+  0x00, 0x61, 0x73, 0x6d, 0x01, 0x00, 0x00, 0x00,  // WASM header
+  0x05, 0x03, 0x01, 0x00, 0x01,                    // Memory section: 1 page
+  0x07, 0x07, 0x01, 0x03, 0x6d, 0x65, 0x6d, 0x02, 0x00  // Export "mem"
+]);
+
+const module = new WebAssembly.Module(wasmBytesWithMemory);
+const instance = new WebAssembly.Instance(module);
+
+// Access exported memory
+const mem = instance.exports.mem;
+console.log(mem instanceof WebAssembly.Memory);  // true
+console.log(mem.buffer.byteLength);  // >= 65536 (WAMR may allocate extra pages)
+
+// Write to memory
+const view = new Uint8Array(mem.buffer);
+view[0] = 42;
+console.log(view[0]);  // 42
+
+// Grow memory
+const oldSize = mem.grow(1);  // Grows by 1 page (64KB)
+console.log(oldSize);  // Previous size in pages
+
+// ⚠️ Exported Table - PARTIAL FUNCTIONALITY
+// WASM module with exported table: (module (table (export "table") 10 funcref))
+const wasmBytesWithTable = new Uint8Array([
+  0x00, 0x61, 0x73, 0x6d, 0x01, 0x00, 0x00, 0x00,  // WASM header
+  0x04, 0x04, 0x01, 0x70, 0x00, 0x0a,              // Table section: 10 funcref
+  0x07, 0x09, 0x01, 0x05, 0x74, 0x61, 0x62, 0x6c, 0x65, 0x01, 0x00  // Export "table"
+]);
+
+const tableModule = new WebAssembly.Module(wasmBytesWithTable);
+const tableInstance = new WebAssembly.Instance(tableModule);
+
+const table = tableInstance.exports.table;
+console.log(table.length);  // 10 ✅ Works!
+// table.get(0);  // ❌ Not supported for exported tables
+// table.set(0, null);  // ❌ Not supported for exported tables
+// table.grow(5);  // ❌ Not supported for exported tables
+```
+
 ### Blocked/Limited Examples
 
 ```javascript
-// ⚠️ Memory - Limited functionality
-const memory = new WebAssembly.Memory({ initial: 1 });
-console.log(memory.buffer.byteLength);  // May be 0!
-// memory.grow(1);  // Throws: "not supported by host"
+// 🔴 Standalone constructors - BLOCKED (throw helpful errors)
+try {
+  new WebAssembly.Memory({ initial: 1 });
+} catch (e) {
+  // TypeError: WebAssembly.Memory constructor not supported.
+  // Use memories exported from WASM module instances instead.
+  // Example: instance.exports.mem.buffer
+}
 
-// ⚠️ Table - Limited functionality
-const table = new WebAssembly.Table({ element: 'funcref', initial: 1 });
-console.log(table.length);  // May be 0!
-// table.grow(1);  // Throws: "not supported by host"
+try {
+  new WebAssembly.Table({ element: 'funcref', initial: 1 });
+} catch (e) {
+  // TypeError: WebAssembly.Table constructor not supported.
+  // Use tables exported from WASM module instances instead.
+  // Example: instance.exports.table.get(0)
+}
 
-// ❌ Global - Not implemented
-// const global = new WebAssembly.Global({ value: 'i32' }, 42);  // Error
+try {
+  new WebAssembly.Global({ value: 'i32' }, 42);
+} catch (e) {
+  // TypeError: WebAssembly.Global constructor not supported.
+  // Use globals exported from WASM module instances instead.
+  // Example: instance.exports.myGlobal.value
+}
 
-// ❌ Async APIs - Not implemented
-// await WebAssembly.compile(bytes);  // Error
-// await WebAssembly.instantiate(bytes);  // Error
+// ✅ Async APIs - IMPLEMENTED (2025-10-18)
+const module = await WebAssembly.compile(bytes);
+const { module, instance } = await WebAssembly.instantiate(bytes, imports);
+const instance2 = await WebAssembly.instantiate(module, imports);
+
+// ⚠️ Streaming APIs - LIMITED (fallback implementation)
+const module = await WebAssembly.compileStreaming(fetch('module.wasm'));
+const { module, instance } = await WebAssembly.instantiateStreaming(fetch('module.wasm'));
 ```
 
 ## References

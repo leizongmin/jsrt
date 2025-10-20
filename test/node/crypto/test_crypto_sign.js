@@ -72,11 +72,17 @@ async function generateECDSAKeyPair() {
 
 // Run async tests
 (async () => {
-  // Check if EC crypto is available (required on Windows for ECDSA operations)
+  // Check if crypto key generation is available (required on Windows)
   try {
+    // Test RSA key generation
+    await generateRSAKeyPair();
+    // Test ECDSA key generation
     await generateECDSAKeyPair();
   } catch (e) {
-    if (e.message && e.message.includes('Failed to initialize EC')) {
+    const errMsg = e && e.message ? e.message : String(e);
+    if (errMsg.includes('Failed to initialize') || 
+        errMsg.includes('not available') ||
+        errMsg.includes('OpenSSL')) {
       console.log('Error: OpenSSL symmetric functions not available');
       process.exit(0);
     }

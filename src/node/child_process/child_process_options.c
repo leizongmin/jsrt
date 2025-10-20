@@ -216,6 +216,22 @@ int parse_spawn_options(JSContext* ctx, JSValueConst options_obj, JSChildProcess
   }
   JS_FreeValue(ctx, kill_signal_val);
 
+  // Parse stdio configuration
+  JSValue stdio_val = JS_GetPropertyStr(ctx, options_obj, "stdio");
+  if (!JS_IsUndefined(stdio_val) && JS_IsArray(ctx, stdio_val)) {
+    JSValue length_val = JS_GetPropertyStr(ctx, stdio_val, "length");
+    uint32_t length;
+    if (!JS_ToUint32(ctx, &length, length_val)) {
+      // Limit to 4 (stdin, stdout, stderr, ipc)
+      if (length > 4) {
+        length = 4;
+      }
+      options->stdio_count = length;
+    }
+    JS_FreeValue(ctx, length_val);
+  }
+  JS_FreeValue(ctx, stdio_val);
+
   return 0;
 }
 

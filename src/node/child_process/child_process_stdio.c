@@ -16,9 +16,8 @@ int setup_stdio_pipes(JSContext* ctx, JSChildProcess* child, const JSChildProces
 
   // Initialize stdio containers
   for (int i = 0; i < options->stdio_count; i++) {
-    // Default to 'pipe' mode for stdin/stdout/stderr
     if (i < 3) {
-      // Create pipe
+      // stdin/stdout/stderr - create regular pipe
       uv_pipe_t* pipe = malloc(sizeof(uv_pipe_t));
       if (!pipe) {
         JSRT_Debug("Failed to allocate pipe for stdio %d", i);
@@ -53,6 +52,21 @@ int setup_stdio_pipes(JSContext* ctx, JSChildProcess* child, const JSChildProces
         ((uv_stdio_container_t*)options->stdio)[i].flags = UV_CREATE_PIPE | UV_WRITABLE_PIPE;
       }
       ((uv_stdio_container_t*)options->stdio)[i].data.stream = (uv_stream_t*)pipe;
+    } else if (i == 3) {
+      // IPC channel (stdio[3])
+      IPCChannelState* ipc = create_ipc_channel(ctx, child, rt->uv_loop);
+      if (!ipc) {
+        JSRT_Debug("Failed to create IPC channel");
+        return -1;
+      }
+
+      child->ipc_channel = ipc;
+      child->connected = true;
+      child->handles_to_close++;
+
+      // Configure stdio container for IPC (bidirectional pipe)
+      ((uv_stdio_container_t*)options->stdio)[i].flags = UV_CREATE_PIPE | UV_READABLE_PIPE | UV_WRITABLE_PIPE;
+      ((uv_stdio_container_t*)options->stdio)[i].data.stream = (uv_stream_t*)ipc->pipe;
     }
   }
 
@@ -107,6 +121,12 @@ void close_stdio_pipes(JSChildProcess* child) {
     // Stop reading first
     uv_read_stop((uv_stream_t*)child->stderr_pipe);
     uv_close((uv_handle_t*)child->stderr_pipe, child_process_close_callback);
+  }
+
+  // Close IPC channel
+  if (child->ipc_channel) {
+    disconnect_ipc_channel(child->ipc_channel);
+    child->ipc_channel = NULL;
   }
 }
 

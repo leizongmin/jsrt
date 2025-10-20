@@ -15,6 +15,8 @@
 typedef struct JSChildProcess JSChildProcess;
 typedef struct JSChildProcessOptions JSChildProcessOptions;
 typedef struct JSSendRequest JSSendRequest;
+typedef struct IPCChannelState IPCChannelState;
+typedef struct IPCQueueEntry IPCQueueEntry;
 
 // Class ID for ChildProcess
 extern JSClassID js_child_process_class_id;
@@ -40,7 +42,9 @@ struct JSChildProcess {
   uv_pipe_t* stdin_pipe;
   uv_pipe_t* stdout_pipe;
   uv_pipe_t* stderr_pipe;
-  uv_pipe_t* ipc_pipe;  // For fork() IPC channel
+
+  // IPC channel (for fork())
+  IPCChannelState* ipc_channel;
 
   // Stream objects
   JSValue stdin_stream;   // Writable stream
@@ -103,6 +107,34 @@ struct JSSendRequest {
   size_t len;
 };
 
+// IPC Queue Entry (for message backpressure)
+struct IPCQueueEntry {
+  char* data;
+  size_t length;
+  JSValue callback;
+  IPCQueueEntry* next;
+};
+
+// IPC Channel State
+struct IPCChannelState {
+  uv_pipe_t* pipe;
+  JSChildProcess* child;
+  bool reading;
+  bool connected;
+
+  // Read state (for partial messages)
+  char* read_buffer;
+  size_t read_buffer_size;
+  size_t read_buffer_capacity;
+  uint32_t expected_length;
+  bool reading_header;
+
+  // Write queue (for backpressure)
+  IPCQueueEntry* queue_head;
+  IPCQueueEntry* queue_tail;
+  bool writing;
+};
+
 // ===== Module Functions (child_process_module.c) =====
 JSValue JSRT_InitNodeChildProcess(JSContext* ctx);
 int js_node_child_process_init(JSContext* ctx, JSModuleDef* m);
@@ -143,9 +175,10 @@ JSValue create_stdout_stream(JSContext* ctx, uv_pipe_t* pipe);
 JSValue create_stderr_stream(JSContext* ctx, uv_pipe_t* pipe);
 
 // ===== IPC Functions (child_process_ipc.c) =====
-int setup_ipc_channel(JSContext* ctx, JSChildProcess* child);
-int send_ipc_message(JSContext* ctx, JSChildProcess* child, JSValue message, JSValue callback);
-void close_ipc_channel(JSChildProcess* child);
+IPCChannelState* create_ipc_channel(JSContext* ctx, JSChildProcess* child, uv_loop_t* loop);
+int start_ipc_reading(IPCChannelState* state);
+int send_ipc_message(IPCChannelState* state, JSValue message, JSValue callback);
+void disconnect_ipc_channel(IPCChannelState* state);
 
 // ===== Callbacks (child_process_callbacks.c) =====
 void on_process_exit(uv_process_t* handle, int64_t exit_status, int term_signal);
@@ -154,9 +187,6 @@ void on_stdout_read(uv_stream_t* stream, ssize_t nread, const uv_buf_t* buf);
 void on_stderr_alloc(uv_handle_t* handle, size_t suggested_size, uv_buf_t* buf);
 void on_stderr_read(uv_stream_t* stream, ssize_t nread, const uv_buf_t* buf);
 void on_stdin_write(uv_write_t* req, int status);
-void on_ipc_alloc(uv_handle_t* handle, size_t suggested_size, uv_buf_t* buf);
-void on_ipc_read(uv_stream_t* stream, ssize_t nread, const uv_buf_t* buf);
-void on_ipc_write(uv_write_t* req, int status);
 void on_timeout(uv_timer_t* timer);
 
 // ===== Finalizers (child_process_finalizers.c) =====

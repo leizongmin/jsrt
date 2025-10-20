@@ -119,7 +119,7 @@ JSValue js_child_process_spawn(JSContext* ctx, JSValueConst this_val, int argc, 
   child->stdin_pipe = NULL;
   child->stdout_pipe = NULL;
   child->stderr_pipe = NULL;
-  child->ipc_pipe = NULL;
+  child->ipc_channel = NULL;
   child->stdin_stream = JS_UNDEFINED;
   child->stdout_stream = JS_UNDEFINED;
   child->stderr_stream = JS_UNDEFINED;

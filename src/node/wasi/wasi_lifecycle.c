@@ -36,6 +36,7 @@ static int jsrt_wasi_attach_instance(JSContext* ctx, jsrt_wasi_t* wasi, JSValueC
              wasi->started, wasi->initialized);
   if (!JS_IsObject(instance)) {
     jsrt_wasi_throw_error(ctx, JSRT_WASI_ERROR_INVALID_ARGUMENT, "Expected WebAssembly.Instance");
+    wasi->instance_failed = true;
     return -1;
   }
 
@@ -47,17 +48,20 @@ static int jsrt_wasi_attach_instance(JSContext* ctx, jsrt_wasi_t* wasi, JSValueC
 
   if (!JS_IsUndefined(wasi->wasm_instance)) {
     jsrt_wasi_throw_error(ctx, JSRT_WASI_ERROR_INVALID_INSTANCE, "WebAssembly.Instance already attached");
+    wasi->instance_failed = true;
     return -1;
   }
 
   JSValue exports = JS_GetPropertyStr(ctx, instance, "exports");
   if (JS_IsException(exports)) {
+    wasi->instance_failed = true;
     return -1;
   }
 
   if (!JS_IsObject(exports)) {
     JS_FreeValue(ctx, exports);
     jsrt_wasi_throw_error(ctx, JSRT_WASI_ERROR_INVALID_ARGUMENT, "Instance has no exports");
+    wasi->instance_failed = true;
     return -1;
   }
 
@@ -65,6 +69,7 @@ static int jsrt_wasi_attach_instance(JSContext* ctx, jsrt_wasi_t* wasi, JSValueC
   if (!module_inst) {
     JS_FreeValue(ctx, exports);
     jsrt_wasi_throw_error(ctx, JSRT_WASI_ERROR_INTERNAL, "Failed to extract WAMR instance from WebAssembly.Instance");
+    wasi->instance_failed = true;
     return -1;
   }
 
@@ -72,6 +77,7 @@ static int jsrt_wasi_attach_instance(JSContext* ctx, jsrt_wasi_t* wasi, JSValueC
   if (!memory) {
     JS_FreeValue(ctx, exports);
     jsrt_wasi_throw_error(ctx, JSRT_WASI_ERROR_MISSING_MEMORY_EXPORT, NULL);
+    wasi->instance_failed = true;
     return -1;
   }
 
@@ -106,6 +112,22 @@ static int jsrt_wasi_require_export_function(JSContext* ctx, JSValue exports, co
   return 0;
 }
 
+static int jsrt_wasi_expect_no_export(JSContext* ctx, JSValue exports, const char* name, const char* detail) {
+  JSValue value = JS_GetPropertyStr(ctx, exports, name);
+  if (JS_IsException(value)) {
+    return -1;
+  }
+
+  if (!JS_IsUndefined(value)) {
+    JS_FreeValue(ctx, value);
+    jsrt_wasi_throw_error(ctx, JSRT_WASI_ERROR_INVALID_ARGUMENT, detail);
+    return -1;
+  }
+
+  JS_FreeValue(ctx, value);
+  return 0;
+}
+
 JSValue jsrt_wasi_start(JSContext* ctx, jsrt_wasi_t* wasi, JSValue instance) {
   JSRT_Debug("jsrt_wasi_start: entry");
   if (!wasi) {
@@ -123,6 +145,14 @@ JSValue jsrt_wasi_start(JSContext* ctx, jsrt_wasi_t* wasi, JSValue instance) {
   JSValue exports;
   if (jsrt_wasi_attach_instance(ctx, wasi, instance, &exports) < 0) {
     JSRT_Debug("jsrt_wasi_start: attach failed");
+    wasi->instance_failed = true;
+    return JS_EXCEPTION;
+  }
+
+  if (jsrt_wasi_expect_no_export(ctx, exports, "_initialize", "_initialize export is incompatible with WASI.start()") <
+      0) {
+    JS_FreeValue(ctx, exports);
+    jsrt_wasi_detach_instance(ctx, wasi);
     return JS_EXCEPTION;
   }
 
@@ -179,12 +209,12 @@ JSValue jsrt_wasi_start(JSContext* ctx, jsrt_wasi_t* wasi, JSValue instance) {
 
   JSRT_Debug("WASI _start() completed with exit code: %d", exit_code);
 
-  // Handle exit behavior
-  if (!wasi->options.return_on_exit) {
-    return JS_UNDEFINED;
+  if (wasi->exec_env) {
+    wasm_runtime_destroy_exec_env(wasi->exec_env);
+    wasi->exec_env = NULL;
   }
 
-  // Return exit code
+  // Return exit code (matches Node.js WASI semantics)
   return JS_NewInt32(ctx, exit_code);
 }
 
@@ -208,16 +238,39 @@ JSValue jsrt_wasi_initialize(JSContext* ctx, jsrt_wasi_t* wasi, JSValue instance
   JSValue exports;
   if (jsrt_wasi_attach_instance(ctx, wasi, instance, &exports) < 0) {
     JSRT_Debug("jsrt_wasi_initialize: attach failed");
+    wasi->instance_failed = true;
     return JS_EXCEPTION;
   }
 
-  JSValue init_fn;
-  if (jsrt_wasi_require_export_function(ctx, exports, "_initialize", JSRT_WASI_ERROR_MISSING_START_EXPORT,
-                                        "_initialize export not found", &init_fn) < 0) {
+  if (jsrt_wasi_expect_no_export(ctx, exports, "_start", "_start export is incompatible with WASI.initialize()") < 0) {
     JS_FreeValue(ctx, exports);
     jsrt_wasi_detach_instance(ctx, wasi);
     return JS_EXCEPTION;
   }
+
+  JSValue init_fn = JS_GetPropertyStr(ctx, exports, "_initialize");
+  if (JS_IsException(init_fn)) {
+    JS_FreeValue(ctx, exports);
+    jsrt_wasi_detach_instance(ctx, wasi);
+    return JS_EXCEPTION;
+  }
+
+  if (JS_IsUndefined(init_fn)) {
+    JS_FreeValue(ctx, init_fn);
+    JS_FreeValue(ctx, exports);
+    wasi->initialized = true;
+    wasi->exit_requested = false;
+    JSRT_Debug("WASI initialize() no-op: _initialize not exported");
+    return JS_UNDEFINED;
+  }
+
+  if (!JS_IsFunction(ctx, init_fn)) {
+    JS_FreeValue(ctx, init_fn);
+    JS_FreeValue(ctx, exports);
+    jsrt_wasi_detach_instance(ctx, wasi);
+    return jsrt_wasi_throw_error(ctx, JSRT_WASI_ERROR_INVALID_ARGUMENT, "_initialize export must be a function");
+  }
+
   JS_FreeValue(ctx, exports);
 
   wasi->exec_env = wasm_runtime_create_exec_env(wasi->wamr_instance, 65536);
@@ -241,6 +294,10 @@ JSValue jsrt_wasi_initialize(JSContext* ctx, jsrt_wasi_t* wasi, JSValue instance
       JS_FreeValue(ctx, exception);
       wasi->exit_requested = false;
       wasi->initialized = true;
+      if (wasi->exec_env) {
+        wasm_runtime_destroy_exec_env(wasi->exec_env);
+        wasi->exec_env = NULL;
+      }
       return JS_NewInt32(ctx, wasi->exit_code);
     }
     jsrt_wasi_detach_instance(ctx, wasi);
@@ -249,6 +306,11 @@ JSValue jsrt_wasi_initialize(JSContext* ctx, jsrt_wasi_t* wasi, JSValue instance
   }
 
   JS_FreeValue(ctx, result);
+
+  if (wasi->exec_env) {
+    wasm_runtime_destroy_exec_env(wasi->exec_env);
+    wasi->exec_env = NULL;
+  }
 
   // Mark as initialized
   wasi->initialized = true;

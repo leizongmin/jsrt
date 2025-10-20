@@ -152,7 +152,7 @@ JSValue jsrt_wasi_get_import_object(JSContext* ctx, jsrt_wasi_t* wasi);
  * @param ctx JavaScript context
  * @param wasi WASI instance
  * @param instance WebAssembly.Instance
- * @return Exit code (if return_on_exit=true) or undefined
+ * @return Exit code returned by _start (0 if none)
  */
 JSValue jsrt_wasi_start(JSContext* ctx, jsrt_wasi_t* wasi, JSValue instance);
 
@@ -161,7 +161,7 @@ JSValue jsrt_wasi_start(JSContext* ctx, jsrt_wasi_t* wasi, JSValue instance);
  * @param ctx JavaScript context
  * @param wasi WASI instance
  * @param instance WebAssembly.Instance
- * @return undefined on success, exception on error
+ * @return undefined on success, exit code if proc_exit intercepted and return_on_exit=true
  */
 JSValue jsrt_wasi_initialize(JSContext* ctx, jsrt_wasi_t* wasi, JSValue instance);
 

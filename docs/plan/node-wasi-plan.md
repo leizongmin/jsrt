@@ -8,10 +8,10 @@
 * Task Metadata
 :PROPERTIES:
 :CREATED: 2025-10-16T22:45:00Z
-:UPDATED: 2025-10-20T04:09:00Z
+:UPDATED: 2025-10-20T04:55:00Z
 :STATUS: 🔵 IN_PROGRESS
-:PROGRESS: 89/141
-:COMPLETION: 63%
+:PROGRESS: 104/141
+:COMPLETION: 74%
 :WASM_DEPENDENCIES: ✅ VERIFIED - All required APIs functional (2025-10-19)
 :WASM_BLOCKERS: NONE - Standalone Memory/Table/Global not needed by WASI
 :PHASE3_SYSCALLS: 🟢 COMPLETE - 13/13 core syscalls implemented with path/FD extensions validated (2025-10-19)
@@ -104,7 +104,7 @@ See [[file:node-wasi-plan/phases/phase7-documentation.md][Phase 7: Documentation
 | Phase 2 | 25 | Core Infrastructure | ✅ COMPLETED |
 | Phase 3 | 38 | WASI Import Implementation | ✅ COMPLETED (2025-10-19) |
 | Phase 4 | 18 | Module Integration | ✅ COMPLETED (2025-10-20) |
-| Phase 5 | 15 | Lifecycle Methods | 🟡 TODO |
+| Phase 5 | 15 | Lifecycle Methods | ✅ COMPLETED (2025-10-20) |
 | Phase 6 | 27 | Testing & Validation | 🟡 TODO |
 | Phase 7 | 10 | Documentation | 🟡 TODO |
 | **Total** | **141** | **All phases** | **🔵 IN_PROGRESS** |
@@ -120,34 +120,34 @@ See individual phase documents for dependency graphs.
 
 ** High-Risk Areas
 
-- Phase 4 focus: Module integration and lifecycle wiring introduce new complexity
+- Phase 6 focus: Comprehensive WASI validation needs disciplined coverage to avoid regressions
 - Security: Sandboxing and path validation (Tasks 2.10, 4.5, 6.8)
-- WAMR integration: Native binding coordination (Tasks 2.14, 3.4, 3.30)
+- Test infrastructure: Ensure WAMR + WASI fixtures run consistently across CI environments
 
 * 🚀 Execution Dashboard
 :PROPERTIES:
-:CURRENT_PHASE: Phase 4: Module Integration
-:PROGRESS: 89/141
-:COMPLETION: 63%
-:ACTIVE_TASK: Task 4.9 - Wire WASI lifecycle state tracking
-:UPDATED: 2025-10-20T04:09:00Z
+:CURRENT_PHASE: Phase 6: Testing & Validation
+:PROGRESS: 104/141
+:COMPLETION: 74%
+:ACTIVE_TASK: Task 6.1 - Establish WASI validation harness
+:UPDATED: 2025-10-20T04:55:00Z
 :END:
 
 ** Current Status
-- Phase: Phase 5: Lifecycle Methods
-- Progress: 89/141 tasks (63%)
-- Active: Implement start() method (Task 5.1)
+- Phase: Phase 6: Testing & Validation
+- Progress: 104/141 tasks (74%)
+- Active: Define WASI test harness scaffolding (Task 6.1)
 
 ** Next Up
-High-priority tasks ready to start (Phase 5):
-- [ ] Task 5.1: Implement start() method
-- [ ] Task 5.2: Implement initialize() method
-- [ ] Task 5.3: Extract WASM instance helper
+High-priority tasks ready to start (Phase 6):
+- [ ] Task 6.1: Create test directory structure
+- [ ] Task 6.2: Build baseline WASI test suite
+- [ ] Task 6.3: Add hello-world WASM integration test
 
-See [[file:node-wasi-plan/phases/phase5-lifecycle-methods.md][Phase 5 document]] for details.
+See [[file:node-wasi-plan/phases/phase6-testing-validation.md][Phase 6 document]] for details.
 
 ** Parallel Opportunities
-Phase 5 focuses on lifecycle execution; helper validation tasks (5.3–5.6) can start in parallel once the start()/initialize() scaffolding lands.
+Phase 6 combines test authoring and automation; while scaffolding (6.1–6.3) proceeds, targeted option/fixture tasks (6.4–6.8) can run in parallel.
 
 ** Blocking Dependencies
 None - All WebAssembly dependencies are satisfied.
@@ -178,6 +178,7 @@ See: docs/webassembly-api-compatibility.md for details.
 ** Recent Changes
 | Timestamp | Action | Task ID | Details |
 |-----------|--------|---------|---------|
+| 2025-10-20T04:55:00Z | Completed | Tasks 5.1-5.15 | Finalized WASI lifecycle semantics, documented Phase 5, and promoted plan to Phase 6. |
 | 2025-10-20T04:09:00Z | Completed | Tasks 4.9-4.18 | Finalized WASI lifecycle handling, header exports, and regression tests; Phase 4 closed out. |
 | 2025-10-19T16:00:00Z | Completed | Tasks 3.14-3.19, 3.28-3.29, 3.38 | Implemented path_* syscalls, poll/socket stubs, and added integration test coverage |
 | 2025-10-19T15:06:00Z | Updated | Task 3.33 | Added fd table scaffolding covering stdio + preopen metadata |
@@ -198,7 +199,7 @@ See: docs/webassembly-api-compatibility.md for details.
 - Critical path: Phase 1 → Phase 2 → Phase 3 → Phase 4 → Phase 5 → Phase 6 → Phase 7
 - Parallel opportunities: Many tasks within each phase can run in parallel
 - Testing is integrated throughout (not just Phase 6)
-- Pending work: kick off Phase 5 lifecycle tasks (5.1–5.4) and align helper validations
+- Pending work: initiate Phase 6 test harness tasks (6.1–6.3) and expand automation coverage
 
 * Implementation Notes
 

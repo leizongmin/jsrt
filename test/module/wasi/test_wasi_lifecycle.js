@@ -40,65 +40,34 @@ console.log('========================================');
 
 // Minimal WASM module exporting memory and a no-op _start function
 const wasmStartModule = new Uint8Array([
-  0x00,
-  0x61,
-  0x73,
-  0x6d, // magic
-  0x01,
-  0x00,
-  0x00,
-  0x00, // version
-  0x01,
-  0x04,
-  0x01,
-  0x60,
-  0x00,
-  0x00, // type section
-  0x03,
-  0x02,
-  0x01,
-  0x00, // function section
-  0x05,
-  0x03,
-  0x01,
-  0x00,
-  0x01, // memory section
-  0x07,
-  0x13,
-  0x02,
-  0x06,
-  0x6d,
-  0x65,
-  0x6d,
-  0x6f,
-  0x72,
-  0x79,
-  0x02,
-  0x00,
-  0x06,
-  0x5f,
-  0x73,
-  0x74,
-  0x61,
-  0x72,
-  0x74,
-  0x00,
-  0x00, // export section (memory + _start)
-  0x0a,
-  0x04,
-  0x01,
-  0x02,
-  0x00,
-  0x0b, // code section
+  0x00, 0x61, 0x73, 0x6d, 0x01, 0x00, 0x00, 0x00, 0x01, 0x04, 0x01, 0x60, 0x00,
+  0x00, 0x03, 0x02, 0x01, 0x00, 0x05, 0x03, 0x01, 0x00, 0x01, 0x07, 0x13, 0x02,
+  0x06, 0x6d, 0x65, 0x6d, 0x6f, 0x72, 0x79, 0x02, 0x00, 0x06, 0x5f, 0x73, 0x74,
+  0x61, 0x72, 0x74, 0x00, 0x00, 0x0a, 0x04, 0x01, 0x02, 0x00, 0x0b,
 ]);
 
-// Minimal WASM module exporting memory and a no-op _initialize function
+// WASM module exporting memory and a no-op _initialize function
 const wasmInitializeModule = new Uint8Array([
   0x00, 0x61, 0x73, 0x6d, 0x01, 0x00, 0x00, 0x00, 0x01, 0x04, 0x01, 0x60, 0x00,
   0x00, 0x03, 0x02, 0x01, 0x00, 0x05, 0x03, 0x01, 0x00, 0x01, 0x07, 0x18, 0x02,
   0x06, 0x6d, 0x65, 0x6d, 0x6f, 0x72, 0x79, 0x02, 0x00, 0x0b, 0x5f, 0x69, 0x6e,
   0x69, 0x74, 0x69, 0x61, 0x6c, 0x69, 0x7a, 0x65, 0x00, 0x00, 0x0a, 0x04, 0x01,
   0x02, 0x00, 0x0b,
+]);
+
+// WASM module exporting both _start and _initialize (invalid for start())
+const wasmStartWithInitializeModule = new Uint8Array([
+  0x00, 0x61, 0x73, 0x6d, 0x01, 0x00, 0x00, 0x00, 0x01, 0x04, 0x01, 0x60, 0x00,
+  0x00, 0x03, 0x02, 0x01, 0x00, 0x05, 0x03, 0x01, 0x00, 0x01, 0x07, 0x21, 0x03,
+  0x06, 0x6d, 0x65, 0x6d, 0x6f, 0x72, 0x79, 0x02, 0x00, 0x06, 0x5f, 0x73, 0x74,
+  0x61, 0x72, 0x74, 0x00, 0x00, 0x0b, 0x5f, 0x69, 0x6e, 0x69, 0x74, 0x69, 0x61,
+  0x6c, 0x69, 0x7a, 0x65, 0x00, 0x00, 0x0a, 0x04, 0x01, 0x02, 0x00, 0x0b,
+]);
+
+// WASM module exporting only memory (no lifecycle functions)
+const wasmMemoryOnlyModule = new Uint8Array([
+  0x00, 0x61, 0x73, 0x6d, 0x01, 0x00, 0x00, 0x00, 0x05, 0x03, 0x01, 0x00, 0x01,
+  0x07, 0x0a, 0x01, 0x06, 0x6d, 0x65, 0x6d, 0x6f, 0x72, 0x79, 0x02, 0x00,
 ]);
 
 function createInstance(wasi, bytes) {
@@ -110,81 +79,101 @@ function createInstance(wasi, bytes) {
 console.log('Test 1: start() succeeds exactly once');
 const wasiStart = new WASI({});
 const startMain = createInstance(wasiStart, wasmStartModule);
-expectNoThrow(
-  () => wasiStart.start(startMain.instance),
-  'start() should succeed on first call'
-);
+expectNoThrow(() => wasiStart.start(startMain.instance));
 expectThrowMatching(
   () => wasiStart.start(startMain.instance),
-  /WASI instance already started/,
-  'start() should reject repeated invocation'
+  /already started/
 );
 console.log('PASS: start() enforces single invocation');
-console.log('Checkpoint: test 1 completed');
 
-console.log('Test 2: start() blocks reuse after missing _start export');
-const wasiRetry = new WASI({});
-const initOnly = createInstance(wasiRetry, wasmInitializeModule);
+console.log('Test 2: start() rejects modules without _start and blocks reuse');
+const wasiNoStart = new WASI({});
+const noStartInstance = createInstance(wasiNoStart, wasmMemoryOnlyModule);
 expectThrowMatching(
-  () => wasiRetry.start(initOnly.instance),
-  /Missing required WASI entry export/,
-  'start() should fail when _start export is missing'
+  () => wasiNoStart.start(noStartInstance.instance),
+  /Missing required WASI entry export/
 );
-const retryInstance = createInstance(wasiRetry, wasmStartModule);
 expectThrowMatching(
-  () => wasiRetry.start(retryInstance.instance),
-  /WASI instance cannot be reused after failure/,
-  'start() should prevent reuse after a fatal failure'
+  () =>
+    wasiNoStart.start(createInstance(wasiNoStart, wasmStartModule).instance),
+  /cannot be reused/
 );
-console.log('PASS: start() marks instance unusable after fatal failure');
-console.log('Checkpoint: test 2 completed');
+console.log('PASS: start() failure locks WASI instance');
 
-console.log('Test 3: initialize() succeeds exactly once');
+console.log('Test 3: start() rejects modules exporting _initialize');
+const wasiDual = new WASI({});
+const dualInstance = createInstance(wasiDual, wasmStartWithInitializeModule);
+expectThrowMatching(
+  () => wasiDual.start(dualInstance.instance),
+  /_initialize export is incompatible/
+);
+expectThrowMatching(
+  () => wasiDual.start(createInstance(wasiDual, wasmStartModule).instance),
+  /cannot be reused/
+);
+console.log('PASS: start() enforces _initialize absence');
+
+console.log(
+  'Test 4: initialize() succeeds exactly once when _initialize is present'
+);
 const wasiInit = new WASI({});
 const initInstance = createInstance(wasiInit, wasmInitializeModule);
-expectNoThrow(
-  () => wasiInit.initialize(initInstance.instance),
-  'initialize() should succeed on first call'
-);
+expectNoThrow(() => wasiInit.initialize(initInstance.instance));
 expectThrowMatching(
   () => wasiInit.initialize(initInstance.instance),
-  /WASI instance already initialized/,
-  'initialize() should reject repeated invocation'
+  /already initialized/
 );
 console.log('PASS: initialize() enforces single invocation');
-console.log('Checkpoint: test 3 completed');
 
-console.log('Test 4: start() blocked after initialize()');
+console.log('Test 5: initialize() succeeds when _initialize export is missing');
+const wasiOptionalInit = new WASI({});
+const memoryOnly = createInstance(wasiOptionalInit, wasmMemoryOnlyModule);
+expectNoThrow(() => wasiOptionalInit.initialize(memoryOnly.instance));
+expectThrowMatching(
+  () => wasiOptionalInit.initialize(memoryOnly.instance),
+  /already initialized/
+);
+console.log('PASS: initialize() treats missing _initialize as no-op');
+
+console.log('Test 6: initialize() rejects modules exporting _start');
+const wasiInvalidInit = new WASI({});
+const startExportInstance = createInstance(wasiInvalidInit, wasmStartModule);
+expectThrowMatching(
+  () => wasiInvalidInit.initialize(startExportInstance.instance),
+  /_start export is incompatible/
+);
+console.log('PASS: initialize() enforces _start absence');
+
+console.log('Test 7: start() blocked after initialize()');
 const wasiMixed = new WASI({});
-const mixedInitInstance = createInstance(wasiMixed, wasmInitializeModule);
-wasiMixed.initialize(mixedInitInstance.instance);
-const mixedStartInstance = createInstance(wasiMixed, wasmStartModule);
+const reactor = createInstance(wasiMixed, wasmInitializeModule);
+wasiMixed.initialize(reactor.instance);
 expectThrowMatching(
-  () => wasiMixed.start(mixedStartInstance.instance),
-  /WASI instance already initialized/,
-  'start() should not run after initialize()'
+  () => wasiMixed.start(createInstance(wasiMixed, wasmStartModule).instance),
+  /already initialized/
 );
-console.log('PASS: start() respects initialize() state');
-console.log('Checkpoint: test 4 completed');
+console.log('PASS: start() rejects after initialize()');
 
-console.log('Test 5: invalid arguments rejected');
+console.log('Test 8: invalid arguments mark instance unusable');
 const wasiInvalid = new WASI({});
+expectThrowMatching(() => wasiInvalid.start({}), /Invalid WASI argument/);
 expectThrowMatching(
-  () => wasiInvalid.start({}),
-  /Invalid WASI argument/,
-  'start() should require WebAssembly.Instance argument'
+  () =>
+    wasiInvalid.start(createInstance(wasiInvalid, wasmStartModule).instance),
+  /cannot be reused/
+);
+const wasiInvalidInitArgs = new WASI({});
+expectThrowMatching(
+  () => wasiInvalidInitArgs.initialize({}),
+  /Invalid WASI argument/
 );
 expectThrowMatching(
-  () => wasiInvalid.initialize({}),
-  /Invalid WASI argument/,
-  'initialize() should require WebAssembly.Instance argument'
+  () =>
+    wasiInvalidInitArgs.initialize(
+      createInstance(wasiInvalidInitArgs, wasmInitializeModule).instance
+    ),
+  /cannot be reused/
 );
-const validInstanceAfterError = createInstance(wasiInvalid, wasmStartModule);
-expectNoThrow(
-  () => wasiInvalid.start(validInstanceAfterError.instance),
-  'start() should work after invalid argument rejection'
-);
-console.log('PASS: argument validation leaves WASI usable');
-console.log('Checkpoint: test 5 completed');
+console.log('PASS: invalid arguments permanently lock instance');
 
 console.log('All WASI lifecycle tests passed.');

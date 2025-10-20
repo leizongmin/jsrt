@@ -27,6 +27,9 @@ typedef struct {
   char* real_path;     // Real filesystem path (e.g., "/tmp/wasm")
 } jsrt_wasi_preopen_t;
 
+typedef struct jsrt_wasi_t jsrt_wasi_t;
+typedef struct jsrt_wasi_options_t jsrt_wasi_options_t;
+
 typedef struct {
   bool in_use;
   int host_fd;
@@ -41,7 +44,7 @@ typedef struct {
  * WASI options structure
  * Matches Node.js WASI constructor options
  */
-typedef struct {
+typedef struct jsrt_wasi_options_t {
   // Command-line arguments
   char** args;        // NULL-terminated array of argument strings
   size_t args_count;  // Number of arguments (excluding NULL terminator)
@@ -70,7 +73,7 @@ typedef struct {
  * WASI instance structure
  * Opaque handle to WASI instance state
  */
-typedef struct {
+typedef struct jsrt_wasi_t {
   JSContext* ctx;  // JavaScript context
 
   // Configuration
@@ -93,6 +96,7 @@ typedef struct {
   int exit_code;          // Exit code from _start (if return_on_exit=true)
   bool exit_requested;    // proc_exit invoked during execution
   bool memory_validated;  // Default memory export present
+  bool instance_failed;   // Permanent failure state after invalid attachment
 
   // File descriptor table
   jsrt_wasi_fd_entry* fd_table;

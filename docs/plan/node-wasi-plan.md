@@ -8,10 +8,10 @@
 * Task Metadata
 :PROPERTIES:
 :CREATED: 2025-10-16T22:45:00Z
-:UPDATED: 2025-10-20T03:26:00Z
+:UPDATED: 2025-10-20T04:09:00Z
 :STATUS: 🔵 IN_PROGRESS
-:PROGRESS: 79/141
-:COMPLETION: 56%
+:PROGRESS: 89/141
+:COMPLETION: 63%
 :WASM_DEPENDENCIES: ✅ VERIFIED - All required APIs functional (2025-10-19)
 :WASM_BLOCKERS: NONE - Standalone Memory/Table/Global not needed by WASI
 :PHASE3_SYSCALLS: 🟢 COMPLETE - 13/13 core syscalls implemented with path/FD extensions validated (2025-10-19)
@@ -103,7 +103,7 @@ See [[file:node-wasi-plan/phases/phase7-documentation.md][Phase 7: Documentation
 | Phase 1 | 8 | Research & Design | ✅ COMPLETED |
 | Phase 2 | 25 | Core Infrastructure | ✅ COMPLETED |
 | Phase 3 | 38 | WASI Import Implementation | ✅ COMPLETED (2025-10-19) |
-| Phase 4 | 18 | Module Integration | 🟡 TODO |
+| Phase 4 | 18 | Module Integration | ✅ COMPLETED (2025-10-20) |
 | Phase 5 | 15 | Lifecycle Methods | 🟡 TODO |
 | Phase 6 | 27 | Testing & Validation | 🟡 TODO |
 | Phase 7 | 10 | Documentation | 🟡 TODO |
@@ -127,27 +127,27 @@ See individual phase documents for dependency graphs.
 * 🚀 Execution Dashboard
 :PROPERTIES:
 :CURRENT_PHASE: Phase 4: Module Integration
-:PROGRESS: 79/141
-:COMPLETION: 56%
+:PROGRESS: 89/141
+:COMPLETION: 63%
 :ACTIVE_TASK: Task 4.9 - Wire WASI lifecycle state tracking
-:UPDATED: 2025-10-20T03:26:00Z
+:UPDATED: 2025-10-20T04:09:00Z
 :END:
 
 ** Current Status
-- Phase: Phase 4: Module Integration
-- Progress: 79/141 tasks (56%)
-- Active: Lifecycle state/error harmonisation (Task 4.9)
+- Phase: Phase 5: Lifecycle Methods
+- Progress: 89/141 tasks (63%)
+- Active: Implement start() method (Task 5.1)
 
 ** Next Up
-High-priority tasks ready to start (Phase 4):
-- [ ] Task 4.9: Integrate lifecycle state guard + error mapping
-- [ ] Task 4.10: Document loader/lifecycle behaviour
-- [ ] Task 4.11: (prep) Update WASI examples with new loader flow
+High-priority tasks ready to start (Phase 5):
+- [ ] Task 5.1: Implement start() method
+- [ ] Task 5.2: Implement initialize() method
+- [ ] Task 5.3: Extract WASM instance helper
 
-See [[file:node-wasi-plan/phases/phase4-module-integration.md][Phase 4 document]] for details.
+See [[file:node-wasi-plan/phases/phase5-lifecycle-methods.md][Phase 5 document]] for details.
 
 ** Parallel Opportunities
-Phase 4 now moves on to lifecycle validation and error mapping; module loader plumbing is in place.
+Phase 5 focuses on lifecycle execution; helper validation tasks (5.3–5.6) can start in parallel once the start()/initialize() scaffolding lands.
 
 ** Blocking Dependencies
 None - All WebAssembly dependencies are satisfied.
@@ -165,7 +165,7 @@ None - All WebAssembly dependencies are satisfied.
 See: docs/webassembly-api-compatibility.md for details.
 
 ** Risk Areas
-- Upcoming complexity in Phase 4 (module integration and lifecycle wiring)
+- Lifecycle execution in Phase 5 requires precise state handling and exit semantics
 - Security critical: sandboxing and path validation
 - WAMR integration complexity
 
@@ -178,6 +178,7 @@ See: docs/webassembly-api-compatibility.md for details.
 ** Recent Changes
 | Timestamp | Action | Task ID | Details |
 |-----------|--------|---------|---------|
+| 2025-10-20T04:09:00Z | Completed | Tasks 4.9-4.18 | Finalized WASI lifecycle handling, header exports, and regression tests; Phase 4 closed out. |
 | 2025-10-19T16:00:00Z | Completed | Tasks 3.14-3.19, 3.28-3.29, 3.38 | Implemented path_* syscalls, poll/socket stubs, and added integration test coverage |
 | 2025-10-19T15:06:00Z | Updated | Task 3.33 | Added fd table scaffolding covering stdio + preopen metadata |
 | 2025-10-19T14:33:00Z | Updated | Phase 3 | Completed fd_tell/fd_fdstat*, clock_res_get, proc_exit logic, and memory validation |
@@ -197,7 +198,7 @@ See: docs/webassembly-api-compatibility.md for details.
 - Critical path: Phase 1 → Phase 2 → Phase 3 → Phase 4 → Phase 5 → Phase 6 → Phase 7
 - Parallel opportunities: Many tasks within each phase can run in parallel
 - Testing is integrated throughout (not just Phase 6)
-- Pending work: advance Phase 4 error/lifecycle tasks (4.7–4.10) and prepare for lifecycle method integration
+- Pending work: kick off Phase 5 lifecycle tasks (5.1–5.4) and align helper validations
 
 * Implementation Notes
 

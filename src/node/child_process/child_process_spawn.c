@@ -128,6 +128,14 @@ JSValue js_child_process_spawn(JSContext* ctx, JSValueConst this_val, int argc, 
   child->buffering = false;
   child->stdout_buffer = NULL;
   child->stderr_buffer = NULL;
+  child->stdout_size = 0;
+  child->stderr_size = 0;
+  child->stdout_capacity = 0;
+  child->stderr_capacity = 0;
+  child->max_buffer = 0;
+  child->exec_callback = JS_UNDEFINED;
+  child->timeout_timer = NULL;
+  child->timeout_ms = 0;
   child->file = strdup(command);
   child->args = args;
   child->cwd = options.cwd ? strdup(options.cwd) : NULL;

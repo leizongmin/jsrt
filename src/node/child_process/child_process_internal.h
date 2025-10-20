@@ -113,6 +113,7 @@ JSValue js_child_process_spawn(JSContext* ctx, JSValueConst this_val, int argc, 
 // ===== Exec Functions (child_process_exec.c) =====
 JSValue js_child_process_exec(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv);
 JSValue js_child_process_exec_file(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv);
+void call_exec_callback(JSContext* ctx, JSChildProcess* child, JSValue error, JSValue stdout_val, JSValue stderr_val);
 
 // ===== Sync Functions (child_process_sync.c) =====
 JSValue js_child_process_spawn_sync(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv);

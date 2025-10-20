@@ -35,8 +35,10 @@ JSValue create_exec_error(JSContext* ctx, int exit_code, const char* signal, con
   if (signal) {
     snprintf(message, sizeof(message), "Command failed: %s (killed by signal %s)", cmd, signal);
     JS_SetPropertyStr(ctx, error, "signal", JS_NewString(ctx, signal));
+    JS_SetPropertyStr(ctx, error, "killed", JS_NewBool(ctx, true));
   } else {
     snprintf(message, sizeof(message), "Command failed: %s (exit code %d)", cmd, exit_code);
+    JS_SetPropertyStr(ctx, error, "killed", JS_NewBool(ctx, false));
   }
 
   JS_SetPropertyStr(ctx, error, "message", JS_NewString(ctx, message));

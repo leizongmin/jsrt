@@ -84,4 +84,8 @@ void jsrt_process_init_timing(void);
 void jsrt_process_init_control(void);
 void jsrt_process_init_nodejs(void);
 
+// IPC functions (process_ipc.c)
+void jsrt_process_setup_ipc(JSContext* ctx, JSValue process_obj, JSRT_Runtime* rt);
+void jsrt_process_cleanup_ipc(JSContext* ctx);
+
 #endif  // __JSRT_NODE_PROCESS_H__

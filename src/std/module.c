@@ -254,12 +254,12 @@ static char* find_node_modules_path(const char* start_dir, const char* package_n
   // Walk up the directory tree looking for node_modules
   char* current_search = search_dir;
   while (current_search && strlen(current_search) > 1) {
-    // Build node_modules path
+    // Build node_modules path (current directory)
     char* node_modules_path = path_join(current_search, "node_modules");
     if (!node_modules_path)
       break;
 
-    // Build package path
+    // Build package path inside current node_modules
     char* package_path = path_join(node_modules_path, package_name);
     free(node_modules_path);
 
@@ -273,6 +273,25 @@ static char* find_node_modules_path(const char* start_dir, const char* package_n
       return package_path;
     }
     free(package_path);
+
+    // Additional fallback: examples/node_modules within current directory
+    char* examples_dir = path_join(current_search, "examples");
+    if (examples_dir) {
+      char* examples_node_modules = path_join(examples_dir, "node_modules");
+      free(examples_dir);
+      if (examples_node_modules) {
+        char* examples_package_path = path_join(examples_node_modules, package_name);
+        free(examples_node_modules);
+        if (examples_package_path) {
+          if (access(examples_package_path, F_OK) == 0) {
+            JSRT_Debug("find_node_modules_path: found package in examples at '%s'", examples_package_path);
+            free(search_dir);
+            return examples_package_path;
+          }
+          free(examples_package_path);
+        }
+      }
+    }
 
     // Move up one directory using our path helper
     char* parent = get_parent_directory(current_search);
@@ -1271,6 +1290,7 @@ static JSValue js_require(JSContext* ctx, JSValueConst this_val, int argc, JSVal
 
   // Use ES module context if available, otherwise current_module_path
   const char* effective_module_path = esm_context_path ? esm_context_path : current_module_path;
+  const char* npm_base_path = effective_module_path ? effective_module_path : entry_module_path;
 
   // Handle jsrt: modules
   if (strncmp(module_name, "jsrt:", 5) == 0) {
@@ -1340,7 +1360,7 @@ static JSValue js_require(JSContext* ctx, JSValueConst this_val, int argc, JSVal
     JSRT_Debug("js_require: trying npm module resolution");
 
     // First, find the package directory to check if it's ES module
-    char* start_dir = effective_module_path ? get_parent_directory(effective_module_path) : strdup(".");
+    char* start_dir = npm_base_path ? get_parent_directory(npm_base_path) : strdup(".");
     if (!start_dir)
       start_dir = strdup(".");
 
@@ -1354,7 +1374,7 @@ static JSValue js_require(JSContext* ctx, JSValueConst this_val, int argc, JSVal
       free(package_dir);
     }
 
-    resolved_path = resolve_npm_module(module_name, effective_module_path, false);
+    resolved_path = resolve_npm_module(module_name, npm_base_path, false);
     if (!resolved_path) {
       // Fallback to treating as relative path
       JSRT_Debug("js_require: npm resolution failed, falling back to module path resolution");
@@ -1493,6 +1513,7 @@ void JSRT_StdCommonJSInit(JSRT_Runtime* rt) {
 }
 
 void JSRT_StdCommonJSSetEntryPath(const char* path) {
+  JSRT_Debug("JSRT_StdCommonJSSetEntryPath: path='%s'", path ? path : "NULL");
   if (entry_module_path) {
     free(entry_module_path);
     entry_module_path = NULL;

@@ -2,8 +2,8 @@
 :ID: phase-6
 :CREATED: 2025-10-16T22:45:00Z
 :DEPS: phase-5
-:PROGRESS: 8/27
-:COMPLETION: 30%
+:PROGRESS: 9/27
+:COMPLETION: 33%
 :STATUS: 🔵 IN_PROGRESS
 :END:
 
@@ -218,11 +218,13 @@ Test that WASI sandboxing prevents access outside preopens:
 **** Testing Strategy
 make test N=wasi; make test; make wpt; make clean && make
 
-*** TODO [#B] Task 6.9: Test returnOnExit modes [P][R:MED][C:MEDIUM][D:6.3,3.20]
+*** DONE [#B] Task 6.9: Test returnOnExit modes [P][R:MED][C:MEDIUM][D:6.3,3.20]
+CLOSED: [2025-10-20T13:30:48Z]
 :PROPERTIES:
 :ID: 6.9
 :CREATED: 2025-10-16T22:45:00Z
 :DEPS: 6.3,3.20
+:COMPLETED: 2025-10-20T13:30:48Z
 :END:
 
 **** Description
@@ -231,8 +233,15 @@ Test both returnOnExit modes:
 - returnOnExit=false: verify process exits (harder to test)
 
 **** Acceptance Criteria
-- [ ] Both modes tested
-- [ ] Tests pass
+- [X] Both modes tested
+- [X] Tests pass
+
+**** Notes
+- Added `test_wasi_return_on_exit.js` to validate returnOnExit semantics including external process exit verification.
+- Implemented fixture invoking `proc_exit` directly for default mode regression.
+
+**** Testing Strategy
+make test N=wasi; make test; make wpt; make clean && make
 
 **** Testing Strategy
 make test N=wasi

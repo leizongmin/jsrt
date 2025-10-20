@@ -8,10 +8,10 @@
 * Task Metadata
 :PROPERTIES:
 :CREATED: 2025-10-16T22:45:00Z
-:UPDATED: 2025-10-20T12:46:19Z
+:UPDATED: 2025-10-20T13:30:48Z
 :STATUS: 🔵 IN_PROGRESS
-:PROGRESS: 109/141
-:COMPLETION: 77%
+:PROGRESS: 110/141
+:COMPLETION: 78%
 :WASM_DEPENDENCIES: ✅ VERIFIED - All required APIs functional (2025-10-19)
 :WASM_BLOCKERS: NONE - Standalone Memory/Table/Global not needed by WASI
 :PHASE3_SYSCALLS: 🟢 COMPLETE - 13/13 core syscalls implemented with path/FD extensions validated (2025-10-19)
@@ -127,22 +127,22 @@ See individual phase documents for dependency graphs.
 * 🚀 Execution Dashboard
 :PROPERTIES:
 :CURRENT_PHASE: Phase 6: Testing & Validation
-:PROGRESS: 109/141
-:COMPLETION: 77%
-:ACTIVE_TASK: Task 6.9 - Test returnOnExit modes
-:UPDATED: 2025-10-20T12:46:19Z
+:PROGRESS: 110/141
+:COMPLETION: 78%
+:ACTIVE_TASK: Task 6.10 - Test start() validation
+:UPDATED: 2025-10-20T13:30:48Z
 :END:
 
 ** Current Status
 - Phase: Phase 6: Testing & Validation
-- Progress: 107/141 tasks (76%)
-- Active: Test returnOnExit modes (Task 6.9)
+- Progress: 110/141 tasks (78%)
+- Active: Test start() validation (Task 6.10)
 
 ** Next Up
 High-priority tasks ready to start (Phase 6):
-- [ ] Task 6.9: Test returnOnExit modes
 - [ ] Task 6.10: Test start() validation
 - [ ] Task 6.11: Test initialize() validation
+- [ ] Task 6.12: Test start/initialize mutual exclusion
 
 See [[file:node-wasi-plan/phases/phase6-testing-validation.md][Phase 6 document]] for details.
 
@@ -178,6 +178,7 @@ See: docs/webassembly-api-compatibility.md for details.
 ** Recent Changes
 | Timestamp | Action | Task ID | Details |
 |-----------|--------|---------|---------|
+| 2025-10-20T13:30:48Z | Completed | Task 6.9 | Added returnOnExit regression tests + fixture to assert default-mode termination. |
 | 2025-10-20T12:46:19Z | Completed | Tasks 6.7-6.8 | Added WASI file I/O + sandbox tests with fd_read/fd_write support and updated docs. |
 | 2025-10-20T04:58:00Z | Completed | Tasks 6.4-6.6 | Validated args/env/preopen behaviour with new WASI option tests. |
 | 2025-10-20T04:57:00Z | Completed | Tasks 6.1-6.3 | Established WASI test harness, baseline constructor tests, and hello-world fixtures. |

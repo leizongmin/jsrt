@@ -374,14 +374,19 @@ Test with WASM modules from different compilers:
 - [ ] Test modules from 3+ compilers
 - [ ] All work correctly
 
+**** Notes
+- Pending external toolchains: current environment lacks WASI SDK / Rust wasm32-wasi / AssemblyScript compilers, so multi-compiler validation cannot proceed until binaries are available or prebuilt fixtures are added.
+
 **** Testing Strategy
 Multi-compiler testing.
 
-*** TODO [#B] Task 6.15: Test module caching [P][R:LOW][C:SIMPLE][D:4.6]
+*** DONE [#B] Task 6.15: Test module caching [P][R:LOW][C:SIMPLE][D:4.6]
+CLOSED: [2025-10-20T15:58:23Z]
 :PROPERTIES:
 :ID: 6.15
 :CREATED: 2025-10-16T22:45:00Z
 :DEPS: 4.6
+:COMPLETED: 2025-10-20T15:58:23Z
 :END:
 
 **** Description
@@ -390,17 +395,23 @@ Test that WASI module is cached:
 - Verify same object returned
 
 **** Acceptance Criteria
-- [ ] Test passes
-- [ ] Caching verified
+- [X] Test passes
+- [X] Caching verified
+
+**** Notes
+- Covered by `test/module/wasi/test_wasi_loader.js` (CommonJS) verifying repeated `require('node:wasi')` returns cached module.
+- Verified via `make test N=module/wasi`.
 
 **** Testing Strategy
-make test N=wasi
+make test N=module/wasi
 
-*** TODO [#B] Task 6.16: Test both protocol aliases [P][R:LOW][C:SIMPLE][D:4.5]
+*** DONE [#B] Task 6.16: Test both protocol aliases [P][R:LOW][C:SIMPLE][D:4.5]
+CLOSED: [2025-10-20T15:58:23Z]
 :PROPERTIES:
 :ID: 6.16
 :CREATED: 2025-10-16T22:45:00Z
 :DEPS: 4.5
+:COMPLETED: 2025-10-20T15:58:23Z
 :END:
 
 **** Description
@@ -409,17 +420,23 @@ Test both node:wasi and jsrt:wasi:
 - Verify same WASI class
 
 **** Acceptance Criteria
-- [ ] Both protocols tested
-- [ ] Tests pass
+- [X] Both protocols tested
+- [X] Tests pass
+
+**** Notes
+- `test/module/wasi/test_wasi_loader.js` confirms `node:wasi` and `jsrt:wasi` share the same constructor.
+- Executed under `make test N=module/wasi`.
 
 **** Testing Strategy
-make test N=wasi
+make test N=module/wasi
 
-*** TODO [#C] Task 6.17: Test CommonJS and ES Module imports [P][R:LOW][C:SIMPLE][D:4.2,4.3]
+*** DONE [#C] Task 6.17: Test CommonJS and ES Module imports [P][R:LOW][C:SIMPLE][D:4.2,4.3]
+CLOSED: [2025-10-20T15:58:23Z]
 :PROPERTIES:
 :ID: 6.17
 :CREATED: 2025-10-16T22:45:00Z
 :DEPS: 4.2,4.3
+:COMPLETED: 2025-10-20T15:58:23Z
 :END:
 
 **** Description
@@ -428,11 +445,15 @@ Test both import styles:
 - import { WASI } from 'node:wasi';
 
 **** Acceptance Criteria
-- [ ] Both import styles tested
-- [ ] Tests pass
+- [X] Both import styles tested
+- [X] Tests pass
+
+**** Notes
+- `test/module/wasi/test_wasi_loader.mjs` covers ESM default/named imports; CommonJS already validated in loader test.
+- Confirmed by `make test N=module/wasi`.
 
 **** Testing Strategy
-make test N=wasi
+make test N=module/wasi
 
 *** TODO [#B] Task 6.18: Test error messages match Node.js [P][R:LOW][C:SIMPLE][D:6.10,6.11]
 :PROPERTIES:

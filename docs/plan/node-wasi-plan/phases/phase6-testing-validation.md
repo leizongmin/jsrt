@@ -2,8 +2,8 @@
 :ID: phase-6
 :CREATED: 2025-10-16T22:45:00Z
 :DEPS: phase-5
-:PROGRESS: 9/27
-:COMPLETION: 33%
+:PROGRESS: 10/27
+:COMPLETION: 37%
 :STATUS: 🔵 IN_PROGRESS
 :END:
 
@@ -246,11 +246,13 @@ make test N=wasi; make test; make wpt; make clean && make
 **** Testing Strategy
 make test N=wasi
 
-*** TODO [#B] Task 6.10: Test start() validation [P][R:MED][C:SIMPLE][D:5.1]
+*** DONE [#B] Task 6.10: Test start() validation [P][R:MED][C:SIMPLE][D:5.1]
+CLOSED: [2025-10-20T14:42:21Z]
 :PROPERTIES:
 :ID: 6.10
 :CREATED: 2025-10-16T22:45:00Z
 :DEPS: 5.1
+:COMPLETED: 2025-10-20T14:42:21Z
 :END:
 
 **** Description
@@ -261,11 +263,15 @@ Test start() error cases:
 - Instance with _initialize export
 
 **** Acceptance Criteria
-- [ ] All error cases tested
-- [ ] Correct errors thrown
+- [X] All error cases tested
+- [X] Correct errors thrown
+
+**** Notes
+- Added `test_wasi_start_validation.js` covering missing `_start`, missing memory export, and `_initialize` rejection.
+- Already-started semantics verified via existing lifecycle suite under test/module/wasi.
 
 **** Testing Strategy
-make test N=wasi
+make test N=wasi; make test; make wpt; make clean && make
 
 *** TODO [#B] Task 6.11: Test initialize() validation [P][R:MED][C:SIMPLE][D:5.2]
 :PROPERTIES:

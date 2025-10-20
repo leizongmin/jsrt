@@ -455,11 +455,13 @@ Test both import styles:
 **** Testing Strategy
 make test N=module/wasi
 
-*** TODO [#B] Task 6.18: Test error messages match Node.js [P][R:LOW][C:SIMPLE][D:6.10,6.11]
+*** DONE [#B] Task 6.18: Test error messages match Node.js [P][R:LOW][C:SIMPLE][D:6.10,6.11]
+CLOSED: [2025-10-20T16:09:46Z]
 :PROPERTIES:
 :ID: 6.18
 :CREATED: 2025-10-16T22:45:00Z
 :DEPS: 6.10,6.11
+:COMPLETED: 2025-10-20T16:09:46Z
 :END:
 
 **** Description
@@ -468,11 +470,15 @@ Compare error messages with Node.js:
 - Verify messages similar
 
 **** Acceptance Criteria
-- [ ] Error messages documented
-- [ ] Close match to Node.js
+- [X] Error messages documented
+- [X] Close match to Node.js
+
+**** Notes
+- Added `test/wasi/test_wasi_error_messages.js` comparing start() invalid exports against Node.js wording.
+- Lifecycle suite now expects updated messages (`The "instance.exports" property must be of type object…`).
 
 **** Testing Strategy
-Comparison testing.
+make test N=wasi
 
 *** TODO [#B] Task 6.19: Test with large files [P][R:MED][C:MEDIUM][D:6.7]
 :PROPERTIES:

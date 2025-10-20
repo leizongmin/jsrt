@@ -60,7 +60,7 @@ static int jsrt_wasi_attach_instance(JSContext* ctx, jsrt_wasi_t* wasi, JSValueC
 
   if (!JS_IsObject(exports)) {
     JS_FreeValue(ctx, exports);
-    jsrt_wasi_throw_error(ctx, JSRT_WASI_ERROR_INVALID_ARGUMENT, "Instance has no exports");
+    JS_ThrowTypeError(ctx, "The \"instance.exports\" property must be of type object. Received undefined");
     wasi->instance_failed = true;
     return -1;
   }

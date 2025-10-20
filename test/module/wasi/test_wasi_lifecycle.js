@@ -156,7 +156,10 @@ console.log('PASS: start() rejects after initialize()');
 
 console.log('Test 8: invalid arguments mark instance unusable');
 const wasiInvalid = new WASI({});
-expectThrowMatching(() => wasiInvalid.start({}), /Invalid WASI argument/);
+expectThrowMatching(
+  () => wasiInvalid.start({}),
+  /The "instance\.exports" property must be of type object/
+);
 expectThrowMatching(
   () =>
     wasiInvalid.start(createInstance(wasiInvalid, wasmStartModule).instance),
@@ -165,7 +168,7 @@ expectThrowMatching(
 const wasiInvalidInitArgs = new WASI({});
 expectThrowMatching(
   () => wasiInvalidInitArgs.initialize({}),
-  /Invalid WASI argument/
+  /The "instance\.exports" property must be of type object/
 );
 expectThrowMatching(
   () =>

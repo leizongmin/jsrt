@@ -8,10 +8,10 @@
 * Task Metadata
 :PROPERTIES:
 :CREATED: 2025-10-16T22:45:00Z
-:UPDATED: 2025-10-20T15:58:53Z
+:UPDATED: 2025-10-20T16:10:07Z
 :STATUS: 🔵 IN_PROGRESS
-:PROGRESS: 117/141
-:COMPLETION: 83%
+:PROGRESS: 118/141
+:COMPLETION: 84%
 :WASM_DEPENDENCIES: ✅ VERIFIED - All required APIs functional (2025-10-19)
 :WASM_BLOCKERS: NONE - Standalone Memory/Table/Global not needed by WASI
 :PHASE3_SYSCALLS: 🟢 COMPLETE - 13/13 core syscalls implemented with path/FD extensions validated (2025-10-19)
@@ -127,22 +127,22 @@ See individual phase documents for dependency graphs.
 * 🚀 Execution Dashboard
 :PROPERTIES:
 :CURRENT_PHASE: Phase 6: Testing & Validation
-:PROGRESS: 117/141
-:COMPLETION: 83%
-:ACTIVE_TASK: Task 6.18 - Test error messages match Node.js
-:UPDATED: 2025-10-20T15:58:53Z
+:PROGRESS: 118/141
+:COMPLETION: 84%
+:ACTIVE_TASK: Task 6.19 - Test with large files
+:UPDATED: 2025-10-20T16:10:07Z
 :END:
 
 ** Current Status
 - Phase: Phase 6: Testing & Validation
-- Progress: 117/141 tasks (83%)
-- Active: Test error messages match Node.js (Task 6.18)
+- Progress: 118/141 tasks (84%)
+- Active: Test with large files (Task 6.19)
 
 ** Next Up
 High-priority tasks ready to start (Phase 6):
-- [ ] Task 6.18: Test error messages match Node.js
 - [ ] Task 6.19: Test with large files
 - [ ] Task 6.20: Test Unicode in args/env
+- [ ] Task 6.21: Test clock functions
 
 See [[file:node-wasi-plan/phases/phase6-testing-validation.md][Phase 6 document]] for details.
 
@@ -178,6 +178,7 @@ See: docs/webassembly-api-compatibility.md for details.
 ** Recent Changes
 | Timestamp | Action | Task ID | Details |
 |-----------|--------|---------|---------|
+| 2025-10-20T16:10:07Z | Completed | Task 6.18 | Added WASI error message parity test and aligned lifecycle assertions with Node.js wording. |
 | 2025-10-20T15:58:23Z | Completed | Tasks 6.15-6.17 | Loader tests cover caching, protocol aliases, and CJS/ESM imports; executed `make test N=module/wasi`. |
 | 2025-10-20T15:49:40Z | Completed | Task 6.13 | Ran ASAN suite (`make jsrt_m`, `ASAN_OPTIONS=detect_leaks=1 ./target/asan/jsrt test/wasi/*.js`) with proc_exit tests skipped safely. |
 | 2025-10-20T15:16:44Z | Completed | Task 6.12 | Confirmed mutual exclusion via lifecycle suite (start after initialize and duplicate initialize attempts). |

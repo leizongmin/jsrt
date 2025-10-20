@@ -27,7 +27,7 @@ static const char* jsrt_wasi_error_messages[] = {
     [JSRT_WASI_ERROR_INVALID_INSTANCE] = "Invalid WASI instance",
     [JSRT_WASI_ERROR_MISSING_MEMORY_EXPORT] = "Missing WebAssembly memory export required by WASI",
     [JSRT_WASI_ERROR_MISSING_START_EXPORT] = "Missing required WASI entry export",
-    [JSRT_WASI_ERROR_ALREADY_STARTED] = "WASI instance already started",
+    [JSRT_WASI_ERROR_ALREADY_STARTED] = "WASI instance has already started",
     [JSRT_WASI_ERROR_ALREADY_INITIALIZED] = "WASI instance already initialized",
     [JSRT_WASI_ERROR_INTERNAL] = "WASI internal error",
 };

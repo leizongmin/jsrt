@@ -2,8 +2,8 @@
 :ID: phase-4
 :CREATED: 2025-10-16T22:45:00Z
 :DEPS: phase-3
-:PROGRESS: 6/18
-:COMPLETION: 33%
+:PROGRESS: 8/18
+:COMPLETION: 44%
 :STATUS: 🔵 IN_PROGRESS
 :END:
 
@@ -181,11 +181,13 @@ Ensure WASI module is cached properly:
 **** Testing Strategy
 Test repeated requires.
 
-*** TODO [#A] Task 4.7: Add WASI-specific error codes [P][R:MED][C:SIMPLE][D:2.17]
+*** DONE [#A] Task 4.7: Add WASI-specific error codes [P][R:MED][C:SIMPLE][D:2.17]
+CLOSED: [2025-10-20T03:26:00Z]
 :PROPERTIES:
 :ID: 4.7
 :CREATED: 2025-10-16T22:45:00Z
 :DEPS: 2.17
+:COMPLETED: 2025-10-20T03:26:00Z
 :END:
 
 **** Description
@@ -203,17 +205,22 @@ typedef enum {
 ```
 
 **** Acceptance Criteria
-- [ ] Error enum defined
-- [ ] Error creation helpers implemented
+- [X] Error enum defined
+- [X] Error creation helpers implemented
+
+**** Notes
+- `jsrt_wasi_error_t` and helper APIs now centralize error reporting; lifecycle code uses new enum-based helpers.
 
 **** Testing Strategy
 Test error messages.
 
-*** TODO [#B] Task 4.8: Implement validation for required WASM exports [P][R:MED][C:MEDIUM][D:3.35]
+*** DONE [#B] Task 4.8: Implement validation for required WASM exports [P][R:MED][C:MEDIUM][D:3.35]
+CLOSED: [2025-10-20T03:26:00Z]
 :PROPERTIES:
 :ID: 4.8
 :CREATED: 2025-10-16T22:45:00Z
 :DEPS: 3.35
+:COMPLETED: 2025-10-20T03:26:00Z
 :END:
 
 **** Description
@@ -222,10 +229,13 @@ Validate WASM instance has required exports:
 - "_start" or "_initialize" export (function)
 
 **** Acceptance Criteria
-- [ ] Validation function implemented
-- [ ] Checks for memory export
-- [ ] Checks for lifecycle exports
-- [ ] Clear error messages
+- [X] Validation function implemented
+- [X] Checks for memory export
+- [X] Checks for lifecycle exports
+- [X] Clear error messages
+
+**** Notes
+- Lifecycle routines now reuse shared error helpers; missing exports raise structured WASI errors.
 
 **** Testing Strategy
 Test with invalid WASM modules.

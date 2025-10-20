@@ -12,6 +12,57 @@
 // QuickJS class ID for WASI instances
 static JSClassID jsrt_wasi_class_id = 0;
 
+static const char* jsrt_wasi_error_labels[] = {
+    [JSRT_WASI_ERROR_INVALID_ARGUMENT] = "ERR_WASI_INVALID_ARGUMENT",
+    [JSRT_WASI_ERROR_INVALID_INSTANCE] = "ERR_WASI_INVALID_INSTANCE",
+    [JSRT_WASI_ERROR_MISSING_MEMORY_EXPORT] = "ERR_WASI_MISSING_MEMORY_EXPORT",
+    [JSRT_WASI_ERROR_MISSING_START_EXPORT] = "ERR_WASI_MISSING_ENTRY_EXPORT",
+    [JSRT_WASI_ERROR_ALREADY_STARTED] = "ERR_WASI_ALREADY_STARTED",
+    [JSRT_WASI_ERROR_ALREADY_INITIALIZED] = "ERR_WASI_ALREADY_INITIALIZED",
+    [JSRT_WASI_ERROR_INTERNAL] = "ERR_WASI_INTERNAL",
+};
+
+static const char* jsrt_wasi_error_messages[] = {
+    [JSRT_WASI_ERROR_INVALID_ARGUMENT] = "Invalid WASI argument",
+    [JSRT_WASI_ERROR_INVALID_INSTANCE] = "Invalid WASI instance",
+    [JSRT_WASI_ERROR_MISSING_MEMORY_EXPORT] = "Missing WebAssembly memory export required by WASI",
+    [JSRT_WASI_ERROR_MISSING_START_EXPORT] = "Missing required WASI entry export",
+    [JSRT_WASI_ERROR_ALREADY_STARTED] = "WASI instance already started",
+    [JSRT_WASI_ERROR_ALREADY_INITIALIZED] = "WASI instance already initialized",
+    [JSRT_WASI_ERROR_INTERNAL] = "WASI internal error",
+};
+
+const char* jsrt_wasi_error_to_string(jsrt_wasi_error_t code) {
+  size_t count = sizeof(jsrt_wasi_error_labels) / sizeof(jsrt_wasi_error_labels[0]);
+  if (code < 0 || (size_t)code >= count || jsrt_wasi_error_labels[code] == NULL) {
+    return "ERR_WASI_UNKNOWN";
+  }
+  return jsrt_wasi_error_labels[code];
+}
+
+static const char* jsrt_wasi_error_default_message(jsrt_wasi_error_t code) {
+  size_t count = sizeof(jsrt_wasi_error_messages) / sizeof(jsrt_wasi_error_messages[0]);
+  if (code < 0 || (size_t)code >= count || jsrt_wasi_error_messages[code] == NULL) {
+    return "Unknown WASI error";
+  }
+  return jsrt_wasi_error_messages[code];
+}
+
+JSValue jsrt_wasi_throw_error(JSContext* ctx, jsrt_wasi_error_t code, const char* detail) {
+  const char* base = jsrt_wasi_error_default_message(code);
+  if (code == JSRT_WASI_ERROR_INTERNAL) {
+    if (detail) {
+      return JS_ThrowInternalError(ctx, "%s: %s", base, detail);
+    }
+    return JS_ThrowInternalError(ctx, "%s", base);
+  }
+
+  if (detail) {
+    return JS_ThrowTypeError(ctx, "%s: %s", base, detail);
+  }
+  return JS_ThrowTypeError(ctx, "%s", base);
+}
+
 /**
  * Finalizer for WASI instances (called by garbage collector)
  */

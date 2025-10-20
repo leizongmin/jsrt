@@ -8,10 +8,10 @@
 * Task Metadata
 :PROPERTIES:
 :CREATED: 2025-10-16T22:45:00Z
-:UPDATED: 2025-10-19T16:00:00Z
+:UPDATED: 2025-10-20T03:26:00Z
 :STATUS: 🔵 IN_PROGRESS
-:PROGRESS: 77/141
-:COMPLETION: 55%
+:PROGRESS: 79/141
+:COMPLETION: 56%
 :WASM_DEPENDENCIES: ✅ VERIFIED - All required APIs functional (2025-10-19)
 :WASM_BLOCKERS: NONE - Standalone Memory/Table/Global not needed by WASI
 :PHASE3_SYSCALLS: 🟢 COMPLETE - 13/13 core syscalls implemented with path/FD extensions validated (2025-10-19)
@@ -127,22 +127,22 @@ See individual phase documents for dependency graphs.
 * 🚀 Execution Dashboard
 :PROPERTIES:
 :CURRENT_PHASE: Phase 4: Module Integration
-:PROGRESS: 71/141
-:COMPLETION: 50%
-:ACTIVE_TASK: Task 4.7 - Add WASI-specific error codes
-:UPDATED: 2025-10-19T16:52:00Z
+:PROGRESS: 79/141
+:COMPLETION: 56%
+:ACTIVE_TASK: Task 4.9 - Wire WASI lifecycle state tracking
+:UPDATED: 2025-10-20T03:26:00Z
 :END:
 
 ** Current Status
 - Phase: Phase 4: Module Integration
-- Progress: 77/141 tasks (55%)
-- Active: Harden WASI error handling (Task 4.7)
+- Progress: 79/141 tasks (56%)
+- Active: Lifecycle state/error harmonisation (Task 4.9)
 
 ** Next Up
 High-priority tasks ready to start (Phase 4):
-- [ ] Task 4.7: Add WASI-specific error codes
-- [ ] Task 4.8: Implement validation for required WASM exports
-- [ ] Task 4.9: (next) Integrate lifecycle error mapping
+- [ ] Task 4.9: Integrate lifecycle state guard + error mapping
+- [ ] Task 4.10: Document loader/lifecycle behaviour
+- [ ] Task 4.11: (prep) Update WASI examples with new loader flow
 
 See [[file:node-wasi-plan/phases/phase4-module-integration.md][Phase 4 document]] for details.
 
@@ -181,6 +181,7 @@ See: docs/webassembly-api-compatibility.md for details.
 | 2025-10-19T16:00:00Z | Completed | Tasks 3.14-3.19, 3.28-3.29, 3.38 | Implemented path_* syscalls, poll/socket stubs, and added integration test coverage |
 | 2025-10-19T15:06:00Z | Updated | Task 3.33 | Added fd table scaffolding covering stdio + preopen metadata |
 | 2025-10-19T14:33:00Z | Updated | Phase 3 | Completed fd_tell/fd_fdstat*, clock_res_get, proc_exit logic, and memory validation |
+| 2025-10-20T03:26:00Z | Updated | Phase 4 | Added WASI error helpers & lifecycle validation (Tasks 4.7-4.8) |
 | 2025-10-19T16:52:00Z | Updated | Phase 4 | Established loader aliases/tests (Tasks 4.1-4.6) and kicked off error-handling work |
 | 2025-10-19T16:00:00Z | Completed | Tasks 3.1, 3.2, 3.33 | Catalogued WASI syscall coverage, finalized FD table management, and refreshed plan metadata |
 | 2025-10-19T13:38:53Z | Updated | Phase 2 & 3 | Documented Phase 2 completion, Phase 3 progress, and WASI import safety fix |

@@ -183,6 +183,19 @@ int js_node_wasi_init(JSContext* ctx, JSModuleDef* m);
  */
 bool JSRT_IsWASIModule(const char* name);
 
+typedef enum {
+  JSRT_WASI_ERROR_INVALID_ARGUMENT = 0,
+  JSRT_WASI_ERROR_INVALID_INSTANCE,
+  JSRT_WASI_ERROR_MISSING_MEMORY_EXPORT,
+  JSRT_WASI_ERROR_MISSING_START_EXPORT,
+  JSRT_WASI_ERROR_ALREADY_STARTED,
+  JSRT_WASI_ERROR_ALREADY_INITIALIZED,
+  JSRT_WASI_ERROR_INTERNAL,
+} jsrt_wasi_error_t;
+
+const char* jsrt_wasi_error_to_string(jsrt_wasi_error_t code);
+JSValue jsrt_wasi_throw_error(JSContext* ctx, jsrt_wasi_error_t code, const char* detail);
+
 #ifdef __cplusplus
 }
 #endif

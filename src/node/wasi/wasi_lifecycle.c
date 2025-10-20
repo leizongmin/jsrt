@@ -18,25 +18,25 @@ static JSValue jsrt_wasi_missing_memory(JSContext* ctx, jsrt_wasi_t* wasi) {
   JS_FreeValue(ctx, wasi->wasm_instance);
   wasi->wasm_instance = JS_UNDEFINED;
   wasi->wamr_instance = NULL;
-  return JS_ThrowTypeError(ctx, "WebAssembly.Instance missing exported memory for WASI");
+  return jsrt_wasi_throw_error(ctx, JSRT_WASI_ERROR_MISSING_MEMORY_EXPORT, NULL);
 }
 
 JSValue jsrt_wasi_start(JSContext* ctx, jsrt_wasi_t* wasi, JSValue instance) {
   if (!wasi) {
-    return JS_ThrowTypeError(ctx, "Invalid WASI instance");
+    return jsrt_wasi_throw_error(ctx, JSRT_WASI_ERROR_INVALID_INSTANCE, NULL);
   }
 
   // Check if already started or initialized
   if (wasi->started) {
-    return JS_ThrowTypeError(ctx, "WASI instance already started");
+    return jsrt_wasi_throw_error(ctx, JSRT_WASI_ERROR_ALREADY_STARTED, NULL);
   }
   if (wasi->initialized) {
-    return JS_ThrowTypeError(ctx, "WASI instance already initialized");
+    return jsrt_wasi_throw_error(ctx, JSRT_WASI_ERROR_ALREADY_INITIALIZED, NULL);
   }
 
   // Validate instance is a WebAssembly.Instance
   if (!JS_IsObject(instance)) {
-    return JS_ThrowTypeError(ctx, "Argument must be a WebAssembly.Instance");
+    return jsrt_wasi_throw_error(ctx, JSRT_WASI_ERROR_INVALID_ARGUMENT, "Expected WebAssembly.Instance");
   }
 
   // Get exports object
@@ -47,7 +47,7 @@ JSValue jsrt_wasi_start(JSContext* ctx, jsrt_wasi_t* wasi, JSValue instance) {
 
   if (!JS_IsObject(exports)) {
     JS_FreeValue(ctx, exports);
-    return JS_ThrowTypeError(ctx, "Instance has no exports");
+    return jsrt_wasi_throw_error(ctx, JSRT_WASI_ERROR_INVALID_ARGUMENT, "Instance has no exports");
   }
 
   // Get _start function
@@ -60,7 +60,7 @@ JSValue jsrt_wasi_start(JSContext* ctx, jsrt_wasi_t* wasi, JSValue instance) {
 
   if (!JS_IsFunction(ctx, start_fn)) {
     JS_FreeValue(ctx, start_fn);
-    return JS_ThrowTypeError(ctx, "WebAssembly.Instance missing _start export");
+    return jsrt_wasi_throw_error(ctx, JSRT_WASI_ERROR_MISSING_START_EXPORT, "_start export not found");
   }
 
   // Store instance reference (keep it alive)
@@ -71,7 +71,8 @@ JSValue jsrt_wasi_start(JSContext* ctx, jsrt_wasi_t* wasi, JSValue instance) {
   if (!wasi->wamr_instance) {
     JS_FreeValue(ctx, wasi->wasm_instance);
     wasi->wasm_instance = JS_UNDEFINED;
-    return JS_ThrowTypeError(ctx, "Failed to extract WAMR instance from WebAssembly.Instance");
+    return jsrt_wasi_throw_error(ctx, JSRT_WASI_ERROR_INTERNAL,
+                                 "Failed to extract WAMR instance from WebAssembly.Instance");
   }
 
   if (!wasi->memory_validated) {
@@ -90,7 +91,7 @@ JSValue jsrt_wasi_start(JSContext* ctx, jsrt_wasi_t* wasi, JSValue instance) {
     JS_FreeValue(ctx, wasi->wasm_instance);
     wasi->wasm_instance = JS_UNDEFINED;
     wasi->wamr_instance = NULL;
-    return JS_ThrowInternalError(ctx, "Failed to create WASM execution environment");
+    return jsrt_wasi_throw_error(ctx, JSRT_WASI_ERROR_INTERNAL, "Failed to create WASM execution environment");
   }
 
   JSRT_Debug("WAMR instance extracted and execution environment created");
@@ -143,20 +144,20 @@ JSValue jsrt_wasi_start(JSContext* ctx, jsrt_wasi_t* wasi, JSValue instance) {
  */
 JSValue jsrt_wasi_initialize(JSContext* ctx, jsrt_wasi_t* wasi, JSValue instance) {
   if (!wasi) {
-    return JS_ThrowTypeError(ctx, "Invalid WASI instance");
+    return jsrt_wasi_throw_error(ctx, JSRT_WASI_ERROR_INVALID_INSTANCE, NULL);
   }
 
   // Check if already started or initialized
   if (wasi->started) {
-    return JS_ThrowTypeError(ctx, "WASI instance already started");
+    return jsrt_wasi_throw_error(ctx, JSRT_WASI_ERROR_ALREADY_STARTED, NULL);
   }
   if (wasi->initialized) {
-    return JS_ThrowTypeError(ctx, "WASI instance already initialized");
+    return jsrt_wasi_throw_error(ctx, JSRT_WASI_ERROR_ALREADY_INITIALIZED, NULL);
   }
 
   // Validate instance is a WebAssembly.Instance
   if (!JS_IsObject(instance)) {
-    return JS_ThrowTypeError(ctx, "Argument must be a WebAssembly.Instance");
+    return jsrt_wasi_throw_error(ctx, JSRT_WASI_ERROR_INVALID_ARGUMENT, "Expected WebAssembly.Instance");
   }
 
   // Get exports object
@@ -167,7 +168,7 @@ JSValue jsrt_wasi_initialize(JSContext* ctx, jsrt_wasi_t* wasi, JSValue instance
 
   if (!JS_IsObject(exports)) {
     JS_FreeValue(ctx, exports);
-    return JS_ThrowTypeError(ctx, "Instance has no exports");
+    return jsrt_wasi_throw_error(ctx, JSRT_WASI_ERROR_INVALID_ARGUMENT, "Instance has no exports");
   }
 
   // Get _initialize function
@@ -180,7 +181,7 @@ JSValue jsrt_wasi_initialize(JSContext* ctx, jsrt_wasi_t* wasi, JSValue instance
 
   if (!JS_IsFunction(ctx, init_fn)) {
     JS_FreeValue(ctx, init_fn);
-    return JS_ThrowTypeError(ctx, "WebAssembly.Instance missing _initialize export");
+    return jsrt_wasi_throw_error(ctx, JSRT_WASI_ERROR_MISSING_START_EXPORT, "_initialize export not found");
   }
 
   // Store instance reference (keep it alive)
@@ -191,7 +192,8 @@ JSValue jsrt_wasi_initialize(JSContext* ctx, jsrt_wasi_t* wasi, JSValue instance
   if (!wasi->wamr_instance) {
     JS_FreeValue(ctx, wasi->wasm_instance);
     wasi->wasm_instance = JS_UNDEFINED;
-    return JS_ThrowTypeError(ctx, "Failed to extract WAMR instance from WebAssembly.Instance");
+    return jsrt_wasi_throw_error(ctx, JSRT_WASI_ERROR_INTERNAL,
+                                 "Failed to extract WAMR instance from WebAssembly.Instance");
   }
 
   if (!wasi->memory_validated) {
@@ -210,7 +212,7 @@ JSValue jsrt_wasi_initialize(JSContext* ctx, jsrt_wasi_t* wasi, JSValue instance
     JS_FreeValue(ctx, wasi->wasm_instance);
     wasi->wasm_instance = JS_UNDEFINED;
     wasi->wamr_instance = NULL;
-    return JS_ThrowInternalError(ctx, "Failed to create WASM execution environment");
+    return jsrt_wasi_throw_error(ctx, JSRT_WASI_ERROR_INTERNAL, "Failed to create WASM execution environment");
   }
 
   JSRT_Debug("WAMR instance extracted and execution environment created");

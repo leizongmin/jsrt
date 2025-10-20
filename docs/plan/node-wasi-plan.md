@@ -8,9 +8,9 @@
 * Task Metadata
 :PROPERTIES:
 :CREATED: 2025-10-16T22:45:00Z
-:UPDATED: 2025-10-20T14:59:51Z
+:UPDATED: 2025-10-20T15:16:44Z
 :STATUS: 🔵 IN_PROGRESS
-:PROGRESS: 112/141
+:PROGRESS: 113/141
 :COMPLETION: 80%
 :WASM_DEPENDENCIES: ✅ VERIFIED - All required APIs functional (2025-10-19)
 :WASM_BLOCKERS: NONE - Standalone Memory/Table/Global not needed by WASI
@@ -127,22 +127,22 @@ See individual phase documents for dependency graphs.
 * 🚀 Execution Dashboard
 :PROPERTIES:
 :CURRENT_PHASE: Phase 6: Testing & Validation
-:PROGRESS: 112/141
+:PROGRESS: 113/141
 :COMPLETION: 80%
-:ACTIVE_TASK: Task 6.12 - Test start/initialize mutual exclusion
-:UPDATED: 2025-10-20T14:59:51Z
+:ACTIVE_TASK: Task 6.13 - Test memory safety with ASAN
+:UPDATED: 2025-10-20T15:16:44Z
 :END:
 
 ** Current Status
 - Phase: Phase 6: Testing & Validation
-- Progress: 112/141 tasks (80%)
-- Active: Test start/initialize mutual exclusion (Task 6.12)
+- Progress: 113/141 tasks (80%)
+- Active: Test memory safety with ASAN (Task 6.13)
 
 ** Next Up
 High-priority tasks ready to start (Phase 6):
-- [ ] Task 6.12: Test start/initialize mutual exclusion
 - [ ] Task 6.13: Test memory safety with ASAN
 - [ ] Task 6.14: Test with various WASM compilers
+- [ ] Task 6.15: Test module caching
 
 See [[file:node-wasi-plan/phases/phase6-testing-validation.md][Phase 6 document]] for details.
 
@@ -178,6 +178,7 @@ See: docs/webassembly-api-compatibility.md for details.
 ** Recent Changes
 | Timestamp | Action | Task ID | Details |
 |-----------|--------|---------|---------|
+| 2025-10-20T15:16:44Z | Completed | Task 6.12 | Confirmed mutual exclusion via lifecycle suite (start after initialize and duplicate initialize attempts). |
 | 2025-10-20T14:59:51Z | Completed | Task 6.11 | Confirmed initialize() validation coverage via lifecycle suite (tests 4–7) and reran baseline test matrix. |
 | 2025-10-20T14:42:21Z | Completed | Task 6.10 | Added start() validation tests covering missing exports and documented lifecycle coverage. |
 | 2025-10-20T13:30:48Z | Completed | Task 6.9 | Added returnOnExit regression tests + fixture to assert default-mode termination. |

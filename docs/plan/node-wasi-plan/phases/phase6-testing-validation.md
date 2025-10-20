@@ -2,8 +2,8 @@
 :ID: phase-6
 :CREATED: 2025-10-16T22:45:00Z
 :DEPS: phase-5
-:PROGRESS: 11/27
-:COMPLETION: 41%
+:PROGRESS: 12/27
+:COMPLETION: 44%
 :STATUS: 🔵 IN_PROGRESS
 :END:
 
@@ -299,11 +299,13 @@ Test initialize() error cases:
 **** Testing Strategy
 make test N=wasi; make test; make wpt; make clean && make
 
-*** TODO [#B] Task 6.12: Test start/initialize mutual exclusion [P][R:MED][C:SIMPLE][D:5.10]
+*** DONE [#B] Task 6.12: Test start/initialize mutual exclusion [P][R:MED][C:SIMPLE][D:5.10]
+CLOSED: [2025-10-20T15:16:44Z]
 :PROPERTIES:
 :ID: 6.12
 :CREATED: 2025-10-16T22:45:00Z
 :DEPS: 5.10
+:COMPLETED: 2025-10-20T15:16:44Z
 :END:
 
 **** Description
@@ -312,11 +314,18 @@ Test that start() and initialize() cannot both be called:
 - Call initialize() then start() - should fail
 
 **** Acceptance Criteria
-- [ ] Tests created
-- [ ] Errors thrown correctly
+- [X] Tests created
+- [X] Errors thrown correctly
+
+**** Notes
+- Behaviour already covered by `test/module/wasi/test_wasi_lifecycle.js`:
+  - Test 1 ensures `start()` succeeds exactly once.
+  - Test 7 verifies `start()` after `initialize()` raises `already initialized`.
+  - Test 4/5 confirm duplicate `initialize()` attempts are rejected.
+- No additional tests required; lifecycle suite rerun with `make test N=wasi`.
 
 **** Testing Strategy
-make test N=wasi
+make test N=wasi; make test; make wpt; make clean && make
 
 *** TODO [#B] Task 6.13: Test memory safety with ASAN [S][R:HIGH][C:MEDIUM][D:6.2-6.12]
 :PROPERTIES:

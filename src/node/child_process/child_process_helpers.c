@@ -148,6 +148,59 @@ void emit_event(JSContext* ctx, JSValue obj, const char* event, int argc, JSValu
   JS_FreeValue(ctx, emit_func);
 }
 
+// Emit an event asynchronously using process.nextTick
+void emit_event_async(JSContext* ctx, JSValue obj, const char* event, int argc, JSValue* argv) {
+  // Use setTimeout with 0 delay to make it asynchronous
+  JSValue global = JS_GetGlobalObject(ctx);
+  JSValue setTimeout_func = JS_GetPropertyStr(ctx, global, "setTimeout");
+
+  if (JS_IsFunction(ctx, setTimeout_func)) {
+    // Create a callback that emits the event
+    // Build callback code with proper argument handling
+    char* code = js_malloc(ctx, 512);
+    if (code) {
+      snprintf(code, 512,
+               "(function(obj, event, ...args) { "
+               "  obj.emit(event, ...args); "
+               "})");
+
+      JSValue callback = JS_Eval(ctx, code, strlen(code), "<emit_async>", JS_EVAL_TYPE_GLOBAL);
+      js_free(ctx, code);
+
+      if (JS_IsFunction(ctx, callback)) {
+        // Build arguments: [callback, 0, obj, event, ...argv]
+        JSValue* timer_argv = js_malloc(ctx, sizeof(JSValue) * (argc + 4));
+        if (timer_argv) {
+          timer_argv[0] = callback;
+          timer_argv[1] = JS_NewInt32(ctx, 0);
+          timer_argv[2] = JS_DupValue(ctx, obj);
+          timer_argv[3] = JS_NewString(ctx, event);
+          for (int i = 0; i < argc; i++) {
+            timer_argv[i + 4] = JS_DupValue(ctx, argv[i]);
+          }
+
+          JSValue result = JS_Call(ctx, setTimeout_func, global, argc + 4, timer_argv);
+          JS_FreeValue(ctx, result);
+
+          // Free all the arguments
+          JS_FreeValue(ctx, callback);
+          JS_FreeValue(ctx, timer_argv[1]);
+          JS_FreeValue(ctx, timer_argv[2]);
+          JS_FreeValue(ctx, timer_argv[3]);
+          for (int i = 0; i < argc; i++) {
+            JS_FreeValue(ctx, timer_argv[i + 4]);
+          }
+          js_free(ctx, timer_argv);
+        }
+      } else {
+        JS_FreeValue(ctx, callback);
+      }
+    }
+  }
+  JS_FreeValue(ctx, setTimeout_func);
+  JS_FreeValue(ctx, global);
+}
+
 // Free a NULL-terminated string array
 void free_string_array(char** arr) {
   if (!arr)

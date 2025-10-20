@@ -1,5 +1,11 @@
+#include <sys/stat.h>
 #include "../../util/debug.h"
 #include "child_process_internal.h"
+
+// External environment variable (POSIX)
+#ifndef _WIN32
+extern char** environ;
+#endif
 
 // Helper to convert JS array to NULL-terminated string array
 static char** js_array_to_string_array(JSContext* ctx, JSValue arr) {
@@ -41,6 +47,15 @@ static char** js_array_to_string_array(JSContext* ctx, JSValue arr) {
 
   result[length] = NULL;
   return result;
+}
+
+// ChildProcess.killed getter
+static JSValue js_child_process_get_killed(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
+  JSChildProcess* child = JS_GetOpaque(this_val, js_child_process_class_id);
+  if (!child) {
+    return JS_ThrowTypeError(ctx, "Not a ChildProcess instance");
+  }
+  return JS_NewBool(ctx, child->killed);
 }
 
 // spawn(command, args, options)
@@ -182,7 +197,13 @@ JSValue js_child_process_spawn(JSContext* ctx, JSValueConst this_val, int argc, 
   uv_args[arg_count] = NULL;
 
   uv_options.args = uv_args;
+  // If no env specified, inherit parent environment
+#ifndef _WIN32
+  uv_options.env = child->env ? child->env : environ;
+#else
+  // On Windows, NULL means inherit
   uv_options.env = child->env;
+#endif
   uv_options.cwd = child->cwd;
   uv_options.stdio_count = options.stdio_count;
   uv_options.stdio = options.stdio;
@@ -210,6 +231,76 @@ JSValue js_child_process_spawn(JSContext* ctx, JSValueConst this_val, int argc, 
   }
 #endif
 
+  // Validate working directory if specified
+  if (child->cwd) {
+    struct stat st;
+    if (stat(child->cwd, &st) != 0) {
+      // Directory doesn't exist
+      JSRT_Debug("cwd validation failed: %s does not exist", child->cwd);
+
+      // Cleanup before error
+      free(uv_args);
+      JS_FreeCString(ctx, command);
+      free_spawn_options(&options);
+
+      // Create error and emit 'error' event
+      JSValue error = JS_NewError(ctx);
+      JS_SetPropertyStr(ctx, error, "code", JS_NewString(ctx, "ENOENT"));
+      JS_SetPropertyStr(ctx, error, "errno", JS_NewInt32(ctx, -2));
+      JS_SetPropertyStr(ctx, error, "path", JS_NewString(ctx, child->cwd));
+      JS_SetPropertyStr(ctx, error, "syscall", JS_NewString(ctx, "spawn"));
+
+      char msg[512];
+      snprintf(msg, sizeof(msg), "spawn %s ENOENT: no such directory '%s'", child->file, child->cwd);
+      JS_SetPropertyStr(ctx, error, "message", JS_NewString(ctx, msg));
+
+      // Add EventEmitter methods before emitting
+      add_event_emitter_methods(ctx, child_obj);
+
+      // Set opaque before emitting
+      JS_SetOpaque(child_obj, child);
+
+      // Emit error event asynchronously
+      JSValue argv_emit[] = {error};
+      emit_event_async(ctx, child_obj, "error", 1, argv_emit);
+
+      return child_obj;
+    }
+
+    if (!S_ISDIR(st.st_mode)) {
+      // Path exists but is not a directory
+      JSRT_Debug("cwd validation failed: %s is not a directory", child->cwd);
+
+      // Cleanup before error
+      free(uv_args);
+      JS_FreeCString(ctx, command);
+      free_spawn_options(&options);
+
+      // Create error and emit 'error' event
+      JSValue error = JS_NewError(ctx);
+      JS_SetPropertyStr(ctx, error, "code", JS_NewString(ctx, "ENOTDIR"));
+      JS_SetPropertyStr(ctx, error, "errno", JS_NewInt32(ctx, -20));
+      JS_SetPropertyStr(ctx, error, "path", JS_NewString(ctx, child->cwd));
+      JS_SetPropertyStr(ctx, error, "syscall", JS_NewString(ctx, "spawn"));
+
+      char msg[512];
+      snprintf(msg, sizeof(msg), "spawn %s ENOTDIR: not a directory '%s'", child->file, child->cwd);
+      JS_SetPropertyStr(ctx, error, "message", JS_NewString(ctx, msg));
+
+      // Add EventEmitter methods before emitting
+      add_event_emitter_methods(ctx, child_obj);
+
+      // Set opaque before emitting
+      JS_SetOpaque(child_obj, child);
+
+      // Emit error event asynchronously
+      JSValue argv_emit[] = {error};
+      emit_event_async(ctx, child_obj, "error", 1, argv_emit);
+
+      return child_obj;
+    }
+  }
+
   // Spawn process
   JSRT_Runtime* rt = JS_GetContextOpaque(ctx);
   child->handle.data = child;
@@ -232,11 +323,9 @@ JSValue js_child_process_spawn(JSContext* ctx, JSValueConst this_val, int argc, 
     // Set opaque before emitting
     JS_SetOpaque(child_obj, child);
 
-    // Emit error event (using nextTick to make it async)
-    JSValue argv_emit[] = {JS_NewString(ctx, "error"), error};
-    emit_event(ctx, child_obj, "error", 2, argv_emit);
-    JS_FreeValue(ctx, argv_emit[0]);
-    JS_FreeValue(ctx, argv_emit[1]);
+    // Emit error event asynchronously
+    JSValue argv_emit[] = {error};
+    emit_event_async(ctx, child_obj, "error", 1, argv_emit);
 
     return child_obj;
   }
@@ -268,6 +357,11 @@ JSValue js_child_process_spawn(JSContext* ctx, JSValueConst this_val, int argc, 
 
   // Set pid property
   JS_SetPropertyStr(ctx, child_obj, "pid", JS_NewInt32(ctx, child->pid));
+
+  // Set killed property as getter
+  JS_DefinePropertyGetSet(ctx, child_obj, JS_NewAtom(ctx, "killed"),
+                          JS_NewCFunction(ctx, js_child_process_get_killed, "get killed", 0), JS_UNDEFINED,
+                          JS_PROP_CONFIGURABLE);
 
   // Set stdin/stdout/stderr properties
   if (!JS_IsUndefined(child->stdin_stream)) {
@@ -320,11 +414,8 @@ JSValue js_child_process_kill(JSContext* ctx, JSValueConst this_val, int argc, J
     }
   }
 
-  JSRT_Debug("Killing process %d with signal %d", child->pid, signal);
-
   int result = uv_process_kill(&child->handle, signal);
   if (result < 0) {
-    JSRT_Debug("uv_process_kill failed: %s", uv_strerror(result));
     return JS_NewBool(ctx, false);
   }
 

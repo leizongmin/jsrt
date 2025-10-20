@@ -202,6 +202,7 @@ void add_event_emitter_methods(JSContext* ctx, JSValue obj);
 const char* signal_name(int signal_num);
 int signal_from_name(const char* name);
 void emit_event(JSContext* ctx, JSValue obj, const char* event, int argc, JSValue* argv);
+void emit_event_async(JSContext* ctx, JSValue obj, const char* event, int argc, JSValue* argv);
 void free_string_array(char** arr);
 char** copy_string_array(const char** arr);
 

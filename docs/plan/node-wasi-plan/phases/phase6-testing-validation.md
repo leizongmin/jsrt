@@ -2,8 +2,8 @@
 :ID: phase-6
 :CREATED: 2025-10-16T22:45:00Z
 :DEPS: phase-5
-:PROGRESS: 6/27
-:COMPLETION: 22%
+:PROGRESS: 8/27
+:COMPLETION: 30%
 :STATUS: 🔵 IN_PROGRESS
 :END:
 
@@ -163,11 +163,13 @@ Create WASM module that reads env and test:
 **** Testing Strategy
 make test N=wasi
 
-*** TODO [#B] Task 6.7: Test file I/O with preopens [P][R:HIGH][C:COMPLEX][D:6.3,3.14]
+*** DONE [#B] Task 6.7: Test file I/O with preopens [P][R:HIGH][C:COMPLEX][D:6.3,3.14]
+CLOSED: [2025-10-20T12:46:19Z]
 :PROPERTIES:
 :ID: 6.7
 :CREATED: 2025-10-16T22:45:00Z
 :DEPS: 6.3,3.14
+:COMPLETED: 2025-10-20T12:46:19Z
 :END:
 
 **** Description
@@ -178,19 +180,25 @@ Test file operations with preopened directories:
 - Verify operations work
 
 **** Acceptance Criteria
-- [ ] File I/O test WASM created
-- [ ] Test passes
-- [ ] Files read/written correctly
-- [ ] Sandboxing enforced
+- [X] File I/O test WASM created
+- [X] Test passes
+- [X] Files read/written correctly
+- [X] Sandboxing enforced
+
+**** Notes
+- Added `test_wasi_fs.js` covering sandbox preopen writes and round-trip reads.
+- Extended `fd_write`/`fd_read` to operate on regular file descriptors with rights enforcement.
 
 **** Testing Strategy
-make test N=wasi
+make test N=wasi; make test; make wpt; make clean && make
 
-*** TODO [#B] Task 6.8: Test sandboxing security [P][R:HIGH][C:COMPLEX][D:6.7]
+*** DONE [#B] Task 6.8: Test sandboxing security [P][R:HIGH][C:COMPLEX][D:6.7]
+CLOSED: [2025-10-20T12:46:19Z]
 :PROPERTIES:
 :ID: 6.8
 :CREATED: 2025-10-16T22:45:00Z
 :DEPS: 6.7
+:COMPLETED: 2025-10-20T12:46:19Z
 :END:
 
 **** Description
@@ -200,12 +208,15 @@ Test that WASI sandboxing prevents access outside preopens:
 - Test path traversal attacks
 
 **** Acceptance Criteria
-- [ ] Security tests created
-- [ ] All tests pass
-- [ ] Path traversal prevented
+- [X] Security tests created
+- [X] All tests pass
+- [X] Path traversal prevented
+
+**** Notes
+- Verified `path_open` rejects traversal (`../`) and absolute escapes via new filesystem test coverage.
 
 **** Testing Strategy
-Security-focused testing.
+make test N=wasi; make test; make wpt; make clean && make
 
 *** TODO [#B] Task 6.9: Test returnOnExit modes [P][R:MED][C:MEDIUM][D:6.3,3.20]
 :PROPERTIES:

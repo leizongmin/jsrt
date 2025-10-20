@@ -58,6 +58,7 @@
 #define WASI_EBUSY __WASI_EBUSY
 #define WASI_ENXIO __WASI_ENXIO
 #define WASI_ENOTSUP __WASI_ENOTSUP
+#define WASI_EISDIR __WASI_EISDIR
 
 static uint8_t* get_wasm_memory(jsrt_wasi_t* wasi, uint32_t offset, uint32_t size);
 
@@ -650,14 +651,30 @@ static JSValue wasi_fd_write(JSContext* ctx, JSValueConst this_val, int argc, JS
   JSRT_Debug("WASI syscall: fd_write(fd=%u, iovs=%u, iovs_len=%u, nwritten=%u)", fd, iovs_ptr, iovs_len, nwritten_ptr);
 
   // Check FD validity
+  jsrt_wasi_fd_entry* entry = NULL;
   int host_fd = -1;
+  bool is_stdio = false;
   if (fd == 1) {
     host_fd = wasi->options.stdout_fd;
+    is_stdio = true;
   } else if (fd == 2) {
     host_fd = wasi->options.stderr_fd;
+    is_stdio = true;
   } else {
-    JSRT_Debug("WASI syscall: fd_write - unsupported fd %u", fd);
-    return JS_NewInt32(ctx, WASI_EBADF);
+    entry = jsrt_wasi_get_fd(wasi, fd);
+    if (!entry) {
+      return JS_NewInt32(ctx, WASI_EBADF);
+    }
+    if (entry->filetype == __WASI_FILETYPE_DIRECTORY || entry->preopen != NULL) {
+      return JS_NewInt32(ctx, WASI_EISDIR);
+    }
+    if (!wasi_has_rights(entry, __WASI_RIGHT_FD_WRITE)) {
+      return JS_NewInt32(ctx, WASI_ENOTCAPABLE);
+    }
+    if (entry->host_fd < 0) {
+      return JS_NewInt32(ctx, WASI_EBADF);
+    }
+    host_fd = entry->host_fd;
   }
 
   // Get iovs array from WASM memory
@@ -690,12 +707,28 @@ static JSValue wasi_fd_write(JSContext* ctx, JSValueConst this_val, int argc, JS
     }
 
     // Write to host FD
-    ssize_t written = write(host_fd, buf, buf_len);
-    if (written < 0) {
-      JSRT_Debug("WASI syscall: fd_write - write failed");
-      return JS_NewInt32(ctx, WASI_EIO);
+    size_t remaining = buf_len;
+    uint8_t* cursor = buf;
+    while (remaining > 0) {
+      ssize_t written = write(host_fd, cursor, remaining);
+      if (written < 0) {
+        int err_code = errno;
+        JSRT_Debug("WASI syscall: fd_write - write failed (fd=%u, errno=%d)", fd, err_code);
+        return JS_NewInt32(ctx, wasi_errno_from_errno(err_code));
+      }
+      if (written == 0) {
+        break;
+      }
+      total_written += written;
+      cursor += written;
+      remaining -= (size_t)written;
+      if (is_stdio) {
+        break;
+      }
     }
-    total_written += written;
+    if (!is_stdio && remaining > 0) {
+      break;
+    }
   }
 
   // Write total bytes written (little-endian)
@@ -731,12 +764,27 @@ static JSValue wasi_fd_read(JSContext* ctx, JSValueConst this_val, int argc, JSV
   JSRT_Debug("WASI syscall: fd_read(fd=%u, iovs=%u, iovs_len=%u, nread=%u)", fd, iovs_ptr, iovs_len, nread_ptr);
 
   // Check FD validity
+  jsrt_wasi_fd_entry* entry = NULL;
   int host_fd = -1;
+  bool is_stdio = false;
   if (fd == 0) {
     host_fd = wasi->options.stdin_fd;
+    is_stdio = true;
   } else {
-    JSRT_Debug("WASI syscall: fd_read - unsupported fd %u", fd);
-    return JS_NewInt32(ctx, WASI_EBADF);
+    entry = jsrt_wasi_get_fd(wasi, fd);
+    if (!entry) {
+      return JS_NewInt32(ctx, WASI_EBADF);
+    }
+    if (entry->filetype == __WASI_FILETYPE_DIRECTORY) {
+      return JS_NewInt32(ctx, WASI_EISDIR);
+    }
+    if (!wasi_has_rights(entry, __WASI_RIGHT_FD_READ)) {
+      return JS_NewInt32(ctx, WASI_ENOTCAPABLE);
+    }
+    if (entry->host_fd < 0) {
+      return JS_NewInt32(ctx, WASI_EBADF);
+    }
+    host_fd = entry->host_fd;
   }
 
   // Get iovs array from WASM memory
@@ -771,13 +819,14 @@ static JSValue wasi_fd_read(JSContext* ctx, JSValueConst this_val, int argc, JSV
     // Read from host FD
     ssize_t bytes_read = read(host_fd, buf, buf_len);
     if (bytes_read < 0) {
-      JSRT_Debug("WASI syscall: fd_read - read failed");
-      return JS_NewInt32(ctx, WASI_EIO);
+      int err_code = errno;
+      JSRT_Debug("WASI syscall: fd_read - read failed (fd=%u, errno=%d)", fd, err_code);
+      return JS_NewInt32(ctx, wasi_errno_from_errno(err_code));
     }
     total_read += bytes_read;
 
     // If we got less than requested, stop (EOF or would block)
-    if ((size_t)bytes_read < buf_len) {
+    if ((size_t)bytes_read < buf_len || (!is_stdio && bytes_read == 0)) {
       break;
     }
   }

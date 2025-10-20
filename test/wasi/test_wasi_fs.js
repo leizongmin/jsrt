@@ -77,6 +77,21 @@ function zeroMemory(view, ptr, length) {
   }
 }
 
+function readUint64(view, ptr) {
+  const low = view.getUint32(ptr, true);
+  const high = view.getUint32(ptr + 4, true);
+  return (BigInt(high) << 32n) | BigInt(low);
+}
+
+function arraysEqual(a, b, length) {
+  for (let i = 0; i < length; i += 1) {
+    if (a[i] !== b[i]) {
+      return false;
+    }
+  }
+  return true;
+}
+
 function runFileIOTests() {
   console.log('========================================');
   console.log('WASI File I/O Tests');
@@ -100,6 +115,9 @@ function runFileIOTests() {
     const dataPtr = 0x800;
     const readPtr = 0x1000;
     const countPtr = 0x1200;
+    const largeChunkPtr = 0x2000;
+    const largeReadPtr = 0x4000;
+    const filestatPtr = 0x6000;
 
     const PREOPEN_FD = 3;
 
@@ -276,10 +294,172 @@ function runFileIOTests() {
     );
 
     console.log('Test 2 passed.');
+
+    console.log('Test 3: Large file read/write handles multi-MB payloads');
+    const largeFile = 'large.bin';
+    const chunkSize = 4096;
+    const chunkCount = 512; // 2 MB total
+    const totalBytes = chunkSize * chunkCount;
+
+    zeroMemory(view, pathPtr, 256);
+    writeString(view, pathPtr, largeFile);
+
+    zeroMemory(view, openedFdPtr, 8);
+    const largeCreateResult = wasiNS.path_open(
+      PREOPEN_FD,
+      0,
+      pathPtr,
+      largeFile.length,
+      WASI_O_CREAT | WASI_O_TRUNC,
+      FILE_RIGHTS,
+      FILE_RIGHTS,
+      0,
+      openedFdPtr
+    );
+    assert.strictEqual(
+      largeCreateResult,
+      WASI_ERRNO_SUCCESS,
+      'path_open should create large file within sandbox'
+    );
+
+    const largeFd = view.getUint32(openedFdPtr, true);
+    assert.ok(largeFd >= 4, 'Large file descriptor should be allocated');
+
+    const chunkData = new Uint8Array(chunkSize);
+    for (let i = 0; i < chunkSize; i += 1) {
+      chunkData[i] = i & 0xff;
+    }
+    zeroMemory(view, largeChunkPtr, chunkSize);
+    writeBytes(view, largeChunkPtr, chunkData);
+
+    view.setUint32(iovPtr, largeChunkPtr, true);
+    view.setUint32(iovPtr + 4, chunkSize, true);
+
+    const largeCountPtr = countPtr;
+    zeroMemory(view, largeCountPtr, 4);
+
+    let writtenTotal = 0;
+    for (let i = 0; i < chunkCount; i += 1) {
+      zeroMemory(view, largeCountPtr, 4);
+      const writeResult = wasiNS.fd_write(largeFd, iovPtr, 1, largeCountPtr);
+      assert.strictEqual(
+        writeResult,
+        WASI_ERRNO_SUCCESS,
+        'fd_write should succeed for large file chunk'
+      );
+      const bytesWritten = view.getUint32(largeCountPtr, true);
+      assert.strictEqual(
+        bytesWritten,
+        chunkSize,
+        'Each fd_write should report full chunk written'
+      );
+      writtenTotal += bytesWritten;
+    }
+    assert.strictEqual(
+      writtenTotal,
+      totalBytes,
+      'Total written bytes should match expected size'
+    );
+
+    assert.strictEqual(
+      wasiNS.fd_close(largeFd),
+      WASI_ERRNO_SUCCESS,
+      'fd_close should succeed for large file'
+    );
+
+    zeroMemory(view, openedFdPtr, 8);
+    const largeReopenResult = wasiNS.path_open(
+      PREOPEN_FD,
+      0,
+      pathPtr,
+      largeFile.length,
+      0,
+      RIGHTS.FD_READ | RIGHTS.FD_SEEK,
+      RIGHTS.FD_READ | RIGHTS.FD_SEEK,
+      0,
+      openedFdPtr
+    );
+    assert.strictEqual(
+      largeReopenResult,
+      WASI_ERRNO_SUCCESS,
+      'path_open should reopen large file for reading'
+    );
+
+    const largeReadFd = view.getUint32(openedFdPtr, true);
+    view.setUint32(iovPtr, largeReadPtr, true);
+    view.setUint32(iovPtr + 4, chunkSize, true);
+
+    zeroMemory(view, largeReadPtr, chunkSize);
+    zeroMemory(view, countPtr + 4, 4);
+
+    let readTotal = 0;
+    while (true) {
+      const nreadPtr = countPtr + 4;
+      zeroMemory(view, nreadPtr, 4);
+      const readResult = wasiNS.fd_read(largeReadFd, iovPtr, 1, nreadPtr);
+      assert.strictEqual(
+        readResult,
+        WASI_ERRNO_SUCCESS,
+        'fd_read should succeed for large file chunk'
+      );
+      const bytesRead = view.getUint32(nreadPtr, true);
+      if (bytesRead === 0) {
+        break;
+      }
+
+      const chunkView = new Uint8Array(memory.buffer, largeReadPtr, bytesRead);
+      assert.ok(
+        arraysEqual(chunkData, chunkView, bytesRead),
+        'Read bytes should match expected pattern'
+      );
+
+      readTotal += bytesRead;
+    }
+
+    assert.strictEqual(
+      readTotal,
+      totalBytes,
+      'Total read bytes should match expected size'
+    );
+
+    assert.strictEqual(
+      wasiNS.fd_close(largeReadFd),
+      WASI_ERRNO_SUCCESS,
+      'fd_close should succeed for large file read handle'
+    );
+
+    const hostLargeFile = path.join(tempDir, largeFile);
+    const hostStats = fs.statSync(hostLargeFile);
+    assert.strictEqual(
+      hostStats.size,
+      totalBytes,
+      'Host filesystem should report full large file size'
+    );
+
+    zeroMemory(view, filestatPtr, 72);
+    const filestatResult = wasiNS.path_filestat_get(
+      PREOPEN_FD,
+      0,
+      pathPtr,
+      largeFile.length,
+      filestatPtr
+    );
+    assert.strictEqual(
+      filestatResult,
+      WASI_ERRNO_SUCCESS,
+      'path_filestat_get should succeed for large file'
+    );
+    const wasmReportedSize = readUint64(view, filestatPtr + 32);
+    assert.strictEqual(
+      wasmReportedSize,
+      BigInt(totalBytes),
+      'WASI filestat size should match host size'
+    );
+
+    console.log('Test 3 passed.');
     console.log('All WASI file system tests passed.');
   } finally {
     fs.rmSync(tempDir, { recursive: true, force: true });
   }
 }
-
 runFileIOTests();

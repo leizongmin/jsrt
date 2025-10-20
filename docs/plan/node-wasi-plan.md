@@ -8,7 +8,7 @@
 * Task Metadata
 :PROPERTIES:
 :CREATED: 2025-10-16T22:45:00Z
-:UPDATED: 2025-10-20T16:42:57Z
+:UPDATED: 2025-10-20T17:04:45Z
 :STATUS: 🔵 IN_PROGRESS
 :PROGRESS: 125/141
 :COMPLETION: 89%
@@ -178,6 +178,7 @@ See: docs/webassembly-api-compatibility.md for details.
 ** Recent Changes
 | Timestamp | Action | Task ID | Details |
 |-----------|--------|---------|---------|
+| 2025-10-20T17:04:45Z | Blocked | Task 6.14 | Attempted to download wasi-sdk-24; network transfer exceeded sandbox timeout, tooling still unavailable. |
 | 2025-10-20T16:42:57Z | Completed | Task 6.25 | Confirmed Linux platform coverage by rerunning `make test`, `make wpt`; no platform-specific regressions detected. |
 | 2025-10-20T16:37:55Z | Completed | Task 6.24 | Ran `make format`, `make test`, `make wpt`, and `make clean && make` to establish WASI baseline. |
 | 2025-10-20T16:32:28Z | Completed | Tasks 6.19-6.23 | Added large-file stress, Unicode args/env, and clock/random WASI tests; suite consolidated under make test N=wasi. |

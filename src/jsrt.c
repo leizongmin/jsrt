@@ -1,6 +1,7 @@
 #include "jsrt.h"
 
 #include <limits.h>
+#include <quickjs.h>
 #include <stdbool.h>
 #include <stdint.h>
 #include <stdio.h>
@@ -18,6 +19,7 @@
 #include "std/module.h"
 #include "util/file.h"
 #include "util/http_client.h"
+#include "util/path.h"
 
 // External references to global variables (defined in node/process/module.c)
 extern int jsrt_argc;
@@ -31,6 +33,9 @@ static const char* jsrt_get_version_string(void);
 static char* jsrt_cli_resolve_path(const char* filename);
 static char* jsrt_cli_normalize_path(const char* path);
 static bool jsrt_cli_is_absolute_path(const char* path);
+static char* jsrt_cli_dirname(const char* path);
+static int jsrt_cli_run_commonjs(JSRT_Runtime* rt, const char* eval_name, const char* module_filename, const char* code,
+                                 size_t length);
 
 // Helper function to check if a string is a URL
 static bool is_url(const char* str) {
@@ -102,6 +107,223 @@ static JSRT_ReadFileResult download_url(const char* url) {
   return result;
 }
 
+static char* jsrt_cli_dirname(const char* path) {
+  if (!path) {
+    return strdup(".");
+  }
+
+  const char* last_sep = NULL;
+  for (const char* p = path; *p; p++) {
+    if (*p == '/' || *p == '\\') {
+      last_sep = p;
+    }
+  }
+
+  if (!last_sep) {
+    return strdup(".");
+  }
+
+  size_t len = (size_t)(last_sep - path);
+  if (len == 0) {
+    return strdup("/");
+  }
+
+  char* dirname = malloc(len + 1);
+  if (!dirname) {
+    return NULL;
+  }
+
+  memcpy(dirname, path, len);
+  dirname[len] = '\0';
+  return dirname;
+}
+
+static int jsrt_cli_run_commonjs(JSRT_Runtime* rt, const char* eval_name, const char* module_filename, const char* code,
+                                 size_t length) {
+  if (!rt || !code) {
+    return -1;
+  }
+
+  JSContext* ctx = rt->ctx;
+  const char* filename_value = module_filename ? module_filename : eval_name;
+  if (!filename_value) {
+    filename_value = "<anonymous>";
+  }
+
+  const char* code_start = code;
+  size_t code_length = length;
+  if (length >= 2 && code[0] == '#' && code[1] == '!') {
+    const char* newline = memchr(code, '\n', length);
+    if (newline) {
+      code_start = newline + 1;
+      code_length = length - (size_t)(code_start - code);
+    } else {
+      code_start = code + length;
+      code_length = 0;
+    }
+  }
+
+  size_t wrapper_size = code_length + 256;
+  char* wrapper = (char*)malloc(wrapper_size);
+  if (!wrapper) {
+    fprintf(stderr, "Error: Failed to allocate CommonJS wrapper\n");
+    return -1;
+  }
+
+  snprintf(wrapper, wrapper_size,
+           "(function() {\n"
+           "%s\n"
+           "})",
+           code_start);
+
+  JSValue func = JS_Eval(ctx, wrapper, strlen(wrapper), filename_value, JS_EVAL_TYPE_GLOBAL);
+  free(wrapper);
+
+  JSValue module_obj = JS_UNDEFINED;
+  JSValue exports_obj = JS_UNDEFINED;
+  JSValue global_obj = JS_UNDEFINED;
+  JSValue call_result = JS_UNDEFINED;
+  JSValue exception = JS_UNDEFINED;
+  JSValue prev_module = JS_UNDEFINED;
+  JSValue prev_exports = JS_UNDEFINED;
+  JSValue prev_filename = JS_UNDEFINED;
+  JSValue prev_dirname = JS_UNDEFINED;
+  char* dirname = NULL;
+  int status = -1;
+  bool globals_overridden = false;
+
+  if (JS_IsException(func)) {
+    exception = JS_GetException(ctx);
+    goto cleanup;
+  }
+
+  module_obj = JS_NewObject(ctx);
+  if (JS_IsException(module_obj)) {
+    exception = JS_GetException(ctx);
+    goto cleanup;
+  }
+
+  exports_obj = JS_NewObject(ctx);
+  if (JS_IsException(exports_obj)) {
+    exception = JS_GetException(ctx);
+    goto cleanup;
+  }
+
+  if (JS_SetPropertyStr(ctx, module_obj, "exports", JS_DupValue(ctx, exports_obj)) < 0) {
+    exception = JS_GetException(ctx);
+    goto cleanup;
+  }
+
+  if (JS_SetPropertyStr(ctx, module_obj, "id", JS_NewString(ctx, filename_value)) < 0 ||
+      JS_SetPropertyStr(ctx, module_obj, "filename", JS_NewString(ctx, filename_value)) < 0 ||
+      JS_SetPropertyStr(ctx, module_obj, "loaded", JS_NewBool(ctx, false)) < 0) {
+    exception = JS_GetException(ctx);
+    goto cleanup;
+  }
+
+  dirname = jsrt_cli_dirname(filename_value);
+  const char* dirname_value = dirname ? dirname : ".";
+
+  global_obj = JS_GetGlobalObject(ctx);
+  if (JS_IsException(global_obj)) {
+    exception = JS_GetException(ctx);
+    goto cleanup;
+  }
+
+  prev_module = JS_GetPropertyStr(ctx, global_obj, "module");
+  if (JS_IsException(prev_module)) {
+    exception = JS_GetException(ctx);
+    goto cleanup;
+  }
+  prev_exports = JS_GetPropertyStr(ctx, global_obj, "exports");
+  if (JS_IsException(prev_exports)) {
+    exception = JS_GetException(ctx);
+    goto cleanup;
+  }
+  prev_filename = JS_GetPropertyStr(ctx, global_obj, "__filename");
+  if (JS_IsException(prev_filename)) {
+    exception = JS_GetException(ctx);
+    goto cleanup;
+  }
+  prev_dirname = JS_GetPropertyStr(ctx, global_obj, "__dirname");
+  if (JS_IsException(prev_dirname)) {
+    exception = JS_GetException(ctx);
+    goto cleanup;
+  }
+
+  if (JS_SetPropertyStr(ctx, global_obj, "module", JS_DupValue(ctx, module_obj)) < 0 ||
+      JS_SetPropertyStr(ctx, global_obj, "exports", JS_DupValue(ctx, exports_obj)) < 0 ||
+      JS_SetPropertyStr(ctx, global_obj, "__filename", JS_NewString(ctx, filename_value)) < 0 ||
+      JS_SetPropertyStr(ctx, global_obj, "__dirname", JS_NewString(ctx, dirname_value)) < 0) {
+    exception = JS_GetException(ctx);
+    goto cleanup;
+  }
+  globals_overridden = true;
+
+  call_result = JS_Call(ctx, func, global_obj, 0, NULL);
+  if (JS_IsException(call_result)) {
+    exception = JS_GetException(ctx);
+    goto cleanup;
+  }
+
+  JS_FreeValue(ctx, call_result);
+  JS_SetPropertyStr(ctx, module_obj, "loaded", JS_NewBool(ctx, true));
+
+  status = 0;
+
+cleanup:
+  if (globals_overridden) {
+    JS_SetPropertyStr(ctx, global_obj, "module", prev_module);
+    JS_SetPropertyStr(ctx, global_obj, "exports", prev_exports);
+    JS_SetPropertyStr(ctx, global_obj, "__filename", prev_filename);
+    JS_SetPropertyStr(ctx, global_obj, "__dirname", prev_dirname);
+    prev_module = prev_exports = prev_filename = prev_dirname = JS_UNDEFINED;
+  } else {
+    if (!JS_IsUndefined(prev_module)) {
+      JS_FreeValue(ctx, prev_module);
+    }
+    if (!JS_IsUndefined(prev_exports)) {
+      JS_FreeValue(ctx, prev_exports);
+    }
+    if (!JS_IsUndefined(prev_filename)) {
+      JS_FreeValue(ctx, prev_filename);
+    }
+    if (!JS_IsUndefined(prev_dirname)) {
+      JS_FreeValue(ctx, prev_dirname);
+    }
+  }
+  if (!JS_IsUndefined(global_obj)) {
+    JS_FreeValue(ctx, global_obj);
+  }
+  if (!JS_IsUndefined(func)) {
+    JS_FreeValue(ctx, func);
+  }
+  if (!JS_IsUndefined(exports_obj)) {
+    JS_FreeValue(ctx, exports_obj);
+  }
+  if (!JS_IsUndefined(module_obj)) {
+    JS_FreeValue(ctx, module_obj);
+  }
+  free(dirname);
+
+  if (status != 0) {
+    if (!JS_IsUndefined(exception)) {
+      char* error = JSRT_RuntimeGetExceptionString(rt, exception);
+      if (error) {
+        fprintf(stderr, "%s\n", error);
+        free(error);
+      }
+      JSRT_RuntimeFreeValue(rt, exception);
+    } else {
+      fprintf(stderr, "Error: Failed to execute CommonJS module '%s'\n", filename_value ? filename_value : "<unknown>");
+    }
+  } else if (!JS_IsUndefined(exception)) {
+    JSRT_RuntimeFreeValue(rt, exception);
+  }
+
+  return status;
+}
+
 int JSRT_CmdRunFile(const char* filename, bool compact_node, int argc, char** argv) {
   // Store command line arguments for process module
   jsrt_argc = argc;
@@ -117,6 +339,9 @@ int JSRT_CmdRunFile(const char* filename, bool compact_node, int argc, char** ar
   JSRT_ReadFileResult file = JSRT_ReadFileResultDefault();
   JSRT_EvalResult res = JSRT_EvalResultDefault();
   JSRT_EvalResult res2 = JSRT_EvalResultDefault();
+  const char* module_filename = NULL;
+  bool treat_as_module = false;
+  bool used_runtime_eval = false;
   char* entry_path = NULL;
 
   if (is_url(filename)) {
@@ -144,25 +369,38 @@ int JSRT_CmdRunFile(const char* filename, bool compact_node, int argc, char** ar
     goto end;
   }
 
-  res = JSRT_RuntimeEval(rt, filename, file.data, file.size);
-  if (res.is_error) {
-    fprintf(stderr, "%s\n", res.error);
-    ret = 1;
-    goto end;
-  }
+  module_filename = entry_path ? entry_path : filename;
+  treat_as_module = JSRT_PathHasSuffix(filename, ".mjs") || JS_DetectModule((const uint8_t*)file.data, file.size);
 
-  res2 = JSRT_RuntimeAwaitEvalResult(rt, &res);
-  if (res2.is_error) {
-    fprintf(stderr, "%s\n", res2.error);
-    ret = 1;
-    goto end;
+  if (treat_as_module) {
+    used_runtime_eval = true;
+    res = JSRT_RuntimeEval(rt, filename, file.data, file.size);
+    if (res.is_error) {
+      fprintf(stderr, "%s\n", res.error);
+      ret = 1;
+      goto end;
+    }
+
+    res2 = JSRT_RuntimeAwaitEvalResult(rt, &res);
+    if (res2.is_error) {
+      fprintf(stderr, "%s\n", res2.error);
+      ret = 1;
+      goto end;
+    }
+  } else {
+    if (jsrt_cli_run_commonjs(rt, filename, module_filename, file.data, file.size) != 0) {
+      ret = 1;
+      goto end;
+    }
   }
 
   JSRT_RuntimeRun(rt);
 
 end:
-  JSRT_EvalResultFree(&res2);
-  JSRT_EvalResultFree(&res);
+  if (used_runtime_eval) {
+    JSRT_EvalResultFree(&res2);
+    JSRT_EvalResultFree(&res);
+  }
   JSRT_ReadFileResultFree(&file);
   if (entry_path) {
     free(entry_path);

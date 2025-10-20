@@ -1,21 +1,22 @@
 #include "../../util/debug.h"
 #include "child_process_internal.h"
 
-// TODO: Implement finalizer
+// Finalizer for ChildProcess instances
 void js_child_process_finalizer(JSRuntime* rt, JSValue val) {
   JSChildProcess* child = JS_GetOpaque(val, js_child_process_class_id);
   if (!child) {
     return;
   }
 
-  JSRT_Debug("Finalizing ChildProcess");
+  JSRT_Debug("Finalizing ChildProcess (PID: %d)", child->pid);
 
   // Don't finalize if we're in a callback
   if (child->in_callback) {
+    JSRT_Debug("Skipping finalization - in callback");
     return;
   }
 
-  // Free resources
+  // Free owned string resources
   if (child->cwd)
     free(child->cwd);
   if (child->env)
@@ -29,14 +30,24 @@ void js_child_process_finalizer(JSRuntime* rt, JSValue val) {
   if (child->stderr_buffer)
     free(child->stderr_buffer);
 
-  // Free streams (need runtime context - skip for now in finalizer)
-  // JS_FreeValue is not safe in finalizer without context
+  // Note: JSValue fields (child_obj, stdin_stream, stdout_stream, stderr_stream)
+  // cannot be freed here because we don't have JSContext in finalizer.
+  // They will be garbage collected by QuickJS.
 
+  // Free the child structure
   js_free_rt(rt, child);
 }
 
-// TODO: Implement close callback
+// Close callback for stdio pipes and process handle
 void child_process_close_callback(uv_handle_t* handle) {
   JSRT_Debug("ChildProcess handle closed");
-  // Placeholder
+
+  // For stdio pipes, we just free the pipe structure
+  // The pipe is malloc'd, not js_malloc'd
+  if (handle->type == UV_NAMED_PIPE || handle->type == UV_TCP) {
+    free(handle);
+  }
+
+  // For process handle, we don't free anything
+  // The handle is embedded in JSChildProcess structure
 }

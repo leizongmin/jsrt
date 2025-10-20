@@ -135,6 +135,7 @@ void free_spawn_options(JSChildProcessOptions* options);
 
 // ===== Stdio Management (child_process_stdio.c) =====
 int setup_stdio_pipes(JSContext* ctx, JSChildProcess* child, const JSChildProcessOptions* options);
+int start_stdio_reading(JSContext* ctx, JSChildProcess* child);
 void close_stdio_pipes(JSChildProcess* child);
 JSValue create_stdin_stream(JSContext* ctx, uv_pipe_t* pipe);
 JSValue create_stdout_stream(JSContext* ctx, uv_pipe_t* pipe);

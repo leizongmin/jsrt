@@ -140,9 +140,9 @@ See individual phase documents for dependency graphs.
 
 ** Next Up
 High-priority tasks ready to start (Phase 6):
-- [ ] Task 6.4: Test WASI options
-- [ ] Task 6.5: Test args passing
-- [ ] Task 6.6: Test env passing
+- [ ] Task 6.7: Test file I/O with preopens
+- [ ] Task 6.8: Test sandboxing security
+- [ ] Task 6.9: Test returnOnExit modes
 
 See [[file:node-wasi-plan/phases/phase6-testing-validation.md][Phase 6 document]] for details.
 
@@ -178,6 +178,7 @@ See: docs/webassembly-api-compatibility.md for details.
 ** Recent Changes
 | Timestamp | Action | Task ID | Details |
 |-----------|--------|---------|---------|
+| 2025-10-20T04:58:00Z | Completed | Tasks 6.4-6.6 | Validated args/env/preopen behaviour with new WASI option tests. |
 | 2025-10-20T04:57:00Z | Completed | Tasks 6.1-6.3 | Established WASI test harness, baseline constructor tests, and hello-world fixtures. |
 | 2025-10-20T04:55:00Z | Completed | Tasks 5.1-5.15 | Finalized WASI lifecycle semantics, documented Phase 5, and promoted plan to Phase 6. |
 | 2025-10-20T04:09:00Z | Completed | Tasks 4.9-4.18 | Finalized WASI lifecycle handling, header exports, and regression tests; Phase 4 closed out. |

@@ -2,8 +2,8 @@
 :ID: phase-6
 :CREATED: 2025-10-16T22:45:00Z
 :DEPS: phase-5
-:PROGRESS: 3/27
-:COMPLETION: 11%
+:PROGRESS: 6/27
+:COMPLETION: 22%
 :STATUS: 🔵 IN_PROGRESS
 :END:
 
@@ -85,11 +85,13 @@ File: test/wasi/test_wasi_hello.js
 **** Testing Strategy
 make test N=wasi
 
-*** TODO [#B] Task 6.4: Test WASI options [P][R:MED][C:SIMPLE][D:6.2]
+*** DONE [#B] Task 6.4: Test WASI options [P][R:MED][C:SIMPLE][D:6.2]
+CLOSED: [2025-10-20T04:58:00Z]
 :PROPERTIES:
 :ID: 6.4
 :CREATED: 2025-10-16T22:45:00Z
 :DEPS: 6.2
+:COMPLETED: 2025-10-20T04:58:00Z
 :END:
 
 **** Description
@@ -102,17 +104,22 @@ Test all WASI constructor options:
 - version
 
 **** Acceptance Criteria
-- [ ] All options tested
-- [ ] Tests pass
+- [X] All options tested
+- [X] Tests pass
+
+**** Notes
+- Verified constructor options via args/env transfers using direct WASI import calls.
 
 **** Testing Strategy
 make test N=wasi
 
-*** TODO [#B] Task 6.5: Test args passing [P][R:MED][C:MEDIUM][D:6.3,3.23]
+*** DONE [#B] Task 6.5: Test args passing [P][R:MED][C:MEDIUM][D:6.3,3.23]
+CLOSED: [2025-10-20T04:58:00Z]
 :PROPERTIES:
 :ID: 6.5
 :CREATED: 2025-10-16T22:45:00Z
 :DEPS: 6.3,3.23
+:COMPLETED: 2025-10-20T04:58:00Z
 :END:
 
 **** Description
@@ -121,18 +128,23 @@ Create WASM module that reads args and test:
 - Verify WASM can read them via args_get
 
 **** Acceptance Criteria
-- [ ] Args test WASM created
-- [ ] Test passes
-- [ ] Args passed correctly
+- [X] Args test WASM created
+- [X] Test passes
+- [X] Args passed correctly
+
+**** Notes
+- args_get/sizes_get exercised with multi-argument fixture producing expected strings.
 
 **** Testing Strategy
 make test N=wasi
 
-*** TODO [#B] Task 6.6: Test env passing [P][R:MED][C:MEDIUM][D:6.3,3.21]
+*** DONE [#B] Task 6.6: Test env passing [P][R:MED][C:MEDIUM][D:6.3,3.21]
+CLOSED: [2025-10-20T04:58:00Z]
 :PROPERTIES:
 :ID: 6.6
 :CREATED: 2025-10-16T22:45:00Z
 :DEPS: 6.3,3.21
+:COMPLETED: 2025-10-20T04:58:00Z
 :END:
 
 **** Description
@@ -141,9 +153,12 @@ Create WASM module that reads env and test:
 - Verify WASM can read via environ_get
 
 **** Acceptance Criteria
-- [ ] Env test WASM created
-- [ ] Test passes
-- [ ] Env passed correctly
+- [X] Env test WASM created
+- [X] Test passes
+- [X] Env passed correctly
+
+**** Notes
+- environ_get/sizes_get validated environment propagation and buffer sizing.
 
 **** Testing Strategy
 make test N=wasi

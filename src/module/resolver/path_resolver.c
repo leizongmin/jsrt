@@ -33,10 +33,10 @@ char* jsrt_try_extensions(const char* base_path) {
 
   MODULE_DEBUG_RESOLVER("Trying extensions for '%s'", base_path);
 
-  // Extensions to try in order
-  const char* extensions[] = {".js", ".mjs", ".cjs", ""};
+  // Extensions to try in order (Node.js compatible order)
+  const char* extensions[] = {".js", ".json", ".mjs", ".cjs", ""};
 
-  for (int i = 0; i < 4; i++) {
+  for (int i = 0; i < 5; i++) {
     const char* ext = extensions[i];
     size_t total_len = strlen(base_path) + strlen(ext) + 1;
     char* full_path = (char*)malloc(total_len);

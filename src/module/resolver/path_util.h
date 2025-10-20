@@ -76,6 +76,14 @@ bool jsrt_is_absolute_path(const char* path);
 bool jsrt_is_relative_path(const char* path);
 
 /**
+ * Resolve symlinks to get the real path
+ * @param path Path to resolve (may be a symlink)
+ * @return Newly allocated real path (caller must free), or copy of path if not a symlink
+ * @note On error or if realpath() is not available, returns a copy of the input path
+ */
+char* jsrt_resolve_symlink(const char* path);
+
+/**
  * Resolve a relative path against a base path
  * @param base_path Base path (file or directory)
  * @param relative_path Relative path to resolve

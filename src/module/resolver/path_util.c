@@ -4,9 +4,14 @@
 
 #include "path_util.h"
 
+#include <limits.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+
+#ifndef _WIN32
+#include <unistd.h>
+#endif
 
 #include "../util/module_debug.h"
 
@@ -151,6 +156,29 @@ bool jsrt_is_relative_path(const char* path) {
 
   // Check for ./ or ../
   return (path[0] == '.' && (jsrt_is_path_separator(path[1]) || (path[1] == '.' && jsrt_is_path_separator(path[2]))));
+}
+
+char* jsrt_resolve_symlink(const char* path) {
+  if (!path)
+    return NULL;
+
+#ifdef _WIN32
+  // Windows doesn't have realpath, just return a copy
+  // TODO: Consider using GetFinalPathNameByHandle for Windows symlink resolution
+  MODULE_DEBUG_RESOLVER("Symlink resolution not supported on Windows, returning copy: %s", path);
+  return strdup(path);
+#else
+  // Use realpath to resolve symlinks on Unix systems
+  char* resolved = realpath(path, NULL);
+  if (resolved) {
+    MODULE_DEBUG_RESOLVER("Resolved symlink '%s' to '%s'", path, resolved);
+    return resolved;
+  } else {
+    // If realpath fails (e.g., file doesn't exist), return a copy
+    MODULE_DEBUG_RESOLVER("realpath failed for '%s', returning copy", path);
+    return strdup(path);
+  }
+#endif
 }
 
 char* jsrt_resolve_relative_path(const char* base_path, const char* relative_path) {

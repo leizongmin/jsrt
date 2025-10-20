@@ -13,8 +13,10 @@
 #include "../loaders/builtin_loader.h"
 #include "../loaders/commonjs_loader.h"
 #include "../loaders/esm_loader.h"
+#include "../loaders/json_loader.h"
 #include "../protocols/protocol_dispatcher.h"
 #include "../resolver/path_resolver.h"
+#include "../resolver/path_util.h"
 #include "../util/module_debug.h"
 #include "../util/module_errors.h"
 #include "module_cache.h"
@@ -99,6 +101,19 @@ JSValue jsrt_load_module(JSRT_ModuleLoader* loader, const char* specifier, const
   MODULE_DEBUG_LOADER("Resolved to: %s (protocol: %s)", resolved->resolved_path,
                       resolved->protocol ? resolved->protocol : "file");
 
+  // Step 2.5: Resolve symlinks for file:// paths (not URLs or builtins)
+  // This ensures __filename, __dirname, and base_path for nested requires use real paths
+  if (!resolved->is_url && !resolved->is_builtin && resolved->resolved_path) {
+    char* real_path = jsrt_resolve_symlink(resolved->resolved_path);
+    if (real_path && strcmp(real_path, resolved->resolved_path) != 0) {
+      MODULE_DEBUG_LOADER("Resolved symlink: %s -> %s", resolved->resolved_path, real_path);
+      free(resolved->resolved_path);
+      resolved->resolved_path = real_path;
+    } else if (real_path) {
+      free(real_path);
+    }
+  }
+
   // Step 3: Check cache with resolved path
   if (loader->enable_cache && loader->cache) {
     JSValue cached = jsrt_module_cache_get(loader->cache, resolved->resolved_path);
@@ -144,8 +159,7 @@ JSValue jsrt_load_module(JSRT_ModuleLoader* loader, const char* specifier, const
 
     case JSRT_MODULE_FORMAT_JSON:
       MODULE_DEBUG_LOADER("Loading as JSON module");
-      // TODO: Implement JSON loader
-      result = jsrt_module_throw_error(loader->ctx, JSRT_MODULE_LOAD_FAILED, "JSON modules not yet implemented");
+      result = jsrt_load_json_module(loader->ctx, loader, resolved->resolved_path, specifier);
       break;
 
     case JSRT_MODULE_FORMAT_UNKNOWN:

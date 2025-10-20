@@ -712,10 +712,10 @@ static char* resolve_module_path(const char* module_name, const char* base_path)
 }
 
 static char* try_extensions(const char* base_path) {
-  const char* extensions[] = {".js", ".mjs", ""};
+  const char* extensions[] = {".js", ".json", ".mjs", ""};
   size_t base_len = strlen(base_path);
 
-  for (int i = 0; i < 3; i++) {
+  for (int i = 0; i < 4; i++) {
     const char* ext = extensions[i];
     size_t ext_len = strlen(ext);
     char* full_path = malloc(base_len + ext_len + 1);
@@ -1425,6 +1425,30 @@ static JSValue js_require(JSContext* ctx, JSValueConst this_val, int argc, JSVal
     free(esm_context_path);
     JSRT_ReadFileResultFree(&file_result);
     return thrown;
+  }
+
+  // Check if this is a JSON file
+  size_t path_len = strlen(final_path);
+  if (path_len >= 5 && strcmp(final_path + path_len - 5, ".json") == 0) {
+    JSRT_Debug("js_require: loading JSON file: %s", final_path);
+    // Parse as JSON
+    JSValue json_obj = JS_ParseJSON(ctx, file_result.data, file_result.size, final_path);
+    JSRT_ReadFileResultFree(&file_result);
+
+    if (JS_IsException(json_obj)) {
+      JS_FreeCString(ctx, module_name);
+      free(final_path);
+      free(esm_context_path);
+      return json_obj;
+    }
+
+    // Cache the JSON object
+    cache_module(ctx, final_path, json_obj);
+
+    JS_FreeCString(ctx, module_name);
+    free(final_path);
+    free(esm_context_path);
+    return json_obj;
   }
 
   // Create isolated module context

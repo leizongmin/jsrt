@@ -835,36 +835,51 @@ static char* jsrt_cli_resolve_path(const char* filename) {
     return NULL;
   }
 
+  char* normalized = NULL;
   if (jsrt_cli_is_absolute_path(filename)) {
-    return jsrt_cli_normalize_path(filename);
-  }
-
-  char* cwd = jsrt_cli_get_cwd();
-  if (!cwd) {
-    return NULL;
-  }
-
-  size_t cwd_len = strlen(cwd);
-  size_t filename_len = strlen(filename);
-  bool needs_separator = cwd_len > 0 && !JSRT_CLI_IS_PATH_SEPARATOR(cwd[cwd_len - 1]);
-
-  size_t combined_len = cwd_len + (needs_separator ? 1 : 0) + filename_len + 1;
-  char* combined = (char*)malloc(combined_len);
-  if (!combined) {
-    free(cwd);
-    return NULL;
-  }
-
-  if (needs_separator) {
-    snprintf(combined, combined_len, "%s%s%s", cwd, JSRT_CLI_PATH_SEPARATOR_STR, filename);
+    normalized = jsrt_cli_normalize_path(filename);
   } else {
-    snprintf(combined, combined_len, "%s%s", cwd, filename);
+    char* cwd = jsrt_cli_get_cwd();
+    if (!cwd) {
+      return NULL;
+    }
+
+    size_t cwd_len = strlen(cwd);
+    size_t filename_len = strlen(filename);
+    bool needs_separator = cwd_len > 0 && !JSRT_CLI_IS_PATH_SEPARATOR(cwd[cwd_len - 1]);
+
+    size_t combined_len = cwd_len + (needs_separator ? 1 : 0) + filename_len + 1;
+    char* combined = (char*)malloc(combined_len);
+    if (!combined) {
+      free(cwd);
+      return NULL;
+    }
+
+    if (needs_separator) {
+      snprintf(combined, combined_len, "%s%s%s", cwd, JSRT_CLI_PATH_SEPARATOR_STR, filename);
+    } else {
+      snprintf(combined, combined_len, "%s%s", cwd, filename);
+    }
+
+    free(cwd);
+    normalized = jsrt_cli_normalize_path(combined);
+    free(combined);
   }
 
-  free(cwd);
-  char* normalized = jsrt_cli_normalize_path(combined);
-  free(combined);
+  // Resolve symlinks to get the real path
+#ifdef _WIN32
+  // Windows doesn't have realpath, just return normalized path
   return normalized;
+#else
+  char* real_path = realpath(normalized, NULL);
+  if (real_path) {
+    free(normalized);
+    return real_path;
+  } else {
+    // If realpath fails (e.g., file doesn't exist), return normalized path
+    return normalized;
+  }
+#endif
 }
 
 static void print_module_not_found_error(const char* filename) {

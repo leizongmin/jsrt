@@ -29,13 +29,17 @@ function test_exec_shell_pipe() {
 function test_exec_shell_env_var() {
   console.log('\nTest: exec() with environment variable expansion');
 
-  child_process.exec('echo "$TEST_VAR"', { env: { TEST_VAR: 'test_value' } }, (error, stdout, stderr) => {
-    assert(!error, 'Shell env expansion executed without error');
-    assert(
-      stdout.trim() === 'test_value',
-      'Shell expanded environment variable: ' + stdout.trim()
-    );
-  });
+  child_process.exec(
+    'echo "$TEST_VAR"',
+    { env: { TEST_VAR: 'test_value' } },
+    (error, stdout, stderr) => {
+      assert(!error, 'Shell env expansion executed without error');
+      assert(
+        stdout.trim() === 'test_value',
+        'Shell expanded environment variable: ' + stdout.trim()
+      );
+    }
+  );
 }
 
 function test_exec_shell_complex() {

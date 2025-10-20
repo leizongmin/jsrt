@@ -2,8 +2,8 @@
 :ID: phase-6
 :CREATED: 2025-10-16T22:45:00Z
 :DEPS: phase-5
-:PROGRESS: 10/27
-:COMPLETION: 37%
+:PROGRESS: 11/27
+:COMPLETION: 41%
 :STATUS: 🔵 IN_PROGRESS
 :END:
 
@@ -273,11 +273,13 @@ Test start() error cases:
 **** Testing Strategy
 make test N=wasi; make test; make wpt; make clean && make
 
-*** TODO [#B] Task 6.11: Test initialize() validation [P][R:MED][C:SIMPLE][D:5.2]
+*** DONE [#B] Task 6.11: Test initialize() validation [P][R:MED][C:SIMPLE][D:5.2]
+CLOSED: [2025-10-20T14:59:51Z]
 :PROPERTIES:
 :ID: 6.11
 :CREATED: 2025-10-16T22:45:00Z
 :DEPS: 5.2
+:COMPLETED: 2025-10-20T14:59:51Z
 :END:
 
 **** Description
@@ -287,11 +289,15 @@ Test initialize() error cases:
 - Already initialized
 
 **** Acceptance Criteria
-- [ ] All error cases tested
-- [ ] Correct errors thrown
+- [X] All error cases tested
+- [X] Correct errors thrown
+
+**** Notes
+- Verified initialize() guards via existing lifecycle coverage in `test/module/wasi/test_wasi_lifecycle.js` (Tests 4–7 cover missing `_initialize`, `_start` conflicts, duplicate initialize, and invalid arguments).
+- Confirmed behaviour by rerunning `make test N=wasi` after updating lifecycle documentation references.
 
 **** Testing Strategy
-make test N=wasi
+make test N=wasi; make test; make wpt; make clean && make
 
 *** TODO [#B] Task 6.12: Test start/initialize mutual exclusion [P][R:MED][C:SIMPLE][D:5.10]
 :PROPERTIES:

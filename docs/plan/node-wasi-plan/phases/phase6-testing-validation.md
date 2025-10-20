@@ -328,11 +328,13 @@ Test that start() and initialize() cannot both be called:
 **** Testing Strategy
 make test N=wasi; make test; make wpt; make clean && make
 
-*** TODO [#B] Task 6.13: Test memory safety with ASAN [S][R:HIGH][C:MEDIUM][D:6.2-6.12]
+*** DONE [#B] Task 6.13: Test memory safety with ASAN [S][R:HIGH][C:MEDIUM][D:6.2-6.12]
+CLOSED: [2025-10-20T15:50:00Z]
 :PROPERTIES:
 :ID: 6.13
 :CREATED: 2025-10-16T22:45:00Z
 :DEPS: 6.2,6.3,6.4,6.5,6.6,6.7,6.8,6.9,6.10,6.11,6.12
+:COMPLETED: 2025-10-20T15:50:00Z
 :END:
 
 **** Description
@@ -343,12 +345,16 @@ Run all WASI tests with AddressSanitizer:
 - Verify no memory errors
 
 **** Acceptance Criteria
-- [ ] All tests pass under ASAN
-- [ ] No memory leaks detected
-- [ ] No buffer overflows
+- [X] All tests pass under ASAN
+- [X] No memory leaks detected
+- [X] No buffer overflows
+
+**** Notes
+- Ran `make jsrt_m` then `ASAN_OPTIONS=detect_leaks=1 ./target/asan/jsrt test/wasi/*.js`.
+- `proc_exit` case skipped in tests to avoid harness termination; no leaks or address issues reported.
 
 **** Testing Strategy
-ASAN validation: make jsrt_m
+ASAN validation: make jsrt_m; ASAN_OPTIONS=detect_leaks=1 ./target/asan/jsrt test/wasi/*.js
 
 *** TODO [#B] Task 6.14: Test with various WASM compilers [P][R:MED][C:MEDIUM][D:6.3]
 :PROPERTIES:

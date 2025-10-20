@@ -295,6 +295,7 @@ Test initialize() error cases:
 **** Notes
 - Verified initialize() guards via existing lifecycle coverage in `test/module/wasi/test_wasi_lifecycle.js` (Tests 4–7 cover missing `_initialize`, `_start` conflicts, duplicate initialize, and invalid arguments).
 - Confirmed behaviour by rerunning `make test N=wasi` after updating lifecycle documentation references.
+- Direct `proc_exit` validation is paused: invoking it terminates the harness/ASAN runner, so we will re-enable dedicated coverage after we have a safe sandbox strategy.
 
 **** Testing Strategy
 make test N=wasi; make test; make wpt; make clean && make

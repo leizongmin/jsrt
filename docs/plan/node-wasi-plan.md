@@ -8,7 +8,7 @@
 * Task Metadata
 :PROPERTIES:
 :CREATED: 2025-10-16T22:45:00Z
-:UPDATED: 2025-10-20T15:16:44Z
+:UPDATED: 2025-10-20T15:25:00Z
 :STATUS: 🔵 IN_PROGRESS
 :PROGRESS: 113/141
 :COMPLETION: 80%
@@ -203,6 +203,7 @@ See: docs/webassembly-api-compatibility.md for details.
 ** Notes
 - Total tasks: 141
 - Estimated timeline: 2-3 weeks for full implementation
+- `proc_exit` validation temporarily deferred (see Phase 6 notes) because invoking it terminates the harness/ASAN runner; will resume once safe sandbox strategy is in place.
 - Critical path: Phase 1 → Phase 2 → Phase 3 → Phase 4 → Phase 5 → Phase 6 → Phase 7
 - Parallel opportunities: Many tasks within each phase can run in parallel
 - Testing is integrated throughout (not just Phase 6)

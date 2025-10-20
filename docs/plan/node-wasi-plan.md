@@ -8,10 +8,10 @@
 * Task Metadata
 :PROPERTIES:
 :CREATED: 2025-10-16T22:45:00Z
-:UPDATED: 2025-10-20T04:55:00Z
+:UPDATED: 2025-10-20T04:57:00Z
 :STATUS: 🔵 IN_PROGRESS
-:PROGRESS: 104/141
-:COMPLETION: 74%
+:PROGRESS: 107/141
+:COMPLETION: 76%
 :WASM_DEPENDENCIES: ✅ VERIFIED - All required APIs functional (2025-10-19)
 :WASM_BLOCKERS: NONE - Standalone Memory/Table/Global not needed by WASI
 :PHASE3_SYSCALLS: 🟢 COMPLETE - 13/13 core syscalls implemented with path/FD extensions validated (2025-10-19)
@@ -127,27 +127,27 @@ See individual phase documents for dependency graphs.
 * 🚀 Execution Dashboard
 :PROPERTIES:
 :CURRENT_PHASE: Phase 6: Testing & Validation
-:PROGRESS: 104/141
-:COMPLETION: 74%
-:ACTIVE_TASK: Task 6.1 - Establish WASI validation harness
-:UPDATED: 2025-10-20T04:55:00Z
+:PROGRESS: 107/141
+:COMPLETION: 76%
+:ACTIVE_TASK: Task 6.4 - Expand WASI option coverage
+:UPDATED: 2025-10-20T04:57:00Z
 :END:
 
 ** Current Status
 - Phase: Phase 6: Testing & Validation
-- Progress: 104/141 tasks (74%)
-- Active: Define WASI test harness scaffolding (Task 6.1)
+- Progress: 107/141 tasks (76%)
+- Active: Build option coverage tests (Task 6.4)
 
 ** Next Up
 High-priority tasks ready to start (Phase 6):
-- [ ] Task 6.1: Create test directory structure
-- [ ] Task 6.2: Build baseline WASI test suite
-- [ ] Task 6.3: Add hello-world WASM integration test
+- [ ] Task 6.4: Test WASI options
+- [ ] Task 6.5: Test args passing
+- [ ] Task 6.6: Test env passing
 
 See [[file:node-wasi-plan/phases/phase6-testing-validation.md][Phase 6 document]] for details.
 
 ** Parallel Opportunities
-Phase 6 combines test authoring and automation; while scaffolding (6.1–6.3) proceeds, targeted option/fixture tasks (6.4–6.8) can run in parallel.
+Phase 6 combines test authoring and automation; with scaffolding complete, option/fixture tasks (6.4–6.8) and lifecycle validation suites (6.9–6.12) can proceed in parallel.
 
 ** Blocking Dependencies
 None - All WebAssembly dependencies are satisfied.
@@ -165,7 +165,7 @@ None - All WebAssembly dependencies are satisfied.
 See: docs/webassembly-api-compatibility.md for details.
 
 ** Risk Areas
-- Lifecycle execution in Phase 5 requires precise state handling and exit semantics
+- Expanding Phase 6 coverage requires thorough fixtures for args/env/preopens
 - Security critical: sandboxing and path validation
 - WAMR integration complexity
 
@@ -178,6 +178,7 @@ See: docs/webassembly-api-compatibility.md for details.
 ** Recent Changes
 | Timestamp | Action | Task ID | Details |
 |-----------|--------|---------|---------|
+| 2025-10-20T04:57:00Z | Completed | Tasks 6.1-6.3 | Established WASI test harness, baseline constructor tests, and hello-world fixtures. |
 | 2025-10-20T04:55:00Z | Completed | Tasks 5.1-5.15 | Finalized WASI lifecycle semantics, documented Phase 5, and promoted plan to Phase 6. |
 | 2025-10-20T04:09:00Z | Completed | Tasks 4.9-4.18 | Finalized WASI lifecycle handling, header exports, and regression tests; Phase 4 closed out. |
 | 2025-10-19T16:00:00Z | Completed | Tasks 3.14-3.19, 3.28-3.29, 3.38 | Implemented path_* syscalls, poll/socket stubs, and added integration test coverage |
@@ -199,7 +200,7 @@ See: docs/webassembly-api-compatibility.md for details.
 - Critical path: Phase 1 → Phase 2 → Phase 3 → Phase 4 → Phase 5 → Phase 6 → Phase 7
 - Parallel opportunities: Many tasks within each phase can run in parallel
 - Testing is integrated throughout (not just Phase 6)
-- Pending work: initiate Phase 6 test harness tasks (6.1–6.3) and expand automation coverage
+- Pending work: deepen Phase 6 coverage (6.4–6.12) across options, I/O, and sandboxing tests
 
 * Implementation Notes
 

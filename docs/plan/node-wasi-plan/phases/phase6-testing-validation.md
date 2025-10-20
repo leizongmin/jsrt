@@ -2,16 +2,18 @@
 :ID: phase-6
 :CREATED: 2025-10-16T22:45:00Z
 :DEPS: phase-5
-:PROGRESS: 0/27
-:COMPLETION: 0%
-:STATUS: 🟡 TODO
+:PROGRESS: 3/27
+:COMPLETION: 11%
+:STATUS: 🔵 IN_PROGRESS
 :END:
 
-*** TODO [#A] Task 6.1: Create test directory structure [S][R:LOW][C:TRIVIAL]
+*** DONE [#A] Task 6.1: Create test directory structure [S][R:LOW][C:TRIVIAL]
+CLOSED: [2025-10-20T04:57:00Z]
 :PROPERTIES:
 :ID: 6.1
 :CREATED: 2025-10-16T22:45:00Z
 :DEPS: None
+:COMPLETED: 2025-10-20T04:57:00Z
 :END:
 
 **** Description
@@ -20,17 +22,22 @@ Create test directory for WASI tests:
 - test/wasi/wasm/ (for test WASM modules)
 
 **** Acceptance Criteria
-- [ ] Directories created
-- [ ] .gitignore updated if needed
+- [X] Directories created
+- [X] .gitignore updated if needed
+
+**** Notes
+- Created test/wasi directory with wasm fixtures to anchor the new validation suite.
 
 **** Testing Strategy
 Directory listing verification.
 
-*** TODO [#A] Task 6.2: Create basic WASI test suite [S][R:MED][C:MEDIUM][D:6.1]
+*** DONE [#A] Task 6.2: Create basic WASI test suite [S][R:MED][C:MEDIUM][D:6.1]
+CLOSED: [2025-10-20T04:57:00Z]
 :PROPERTIES:
 :ID: 6.2
 :CREATED: 2025-10-16T22:45:00Z
 :DEPS: 6.1
+:COMPLETED: 2025-10-20T04:57:00Z
 :END:
 
 **** Description
@@ -41,17 +48,22 @@ Create test/wasi/test_wasi_basic.js:
 - Test error cases
 
 **** Acceptance Criteria
-- [ ] Test file created
-- [ ] Tests pass with make test N=wasi
+- [X] Test file created
+- [X] Tests pass with make test N=wasi
+
+**** Notes
+- Added test_wasi_basic.js covering constructor usage, namespaces, and option validation.
 
 **** Testing Strategy
 make test N=wasi
 
-*** TODO [#A] Task 6.3: Create hello world WASM test [S][R:HIGH][C:MEDIUM][D:6.1,3.5]
+*** DONE [#A] Task 6.3: Create hello world WASM test [S][R:HIGH][C:MEDIUM][D:6.1,3.5]
+CLOSED: [2025-10-20T04:57:00Z]
 :PROPERTIES:
 :ID: 6.3
 :CREATED: 2025-10-16T22:45:00Z
 :DEPS: 6.1,3.5
+:COMPLETED: 2025-10-20T04:57:00Z
 :END:
 
 **** Description
@@ -63,9 +75,12 @@ Create test WASM module and test:
 File: test/wasi/test_wasi_hello.js
 
 **** Acceptance Criteria
-- [ ] WASM module compiled
-- [ ] Test passes
-- [ ] "hello world" output verified
+- [X] WASM module compiled
+- [X] Test passes
+- [X] "hello world" output verified
+
+**** Notes
+- Added hello_start/hello_initialize fixtures with integration test exercising start()/initialize().
 
 **** Testing Strategy
 make test N=wasi

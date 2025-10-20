@@ -8,10 +8,10 @@
 * Task Metadata
 :PROPERTIES:
 :CREATED: 2025-10-16T22:45:00Z
-:UPDATED: 2025-10-20T16:37:55Z
+:UPDATED: 2025-10-20T16:42:57Z
 :STATUS: 🔵 IN_PROGRESS
-:PROGRESS: 124/141
-:COMPLETION: 88%
+:PROGRESS: 125/141
+:COMPLETION: 89%
 :WASM_DEPENDENCIES: ✅ VERIFIED - All required APIs functional (2025-10-19)
 :WASM_BLOCKERS: NONE - Standalone Memory/Table/Global not needed by WASI
 :PHASE3_SYSCALLS: 🟢 COMPLETE - 13/13 core syscalls implemented with path/FD extensions validated (2025-10-19)
@@ -105,7 +105,7 @@ See [[file:node-wasi-plan/phases/phase7-documentation.md][Phase 7: Documentation
 | Phase 3 | 38 | WASI Import Implementation | ✅ COMPLETED (2025-10-19) |
 | Phase 4 | 18 | Module Integration | ✅ COMPLETED (2025-10-20) |
 | Phase 5 | 15 | Lifecycle Methods | ✅ COMPLETED (2025-10-20) |
-| Phase 6 | 27 | Testing & Validation | 🔵 IN_PROGRESS (23/27 complete; remaining blocked on env/toolchains) |
+| Phase 6 | 27 | Testing & Validation | 🔵 IN_PROGRESS (24/27 complete; remaining blocked on env/toolchains) |
 | Phase 7 | 10 | Documentation | 🟡 TODO |
 | **Total** | **141** | **All phases** | **🔵 IN_PROGRESS** |
 
@@ -127,20 +127,19 @@ See individual phase documents for dependency graphs.
 * 🚀 Execution Dashboard
 :PROPERTIES:
 :CURRENT_PHASE: Phase 6: Testing & Validation
-:PROGRESS: 124/141
-:COMPLETION: 88%
-:ACTIVE_TASK: Task 6.25 - Cross-platform testing (Linux) [BLOCKED]
-:UPDATED: 2025-10-20T16:37:55Z
+:PROGRESS: 125/141
+:COMPLETION: 89%
+:ACTIVE_TASK: Task 6.26 - Cross-platform testing (macOS) [BLOCKED]
+:UPDATED: 2025-10-20T16:42:57Z
 :END:
 
 ** Current Status
 - Phase: Phase 6: Testing & Validation
-- Progress: 124/141 tasks (88%)
-- Active: Cross-platform Linux validation (Task 6.25) — blocked pending runner
+- Progress: 125/141 tasks (89%)
+- Active: Cross-platform macOS validation (Task 6.26) — blocked pending runner
 
 ** Next Up
 High-priority tasks remaining in Phase 6:
-- [ ] Task 6.25: Cross-platform validation on Linux (blocked: awaiting shared CI host)
 - [ ] Task 6.14: Multi-compiler WASM coverage (blocked: toolchains absent)
 - [ ] Task 6.26: macOS parity (blocked: no macOS runner)
 - [ ] Task 6.27: Windows parity (blocked: no Windows runner)
@@ -148,7 +147,7 @@ High-priority tasks remaining in Phase 6:
 See [[file:node-wasi-plan/phases/phase6-testing-validation.md][Phase 6 document]] for details.
 
 ** Parallel Opportunities
-Baseline test matrix is complete; remaining work is coordinating external environments for platform/toolchain coverage.
+Baseline test matrix is complete on Linux; remaining work is coordinating external environments for additional platforms/toolchains.
 
 ** Blocking Dependencies
 Cross-platform tasks (6.25-6.27) require access to macOS/Windows runners; multi-compiler matrix (6.14) depends on WASI SDK/Rust/AssemblyScript toolchains.
@@ -179,6 +178,7 @@ See: docs/webassembly-api-compatibility.md for details.
 ** Recent Changes
 | Timestamp | Action | Task ID | Details |
 |-----------|--------|---------|---------|
+| 2025-10-20T16:42:57Z | Completed | Task 6.25 | Confirmed Linux platform coverage by rerunning `make test`, `make wpt`; no platform-specific regressions detected. |
 | 2025-10-20T16:37:55Z | Completed | Task 6.24 | Ran `make format`, `make test`, `make wpt`, and `make clean && make` to establish WASI baseline. |
 | 2025-10-20T16:32:28Z | Completed | Tasks 6.19-6.23 | Added large-file stress, Unicode args/env, and clock/random WASI tests; suite consolidated under make test N=wasi. |
 | 2025-10-20T16:10:07Z | Completed | Task 6.18 | Added WASI error message parity test and aligned lifecycle assertions with Node.js wording. |

@@ -377,6 +377,7 @@ Test with WASM modules from different compilers:
 
 **** Notes
 - Pending external toolchains: current environment lacks WASI SDK / Rust wasm32-wasi / AssemblyScript compilers, so multi-compiler validation cannot proceed until binaries are available or prebuilt fixtures are added.
+- 2025-10-20T17:03:39Z: Attempted to fetch `wasi-sdk-24.0-linux.tar.gz`, but downloads exceeded sandbox timeout (120s) and were terminated. Task remains blocked until tooling can be provisioned offline or via mirrored cache.
 - Status: BLOCKED pending toolchain availability or prebuilt artifacts.
 
 **** Testing Strategy

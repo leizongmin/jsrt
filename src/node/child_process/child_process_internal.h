@@ -21,18 +21,18 @@ extern JSClassID js_child_process_class_id;
 
 // ChildProcess state structure
 struct JSChildProcess {
-  uint32_t type_tag;              // Must be first field for cleanup callback
+  uint32_t type_tag;  // Must be first field for cleanup callback
   JSContext* ctx;
-  JSValue child_obj;              // JavaScript ChildProcess object (EventEmitter)
-  uv_process_t handle;            // libuv process handle
+  JSValue child_obj;    // JavaScript ChildProcess object (EventEmitter)
+  uv_process_t handle;  // libuv process handle
 
   // Process state
   int pid;
   bool spawned;
   bool exited;
   bool killed;
-  bool connected;                 // IPC channel active
-  bool in_callback;               // Prevent finalization during callback
+  bool connected;    // IPC channel active
+  bool in_callback;  // Prevent finalization during callback
   int exit_code;
   int signal_code;
 
@@ -40,27 +40,27 @@ struct JSChildProcess {
   uv_pipe_t* stdin_pipe;
   uv_pipe_t* stdout_pipe;
   uv_pipe_t* stderr_pipe;
-  uv_pipe_t* ipc_pipe;            // For fork() IPC channel
+  uv_pipe_t* ipc_pipe;  // For fork() IPC channel
 
   // Stream objects
-  JSValue stdin_stream;           // Writable stream
-  JSValue stdout_stream;          // Readable stream
-  JSValue stderr_stream;          // Readable stream
+  JSValue stdin_stream;   // Writable stream
+  JSValue stdout_stream;  // Readable stream
+  JSValue stderr_stream;  // Readable stream
 
   // Close tracking
-  int close_count;                // Number of handles that need to close
-  int handles_to_close;           // Expected number of handles to close
+  int close_count;       // Number of handles that need to close
+  int handles_to_close;  // Expected number of handles to close
 
   // Buffering state (for exec/execFile)
-  bool buffering;                 // True if buffering output
+  bool buffering;  // True if buffering output
   char* stdout_buffer;
   char* stderr_buffer;
   size_t stdout_size;
   size_t stderr_size;
   size_t stdout_capacity;
   size_t stderr_capacity;
-  size_t max_buffer;              // maxBuffer option
-  JSValue exec_callback;          // Callback for exec/execFile
+  size_t max_buffer;      // maxBuffer option
+  JSValue exec_callback;  // Callback for exec/execFile
 
   // Timeout tracking (for exec/execFile)
   uv_timer_t* timeout_timer;
@@ -71,8 +71,8 @@ struct JSChildProcess {
   char** env;
   char** args;
   char* file;
-  int uid;                        // POSIX only (-1 if not set)
-  int gid;                        // POSIX only (-1 if not set)
+  int uid;  // POSIX only (-1 if not set)
+  int gid;  // POSIX only (-1 if not set)
 };
 
 // Spawn options (temporary structure used during spawn)
@@ -81,16 +81,16 @@ struct JSChildProcessOptions {
   char** args;
   char** env;
   const char* cwd;
-  int uid;                        // POSIX only (-1 if not set)
-  int gid;                        // POSIX only (-1 if not set)
+  int uid;  // POSIX only (-1 if not set)
+  int gid;  // POSIX only (-1 if not set)
   bool detached;
   bool windows_hide;
   const char* shell;              // NULL or shell path
   uv_stdio_container_t stdio[4];  // stdin, stdout, stderr, optional IPC
   int stdio_count;
-  uint64_t timeout;               // milliseconds (0 = no timeout)
-  size_t max_buffer;              // for exec/execFile
-  const char* kill_signal;        // for timeout
+  uint64_t timeout;         // milliseconds (0 = no timeout)
+  size_t max_buffer;        // for exec/execFile
+  const char* kill_signal;  // for timeout
 };
 
 // Send request for IPC

@@ -25,8 +25,7 @@ JSValue JSRT_InitNodeChildProcess(JSContext* ctx) {
   // Add ChildProcess methods
   JS_SetPropertyStr(ctx, child_proto, "kill", JS_NewCFunction(ctx, js_child_process_kill, "kill", 1));
   JS_SetPropertyStr(ctx, child_proto, "send", JS_NewCFunction(ctx, js_child_process_send, "send", 2));
-  JS_SetPropertyStr(ctx, child_proto, "disconnect",
-                    JS_NewCFunction(ctx, js_child_process_disconnect, "disconnect", 0));
+  JS_SetPropertyStr(ctx, child_proto, "disconnect", JS_NewCFunction(ctx, js_child_process_disconnect, "disconnect", 0));
   JS_SetPropertyStr(ctx, child_proto, "ref", JS_NewCFunction(ctx, js_child_process_ref, "ref", 0));
   JS_SetPropertyStr(ctx, child_proto, "unref", JS_NewCFunction(ctx, js_child_process_unref, "unref", 0));
 
@@ -39,8 +38,7 @@ JSValue JSRT_InitNodeChildProcess(JSContext* ctx) {
   JS_SetPropertyStr(ctx, cp, "fork", JS_NewCFunction(ctx, js_child_process_fork, "fork", 3));
   JS_SetPropertyStr(ctx, cp, "spawnSync", JS_NewCFunction(ctx, js_child_process_spawn_sync, "spawnSync", 3));
   JS_SetPropertyStr(ctx, cp, "execSync", JS_NewCFunction(ctx, js_child_process_exec_sync, "execSync", 2));
-  JS_SetPropertyStr(ctx, cp, "execFileSync",
-                    JS_NewCFunction(ctx, js_child_process_exec_file_sync, "execFileSync", 3));
+  JS_SetPropertyStr(ctx, cp, "execFileSync", JS_NewCFunction(ctx, js_child_process_exec_file_sync, "execFileSync", 3));
 
   return cp;
 }

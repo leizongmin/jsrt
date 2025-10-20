@@ -1,50 +1,10 @@
+#include <signal.h>
 #include "../../util/debug.h"
 #include "child_process_internal.h"
-#include <signal.h>
 
-// Add EventEmitter methods to an object
-void add_event_emitter_methods(JSContext* ctx, JSValue obj) {
-  // Get EventEmitter from events module
-  JSValue events_module = JSRT_LoadNodeModuleCommonJS(ctx, "events");
-  if (JS_IsException(events_module)) {
-    JSRT_Debug("Failed to load events module");
-    return;
-  }
-
-  JSValue EventEmitter = JS_GetPropertyStr(ctx, events_module, "EventEmitter");
-  if (!JS_IsException(EventEmitter)) {
-    JSValue proto = JS_GetPropertyStr(ctx, EventEmitter, "prototype");
-    if (!JS_IsException(proto)) {
-      // Copy EventEmitter methods to obj
-      JSValue on_func = JS_GetPropertyStr(ctx, proto, "on");
-      if (JS_IsFunction(ctx, on_func)) {
-        JS_SetPropertyStr(ctx, obj, "on", JS_DupValue(ctx, on_func));
-      }
-      JS_FreeValue(ctx, on_func);
-
-      JSValue emit_func = JS_GetPropertyStr(ctx, proto, "emit");
-      if (JS_IsFunction(ctx, emit_func)) {
-        JS_SetPropertyStr(ctx, obj, "emit", JS_DupValue(ctx, emit_func));
-      }
-      JS_FreeValue(ctx, emit_func);
-
-      JSValue once_func = JS_GetPropertyStr(ctx, proto, "once");
-      if (JS_IsFunction(ctx, once_func)) {
-        JS_SetPropertyStr(ctx, obj, "once", JS_DupValue(ctx, once_func));
-      }
-      JS_FreeValue(ctx, once_func);
-
-      JSValue removeListener = JS_GetPropertyStr(ctx, proto, "removeListener");
-      if (JS_IsFunction(ctx, removeListener)) {
-        JS_SetPropertyStr(ctx, obj, "removeListener", JS_DupValue(ctx, removeListener));
-      }
-      JS_FreeValue(ctx, removeListener);
-    }
-    JS_FreeValue(ctx, proto);
-  }
-  JS_FreeValue(ctx, EventEmitter);
-  JS_FreeValue(ctx, events_module);
-}
+// add_event_emitter_methods is defined in net module (src/node/net/net_callbacks.c)
+// We just use it here
+extern void add_event_emitter_methods(JSContext* ctx, JSValue obj);
 
 // Get signal name from number
 const char* signal_name(int signal_num) {

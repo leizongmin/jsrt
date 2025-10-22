@@ -163,12 +163,7 @@ prettier: npm-install
 
 .PHONY: test
 test: jsrt npm-install
-	cd target/release && $(if $(TIMEOUT),TEST_TIMEOUT=$(TIMEOUT)) cmake -DTEST_TIMEOUT=$(if $(TIMEOUT),$(TIMEOUT),20) $(CURDIR) && ctest --verbose $(if $(N),-R "test_$(subst /,_,$(N))")
-
-# Fast parallel test execution (4 jobs)
-.PHONY: test-fast
-test-fast: jsrt
-	cd target/release && cmake -DTEST_TIMEOUT=$(if $(TIMEOUT),$(TIMEOUT),20) $(CURDIR) && ctest --verbose --parallel 4 $(if $(N),-R "test_$(subst /,_,$(N))")
+	cd target/release && $(if $(TIMEOUT),TEST_TIMEOUT=$(TIMEOUT)) cmake -DTEST_TIMEOUT=$(if $(TIMEOUT),$(TIMEOUT),20) $(CURDIR) && ctest --verbose $(if $(J),--parallel $(J),--parallel $(cpu_count)) $(if $(N),-R "test_$(subst /,_,$(N))")
 
 # Quick test - only essential tests without network dependencies
 .PHONY: test-quick
@@ -177,19 +172,19 @@ test-quick: jsrt
 
 .PHONY: test_g
 test_g: jsrt_g
-	cd target/debug && cmake -DTEST_TIMEOUT=$(if $(TIMEOUT),$(TIMEOUT),20) $(CURDIR) && ctest --verbose $(if $(N),-R "test_$(subst /,_,$(N))")
+	cd target/debug && cmake -DTEST_TIMEOUT=$(if $(TIMEOUT),$(TIMEOUT),20) $(CURDIR) && ctest --verbose $(if $(J),--parallel $(J),--parallel $(cpu_count)) $(if $(N),-R "test_$(subst /,_,$(N))")
 
 .PHONY: test_m
 test_m: jsrt_m
-	cd target/asan && cmake -DTEST_TIMEOUT=$(if $(TIMEOUT),$(TIMEOUT),20) $(CURDIR) && ctest --verbose $(if $(N),-R "test_$(subst /,_,$(N))")
+	cd target/asan && cmake -DTEST_TIMEOUT=$(if $(TIMEOUT),$(TIMEOUT),20) $(CURDIR) && ctest --verbose $(if $(J),--parallel $(J),--parallel $(cpu_count)) $(if $(N),-R "test_$(subst /,_,$(N))")
 
 .PHONY: test_cov
 test_cov: jsrt_cov
-	cd target/coverage && cmake -DTEST_TIMEOUT=$(if $(TIMEOUT),$(TIMEOUT),20) $(CURDIR) && ctest --verbose $(if $(N),-R "test_$(subst /,_,$(N))")
+	cd target/coverage && cmake -DTEST_TIMEOUT=$(if $(TIMEOUT),$(TIMEOUT),20) $(CURDIR) && ctest --verbose $(if $(J),--parallel $(J),--parallel $(cpu_count)) $(if $(N),-R "test_$(subst /,_,$(N))")
 
 .PHONY: test_static
 test_static: jsrt_static npm-install
-	cd target/static && cmake -DTEST_TIMEOUT=$(if $(TIMEOUT),$(TIMEOUT),20) $(CURDIR) && ctest --verbose $(if $(N),-R "test_$(subst /,_,$(N))")
+	cd target/static && cmake -DTEST_TIMEOUT=$(if $(TIMEOUT),$(TIMEOUT),20) $(CURDIR) && ctest --verbose $(if $(J),--parallel $(J),--parallel $(cpu_count)) $(if $(N),-R "test_$(subst /,_,$(N))")
 
 .PHONY: coverage
 coverage: test_cov
@@ -418,10 +413,9 @@ help:
 	@echo "  make prettier      - Format JavaScript code"
 	@echo ""
 	@echo "Testing:"
-	@echo "  make test          - Run all tests (release build)"
-	@echo "  make test_static   - Run all tests (static build)"
+	@echo "  make test          - Run all tests in parallel (release build)"
+	@echo "  make test_static   - Run all tests in parallel (static build)"
 	@echo "  make test-quick    - Run essential tests only"
-	@echo "  make test-fast     - Run tests in parallel"
 	@echo "  make wpt           - Run Web Platform Tests (release build)"
 	@echo "  make wpt_static    - Run Web Platform Tests (static build)"
 	@echo "  make coverage      - Generate coverage report"
@@ -429,6 +423,8 @@ help:
 	@echo "Test Options (use with make test/test_g/test_m/test_cov/test_static):"
 	@echo "  N=path             - Run specific test(s) by path"
 	@echo "                       Examples: N=node/stream, N=assert, N=node/stream/writable"
+	@echo "  J=number           - Set parallel jobs (default: auto-detect CPU count)"
+	@echo "                       Examples: make test J=8, make test J=1 (serial for debugging)"
 	@echo "  TIMEOUT=seconds    - Set timeout for each test (default: 20)"
 	@echo "                       Examples: make test TIMEOUT=30, make test_g TIMEOUT=10"
 	@echo ""

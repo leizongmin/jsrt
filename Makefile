@@ -280,11 +280,17 @@ DOCKER_TAG = latest
 .PHONY: docker-build
 docker-build:
 	@echo "Building Docker image for development environment..."
+	@echo "Note: Claude Code and Codex are installed via package.json devDependencies"
+	@echo "Run 'npm install' in the repo before starting containers to get the latest versions"
 	docker build -t $(DOCKER_IMAGE_NAME):$(DOCKER_TAG) -f Dockerfile.dev .
 	@echo "✓ Docker image built: $(DOCKER_IMAGE_NAME):$(DOCKER_TAG)"
 
 .PHONY: claude
 claude:
+	@if [ ! -d "node_modules" ]; then \
+		echo "⚠ Warning: node_modules not found. Run 'npm install' first to install Claude Code."; \
+		exit 1; \
+	fi
 	@echo "Starting Claude Code development environment in Docker..."
 	@echo "Repository mapped to /repo inside container"
 	@echo "Running as current user (UID=$(shell id -u), GID=$(shell id -g))"
@@ -310,6 +316,10 @@ claude:
 
 .PHONY: codex
 codex:
+	@if [ ! -d "node_modules" ]; then \
+		echo "⚠ Warning: node_modules not found. Run 'npm install' first to install Codex."; \
+		exit 1; \
+	fi
 	@echo "Starting Codex development environment in Docker..."
 	@echo "Repository mapped to /repo inside container"
 	@echo "Running as current user (UID=$(shell id -u), GID=$(shell id -g))"

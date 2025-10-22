@@ -61,11 +61,11 @@ RUN curl -fsSL https://deb.nodesource.com/setup_22.x | bash - \
 #     && dpkg -i code-server_${VERSION}_amd64.deb \
 #     && rm -f code-server_${VERSION}_amd64.deb
 
-# Install Claude Code and Codex
-RUN npm i -g @anthropic-ai/claude-code@^2.0.22 @openai/codex@0.47.0
-
 # Set up working directory
 WORKDIR /repo
+
+# Add /repo/node_modules/.bin to PATH for claude-code and codex
+ENV PATH="/repo/node_modules/.bin:${PATH}"
 
 # Create entrypoint script
 RUN echo '#!/bin/bash' > /usr/local/bin/entrypoint \

@@ -10,6 +10,8 @@
     "prettier": "prettier --write 'examples/**/*.{js,mjs}' 'test/**/*.{js,mjs}'"
   },
   "devDependencies": {
+    "@anthropic-ai/claude-code": "^2.0.25",
+    "@openai/codex": "^0.47.0",
     "prettier": "^3.1.0"
   }
 }

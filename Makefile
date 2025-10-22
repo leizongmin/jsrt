@@ -276,19 +276,11 @@ wpt-list:
 # Docker development environment
 DOCKER_IMAGE_NAME = jsrt-dev
 DOCKER_TAG = latest
-CLAUDE_CODE_VERSION ?= 2.0.25
-CODEX_VERSION ?= 0.47.0
 
 .PHONY: docker-build
 docker-build:
 	@echo "Building Docker image for development environment..."
-	@echo "Claude Code version: $(CLAUDE_CODE_VERSION)"
-	@echo "Codex version: $(CODEX_VERSION)"
-	docker build \
-		--build-arg CLAUDE_CODE_VERSION=$(CLAUDE_CODE_VERSION) \
-		--build-arg CODEX_VERSION=$(CODEX_VERSION) \
-		-t $(DOCKER_IMAGE_NAME):$(DOCKER_TAG) \
-		-f Dockerfile.dev .
+	docker build -t $(DOCKER_IMAGE_NAME):$(DOCKER_TAG) -f Dockerfile.dev .
 	@echo "✓ Docker image built: $(DOCKER_IMAGE_NAME):$(DOCKER_TAG)"
 
 .PHONY: claude

@@ -1,10 +1,6 @@
 # Dockerfile for jsrt development with Claude Code
 FROM ubuntu:22.04
 
-# Build arguments for tool versions
-ARG CLAUDE_CODE_VERSION=2.0.25
-ARG CODEX_VERSION=0.47.0
-
 # Set environment variables to avoid interactive prompts
 ENV DEBIAN_FRONTEND=noninteractive
 ENV TZ=UTC
@@ -66,7 +62,7 @@ RUN curl -fsSL https://deb.nodesource.com/setup_22.x | bash - \
 #     && rm -f code-server_${VERSION}_amd64.deb
 
 # Install Claude Code and Codex
-RUN npm i -g @anthropic-ai/claude-code@${CLAUDE_CODE_VERSION} @openai/codex@${CODEX_VERSION}
+RUN npm i -g @anthropic-ai/claude-code@^2.0.22 @openai/codex@0.47.0
 
 # Set up working directory
 WORKDIR /repo

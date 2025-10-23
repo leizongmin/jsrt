@@ -43,6 +43,24 @@ static char* jsrt_realpath(const char* path, char* resolved_path) {
 #include "ffi.h"
 extern JSValue JSRT_InitNodeWASI(JSContext* ctx);
 
+// ============================================================================
+// LEGACY CODE SECTION - DEPRECATED
+// ============================================================================
+// The code below (lines ~50-1530) contains the old module loading system.
+// It is largely superseded by the new module system in src/module/.
+//
+// Current Status:
+// - ESM loading: Uses new bridge (jsrt_esm_*_callback) in src/module/loaders/esm_loader.c
+// - CJS require(): Uses new system (jsrt_create_require_function) in src/module/loaders/commonjs_loader.c
+// - Fallback only: Old code remains as safety fallback (rarely/never executed)
+//
+// Future Work (Phase 10.5):
+// - Can be safely removed after extended testing period
+// - Requires verification that all edge cases are covered
+// - Some utility functions (is_absolute_path, is_relative_path) are still
+//   needed by the bridge code and have been made non-static
+// ============================================================================
+
 // ==== Cross-platform Path Handling Functions ====
 
 // Check if a character is a path separator (/ or \)
@@ -1537,6 +1555,19 @@ static JSValue js_require(JSContext* ctx, JSValueConst this_val, int argc, JSVal
 
   return module_exports;
 }
+
+// ============================================================================
+// END OF LEGACY CODE SECTION
+// ============================================================================
+// Everything above this line is deprecated legacy code from the old module system.
+// Everything below this line is the current, active module system initialization.
+// ============================================================================
+
+// ============================================================================
+// CURRENT MODULE SYSTEM - ACTIVE CODE
+// ============================================================================
+// The functions below integrate with the new module system in src/module/
+// ============================================================================
 
 void JSRT_StdModuleInit(JSRT_Runtime* rt) {
   JSRT_Debug("JSRT_StdModuleInit: initializing ES module loader");

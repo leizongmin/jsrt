@@ -32,7 +32,8 @@ static char* jsrt_realpath(const char* path, char* resolved_path) {
 
 #include "../http/module_loader.h"
 #include "../http/security.h"
-#include "../module/loaders/esm_loader.h"  // For new ES module loader bridge
+#include "../module/loaders/commonjs_loader.h"  // For new CommonJS loader
+#include "../module/loaders/esm_loader.h"       // For new ES module loader bridge
 #include "../node/process/process.h"
 #include "../util/debug.h"
 #include "../util/file.h"
@@ -1083,6 +1084,7 @@ static size_t module_cache_capacity = 0;
 // Current module path context for relative require resolution
 static char* current_module_path = NULL;
 static char* entry_module_path = NULL;
+static JSRT_Runtime* global_runtime = NULL;  // Store runtime for updating global require()
 
 static int get_not_found_strings(const char* module_display, const char* require_display, bool include_require_section,
                                  char** message_out, char** stack_out) {
@@ -1545,9 +1547,44 @@ void JSRT_StdModuleInit(JSRT_Runtime* rt) {
 void JSRT_StdCommonJSInit(JSRT_Runtime* rt) {
   JSRT_Debug("JSRT_StdCommonJSInit: initializing CommonJS support");
 
-  JSValue global = JS_GetGlobalObject(rt->ctx);
-  JS_SetPropertyStr(rt->ctx, global, "require", JS_NewCFunction(rt->ctx, js_require, "require", 1));
-  JS_FreeValue(rt->ctx, global);
+  // Store runtime globally so we can update require() later
+  global_runtime = rt;
+
+  // Use the new module loader to create global require()
+  // For global require(), use current working directory as base
+  if (rt->module_loader) {
+    char cwd[4096];
+    if (getcwd(cwd, sizeof(cwd)) != NULL) {
+      // Create a dummy file path in cwd so path resolution works correctly
+      // (path resolver expects a file path, not a directory path)
+      char cwd_file[4100];
+      snprintf(cwd_file, sizeof(cwd_file), "%s/__main__.js", cwd);
+      JSRT_Debug("JSRT_StdCommonJSInit: creating require() with cwd='%s', loader=%p", cwd, (void*)rt->module_loader);
+      JSValue global = JS_GetGlobalObject(rt->ctx);
+      JSValue require_func = jsrt_create_require_function(rt->ctx, rt->module_loader, cwd_file);
+      if (!JS_IsException(require_func)) {
+        JSRT_Debug("JSRT_StdCommonJSInit: require function created successfully");
+        JS_SetPropertyStr(rt->ctx, global, "require", require_func);
+      } else {
+        JSRT_Debug("JSRT_StdCommonJSInit: failed to create require function, falling back to old implementation");
+        // Fallback to old implementation if new one fails
+        JS_SetPropertyStr(rt->ctx, global, "require", JS_NewCFunction(rt->ctx, js_require, "require", 1));
+      }
+      JS_FreeValue(rt->ctx, global);
+    } else {
+      // Fallback if getcwd fails
+      JSRT_Debug("JSRT_StdCommonJSInit: getcwd failed, using fallback");
+      JSValue global = JS_GetGlobalObject(rt->ctx);
+      JS_SetPropertyStr(rt->ctx, global, "require", JS_NewCFunction(rt->ctx, js_require, "require", 1));
+      JS_FreeValue(rt->ctx, global);
+    }
+  } else {
+    // Fallback if module loader not available
+    JSRT_Debug("JSRT_StdCommonJSInit: module_loader not available, using fallback");
+    JSValue global = JS_GetGlobalObject(rt->ctx);
+    JS_SetPropertyStr(rt->ctx, global, "require", JS_NewCFunction(rt->ctx, js_require, "require", 1));
+    JS_FreeValue(rt->ctx, global);
+  }
 }
 
 void JSRT_StdCommonJSSetEntryPath(const char* path) {
@@ -1559,6 +1596,8 @@ void JSRT_StdCommonJSSetEntryPath(const char* path) {
 
   if (path) {
     entry_module_path = strdup(path);
+    // Note: We don't update the global require() here because it should remain bound to cwd
+    // for compatibility with existing tests that use paths like './test/module/file.js'
   }
 }
 

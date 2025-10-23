@@ -317,10 +317,25 @@ static JSValue js_commonjs_require(JSContext* ctx, JSValueConst this_val, int ar
     return JS_EXCEPTION;
   }
 
+  MODULE_DEBUG_LOADER("js_commonjs_require called with specifier='%s'", specifier);
+
   // Get module path and loader from func_data
-  if (!func_data || JS_IsUndefined(func_data[0]) || JS_IsUndefined(func_data[1])) {
+  if (!func_data) {
+    MODULE_DEBUG_ERROR("func_data is NULL");
     JS_FreeCString(ctx, specifier);
-    return JS_ThrowInternalError(ctx, "Invalid require() function data");
+    return JS_ThrowInternalError(ctx, "Invalid require() function data (NULL)");
+  }
+
+  if (JS_IsUndefined(func_data[0])) {
+    MODULE_DEBUG_ERROR("func_data[0] is undefined");
+    JS_FreeCString(ctx, specifier);
+    return JS_ThrowInternalError(ctx, "Invalid require() function data (path undefined)");
+  }
+
+  if (JS_IsUndefined(func_data[1])) {
+    MODULE_DEBUG_ERROR("func_data[1] is undefined");
+    JS_FreeCString(ctx, specifier);
+    return JS_ThrowInternalError(ctx, "Invalid require() function data (loader undefined)");
   }
 
   const char* module_path = JS_ToCString(ctx, func_data[0]);
@@ -329,13 +344,19 @@ static JSValue js_commonjs_require(JSContext* ctx, JSValueConst this_val, int ar
     return JS_EXCEPTION;
   }
 
+  MODULE_DEBUG_LOADER("module_path='%s'", module_path);
+
   // Get loader pointer
   void* loader_ptr;
-  if (JS_ToInt64(ctx, (int64_t*)&loader_ptr, func_data[1]) != 0) {
+  int64_t loader_int64;
+  if (JS_ToBigInt64(ctx, &loader_int64, func_data[1]) != 0) {
+    MODULE_DEBUG_ERROR("Failed to convert func_data[1] to BigInt64");
     JS_FreeCString(ctx, specifier);
     JS_FreeCString(ctx, module_path);
-    return JS_ThrowInternalError(ctx, "Invalid loader pointer");
+    return JS_ThrowInternalError(ctx, "Invalid loader pointer (conversion failed)");
   }
+  loader_ptr = (void*)(intptr_t)loader_int64;
+  MODULE_DEBUG_LOADER("loader_ptr=%p", loader_ptr);
 
   JSRT_ModuleLoader* loader = (JSRT_ModuleLoader*)loader_ptr;
 

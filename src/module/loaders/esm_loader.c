@@ -97,11 +97,13 @@ static JSValue js_import_meta_resolve(JSContext* ctx, JSValueConst this_val, int
 
   // Get loader pointer
   void* loader_ptr;
-  if (JS_ToInt64(ctx, (int64_t*)&loader_ptr, func_data[1]) != 0) {
+  int64_t loader_int64;
+  if (JS_ToBigInt64(ctx, &loader_int64, func_data[1]) != 0) {
     JS_FreeCString(ctx, specifier);
     JS_FreeCString(ctx, module_path);
     return JS_ThrowInternalError(ctx, "Invalid loader pointer");
   }
+  loader_ptr = (void*)(intptr_t)loader_int64;
 
   JSRT_ModuleLoader* loader = (JSRT_ModuleLoader*)loader_ptr;
   (void)loader;  // Use loader if needed

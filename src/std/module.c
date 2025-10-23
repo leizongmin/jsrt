@@ -32,6 +32,7 @@ static char* jsrt_realpath(const char* path, char* resolved_path) {
 
 #include "../http/module_loader.h"
 #include "../http/security.h"
+#include "../module/loaders/esm_loader.h"  // For new ES module loader bridge
 #include "../node/process/process.h"
 #include "../util/debug.h"
 #include "../util/file.h"
@@ -140,7 +141,7 @@ static char* path_join(const char* dir, const char* file) {
 }
 
 // Check if a path is absolute
-static bool is_absolute_path(const char* path) {
+bool is_absolute_path(const char* path) {
   if (!path)
     return false;
 
@@ -155,7 +156,7 @@ static bool is_absolute_path(const char* path) {
 }
 
 // Check if a path is relative (starts with ./ or ../)
-static bool is_relative_path(const char* path) {
+bool is_relative_path(const char* path) {
   if (!path)
     return false;
 
@@ -203,7 +204,7 @@ static char* resolve_relative_path(const char* base_path, const char* relative_p
 }
 
 // Module init function for jsrt:assert ES module
-static int js_std_assert_init(JSContext* ctx, JSModuleDef* m) {
+int js_std_assert_init(JSContext* ctx, JSModuleDef* m) {
   JSValue assert_module = JSRT_CreateAssertModule(ctx);
   if (JS_IsException(assert_module)) {
     return -1;
@@ -213,13 +214,13 @@ static int js_std_assert_init(JSContext* ctx, JSModuleDef* m) {
 }
 
 // Module init function for jsrt:process ES module
-static int js_std_process_module_init(JSContext* ctx, JSModuleDef* m) {
+int js_std_process_module_init(JSContext* ctx, JSModuleDef* m) {
   // Use the unified process module
   return js_unified_process_init(ctx, m);
 }
 
 // Module init function for jsrt:ffi ES module
-static int js_std_ffi_init(JSContext* ctx, JSModuleDef* m) {
+int js_std_ffi_init(JSContext* ctx, JSModuleDef* m) {
   JSValue ffi_module = JSRT_CreateFFIModule(ctx);
   if (JS_IsException(ffi_module)) {
     return -1;
@@ -1537,7 +1538,8 @@ static JSValue js_require(JSContext* ctx, JSValueConst this_val, int argc, JSVal
 
 void JSRT_StdModuleInit(JSRT_Runtime* rt) {
   JSRT_Debug("JSRT_StdModuleInit: initializing ES module loader");
-  JS_SetModuleLoaderFunc(rt->rt, JSRT_StdModuleNormalize, JSRT_StdModuleLoader, rt);
+  // Use new ES module loader bridge functions
+  JS_SetModuleLoaderFunc(rt->rt, jsrt_esm_normalize_callback, jsrt_esm_loader_callback, rt);
 }
 
 void JSRT_StdCommonJSInit(JSRT_Runtime* rt) {

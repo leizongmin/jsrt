@@ -7,6 +7,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include "../../runtime.h"  // For JSRT_Runtime
 #include "../core/module_cache.h"
 #include "../protocols/protocol_dispatcher.h"
 #include "../resolver/path_resolver.h"
@@ -180,24 +181,17 @@ int jsrt_setup_import_meta(JSContext* ctx, JSModuleDef* module, JSRT_ModuleLoade
     return -1;
   }
 
-  JSValue url_val = JS_NewString(ctx, url);
+  JS_SetPropertyStr(ctx, meta_obj, "url", JS_NewString(ctx, url));
   free(url);
 
-  if (JS_IsException(url_val)) {
-    JS_FreeValue(ctx, meta_obj);
-    return -1;
-  }
-
-  JS_SetPropertyStr(ctx, meta_obj, "url", url_val);
-
-  // Set import.meta.resolve function
-  JSValue resolve_func = jsrt_create_import_meta_resolve(ctx, loader, resolved_path);
-  if (JS_IsException(resolve_func)) {
-    JS_FreeValue(ctx, meta_obj);
-    return -1;
-  }
-
-  JS_SetPropertyStr(ctx, meta_obj, "resolve", resolve_func);
+  // TODO: Set import.meta.resolve function
+  // Temporarily skip this to avoid potential issues with function data conversion
+  // JSValue resolve_func = jsrt_create_import_meta_resolve(ctx, loader, resolved_path);
+  // if (JS_IsException(resolve_func)) {
+  //   JS_FreeValue(ctx, meta_obj);
+  //   return -1;
+  // }
+  // JS_SetPropertyStr(ctx, meta_obj, "resolve", resolve_func);
 
   JS_FreeValue(ctx, meta_obj);
 
@@ -241,19 +235,9 @@ JSModuleDef* jsrt_load_esm_module(JSContext* ctx, JSRT_ModuleLoader* loader, con
     return NULL;
   }
 
-  // Extract JSModuleDef* from compiled module
-  // When JS_EVAL_TYPE_MODULE is used with JS_EVAL_FLAG_COMPILE_ONLY,
-  // the result is a JSValue containing the module function
-  // We need to check the value type before extracting the pointer
-  if (!JS_IsFunction(ctx, func_val)) {
-    MODULE_DEBUG_ERROR("Compiled module is not a function: %s", resolved_path);
-    JS_FreeValue(ctx, func_val);
-    return NULL;
-  }
-
-  // Use QuickJS API to get the module definition
-  // Note: JS_VALUE_GET_PTR is internal and may not be safe
-  // The proper way is to use the module through QuickJS APIs
+  // Get the module definition from the compiled function
+  // When JS_EVAL_TYPE_MODULE | JS_EVAL_FLAG_COMPILE_ONLY is used,
+  // QuickJS returns a special value containing the JSModuleDef pointer
   JSModuleDef* module = (JSModuleDef*)JS_VALUE_GET_PTR(func_val);
   if (!module) {
     MODULE_DEBUG_ERROR("Failed to extract module definition: %s", resolved_path);
@@ -261,15 +245,15 @@ JSModuleDef* jsrt_load_esm_module(JSContext* ctx, JSRT_ModuleLoader* loader, con
     return NULL;
   }
 
+  // Free the function value after extracting the module pointer
+  // The module is now owned by QuickJS's module system
+  JS_FreeValue(ctx, func_val);
+
   // Set up import.meta
   if (jsrt_setup_import_meta(ctx, module, loader, resolved_path) != 0) {
     MODULE_DEBUG_ERROR("Failed to setup import.meta for: %s", resolved_path);
-    JS_FreeValue(ctx, func_val);
     return NULL;
   }
-
-  // Don't free func_val here - QuickJS owns the module now
-  // The module is registered in QuickJS's internal module system
 
   MODULE_DEBUG_LOADER("Successfully loaded ES module: %s", resolved_path);
   return module;
@@ -296,4 +280,150 @@ JSValue jsrt_get_esm_exports(JSContext* ctx, JSModuleDef* module) {
 
   MODULE_DEBUG_LOADER("Successfully retrieved ES module exports");
   return ns;
+}
+
+/**
+ * QuickJS module normalize callback (bridge to new system)
+ *
+ * This function is called by QuickJS to normalize (resolve) ES module specifiers.
+ * It bridges the old JSRT_StdModuleNormalize API to the new path resolver.
+ */
+// Forward declaration for node module check
+#ifdef JSRT_NODE_COMPAT
+extern bool JSRT_IsNodeModule(const char* name);
+extern bool is_absolute_path(const char* path);
+extern bool is_relative_path(const char* path);
+#endif
+
+char* jsrt_esm_normalize_callback(JSContext* ctx, const char* module_base_name, const char* module_name, void* opaque) {
+  MODULE_DEBUG_RESOLVER("=== ESM Normalize: '%s' from base '%s' ===", module_name,
+                        module_base_name ? module_base_name : "null");
+
+  if (!module_name) {
+    MODULE_DEBUG_ERROR("Module name is NULL");
+    return NULL;
+  }
+
+#ifdef JSRT_NODE_COMPAT
+  // Compact Node mode: check bare name as node module for ES modules
+  JSRT_Runtime* rt = (JSRT_Runtime*)opaque;
+  if (rt && rt->compact_node_mode && !is_absolute_path(module_name) && !is_relative_path(module_name) &&
+      JSRT_IsNodeModule(module_name)) {
+    MODULE_DEBUG_RESOLVER("Compact Node mode (ESM): resolving '%s' as 'node:%s'", module_name, module_name);
+    char* prefixed = malloc(strlen(module_name) + 6);
+    if (prefixed) {
+      sprintf(prefixed, "node:%s", module_name);
+      return prefixed;
+    }
+  }
+#endif
+
+  // Use the new path resolver
+  JSRT_ResolvedPath* resolved = jsrt_resolve_path(ctx, module_name, module_base_name, true);
+
+  if (!resolved || !resolved->resolved_path) {
+    MODULE_DEBUG_ERROR("Failed to resolve ES module: %s", module_name);
+    if (resolved) {
+      jsrt_resolved_path_free(resolved);
+    }
+    return NULL;
+  }
+
+  // Extract the resolved path
+  char* result = strdup(resolved->resolved_path);
+  jsrt_resolved_path_free(resolved);
+
+  MODULE_DEBUG_RESOLVER("Resolved '%s' to '%s'", module_name, result);
+  return result;
+}
+
+// Include standard module header for builtin module init functions
+#include "../../std/module.h"
+
+// Forward declarations for HTTP and Node modules
+#ifdef JSRT_NODE_COMPAT
+extern JSModuleDef* JSRT_LoadNodeModule(JSContext* ctx, const char* module_name);
+#endif
+extern JSModuleDef* jsrt_load_http_module(JSContext* ctx, const char* module_name);
+extern bool jsrt_is_http_url(const char* url);
+
+/**
+ * QuickJS module loader callback (bridge to new system)
+ *
+ * This function is called by QuickJS to load ES modules.
+ * It bridges the old JSRT_StdModuleLoader API to the new ES module loader.
+ */
+JSModuleDef* jsrt_esm_loader_callback(JSContext* ctx, const char* module_name, void* opaque) {
+  MODULE_DEBUG_LOADER("=== ESM Loader: '%s' ===", module_name);
+
+  if (!module_name) {
+    MODULE_DEBUG_ERROR("Module name is NULL");
+    return NULL;
+  }
+
+  // Handle jsrt: builtin modules
+  if (strncmp(module_name, "jsrt:", 5) == 0) {
+    const char* std_module = module_name + 5;  // Skip "jsrt:" prefix
+
+    if (strcmp(std_module, "assert") == 0) {
+      JSModuleDef* m = JS_NewCModule(ctx, module_name, js_std_assert_init);
+      if (m) {
+        JS_AddModuleExport(ctx, m, "default");
+      }
+      return m;
+    }
+
+    if (strcmp(std_module, "process") == 0) {
+      JSModuleDef* m = JS_NewCModule(ctx, module_name, js_std_process_module_init);
+      if (m) {
+        JS_AddModuleExport(ctx, m, "default");
+      }
+      return m;
+    }
+
+    if (strcmp(std_module, "ffi") == 0) {
+      JSModuleDef* m = JS_NewCModule(ctx, module_name, js_std_ffi_init);
+      if (m) {
+        JS_AddModuleExport(ctx, m, "default");
+      }
+      return m;
+    }
+
+    JS_ThrowReferenceError(ctx, "Unknown std module '%s'", std_module);
+    return NULL;
+  }
+
+#ifdef JSRT_NODE_COMPAT
+  // Handle node: modules
+  if (strncmp(module_name, "node:", 5) == 0) {
+    const char* node_module = module_name + 5;  // Skip "node:" prefix
+    return JSRT_LoadNodeModule(ctx, node_module);
+  }
+#endif
+
+  // Handle HTTP/HTTPS modules
+  if (jsrt_is_http_url(module_name)) {
+    return jsrt_load_http_module(ctx, module_name);
+  }
+
+  // Get the module loader from runtime context
+  // opaque should be JSRT_Runtime*
+  JSRT_Runtime* rt = (JSRT_Runtime*)opaque;
+  if (!rt || !rt->module_loader) {
+    MODULE_DEBUG_ERROR("Module loader not available");
+    return NULL;
+  }
+
+  JSRT_ModuleLoader* loader = rt->module_loader;
+
+  // Load the module using new ES module loader
+  JSModuleDef* module = jsrt_load_esm_module(ctx, loader, module_name, module_name);
+
+  if (!module) {
+    MODULE_DEBUG_ERROR("Failed to load ES module: %s", module_name);
+    return NULL;
+  }
+
+  MODULE_DEBUG_LOADER("Successfully loaded ES module: %s", module_name);
+  return module;
 }

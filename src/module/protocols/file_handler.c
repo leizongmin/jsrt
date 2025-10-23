@@ -132,12 +132,26 @@ JSRT_ReadFileResult jsrt_file_handler_load(const char* url, void* user_data) {
 
   JSRT_ReadFileResult result = JSRT_ReadFileResultDefault();
 
-  // Parse URL to filesystem path
-  char* path = parse_file_url(url);
-  if (!path) {
-    result.error = JSRT_READ_FILE_ERROR_FILE_NOT_FOUND;
-    MODULE_DEBUG_ERROR("Failed to parse file URL: %s", url);
-    return result;
+  char* path = NULL;
+
+  // Check if this is a file:// URL or a plain path
+  if (strncmp(url, "file://", 7) == 0) {
+    // Parse URL to filesystem path
+    path = parse_file_url(url);
+    if (!path) {
+      result.error = JSRT_READ_FILE_ERROR_FILE_NOT_FOUND;
+      MODULE_DEBUG_ERROR("Failed to parse file URL: %s", url);
+      return result;
+    }
+  } else {
+    // Plain filesystem path - use as-is
+    MODULE_DEBUG_PROTOCOL("Plain path provided (not file:// URL): %s", url);
+    path = strdup(url);
+    if (!path) {
+      result.error = JSRT_READ_FILE_ERROR_READ_ERROR;
+      MODULE_DEBUG_ERROR("Failed to allocate memory for path");
+      return result;
+    }
   }
 
   // Read file using existing file I/O

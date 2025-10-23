@@ -257,6 +257,23 @@ jsrt features a unified, extensible module loading system that supports multiple
 ### Architecture
 
 ```
+QuickJS Module System
+    │
+    │ JS_SetModuleLoaderFunc(normalize_callback, loader_callback)
+    ▼
+ES Module Bridge (loaders/esm_loader.c)
+    │
+    ├─► jsrt_esm_normalize_callback()
+    │   - Compact node mode handling (bare → node:*)
+    │   - Delegates to path resolver
+    │   - Returns resolved absolute path
+    │
+    └─► jsrt_esm_loader_callback()
+        - Handles builtin modules (jsrt:*, node:*)
+        - Handles HTTP/HTTPS modules
+        - Delegates to new module loader
+        │
+        ▼
 Module Loader Core (module_loader.c)
     │
     ├─► Cache System (core/module_cache.c)

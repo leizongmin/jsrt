@@ -17,6 +17,17 @@ char* JSRT_StdModuleNormalize(JSContext* ctx, const char* module_base_name, cons
 // Initialize CommonJS support (require, module.exports, exports)
 void JSRT_StdCommonJSInit(JSRT_Runtime* rt);
 
+// Builtin module init functions (for new ES module loader)
+int js_std_assert_init(JSContext* ctx, JSModuleDef* m);
+int js_std_process_module_init(JSContext* ctx, JSModuleDef* m);
+int js_std_ffi_init(JSContext* ctx, JSModuleDef* m);
+
+// Path utility functions (for compact node mode support)
+#ifdef JSRT_NODE_COMPAT
+bool is_absolute_path(const char* path);
+bool is_relative_path(const char* path);
+#endif
+
 // Set the entry module path for CommonJS require stack traces
 void JSRT_StdCommonJSSetEntryPath(const char* path);
 

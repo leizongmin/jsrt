@@ -13,6 +13,7 @@
 #include "http/fetch.h"
 #include "module/core/module_context.h"
 #include "module/core/module_loader.h"
+#include "module/protocols/file_handler.h"
 #include "module/protocols/protocol_registry.h"
 #include "node/net/net_internal.h"
 #include "node/process/process.h"
@@ -134,6 +135,9 @@ JSRT_Runtime* JSRT_RuntimeNew() {
 
   // Initialize protocol registry for new module system
   jsrt_init_protocol_handlers();
+
+  // Register default protocol handlers (file://, http://, https://)
+  jsrt_file_handler_init();
 
   // Create and initialize new module loader
   rt->module_loader = jsrt_module_loader_create(rt->ctx);

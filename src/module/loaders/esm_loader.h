@@ -107,6 +107,33 @@ JSValue jsrt_create_import_meta_resolve(JSContext* ctx, JSRT_ModuleLoader* loade
  */
 JSValue jsrt_get_esm_exports(JSContext* ctx, JSModuleDef* module);
 
+/**
+ * QuickJS module normalize callback (bridge function)
+ *
+ * This callback is registered with QuickJS via JS_SetModuleLoaderFunc.
+ * It resolves module specifiers to absolute paths using the new resolver.
+ *
+ * @param ctx JavaScript context
+ * @param module_base_name Base module path (importer)
+ * @param module_name Module specifier to resolve
+ * @param opaque User data (JSRT_Runtime*)
+ * @return Resolved path (caller must free), or NULL on error
+ */
+char* jsrt_esm_normalize_callback(JSContext* ctx, const char* module_base_name, const char* module_name, void* opaque);
+
+/**
+ * QuickJS module loader callback (bridge function)
+ *
+ * This callback is registered with QuickJS via JS_SetModuleLoaderFunc.
+ * It loads ES modules using the new loader system.
+ *
+ * @param ctx JavaScript context
+ * @param module_name Normalized module path
+ * @param opaque User data (JSRT_Runtime*)
+ * @return Compiled module definition, or NULL on error
+ */
+JSModuleDef* jsrt_esm_loader_callback(JSContext* ctx, const char* module_name, void* opaque);
+
 #ifdef __cplusplus
 }
 #endif

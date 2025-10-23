@@ -108,7 +108,7 @@ The module loading system consists of six major subsystems:
 
 **Components:**
 - **cjs_loader.c**: CommonJS module loader
-- **esm_loader.c**: ES module loader
+- **esm_loader.c**: ES module loader with QuickJS bridge
 - **json_loader.c**: JSON module loader
 - **builtin_loader.c**: Built-in module loader (jsrt:, node:)
 
@@ -117,6 +117,12 @@ The module loading system consists of six major subsystems:
 - Wrapper function generation (CommonJS)
 - Module environment setup (__filename, __dirname, etc.)
 - Integration with QuickJS module system
+- **QuickJS Bridge Functions** (esm_loader.c):
+  - `jsrt_esm_normalize_callback()`: Path resolution callback for QuickJS
+  - `jsrt_esm_loader_callback()`: Module loading callback for QuickJS
+  - Handles builtin modules (jsrt:*, node:*) directly
+  - Handles HTTP/HTTPS modules via protocol handlers
+  - Supports compact node mode (bare specifiers → node:* prefix)
 
 ### 6. Module Cache (`module/core/module_cache.c`)
 
@@ -214,23 +220,80 @@ Runtime Startup
    │
    ├─► 1. jsrt_init_protocol_handlers()
    │      - Initialize protocol registry
-   │      - Register file:// handler
+   │      - Register file:// handler (jsrt_file_handler_init)
    │      - Register http://, https:// handlers
    │
-   └─► 2. jsrt_module_loader_create(ctx)
-          │
-          ├─► a. Allocate JSRT_ModuleLoader
-          │      - Create context
-          │      - Initialize state
-          │
-          ├─► b. jsrt_module_cache_create(128)
-          │      - Allocate cache with 128 slots
-          │      - Initialize statistics
-          │
-          └─► c. Return initialized loader
+   ├─► 2. jsrt_module_loader_create(ctx)
+   │      │
+   │      ├─► a. Allocate JSRT_ModuleLoader
+   │      │      - Create context
+   │      │      - Initialize state
+   │      │
+   │      ├─► b. jsrt_module_cache_create(128)
+   │      │      - Allocate cache with 128 slots
+   │      │      - Initialize statistics
+   │      │
+   │      └─► c. Return initialized loader
+   │
+   └─► 3. JSRT_StdModuleInit(rt)
+          - Set QuickJS module loader callbacks:
+            * JS_SetModuleLoaderFunc(jsrt_esm_normalize_callback,
+                                     jsrt_esm_loader_callback, rt)
+          - Bridge between QuickJS and new module system
 ```
 
-### Module Load Sequence
+### ES Module Load Sequence (via QuickJS Bridge)
+
+```
+JavaScript: import 'module-specifier'
+   │
+   │ QuickJS internal module system
+   ▼
+jsrt_esm_normalize_callback(ctx, base_name, module_name, opaque)
+   │
+   ├─► Check compact node mode
+   │   - If bare specifier + node module → return "node:<name>"
+   │
+   ├─► jsrt_resolve_path(module_name, base_name, is_esm=true)
+   │   - Resolve to absolute path
+   │   - Handle relative/absolute/bare specifiers
+   │
+   └─► Return resolved path to QuickJS
+       │
+       │ QuickJS calls loader with resolved path
+       ▼
+jsrt_esm_loader_callback(ctx, module_name, opaque)
+   │
+   ├─► Check for builtin modules (jsrt:*, node:*)
+   │   - Create JSModuleDef with JS_NewCModule
+   │   - Call init function (js_std_assert_init, etc.)
+   │   - Return module
+   │
+   ├─► Check for HTTP/HTTPS modules
+   │   - Delegate to jsrt_load_http_module()
+   │   - Return module
+   │
+   └─► Delegate to new module loader
+       │
+       ▼
+   jsrt_load_esm_module(ctx, loader, resolved_path, specifier)
+       │
+       ├─► jsrt_load_content_by_protocol(resolved_path)
+       │   - Load source code via protocol dispatcher
+       │
+       ├─► JS_Eval(source, JS_EVAL_TYPE_MODULE | JS_EVAL_FLAG_COMPILE_ONLY)
+       │   - Compile as ES module
+       │
+       ├─► Extract JSModuleDef* from compiled value
+       │
+       ├─► jsrt_setup_import_meta(ctx, module, loader, resolved_path)
+       │   - Set import.meta.url
+       │   - (import.meta.resolve temporarily disabled)
+       │
+       └─► Return JSModuleDef to QuickJS
+```
+
+### CommonJS Module Load Sequence (via require())
 
 ```
 jsrt_load_module(loader, specifier, base_path)
@@ -355,6 +418,27 @@ Runtime Shutdown
 - Fixed capacity (can be increased)
 - Collision handling needed
 - Not ordered (doesn't matter for cache)
+
+### 6. Why Bridge Pattern for ES Modules?
+
+**Rationale:**
+- QuickJS requires specific callback signatures for module loading
+- Allows incremental migration from legacy module system
+- Enables reuse of new module system infrastructure (cache, resolver, protocols)
+- Maintains compatibility during refactoring
+- Separates QuickJS integration from module loading logic
+
+**Trade-offs:**
+- Additional layer of indirection
+- Need to export some functions from legacy code (builtin init functions, path utilities)
+- Temporary duplication during migration period
+- More complex initialization sequence
+
+**Implementation:**
+- `jsrt_esm_normalize_callback()`: Bridges QuickJS normalize to path resolver
+- `jsrt_esm_loader_callback()`: Bridges QuickJS loader to new module system
+- Handles special cases (builtin modules, HTTP modules, compact node mode) before delegation
+- Set via `JS_SetModuleLoaderFunc()` during runtime initialization
 
 ---
 

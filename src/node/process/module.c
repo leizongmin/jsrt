@@ -143,8 +143,6 @@ void JSRT_RuntimeSetupStdProcess(JSRT_Runtime* rt) {
   JSValue process_obj = jsrt_get_process_module(rt->ctx);
   JS_SetPropertyStr(rt->ctx, rt->global, "process", process_obj);
 
-  // TODO: Setup IPC if this is a forked child process
-  // This requires more complex integration to properly inherit the pipe from parent
-  // For now, child-side IPC is not automatically configured
-  // jsrt_process_setup_ipc(rt->ctx, process_obj, rt);
+  // Setup IPC if this is a forked child process
+  jsrt_process_setup_ipc(rt->ctx, process_obj, rt);
 }

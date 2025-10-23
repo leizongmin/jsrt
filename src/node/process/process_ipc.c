@@ -1,9 +1,17 @@
 #include <errno.h>
 #include <fcntl.h>
 #include <string.h>
+#include <sys/stat.h>
 #include <unistd.h>
 #include "../../util/debug.h"
 #include "process.h"
+
+// Simple event listener storage for process object
+typedef struct EventListener {
+  char* event_name;
+  JSValue callback;
+  struct EventListener* next;
+} EventListener;
 
 // IPC state for the current process (when forked)
 typedef struct {
@@ -12,6 +20,9 @@ typedef struct {
   JSValue process_obj;
   bool connected;
   bool reading;
+
+  // Event listeners for process object
+  EventListener* listeners;
 
   // Read buffer for incoming messages
   char* read_buffer;
@@ -28,12 +39,35 @@ static void on_ipc_read(uv_stream_t* stream, ssize_t nread, const uv_buf_t* buf)
 static void on_ipc_write(uv_write_t* req, int status);
 static void alloc_buffer(uv_handle_t* handle, size_t suggested_size, uv_buf_t* buf);
 
-// Check if IPC channel exists (stdio fd 3)
+// Find the IPC socket fd (searches fds 3-20 for a socket)
+static int find_ipc_fd() {
+  for (int fd = 3; fd < 20; fd++) {
+    struct stat st;
+    if (fstat(fd, &st) != 0) {
+      continue;  // fd doesn't exist
+    }
+
+    // Check if it's a socket
+    if (S_ISSOCK(st.st_mode)) {
+      JSRT_Debug("find_ipc_fd: found socket at fd %d", fd);
+      return fd;
+    }
+  }
+
+  JSRT_Debug("find_ipc_fd: no socket found in fds 3-19");
+  return -1;
+}
+
+// Check if IPC channel exists
 static bool has_ipc_channel() {
-  // Check if fd 3 exists and is a pipe
-  int fd = 3;
-  int flags = fcntl(fd, F_GETFL);
-  return flags != -1;
+  int ipc_fd = find_ipc_fd();
+  if (ipc_fd < 0) {
+    JSRT_Debug("has_ipc_channel: no IPC socket found");
+    return false;
+  }
+
+  JSRT_Debug("has_ipc_channel: IPC socket found at fd %d", ipc_fd);
+  return true;
 }
 
 // Allocation callback
@@ -47,22 +81,33 @@ static void process_ipc_message(ProcessIPCState* state, const char* data, size_t
   JSContext* ctx = state->ctx;
 
   // Parse JSON message
-  JSValue message = JS_ParseJSON(ctx, data, length, "<ipc>");
+  // JS_ParseJSON requires null-terminated string
+  char* null_terminated = malloc(length + 1);
+  if (!null_terminated) {
+    JSRT_Debug("Failed to allocate memory for IPC message in child");
+    return;
+  }
+  memcpy(null_terminated, data, length);
+  null_terminated[length] = '\0';
+
+  JSValue message = JS_ParseJSON(ctx, null_terminated, length, "<ipc>");
+  free(null_terminated);
+
   if (JS_IsException(message)) {
     JSRT_Debug("Failed to parse IPC message in child");
     JS_FreeValue(ctx, message);
     return;
   }
 
-  // Emit 'message' event on process object
-  JSValue emit = JS_GetPropertyStr(ctx, state->process_obj, "emit");
-  if (JS_IsFunction(ctx, emit)) {
-    JSValue args[2] = {JS_NewString(ctx, "message"), message};
-    JSValue result = JS_Call(ctx, emit, state->process_obj, 2, args);
-    JS_FreeValue(ctx, result);
-    JS_FreeValue(ctx, args[0]);
+  // Emit 'message' event on process object using our simple emitter
+  EventListener* listener = state->listeners;
+  while (listener) {
+    if (strcmp(listener->event_name, "message") == 0) {
+      JSValue result = JS_Call(ctx, listener->callback, state->process_obj, 1, &message);
+      JS_FreeValue(ctx, result);
+    }
+    listener = listener->next;
   }
-  JS_FreeValue(ctx, emit);
   JS_FreeValue(ctx, message);
 }
 
@@ -91,15 +136,15 @@ static void on_ipc_read(uv_stream_t* stream, ssize_t nread, const uv_buf_t* buf)
     if (state->connected) {
       state->connected = false;
 
-      // Emit 'disconnect' event
-      JSValue emit = JS_GetPropertyStr(state->ctx, state->process_obj, "emit");
-      if (JS_IsFunction(state->ctx, emit)) {
-        JSValue args[1] = {JS_NewString(state->ctx, "disconnect")};
-        JSValue result = JS_Call(state->ctx, emit, state->process_obj, 1, args);
-        JS_FreeValue(state->ctx, result);
-        JS_FreeValue(state->ctx, args[0]);
+      // Emit 'disconnect' event using our simple emitter
+      EventListener* listener = state->listeners;
+      while (listener) {
+        if (strcmp(listener->event_name, "disconnect") == 0) {
+          JSValue result = JS_Call(state->ctx, listener->callback, state->process_obj, 0, NULL);
+          JS_FreeValue(state->ctx, result);
+        }
+        listener = listener->next;
       }
-      JS_FreeValue(state->ctx, emit);
     }
 
     return;
@@ -232,6 +277,62 @@ static JSValue js_process_send(JSContext* ctx, JSValueConst this_val, int argc, 
   return JS_TRUE;
 }
 
+// Simple process.on() implementation for IPC events
+static JSValue js_process_on(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
+  if (!g_ipc_state || argc < 2) {
+    return JS_UNDEFINED;
+  }
+
+  const char* event_name = JS_ToCString(ctx, argv[0]);
+  if (!event_name) {
+    return JS_EXCEPTION;
+  }
+
+  JSValue callback = argv[1];
+  if (!JS_IsFunction(ctx, callback)) {
+    JS_FreeCString(ctx, event_name);
+    return JS_ThrowTypeError(ctx, "Callback must be a function");
+  }
+
+  // Add listener to list
+  EventListener* listener = malloc(sizeof(EventListener));
+  listener->event_name = strdup(event_name);
+  listener->callback = JS_DupValue(ctx, callback);
+  listener->next = g_ipc_state->listeners;
+  g_ipc_state->listeners = listener;
+
+  JS_FreeCString(ctx, event_name);
+  return this_val;  // Return process for chaining
+}
+
+// Simple process.emit() implementation for IPC events
+static JSValue js_process_emit(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
+  if (!g_ipc_state || argc < 1) {
+    return JS_FALSE;
+  }
+
+  const char* event_name = JS_ToCString(ctx, argv[0]);
+  if (!event_name) {
+    return JS_EXCEPTION;
+  }
+
+  // Find and call listeners for this event
+  EventListener* listener = g_ipc_state->listeners;
+  bool emitted = false;
+  while (listener) {
+    if (strcmp(listener->event_name, event_name) == 0) {
+      // Call the callback with remaining arguments
+      JSValue result = JS_Call(ctx, listener->callback, this_val, argc - 1, argv + 1);
+      JS_FreeValue(ctx, result);
+      emitted = true;
+    }
+    listener = listener->next;
+  }
+
+  JS_FreeCString(ctx, event_name);
+  return JS_NewBool(ctx, emitted);
+}
+
 // process.disconnect()
 static JSValue js_process_disconnect(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
   if (!g_ipc_state || !g_ipc_state->connected) {
@@ -249,15 +350,15 @@ static JSValue js_process_disconnect(JSContext* ctx, JSValueConst this_val, int 
   // Close pipe
   uv_close((uv_handle_t*)g_ipc_state->pipe, NULL);
 
-  // Emit disconnect event
-  JSValue emit = JS_GetPropertyStr(ctx, g_ipc_state->process_obj, "emit");
-  if (JS_IsFunction(ctx, emit)) {
-    JSValue args[1] = {JS_NewString(ctx, "disconnect")};
-    JSValue result = JS_Call(ctx, emit, g_ipc_state->process_obj, 1, args);
-    JS_FreeValue(ctx, result);
-    JS_FreeValue(ctx, args[0]);
+  // Emit disconnect event using our simple emitter
+  EventListener* listener = g_ipc_state->listeners;
+  while (listener) {
+    if (strcmp(listener->event_name, "disconnect") == 0) {
+      JSValue result = JS_Call(ctx, listener->callback, g_ipc_state->process_obj, 0, NULL);
+      JS_FreeValue(ctx, result);
+    }
+    listener = listener->next;
   }
-  JS_FreeValue(ctx, emit);
 
   return JS_UNDEFINED;
 }
@@ -274,6 +375,7 @@ static JSValue js_process_get_connected(JSContext* ctx, JSValueConst this_val, i
 void jsrt_process_setup_ipc(JSContext* ctx, JSValue process_obj, JSRT_Runtime* rt) {
   // Check if IPC channel exists
   if (!has_ipc_channel()) {
+    JSRT_Debug("Child process: No IPC channel detected on fd 3");
     return;
   }
 
@@ -304,6 +406,7 @@ void jsrt_process_setup_ipc(JSContext* ctx, JSValue process_obj, JSRT_Runtime* r
   }
 
   // Initialize a new pipe in IPC mode
+  // The '1' flag enables IPC mode for passing handles (not just data)
   int result = uv_pipe_init(rt->uv_loop, g_ipc_state->pipe, 1);
   if (result < 0) {
     JSRT_Debug("Failed to init IPC pipe: %s", uv_strerror(result));
@@ -314,11 +417,10 @@ void jsrt_process_setup_ipc(JSContext* ctx, JSValue process_obj, JSRT_Runtime* r
     return;
   }
 
-  // Open the existing fd 3 as a pipe
-  // We need to dup the fd first to avoid conflicts with libuv's management
-  int ipc_fd = dup(3);
+  // Find the actual IPC socket fd
+  int ipc_fd = find_ipc_fd();
   if (ipc_fd < 0) {
-    JSRT_Debug("Failed to dup fd 3: %s", strerror(errno));
+    JSRT_Debug("Cannot find IPC socket fd");
     uv_close((uv_handle_t*)g_ipc_state->pipe, NULL);
     free(g_ipc_state->read_buffer);
     free(g_ipc_state);
@@ -326,10 +428,13 @@ void jsrt_process_setup_ipc(JSContext* ctx, JSValue process_obj, JSRT_Runtime* r
     return;
   }
 
+  JSRT_Debug("Opening IPC socket fd %d as pipe...", ipc_fd);
+
+  // Open the IPC socket fd as a pipe
   result = uv_pipe_open(g_ipc_state->pipe, ipc_fd);
+  JSRT_Debug("uv_pipe_open result: %d (%s)", result, result < 0 ? uv_strerror(result) : "success");
   if (result < 0) {
-    JSRT_Debug("Failed to open IPC pipe on duped fd: %s", uv_strerror(result));
-    close(ipc_fd);
+    JSRT_Debug("Failed to open IPC pipe on fd 3: %s", uv_strerror(result));
     uv_close((uv_handle_t*)g_ipc_state->pipe, NULL);
     free(g_ipc_state->read_buffer);
     free(g_ipc_state);
@@ -348,43 +453,23 @@ void jsrt_process_setup_ipc(JSContext* ctx, JSValue process_obj, JSRT_Runtime* r
                           JS_NewCFunction(ctx, js_process_get_connected, "get connected", 0), JS_UNDEFINED,
                           JS_PROP_CONFIGURABLE);
 
-  // Make process an EventEmitter (load events module and add methods)
-  JSValue events_module = JS_Eval(ctx, "require('node:events')", 23, "<ipc>", JS_EVAL_TYPE_GLOBAL);
-  if (!JS_IsException(events_module)) {
-    JSValue EventEmitter = JS_GetPropertyStr(ctx, events_module, "EventEmitter");
-    if (!JS_IsException(EventEmitter)) {
-      JSValue proto = JS_GetPropertyStr(ctx, EventEmitter, "prototype");
-      if (!JS_IsException(proto)) {
-        // Copy EventEmitter methods to process
-        JSValue on = JS_GetPropertyStr(ctx, proto, "on");
-        JSValue emit = JS_GetPropertyStr(ctx, proto, "emit");
-        JSValue once = JS_GetPropertyStr(ctx, proto, "once");
-        JSValue off = JS_GetPropertyStr(ctx, proto, "off");
+  // Add simple event emitter methods to process object
+  JS_SetPropertyStr(ctx, process_obj, "on", JS_NewCFunction(ctx, js_process_on, "on", 2));
+  JS_SetPropertyStr(ctx, process_obj, "emit", JS_NewCFunction(ctx, js_process_emit, "emit", 1));
 
-        if (!JS_IsException(on))
-          JS_SetPropertyStr(ctx, process_obj, "on", on);
-        if (!JS_IsException(emit))
-          JS_SetPropertyStr(ctx, process_obj, "emit", emit);
-        if (!JS_IsException(once))
-          JS_SetPropertyStr(ctx, process_obj, "once", once);
-        if (!JS_IsException(off))
-          JS_SetPropertyStr(ctx, process_obj, "off", off);
-
-        JS_FreeValue(ctx, proto);
-      }
-      JS_FreeValue(ctx, EventEmitter);
-    }
-    JS_FreeValue(ctx, events_module);
-  }
+  JSRT_Debug("Child process: Event emitter methods added");
 
   // Start reading from IPC channel
+  JSRT_Debug("About to call uv_read_start on pipe...");
   result = uv_read_start((uv_stream_t*)g_ipc_state->pipe, alloc_buffer, on_ipc_read);
+  JSRT_Debug("uv_read_start returned: %d", result);
   if (result == 0) {
     g_ipc_state->reading = true;
     JSRT_Debug("Child process: IPC channel started successfully");
   } else {
     JSRT_Debug("Failed to start IPC reading: %s", uv_strerror(result));
   }
+  JSRT_Debug("IPC setup complete, returning from jsrt_process_setup_ipc");
 }
 
 // Cleanup IPC state
@@ -400,6 +485,16 @@ void jsrt_process_cleanup_ipc(JSContext* ctx) {
       uv_close((uv_handle_t*)g_ipc_state->pipe, NULL);
       free(g_ipc_state->pipe);
     }
+    // Free event listeners
+    EventListener* listener = g_ipc_state->listeners;
+    while (listener) {
+      EventListener* next = listener->next;
+      free(listener->event_name);
+      JS_FreeValue(ctx, listener->callback);
+      free(listener);
+      listener = next;
+    }
+
     JS_FreeValue(ctx, g_ipc_state->process_obj);
     free(g_ipc_state);
     g_ipc_state = NULL;

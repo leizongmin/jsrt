@@ -31,7 +31,8 @@ function test_fork_basic() {
     'Child has disconnect() method'
   );
 
-  // Cleanup
+  // Cleanup - disconnect first, then kill
+  child.disconnect();
   child.kill();
 }
 
@@ -44,6 +45,14 @@ function test_fork_message_parent_to_child(callback) {
 
   let receivedReady = false;
   let receivedEcho = false;
+  let callbackCalled = false;
+
+  function complete() {
+    if (callbackCalled) return;
+    callbackCalled = true;
+    clearTimeout(timer);
+    callback();
+  }
 
   child.on('message', (msg) => {
     console.log('Parent received:', JSON.stringify(msg));
@@ -62,28 +71,28 @@ function test_fork_message_parent_to_child(callback) {
     } else if (msg.type === 'goodbye') {
       assert(receivedReady, 'Received ready message');
       assert(receivedEcho, 'Received echo response');
-      callback();
+      complete();
     }
   });
 
   child.on('exit', (code) => {
     if (code !== 0 && !receivedEcho) {
       assert(false, 'Child exited with non-zero code: ' + code);
-      callback();
+      complete();
     }
   });
 
   child.on('error', (err) => {
     assert(false, 'Child process error: ' + err.message);
-    callback();
+    complete();
   });
 
   // Timeout after 5 seconds
-  setTimeout(() => {
+  const timer = setTimeout(() => {
     if (child.connected) {
       child.kill();
       assert(false, 'Test timed out');
-      callback();
+      complete();
     }
   }, 5000);
 }
@@ -96,6 +105,14 @@ function test_fork_disconnect(callback) {
   );
 
   let disconnected = false;
+  let callbackCalled = false;
+
+  function complete() {
+    if (callbackCalled) return;
+    callbackCalled = true;
+    clearTimeout(timer);
+    callback();
+  }
 
   child.on('message', (msg) => {
     if (msg.type === 'ready') {
@@ -112,15 +129,15 @@ function test_fork_disconnect(callback) {
 
   child.on('exit', () => {
     assert(disconnected, 'Disconnect happened before exit');
-    callback();
+    complete();
   });
 
   // Timeout
-  setTimeout(() => {
+  const timer = setTimeout(() => {
     if (child.connected) {
       child.kill();
       assert(false, 'Test timed out');
-      callback();
+      complete();
     }
   }, 5000);
 }

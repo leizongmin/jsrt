@@ -96,6 +96,10 @@ JSValue js_child_process_spawn(JSContext* ctx, JSValueConst this_val, int argc, 
     options.uid = -1;
     options.gid = -1;
     options.stdio_count = 3;
+    // Default stdio to pipe (Node.js default for spawn)
+    for (int i = 0; i < 3; i++) {
+      options.stdio[i].flags = UV_CREATE_PIPE;
+    }
   }
 
   // Create ChildProcess instance

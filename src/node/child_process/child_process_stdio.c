@@ -16,42 +16,55 @@ int setup_stdio_pipes(JSContext* ctx, JSChildProcess* child, const JSChildProces
 
   // Initialize stdio containers
   for (int i = 0; i < options->stdio_count; i++) {
+    uv_stdio_container_t* container = (uv_stdio_container_t*)&options->stdio[i];
+
     if (i < 3) {
-      // stdin/stdout/stderr - create regular pipe
-      uv_pipe_t* pipe = malloc(sizeof(uv_pipe_t));
-      if (!pipe) {
-        JSRT_Debug("Failed to allocate pipe for stdio %d", i);
-        return -1;
-      }
-
-      int result = uv_pipe_init(rt->uv_loop, pipe, 0);  // 0 = not IPC
-      if (result < 0) {
-        JSRT_Debug("uv_pipe_init failed for stdio %d: %s", i, uv_strerror(result));
-        free(pipe);
-        return -1;
-      }
-
-      // Store pipe reference
-      if (i == 0) {
-        child->stdin_pipe = pipe;
-        child->handles_to_close++;
-      } else if (i == 1) {
-        child->stdout_pipe = pipe;
-        child->handles_to_close++;
-      } else if (i == 2) {
-        child->stderr_pipe = pipe;
-        child->handles_to_close++;
-      }
-
-      // Configure stdio container
-      if (i == 0) {
-        // stdin: readable from parent perspective
-        ((uv_stdio_container_t*)options->stdio)[i].flags = UV_CREATE_PIPE | UV_READABLE_PIPE;
+      // stdin/stdout/stderr
+      // Check if already configured by parse_spawn_options()
+      if (container->flags == UV_INHERIT_FD) {
+        // inherit mode - already configured with fd
+        // No need to create pipes, just keep the UV_INHERIT_FD flag
+        continue;
+      } else if (container->flags == UV_IGNORE) {
+        // ignore mode - already configured
+        continue;
       } else {
-        // stdout/stderr: writable from parent perspective
-        ((uv_stdio_container_t*)options->stdio)[i].flags = UV_CREATE_PIPE | UV_WRITABLE_PIPE;
+        // pipe mode (UV_CREATE_PIPE or default) - create pipe
+        uv_pipe_t* pipe = malloc(sizeof(uv_pipe_t));
+        if (!pipe) {
+          JSRT_Debug("Failed to allocate pipe for stdio %d", i);
+          return -1;
+        }
+
+        int result = uv_pipe_init(rt->uv_loop, pipe, 0);  // 0 = not IPC
+        if (result < 0) {
+          JSRT_Debug("uv_pipe_init failed for stdio %d: %s", i, uv_strerror(result));
+          free(pipe);
+          return -1;
+        }
+
+        // Store pipe reference
+        if (i == 0) {
+          child->stdin_pipe = pipe;
+          child->handles_to_close++;
+        } else if (i == 1) {
+          child->stdout_pipe = pipe;
+          child->handles_to_close++;
+        } else if (i == 2) {
+          child->stderr_pipe = pipe;
+          child->handles_to_close++;
+        }
+
+        // Configure stdio container
+        if (i == 0) {
+          // stdin: readable from parent perspective
+          container->flags = UV_CREATE_PIPE | UV_READABLE_PIPE;
+        } else {
+          // stdout/stderr: writable from parent perspective
+          container->flags = UV_CREATE_PIPE | UV_WRITABLE_PIPE;
+        }
+        container->data.stream = (uv_stream_t*)pipe;
       }
-      ((uv_stdio_container_t*)options->stdio)[i].data.stream = (uv_stream_t*)pipe;
     } else if (i == 3) {
       // IPC channel (stdio[3])
       IPCChannelState* ipc = create_ipc_channel(ctx, child, rt->uv_loop);
@@ -65,8 +78,8 @@ int setup_stdio_pipes(JSContext* ctx, JSChildProcess* child, const JSChildProces
       child->handles_to_close++;
 
       // Configure stdio container for IPC (bidirectional pipe)
-      ((uv_stdio_container_t*)options->stdio)[i].flags = UV_CREATE_PIPE | UV_READABLE_PIPE | UV_WRITABLE_PIPE;
-      ((uv_stdio_container_t*)options->stdio)[i].data.stream = (uv_stream_t*)ipc->pipe;
+      container->flags = UV_CREATE_PIPE | UV_READABLE_PIPE | UV_WRITABLE_PIPE;
+      container->data.stream = (uv_stream_t*)ipc->pipe;
     }
   }
 

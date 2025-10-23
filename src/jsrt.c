@@ -190,7 +190,6 @@ static int jsrt_cli_run_commonjs(JSRT_Runtime* rt, const char* eval_name, const 
   JSValue prev_dirname = JS_UNDEFINED;
   char* dirname = NULL;
   int status = -1;
-  bool globals_overridden = false;
 
   if (JS_IsException(func)) {
     exception = JS_GetException(ctx);
@@ -258,7 +257,6 @@ static int jsrt_cli_run_commonjs(JSRT_Runtime* rt, const char* eval_name, const 
     exception = JS_GetException(ctx);
     goto cleanup;
   }
-  globals_overridden = true;
 
   call_result = JS_Call(ctx, func, global_obj, 0, NULL);
   if (JS_IsException(call_result)) {
@@ -272,25 +270,20 @@ static int jsrt_cli_run_commonjs(JSRT_Runtime* rt, const char* eval_name, const 
   status = 0;
 
 cleanup:
-  if (globals_overridden) {
-    JS_SetPropertyStr(ctx, global_obj, "module", prev_module);
-    JS_SetPropertyStr(ctx, global_obj, "exports", prev_exports);
-    JS_SetPropertyStr(ctx, global_obj, "__filename", prev_filename);
-    JS_SetPropertyStr(ctx, global_obj, "__dirname", prev_dirname);
-    prev_module = prev_exports = prev_filename = prev_dirname = JS_UNDEFINED;
-  } else {
-    if (!JS_IsUndefined(prev_module)) {
-      JS_FreeValue(ctx, prev_module);
-    }
-    if (!JS_IsUndefined(prev_exports)) {
-      JS_FreeValue(ctx, prev_exports);
-    }
-    if (!JS_IsUndefined(prev_filename)) {
-      JS_FreeValue(ctx, prev_filename);
-    }
-    if (!JS_IsUndefined(prev_dirname)) {
-      JS_FreeValue(ctx, prev_dirname);
-    }
+  // Don't restore global properties - they should remain set for the entire script lifetime
+  // including async callbacks (setTimeout, process.nextTick, child process events, etc.)
+  // Just free the previous values
+  if (!JS_IsUndefined(prev_module)) {
+    JS_FreeValue(ctx, prev_module);
+  }
+  if (!JS_IsUndefined(prev_exports)) {
+    JS_FreeValue(ctx, prev_exports);
+  }
+  if (!JS_IsUndefined(prev_filename)) {
+    JS_FreeValue(ctx, prev_filename);
+  }
+  if (!JS_IsUndefined(prev_dirname)) {
+    JS_FreeValue(ctx, prev_dirname);
   }
   if (!JS_IsUndefined(global_obj)) {
     JS_FreeValue(ctx, global_obj);

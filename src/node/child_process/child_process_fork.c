@@ -55,10 +55,11 @@ JSValue js_child_process_disconnect(JSContext* ctx, JSValueConst this_val, int a
     disconnect_ipc_channel(child->ipc_channel);
     child->connected = false;
 
-    // Emit 'disconnect' event
-    JSValue event_name = JS_NewString(ctx, "disconnect");
-    emit_event(ctx, child->child_obj, "disconnect", 0, &event_name);
-    JS_FreeValue(ctx, event_name);
+    // Update the connected property on the JS object
+    JS_SetPropertyStr(ctx, this_val, "connected", JS_FALSE);
+
+    // Emit 'disconnect' event (no additional arguments)
+    emit_event(ctx, child->child_obj, "disconnect", 0, NULL);
   }
 
   return JS_UNDEFINED;

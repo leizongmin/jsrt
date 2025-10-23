@@ -61,6 +61,11 @@ int start_ipc_reading(IPCChannelState* state) {
     return -1;
   }
 
+  // Get the underlying fd for debug
+  uv_os_fd_t fd;
+  int fd_result = uv_fileno((uv_handle_t*)state->pipe, &fd);
+  JSRT_Debug("[PARENT] start_ipc_reading: pipe fd = %d (uv_fileno result: %d)", fd, fd_result);
+
   int result = uv_read_start((uv_stream_t*)state->pipe, alloc_buffer, on_ipc_read);
   if (result == 0) {
     state->reading = true;
@@ -97,12 +102,9 @@ static void on_ipc_read(uv_stream_t* stream, ssize_t nread, const uv_buf_t* buf)
       state->connected = false;
       state->child->connected = false;
 
-      // Emit 'disconnect' event
+      // Emit 'disconnect' event (no additional arguments)
       JSContext* ctx = state->child->ctx;
-      JSValue event_name = JS_NewString(ctx, "disconnect");
-      JSValue argv[] = {event_name};
-      emit_event(ctx, state->child->child_obj, "disconnect", 0, argv);
-      JS_FreeValue(ctx, event_name);
+      emit_event(ctx, state->child->child_obj, "disconnect", 0, NULL);
     }
 
     return;
@@ -182,9 +184,22 @@ static void process_ipc_message(IPCChannelState* state, const char* data, size_t
   JSContext* ctx = state->child->ctx;
 
   // Parse JSON message
-  JSValue message = JS_ParseJSON(ctx, data, length, "<ipc>");
+  // JS_ParseJSON requires null-terminated string, so create one
+  char* null_terminated = malloc(length + 1);
+  if (!null_terminated) {
+    JSRT_Debug("Failed to allocate memory for IPC message");
+    return;
+  }
+  memcpy(null_terminated, data, length);
+  null_terminated[length] = '\0';
+
+  JSRT_Debug("Parsing IPC message: length=%zu, data='%s'", length, null_terminated);
+  JSValue message = JS_ParseJSON(ctx, null_terminated, length, "<ipc>");
+  free(null_terminated);
+
   if (JS_IsException(message)) {
     JSRT_Debug("Failed to parse IPC message");
+    js_std_dump_error(ctx);
     JS_FreeValue(ctx, message);
     return;
   }

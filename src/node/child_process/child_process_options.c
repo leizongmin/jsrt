@@ -227,8 +227,44 @@ int parse_spawn_options(JSContext* ctx, JSValueConst options_obj, JSChildProcess
         length = 4;
       }
       options->stdio_count = length;
+
+      // Parse each stdio element
+      for (uint32_t i = 0; i < length; i++) {
+        JSValue item = JS_GetPropertyUint32(ctx, stdio_val, i);
+
+        if (JS_IsString(item)) {
+          const char* mode = JS_ToCString(ctx, item);
+          if (mode) {
+            // Store the mode string in the stdio container's data field temporarily
+            // We'll use this in setup_stdio_pipes() to configure properly
+            if (strcmp(mode, "inherit") == 0) {
+              options->stdio[i].flags = UV_INHERIT_FD;
+              // Set fd to the corresponding parent fd (0=stdin, 1=stdout, 2=stderr)
+              options->stdio[i].data.fd = i;
+            } else if (strcmp(mode, "pipe") == 0) {
+              options->stdio[i].flags = UV_CREATE_PIPE;
+              // Will be set up in setup_stdio_pipes()
+            } else if (strcmp(mode, "ignore") == 0) {
+              options->stdio[i].flags = UV_IGNORE;
+            } else if (strcmp(mode, "ipc") == 0) {
+              // IPC will be handled specially in setup_stdio_pipes()
+              options->stdio[i].flags = UV_CREATE_PIPE;
+            }
+            JS_FreeCString(ctx, mode);
+          }
+        }
+
+        JS_FreeValue(ctx, item);
+      }
     }
     JS_FreeValue(ctx, length_val);
+  } else {
+    // No stdio specified - default to pipe for spawn (Node.js default behavior)
+    // Note: fork() explicitly sets stdio to ['inherit', 'inherit', 'inherit', 'ipc']
+    for (int i = 0; i < 3; i++) {
+      options->stdio[i].flags = UV_CREATE_PIPE;
+      // Will be set up in setup_stdio_pipes()
+    }
   }
   JS_FreeValue(ctx, stdio_val);
 

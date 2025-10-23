@@ -8,9 +8,9 @@
 * Task Metadata
 :PROPERTIES:
 :CREATED: 2025-10-20T00:00:00Z
-:UPDATED: 2025-10-20T15:46:00Z
+:UPDATED: 2025-10-23T02:20:00Z
 :STATUS: ✅ COMPLETED
-:PROGRESS: 218/220
+:PROGRESS: 234/235
 :COMPLETION: 99%
 :END:
 
@@ -698,163 +698,172 @@ Test synchronous APIs thoroughly
 *** ✅ Subtask 5.5.11: Run tests: make test N=node/child_process
 *** ✅ Subtask 5.5.12: Memory safety validation: make jsrt_m && ASAN test
 
-** ❌ Phase 6: IPC Channel and fork() [S][R:HIGH][C:COMPLEX][D:phase-3] :implementation:
+** ✅ Phase 6: IPC Channel and fork() [S][R:HIGH][C:COMPLEX][D:phase-3] :implementation:
 :PROPERTIES:
 :ID: phase-6
 :CREATED: 2025-10-20T00:00:00Z
+:COMPLETED: 2025-10-23T02:20:00Z
 :DEPS: phase-3
-:PROGRESS: 0/40
-:COMPLETION: 0%
+:PROGRESS: 40/40
+:COMPLETION: 100%
 :END:
 
 Goal: Implement IPC messaging system and fork() for Node.js child processes
 Duration Estimate: Complex IPC implementation
 
-*** ❌ Task 6.1: IPC Channel Infrastructure [S][R:HIGH][C:COMPLEX]
+*** ✅ Task 6.1: IPC Channel Infrastructure [S][R:HIGH][C:COMPLEX]
 :PROPERTIES:
 :ID: 6.1
 :CREATED: 2025-10-20T00:00:00Z
+:COMPLETED: 2025-10-23T02:20:00Z
 :DEPS: None
 :END:
 
 Build IPC communication channel using uv_pipe
 
-**** ❌ Subtask 6.1.1: Create child_process_ipc.c file
-**** ❌ Subtask 6.1.2: Define IPCChannel structure (uv_pipe_t, message queue, state)
-**** ❌ Subtask 6.1.3: Implement create_ipc_channel() - create UV_IPC pipe
-**** ❌ Subtask 6.1.4: Configure stdio entry for IPC (stdio[3] typically)
-**** ❌ Subtask 6.1.5: Implement IPC channel setup in parent
-**** ❌ Subtask 6.1.6: Implement IPC channel setup in child (via environment variable)
-**** ❌ Subtask 6.1.7: Add IPC pipe to uv_stdio_container_t
-**** ❌ Subtask 6.1.8: Implement channel reference counting
+**** ✅ Subtask 6.1.1: Create child_process_ipc.c file
+**** ✅ Subtask 6.1.2: Define IPCChannel structure (uv_pipe_t, message queue, state)
+**** ✅ Subtask 6.1.3: Implement create_ipc_channel() - create UV_IPC pipe
+**** ✅ Subtask 6.1.4: Configure stdio entry for IPC (stdio[3] typically)
+**** ✅ Subtask 6.1.5: Implement IPC channel setup in parent
+**** ✅ Subtask 6.1.6: Implement IPC channel setup in child (via environment variable)
+**** ✅ Subtask 6.1.7: Add IPC pipe to uv_stdio_container_t
+**** ✅ Subtask 6.1.8: Implement channel reference counting
 
-*** ❌ Task 6.2: Message Serialization [S][R:HIGH][C:COMPLEX][D:6.1]
+*** ✅ Task 6.2: Message Serialization [S][R:HIGH][C:COMPLEX][D:6.1]
 :PROPERTIES:
 :ID: 6.2
 :CREATED: 2025-10-20T00:00:00Z
+:COMPLETED: 2025-10-23T02:20:00Z
 :DEPS: 6.1
 :END:
 
 Implement message serialization/deserialization
 
-**** ❌ Subtask 6.2.1: Design message format (length-prefixed JSON)
-**** ❌ Subtask 6.2.2: Implement serialize_message() - JSValue to buffer
-**** ❌ Subtask 6.2.3: Support JSON-serializable objects
-**** ❌ Subtask 6.2.4: Support null, undefined, primitives
-**** ❌ Subtask 6.2.5: Implement deserialize_message() - buffer to JSValue
-**** ❌ Subtask 6.2.6: Handle serialization errors gracefully
-**** ❌ Subtask 6.2.7: Add message length header (4 bytes)
+**** ✅ Subtask 6.2.1: Design message format (length-prefixed JSON)
+**** ✅ Subtask 6.2.2: Implement serialize_message() - JSValue to buffer
+**** ✅ Subtask 6.2.3: Support JSON-serializable objects
+**** ✅ Subtask 6.2.4: Support null, undefined, primitives
+**** ✅ Subtask 6.2.5: Implement deserialize_message() - buffer to JSValue
+**** ✅ Subtask 6.2.6: Handle serialization errors gracefully
+**** ✅ Subtask 6.2.7: Add message length header (4 bytes)
 
-*** ❌ Task 6.3: send() Method [S][R:MED][C:MEDIUM][D:6.2]
+*** ✅ Task 6.3: send() Method [S][R:MED][C:MEDIUM][D:6.2]
 :PROPERTIES:
 :ID: 6.3
 :CREATED: 2025-10-20T00:00:00Z
+:COMPLETED: 2025-10-23T02:20:00Z
 :DEPS: 6.2
 :END:
 
 Implement ChildProcess.send() method
 
-**** ❌ Subtask 6.3.1: Implement js_child_process_send() JS binding
-**** ❌ Subtask 6.3.2: Validate process has IPC channel
-**** ❌ Subtask 6.3.3: Serialize message using Task 6.2
-**** ❌ Subtask 6.3.4: Write to IPC pipe (uv_write)
-**** ❌ Subtask 6.3.5: Handle write completion callback
-**** ❌ Subtask 6.3.6: Handle optional callback parameter
-**** ❌ Subtask 6.3.7: Return boolean (success/failure)
-**** ❌ Subtask 6.3.8: Implement send queue for backpressure
+**** ✅ Subtask 6.3.1: Implement js_child_process_send() JS binding
+**** ✅ Subtask 6.3.2: Validate process has IPC channel
+**** ✅ Subtask 6.3.3: Serialize message using Task 6.2
+**** ✅ Subtask 6.3.4: Write to IPC pipe (uv_write)
+**** ✅ Subtask 6.3.5: Handle write completion callback
+**** ✅ Subtask 6.3.6: Handle optional callback parameter
+**** ✅ Subtask 6.3.7: Return boolean (success/failure)
+**** ✅ Subtask 6.3.8: Implement send queue for backpressure
 
-*** ❌ Task 6.4: Message Reception [S][R:MED][C:MEDIUM][D:6.2]
+*** ✅ Task 6.4: Message Reception [S][R:MED][C:MEDIUM][D:6.2]
 :PROPERTIES:
 :ID: 6.4
 :CREATED: 2025-10-20T00:00:00Z
+:COMPLETED: 2025-10-23T02:20:00Z
 :DEPS: 6.2
 :END:
 
 Implement message reception and 'message' event
 
-**** ❌ Subtask 6.4.1: Implement on_ipc_read() callback for uv_read_start
-**** ❌ Subtask 6.4.2: Parse message length header
-**** ❌ Subtask 6.4.3: Read full message body
-**** ❌ Subtask 6.4.4: Deserialize message
-**** ❌ Subtask 6.4.5: Emit 'message' event on ChildProcess
-**** ❌ Subtask 6.4.6: Handle partial reads (buffer incomplete messages)
-**** ❌ Subtask 6.4.7: Handle read errors
+**** ✅ Subtask 6.4.1: Implement on_ipc_read() callback for uv_read_start
+**** ✅ Subtask 6.4.2: Parse message length header
+**** ✅ Subtask 6.4.3: Read full message body
+**** ✅ Subtask 6.4.4: Deserialize message
+**** ✅ Subtask 6.4.5: Emit 'message' event on ChildProcess
+**** ✅ Subtask 6.4.6: Handle partial reads (buffer incomplete messages)
+**** ✅ Subtask 6.4.7: Handle read errors
 
-*** ❌ Task 6.5: disconnect() Method [S][R:LOW][C:SIMPLE][D:6.1]
+*** ✅ Task 6.5: disconnect() Method [S][R:LOW][C:SIMPLE][D:6.1]
 :PROPERTIES:
 :ID: 6.5
 :CREATED: 2025-10-20T00:00:00Z
+:COMPLETED: 2025-10-23T02:20:00Z
 :DEPS: 6.1
 :END:
 
 Implement IPC channel disconnection
 
-**** ❌ Subtask 6.5.1: Implement js_child_process_disconnect() JS binding
-**** ❌ Subtask 6.5.2: Close IPC pipe (uv_close)
-**** ❌ Subtask 6.5.3: Set connected property to false
-**** ❌ Subtask 6.5.4: Emit 'disconnect' event
-**** ❌ Subtask 6.5.5: Cleanup IPC channel resources
+**** ✅ Subtask 6.5.1: Implement js_child_process_disconnect() JS binding
+**** ✅ Subtask 6.5.2: Close IPC pipe (uv_close)
+**** ✅ Subtask 6.5.3: Set connected property to false
+**** ✅ Subtask 6.5.4: Emit 'disconnect' event
+**** ✅ Subtask 6.5.5: Cleanup IPC channel resources
 
-*** ❌ Task 6.6: fork() Implementation [S][R:HIGH][C:COMPLEX][D:6.5,6.4,6.3]
+*** ✅ Task 6.6: fork() Implementation [S][R:HIGH][C:COMPLEX][D:6.5,6.4,6.3]
 :PROPERTIES:
 :ID: 6.6
 :CREATED: 2025-10-20T00:00:00Z
+:COMPLETED: 2025-10-23T02:20:00Z
 :DEPS: 6.5,6.4,6.3
 :END:
 
 Implement fork() to spawn Node.js child processes with IPC
 
-**** ❌ Subtask 6.6.1: Create child_process_fork.c file
-**** ❌ Subtask 6.6.2: Implement js_child_process_fork() JS binding
-**** ❌ Subtask 6.6.3: Parse modulePath and options
-**** ❌ Subtask 6.6.4: Resolve module path (absolute or relative to cwd)
-**** ❌ Subtask 6.6.5: Create IPC channel
-**** ❌ Subtask 6.6.6: Build execArgv (V8/Node.js flags - skip for jsrt)
-**** ❌ Subtask 6.6.7: Set command to process.execPath (jsrt binary)
-**** ❌ Subtask 6.6.8: Build args array [modulePath, ...args]
-**** ❌ Subtask 6.6.9: Set silent option (redirect stdio or inherit)
-**** ❌ Subtask 6.6.10: Call spawn() with IPC channel configured
-**** ❌ Subtask 6.6.11: Return ChildProcess with IPC methods enabled
+**** ✅ Subtask 6.6.1: Create child_process_fork.c file
+**** ✅ Subtask 6.6.2: Implement js_child_process_fork() JS binding
+**** ✅ Subtask 6.6.3: Parse modulePath and options
+**** ✅ Subtask 6.6.4: Resolve module path (absolute or relative to cwd)
+**** ✅ Subtask 6.6.5: Create IPC channel
+**** ✅ Subtask 6.6.6: Build execArgv (V8/Node.js flags - skip for jsrt)
+**** ✅ Subtask 6.6.7: Set command to process.execPath (jsrt binary)
+**** ✅ Subtask 6.6.8: Build args array [modulePath, ...args]
+**** ✅ Subtask 6.6.9: Set silent option (redirect stdio or inherit)
+**** ✅ Subtask 6.6.10: Call spawn() with IPC channel configured
+**** ✅ Subtask 6.6.11: Return ChildProcess with IPC methods enabled
 
-*** ❌ Task 6.7: Child Process IPC Bootstrap [S][R:MED][C:MEDIUM][D:6.6]
+*** ✅ Task 6.7: Child Process IPC Bootstrap [S][R:MED][C:MEDIUM][D:6.6]
 :PROPERTIES:
 :ID: 6.7
 :CREATED: 2025-10-20T00:00:00Z
+:COMPLETED: 2025-10-23T02:20:00Z
 :DEPS: 6.6
 :END:
 
 Setup IPC in child process when forked
 
-**** ❌ Subtask 6.7.1: Detect IPC channel in child (check stdio fd or env var)
-**** ❌ Subtask 6.7.2: Create process.send() method in child
-**** ❌ Subtask 6.7.3: Create process.disconnect() method in child
-**** ❌ Subtask 6.7.4: Setup 'message' event on process object
-**** ❌ Subtask 6.7.5: Set process.connected property
-**** ❌ Subtask 6.7.6: Initialize IPC channel reader in child
+**** ✅ Subtask 6.7.1: Detect IPC channel in child (check stdio fd or env var)
+**** ✅ Subtask 6.7.2: Create process.send() method in child
+**** ✅ Subtask 6.7.3: Create process.disconnect() method in child
+**** ✅ Subtask 6.7.4: Setup 'message' event on process object
+**** ✅ Subtask 6.7.5: Set process.connected property
+**** ✅ Subtask 6.7.6: Initialize IPC channel reader in child
 
-*** ❌ Task 6.8: Testing IPC and fork() [S][R:MED][C:MEDIUM][D:6.7]
+*** ✅ Task 6.8: Testing IPC and fork() [S][R:MED][C:MEDIUM][D:6.7]
 :PROPERTIES:
 :ID: 6.8
 :CREATED: 2025-10-20T00:00:00Z
+:COMPLETED: 2025-10-23T02:20:00Z
 :DEPS: 6.7
 :END:
 
 Test IPC functionality comprehensively
 
-**** ❌ Subtask 6.8.1: Create test/node/child_process/test_fork.js
-**** ❌ Subtask 6.8.2: Create test/node/child_process/fixtures/ipc_child.js
-**** ❌ Subtask 6.8.3: Test fork() spawns jsrt process
-**** ❌ Subtask 6.8.4: Test send() from parent to child
-**** ❌ Subtask 6.8.5: Test 'message' event in child
-**** ❌ Subtask 6.8.6: Test send() from child to parent (process.send)
-**** ❌ Subtask 6.8.7: Test 'message' event in parent
-**** ❌ Subtask 6.8.8: Test bidirectional messaging
-**** ❌ Subtask 6.8.9: Test disconnect() from parent
-**** ❌ Subtask 6.8.10: Test disconnect() from child
-**** ❌ Subtask 6.8.11: Test 'disconnect' event
-**** ❌ Subtask 6.8.12: Test message serialization edge cases
-**** ❌ Subtask 6.8.13: Run tests: make test N=node/child_process
-**** ❌ Subtask 6.8.14: Memory safety validation: make jsrt_m && ASAN test
+**** ✅ Subtask 6.8.1: Create test/node/child_process/test_fork.js
+**** ✅ Subtask 6.8.2: Create test/node/child_process/fixtures/ipc_child.js
+**** ✅ Subtask 6.8.3: Test fork() spawns jsrt process
+**** ✅ Subtask 6.8.4: Test send() from parent to child
+**** ✅ Subtask 6.8.5: Test 'message' event in child
+**** ✅ Subtask 6.8.6: Test send() from child to parent (process.send)
+**** ✅ Subtask 6.8.7: Test 'message' event in parent
+**** ✅ Subtask 6.8.8: Test bidirectional messaging
+**** ✅ Subtask 6.8.9: Test disconnect() from parent
+**** ✅ Subtask 6.8.10: Test disconnect() from child
+**** ✅ Subtask 6.8.11: Test 'disconnect' event
+**** ✅ Subtask 6.8.12: Test message serialization edge cases
+**** ✅ Subtask 6.8.13: Run tests: make test N=node/child_process
+**** ✅ Subtask 6.8.14: Memory safety validation: make jsrt_m && ASAN test
 
 ** ✅ Phase 7: Advanced Features [P][R:MED][C:MEDIUM][D:phase-5,phase-6] :implementation:
 :PROPERTIES:
@@ -1202,7 +1211,7 @@ Tasks marked [P] can run in parallel within each phase:
 
 * Progress Summary
 
-** Phase 6 Status (85% Complete - 34/40 tasks)
+** Phase 6 Status (100% Complete - 40/40 tasks) ✅
 *** Completed
 - IPC Channel Infrastructure (child_process_ipc.c - 432 lines)
   - Message queue with backpressure handling
@@ -1214,24 +1223,30 @@ Tasks marked [P] can run in parallel within each phase:
   - ChildProcess.disconnect()
   - 'message' and 'disconnect' events
   - connected property tracking
+- Child-Side IPC APIs
+  - process.send() in child processes (process_ipc.c)
+  - process.on('message') event handling
+  - process.disconnect() in child
+  - process.connected property in child
+  - Full bidirectional IPC communication working
 - fork() Implementation (child_process_fork.c - 204 lines)
   - Complete Node.js-compatible API
   - Automatic IPC channel setup on stdio[3]
   - Silent mode support
   - /proc/self/exe binary path resolution
 - Testing Infrastructure
-  - test_fork_simple.js (basic API verification)
-  - test_fork.js (full IPC tests - partial)
+  - test_fork_simple.js (basic API verification) ✅
+  - test_fork.js (full IPC tests) ✅
   - fixtures/ipc_child.js (test helper)
-  - 4/5 child_process tests passing
+  - **10/10 child_process tests passing (100%)**
 
-*** Remaining (Task 6.7 - Child-Side IPC Bootstrap)
-- process.send() in child processes
-- process.on('message') in child
-- process.disconnect() in child
-- process.connected property in child
-- Requires integration with global process object module
-- This is a separate infrastructure piece that connects to existing process module
+*** Bug Fixes (2025-10-23)
+- Fixed `__dirname` restoration issue in jsrt.c
+  - Problem: Global `__dirname` was being restored immediately after synchronous wrapper execution
+  - Impact: Async callbacks (setTimeout, child process events) saw `undefined` instead of correct path
+  - Solution: Removed premature restoration - `__dirname` now persists for entire script lifetime
+  - Result: test_fork.js now passes all 11 assertions
+  - Files modified: src/jsrt.c (lines 274-289)
 
 * Appendix: Task Statistics
 
@@ -1243,10 +1258,10 @@ Tasks marked [P] can run in parallel within each phase:
 | Phase 3 | 30 | DONE | MEDIUM | MED |
 | Phase 4 | 28 | DONE | MEDIUM | MED |
 | Phase 5 | 32 | DONE | MEDIUM | MED |
-| Phase 6 | 40 | 85% | COMPLEX | HIGH |
-| Phase 7 | 25 | TODO | MEDIUM | MED |
-| Phase 8 | 20 | TODO | SIMPLE | LOW |
-| **Total** | **235** | 81% | - | - |
+| Phase 6 | 40 | DONE ✅ | COMPLEX | HIGH |
+| Phase 7 | 25 | DONE | MEDIUM | MED |
+| Phase 8 | 20 | 95% | SIMPLE | LOW |
+| **Total** | **235** | **99%** | - | - |
 
 ** Execution Modes
 - Sequential [S]: 24 tasks (must complete before next starts)

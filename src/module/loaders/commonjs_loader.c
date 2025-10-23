@@ -5,6 +5,7 @@
 #include "commonjs_loader.h"
 #include <stdlib.h>
 #include <string.h>
+#include "../../runtime.h"  // For JSRT_Runtime
 #include "../core/module_cache.h"
 #include "../core/module_loader.h"
 #include "../protocols/protocol_dispatcher.h"
@@ -361,6 +362,37 @@ static JSValue js_commonjs_require(JSContext* ctx, JSValueConst this_val, int ar
   JSRT_ModuleLoader* loader = (JSRT_ModuleLoader*)loader_ptr;
 
   MODULE_DEBUG_LOADER("require('%s') from module: %s", specifier, module_path);
+
+#ifdef JSRT_NODE_COMPAT
+  // Compact Node mode: check bare name as node module for CommonJS
+  // Import path utility functions
+  extern bool is_absolute_path(const char* path);
+  extern bool is_relative_path(const char* path);
+  extern bool JSRT_IsNodeModule(const char* name);
+
+  // Get runtime to check compact_node_mode
+  JSRT_Runtime* rt = (JSRT_Runtime*)JS_GetContextOpaque(ctx);
+  if (rt && rt->compact_node_mode && !is_absolute_path(specifier) && !is_relative_path(specifier) &&
+      JSRT_IsNodeModule(specifier)) {
+    MODULE_DEBUG_LOADER("Compact Node mode (CJS): resolving '%s' as 'node:%s'", specifier, specifier);
+
+    // Load as node: module
+    char* node_specifier = malloc(strlen(specifier) + 6);
+    if (node_specifier) {
+      sprintf(node_specifier, "node:%s", specifier);
+
+      JSRT_ModuleRequestType previous_request_type = loader->current_request_type;
+      loader->current_request_type = JSRT_MODULE_REQUEST_COMMONJS;
+      JSValue result = jsrt_load_module(loader, node_specifier, module_path);
+      loader->current_request_type = previous_request_type;
+
+      free(node_specifier);
+      JS_FreeCString(ctx, specifier);
+      JS_FreeCString(ctx, module_path);
+      return result;
+    }
+  }
+#endif
 
   JSRT_ModuleRequestType previous_request_type = loader->current_request_type;
   loader->current_request_type = JSRT_MODULE_REQUEST_COMMONJS;

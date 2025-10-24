@@ -3,6 +3,13 @@
 #include <stdio.h>
 #include <stdlib.h>
 
+#ifdef _WIN32
+#include <sys/stat.h>
+#define S_ISDIR(m) (((m) & S_IFMT) == S_IFDIR)
+#else
+#include <sys/stat.h>
+#endif
+
 #include "debug.h"
 
 JSRT_ReadFileResult JSRT_ReadFileResultDefault() {
@@ -16,6 +23,14 @@ JSRT_ReadFileResult JSRT_ReadFileResultDefault() {
 JSRT_ReadFileResult JSRT_ReadFile(const char* path) {
   JSRT_ReadFileResult result = JSRT_ReadFileResultDefault();
 
+  // Check if path is a directory before attempting to open
+  struct stat st;
+  if (stat(path, &st) == 0 && S_ISDIR(st.st_mode)) {
+    // Path exists but is a directory, not a file
+    result.error = JSRT_READ_FILE_ERROR_FILE_NOT_FOUND;
+    goto fail;
+  }
+
   FILE* file = fopen(path, "rb");
   if (file == NULL) {
     result.error = JSRT_READ_FILE_ERROR_FILE_NOT_FOUND;
@@ -23,7 +38,16 @@ JSRT_ReadFileResult JSRT_ReadFile(const char* path) {
   }
 
   fseek(file, 0, SEEK_END);
-  result.size = ftell(file);
+  long file_size = ftell(file);
+
+  // Check for ftell errors (returns -1 on error)
+  if (file_size < 0) {
+    result.error = JSRT_READ_FILE_ERROR_READ_ERROR;
+    fclose(file);
+    goto fail;
+  }
+
+  result.size = (size_t)file_size;
   fseek(file, 0, SEEK_SET);
 
   result.data = malloc(result.size + 1);

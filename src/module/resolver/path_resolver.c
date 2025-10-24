@@ -7,6 +7,16 @@
 #include <stdlib.h>
 #include <string.h>
 
+#ifdef _WIN32
+#include <io.h>
+#include <sys/stat.h>
+#define S_ISDIR(m) (((m) & S_IFMT) == S_IFDIR)
+#define S_ISREG(m) (((m) & S_IFMT) == S_IFREG)
+#else
+#include <sys/stat.h>
+#include <unistd.h>
+#endif
+
 #include "../../util/file.h"
 #include "../util/module_debug.h"
 #include "npm_resolver.h"
@@ -14,15 +24,30 @@
 #include "path_util.h"
 #include "specifier.h"
 
-// Helper to check if a file exists
+// Helper to check if a path is a directory
+static bool is_directory(const char* path) {
+  if (!path)
+    return false;
+
+  struct stat st;
+  if (stat(path, &st) != 0) {
+    return false;
+  }
+  return S_ISDIR(st.st_mode);
+}
+
+// Helper to check if a file exists (and is a regular file)
 static bool file_exists(const char* path) {
   if (!path)
     return false;
 
-  JSRT_ReadFileResult result = JSRT_ReadFile(path);
-  bool exists = (result.error == JSRT_READ_FILE_OK);
-  JSRT_ReadFileResultFree(&result);
-  return exists;
+  struct stat st;
+  if (stat(path, &st) != 0) {
+    return false;
+  }
+
+  // Only return true for regular files, not directories
+  return S_ISREG(st.st_mode);
 }
 
 char* jsrt_try_extensions(const char* base_path) {
@@ -196,12 +221,34 @@ JSRT_ResolvedPath* jsrt_resolve_path(JSContext* ctx, const char* specifier, cons
 
   // For non-URL, non-builtin paths, try extensions and directory index
   if (!result->is_url && !result->is_builtin) {
-    // First check if resolved path exists as-is
-    if (file_exists(resolved)) {
-      MODULE_DEBUG_RESOLVER("Resolved path exists as-is: %s", resolved);
+    // First check if resolved path is a directory
+    if (is_directory(resolved)) {
+      MODULE_DEBUG_RESOLVER("Resolved path is a directory: %s", resolved);
+
+      // Try package.json main field first
+      char* package_main = jsrt_resolve_package_main(ctx, resolved, is_esm);
+      if (package_main) {
+        MODULE_DEBUG_RESOLVER("Resolved directory via package.json main: %s", package_main);
+        free(resolved);
+        result->resolved_path = package_main;
+      } else {
+        // Fallback to directory index
+        char* dir_index = jsrt_try_directory_index(resolved);
+        if (dir_index) {
+          MODULE_DEBUG_RESOLVER("Resolved directory via index file: %s", dir_index);
+          free(resolved);
+          result->resolved_path = dir_index;
+        } else {
+          MODULE_DEBUG_RESOLVER("No main or index found in directory: %s", resolved);
+          result->resolved_path = resolved;
+        }
+      }
+    } else if (file_exists(resolved)) {
+      // It's a regular file
+      MODULE_DEBUG_RESOLVER("Resolved path exists as file: %s", resolved);
       result->resolved_path = resolved;
     } else {
-      // Try with extensions
+      // Path doesn't exist as file or directory - try extensions
       char* with_ext = jsrt_try_extensions(resolved);
       if (with_ext) {
         MODULE_DEBUG_RESOLVER("Resolved path with extension: %s", with_ext);

@@ -15,9 +15,12 @@
 #include "../util/module_errors.h"
 
 #ifdef _WIN32
+#include <direct.h>  // For _getcwd
 #include <windows.h>
+#define getcwd _getcwd
 #define PATH_SEP '\\'
 #else
+#include <unistd.h>  // For getcwd
 #define PATH_SEP '/'
 #endif
 
@@ -244,7 +247,8 @@ JSModuleDef* jsrt_load_esm_module(JSContext* ctx, JSRT_ModuleLoader* loader, con
   if (!module) {
     MODULE_DEBUG_ERROR("Failed to extract module definition: %s", resolved_path);
     JS_FreeValue(ctx, func_val);
-    jsrt_module_throw_error(ctx, JSRT_MODULE_LOAD_FAILED, "Failed to extract module definition from '%s'", resolved_path);
+    jsrt_module_throw_error(ctx, JSRT_MODULE_LOAD_FAILED, "Failed to extract module definition from '%s'",
+                            resolved_path);
     return NULL;
   }
 
@@ -329,8 +333,34 @@ char* jsrt_esm_normalize_callback(JSContext* ctx, const char* module_base_name, 
   }
 #endif
 
+  // CRITICAL FIX: Convert relative base path to absolute path
+  // When QuickJS loads a module directly (e.g., jsrt test.mjs), it may pass
+  // a relative filename as module_base_name. For bare specifiers like 'hono',
+  // the npm resolver needs an absolute base path to locate node_modules.
+  char* absolute_base = NULL;
+  if (module_base_name && !is_absolute_path(module_base_name)) {
+    // Get current working directory
+    char cwd[4096];
+    if (getcwd(cwd, sizeof(cwd))) {
+      // Join cwd with relative base path
+      size_t len = strlen(cwd) + strlen(module_base_name) + 2;
+      absolute_base = malloc(len);
+      if (absolute_base) {
+        snprintf(absolute_base, len, "%s/%s", cwd, module_base_name);
+        MODULE_DEBUG_RESOLVER("Converted relative base '%s' to absolute '%s'", module_base_name, absolute_base);
+      }
+    }
+  }
+
+  const char* resolved_base = absolute_base ? absolute_base : module_base_name;
+
   // Use the new path resolver
-  JSRT_ResolvedPath* resolved = jsrt_resolve_path(ctx, module_name, module_base_name, true);
+  JSRT_ResolvedPath* resolved = jsrt_resolve_path(ctx, module_name, resolved_base, true);
+
+  // Free temporary absolute path
+  if (absolute_base) {
+    free(absolute_base);
+  }
 
   if (!resolved || !resolved->resolved_path) {
     MODULE_DEBUG_ERROR("Failed to resolve ES module: %s", module_name);

@@ -372,6 +372,7 @@ static void on_ipc_close(uv_handle_t* handle) {
   }
 
   JSContext* ctx = state->child->ctx;
+  JSChildProcess* child = state->child;
 
   // Free read buffer
   if (state->read_buffer) {
@@ -394,6 +395,11 @@ static void on_ipc_close(uv_handle_t* handle) {
   js_free(ctx, state->pipe);
   state->pipe = NULL;
 
+  // Clear child's reference to prevent use-after-free
+  if (child && child->ipc_channel == state) {
+    child->ipc_channel = NULL;
+  }
+
   // Free state
   js_free(ctx, state);
 }
@@ -401,6 +407,11 @@ static void on_ipc_close(uv_handle_t* handle) {
 // Disconnect IPC channel
 void disconnect_ipc_channel(IPCChannelState* state) {
   if (!state || !state->connected) {
+    return;
+  }
+
+  // Check if pipe is already closing/closed to prevent use-after-free
+  if (uv_is_closing((uv_handle_t*)state->pipe)) {
     return;
   }
 

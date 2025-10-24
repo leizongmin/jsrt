@@ -94,8 +94,7 @@ JSValue jsrt_load_module(JSRT_ModuleLoader* loader, const char* specifier, const
   JSRT_ResolvedPath* resolved = jsrt_resolve_path(loader->ctx, specifier, base_path, is_esm_request);
   if (!resolved) {
     loader->loads_failed++;
-    return jsrt_module_throw_error(loader->ctx, JSRT_MODULE_NOT_FOUND, "Cannot resolve module specifier: %s",
-                                   specifier);
+    return jsrt_module_throw_error(loader->ctx, JSRT_MODULE_NOT_FOUND, "Cannot find module '%s'", specifier);
   }
 
   MODULE_DEBUG_LOADER("Resolved to: %s (protocol: %s)", resolved->resolved_path,

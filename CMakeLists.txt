@@ -705,7 +705,7 @@ file(GLOB_RECURSE JSRT_CRYPTO_FILES "src/crypto/*.c")
 file(GLOB_RECURSE JSRT_UTIL_FILES "src/util/*.c")
 file(GLOB_RECURSE JSRT_HTTP_FILES "src/http/*.c")
 file(GLOB_RECURSE JSRT_WASM_FILES "src/wasm/*.c")
-file(GLOB_RECURSE JSRT_MODULE_FILES "src/module/**/*.c")
+file(GLOB_RECURSE JSRT_MODULE_FILES "src/module/*.c" "src/module/**/*.c")
 
 # URL implementation now uses modular src/url/ directory structure
 

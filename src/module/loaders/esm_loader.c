@@ -340,7 +340,7 @@ char* jsrt_esm_normalize_callback(JSContext* ctx, const char* module_base_name, 
 }
 
 // Include standard module header for builtin module init functions
-#include "../../std/module.h"
+#include "../module.h"
 
 // Forward declarations for HTTP and Node modules
 #ifdef JSRT_NODE_COMPAT

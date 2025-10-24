@@ -59,7 +59,7 @@ Phases Complete: 8/8 (All phases complete)
 10. ✅ `assert.doesNotThrow(fn, error, message)` - Expects function not to throw
 
 **Module Registration:**
-- **jsrt:assert**: Registered in `src/std/module.c` (line 669-676) for ES modules
+- **jsrt:assert**: Registered in `src/module/module.c` (line 669-676) for ES modules
 - **node:assert**: NOT currently registered in `src/node/node_modules.c`
 - CommonJS support: Available via `require('jsrt:assert')`
 - ESM support: Available via `import assert from 'jsrt:assert'`
@@ -756,7 +756,7 @@ static JSValue create_assertion_error(
    - Execution: SEQUENTIAL
    - Dependencies: 7.4
    - Status: ⏳ PENDING
-   - Files: `src/std/module.c`, `src/node/node_modules.c`
+   - Files: `src/module/module.c`, `src/node/node_modules.c`
    - Add named exports:
      - export { ok, equal, strictEqual, deepEqual, ... } from 'node:assert'
      - Ensure both default and named exports work
@@ -1118,7 +1118,7 @@ While not critical for initial implementation, consider:
 ### JSRT Codebase References
 - `/home/lei/work/jsrt/src/std/assert.c` - Current implementation
 - `/home/lei/work/jsrt/src/std/assert.h` - Header file
-- `/home/lei/work/jsrt/src/std/module.c` - Module registration (jsrt:)
+- `/home/lei/work/jsrt/src/module/module.c` - Module registration (jsrt:)
 - `/home/lei/work/jsrt/src/node/node_modules.c` - Node module registration
 - `/home/lei/work/jsrt/test/test_std_assert.js` - Existing tests (CommonJS)
 - `/home/lei/work/jsrt/test/test_std_assert.mjs` - Existing tests (ESM)

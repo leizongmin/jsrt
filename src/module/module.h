@@ -1,5 +1,5 @@
-#ifndef __JSRT_STD_MODULE_H__
-#define __JSRT_STD_MODULE_H__
+#ifndef __JSRT_MODULE_H__
+#define __JSRT_MODULE_H__
 
 #include <quickjs.h>
 

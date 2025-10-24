@@ -44,9 +44,9 @@ This document outlines a comprehensive design and implementation plan for suppor
   - Configurable cache size and TTL
 
 #### 1.4 Integration Points
-- **Module Normalizer**: Extend `JSRT_ModuleNormalize()` in `src/std/module.c`
-- **Module Loader**: Extend `JSRT_ModuleLoader()` in `src/std/module.c`
-- **CommonJS Require**: Extend `js_require()` in `src/std/module.c`
+- **Module Normalizer**: Extend `JSRT_ModuleNormalize()` in `src/module/module.c`
+- **Module Loader**: Extend `JSRT_ModuleLoader()` in `src/module/module.c`
+- **CommonJS Require**: Extend `js_require()` in `src/module/module.c`
 
 ### 2. Security Model
 
@@ -231,7 +231,7 @@ void jsrt_http_cache_free(JSRT_HttpCache* cache);
 ### Phase 2: Module System Integration (Week 3)
 
 #### Task 2.1: Module Normalizer Extension
-- **File**: `src/std/module.c`
+- **File**: `src/module/module.c`
 - **Function**: `JSRT_ModuleNormalize()`
 - **Changes**:
 
@@ -259,7 +259,7 @@ char* JSRT_ModuleNormalize(JSContext* ctx, const char* module_base_name,
 ```
 
 #### Task 2.2: Module Loader Extension
-- **File**: `src/std/module.c`  
+- **File**: `src/module/module.c`  
 - **Function**: `JSRT_ModuleLoader()`
 - **Changes**:
 
@@ -277,7 +277,7 @@ JSModuleDef* JSRT_ModuleLoader(JSContext* ctx, const char* module_name, void* op
 ```
 
 #### Task 2.3: CommonJS Integration  
-- **File**: `src/std/module.c`
+- **File**: `src/module/module.c`
 - **Function**: `js_require()`
 - **Changes**:
 

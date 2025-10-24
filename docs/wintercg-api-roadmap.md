@@ -40,7 +40,7 @@
   - CommonJS: `require()`, `module.exports`, `exports`
   - ES Modules: `import`, `export`
 - **状态**：完全支持，包括模块缓存和路径解析
-- **位置**：`src/std/module.c`
+- **位置**：`src/module/module.c`
 
 #### 4. Global Objects (部分实现)
 - **已实现**：`globalThis`

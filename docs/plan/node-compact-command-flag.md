@@ -251,7 +251,7 @@ void PrintHelp(bool is_error) {
 **Goal**: Enable =require('os')= to resolve to =node:os= when in compact mode
 
 **Files to modify**:
-- =src/std/module.c=: Update =js_require()= function
+- =src/module/module.c=: Update =js_require()= function
 - =src/node/node_modules.c=: Export helper to check module existence
 
 **Current Flow**:
@@ -279,7 +279,7 @@ bool JSRT_IsNodeModule(const char* module_name) {
   return find_module(module_name) != NULL;
 }
 
-// In src/std/module.c (in js_require, around line 938-947)
+// In src/module/module.c (in js_require, around line 938-947)
 #ifdef JSRT_NODE_COMPAT
   // Handle node: modules
   if (strncmp(module_name, "node:", 5) == 0) {
@@ -321,7 +321,7 @@ bool JSRT_IsNodeModule(const char* module_name) {
 **Goal**: Support =import os from 'os'= in ES modules
 
 **Files to modify**:
-- =src/std/module.c=: Update =JSRT_ModuleNormalize()= function
+- =src/module/module.c=: Update =JSRT_ModuleNormalize()= function
 
 **Implementation**:
 #+BEGIN_SRC c
@@ -408,7 +408,7 @@ Current implementation already handles submodules via ='/'= character check. Jus
 **Goal**: Document module resolution order in compact mode
 
 **Files to modify**:
-- =src/std/module.c=: Add comment block explaining resolution
+- =src/module/module.c=: Add comment block explaining resolution
 - =docs/plan/node-compact-command-flag.md=: Document behavior
 
 **Resolution Order** (when =--compact-node= active):
@@ -442,7 +442,7 @@ Current implementation already handles submodules via ='/'= character check. Jus
 
 **Goal**: Understand existing implementation and verify behavior
 
-**Current Implementation** (in =src/std/module.c= lines 1024-1056):
+**Current Implementation** (in =src/module/module.c= lines 1024-1056):
 - =js_require()= already provides =__dirname= and =__filename= to wrapper function
 - These are passed as parameters to CommonJS module wrapper
 - **Already working** when using =require()=
@@ -1006,9 +1006,9 @@ Phase 1 → Phase 2 → Phase 4 → Phase 5
 * 🔗 Related Documentation
 
 - Node.js module resolution: https://nodejs.org/api/modules.html
-- jsrt module system: =src/std/module.c=
+- jsrt module system: =src/module/module.c=
 - Node.js process object: =src/node/process/process.c=
-- CommonJS implementation: =src/std/module.c= (=js_require= function)
+- CommonJS implementation: =src/module/module.c= (=js_require= function)
 
 * 📜 Change Log
 

@@ -15,8 +15,8 @@
 #endif
 
 #include "build.h"
+#include "module/module.h"
 #include "runtime.h"
-#include "std/module.h"
 #include "util/file.h"
 #include "util/http_client.h"
 #include "util/path.h"

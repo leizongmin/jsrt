@@ -35,7 +35,7 @@ jsrt --compact-node script.js [args]
 **Files Modified:**
 - `src/node/node_modules.h`: Added `JSRT_IsNodeModule()` helper function declaration
 - `src/node/node_modules.c`: Implemented `JSRT_IsNodeModule()` to check if a module name is a Node.js built-in
-- `src/std/module.c`: 
+- `src/module/module.c`: 
   - In `js_require()`: Added bare-name fallback logic for CommonJS modules
   - In `JSRT_ModuleNormalize()`: Added bare-name fallback logic for ES modules
 

@@ -19,10 +19,10 @@
 
 ** Project Status: 🟡 **NEW PHASE - CONSOLIDATION**
 
-The original module system refactoring (Phases 0-8) was completed successfully. However, the legacy code in `src/std/module.c` was kept for compatibility, creating code duplication and maintenance burden.
+The original module system refactoring (Phases 0-8) was completed successfully. However, the legacy code in `src/module/module.c` was kept for compatibility, creating code duplication and maintenance burden.
 
 **Phase 10** aims to complete the consolidation by:
-1. Migrating remaining functionality from `src/std/module.c` to `src/module/`
+1. Migrating remaining functionality from `src/module/module.c` to `src/module/`
 2. Removing duplicate code
 3. Ensuring all tests pass
 4. Updating documentation
@@ -31,7 +31,7 @@ The original module system refactoring (Phases 0-8) was completed successfully. 
 
 The current codebase has TWO module loading systems running in parallel:
 
-1. **Legacy system** (src/std/module.c - 1,586 lines):
+1. **Legacy system** (src/module/module.c - 1,586 lines):
    - JSRT_StdModuleNormalize() - ES module path normalization
    - JSRT_StdModuleLoader() - ES module loading with CommonJS detection
    - js_require() - Global require() function
@@ -70,17 +70,17 @@ The old system is still used for:
 ** Goal
 
 Complete the module system consolidation by:
-1. Moving remaining unique functionality from `src/std/module.c` to `src/module/`
+1. Moving remaining unique functionality from `src/module/module.c` to `src/module/`
 2. Making the new system handle all ES module and CommonJS loading
-3. Removing the legacy `src/std/module.c` file
+3. Removing the legacy `src/module/module.c` file
 4. Ensuring zero regressions in test suite
 5. Updating documentation to reflect unified architecture
 
 ** Success Criteria
 
-- [X] All functionality from `src/std/module.c` migrated to `src/module/`
-- [X] `src/std/module.c` deleted
-- [X] `src/std/module.h` minimal shim (if needed) or deleted
+- [X] All functionality from `src/module/module.c` migrated to `src/module/`
+- [X] `src/module/module.c` deleted
+- [X] `src/module/module.h` minimal shim (if needed) or deleted
 - [X] All tests pass: `make test && make wpt`
 - [X] No memory leaks: `make jsrt_m` with ASAN
 - [X] Documentation updated
@@ -100,7 +100,7 @@ Complete the module system consolidation by:
 
 ** What Remains (Phase 10)
 
-The core issue: `src/std/module.c` contains code that duplicates or conflicts with `src/module/`:
+The core issue: `src/module/module.c` contains code that duplicates or conflicts with `src/module/`:
 
 1. **Duplicate Path Resolution**: Both systems have their own path resolution
 2. **Duplicate Module Cache**: Two separate caching mechanisms
@@ -113,7 +113,7 @@ The core issue: `src/std/module.c` contains code that duplicates or conflicts wi
 
 ** Overview
 
-Phase 10 consolidates the module system by removing `src/std/module.c` and routing all functionality through `src/module/`.
+Phase 10 consolidates the module system by removing `src/module/module.c` and routing all functionality through `src/module/`.
 
 ** Task Summary
 
@@ -152,8 +152,8 @@ Phase 10 consolidates the module system by removing `src/std/module.c` and routi
 |------|--------|---------|
 | `src/module/loaders/esm_loader.c` | **Add** | QuickJS callbacks for ES modules |
 | `src/module/loaders/commonjs_loader.c` | **Add** | Global require() function |
-| `src/std/module.c` | **Delete** | Remove after migration |
-| `src/std/module.h` | **Minimize** | Keep only public API if needed |
+| `src/module/module.c` | **Delete** | Remove after migration |
+| `src/module/module.h` | **Minimize** | Keep only public API if needed |
 | `src/runtime.c` | **Update** | Use new callbacks |
 
 ** Testing Checklist
@@ -173,14 +173,14 @@ ASAN_OPTIONS=detect_leaks=1 ./bin/jsrt_m test/module/test_module_cjs.js
 - ✅ All tests pass (baseline: 177/182 unit tests, 20/20 module tests)
 - ✅ No memory leaks (ASAN clean)
 - ✅ Same behavior as before (CommonJS, ESM, npm, HTTP all work)
-- ✅ src/std/module.c deleted
+- ✅ src/module/module.c deleted
 - ✅ Single source of truth: src/module/
 
 * 📊 Current State Analysis
 
 ** Existing Module Loading Code
 
-*** File: src/std/module.c (1152 lines)
+*** File: src/module/module.c (1152 lines)
 - JSRT_ModuleNormalize(): ES module path resolution
 - JSRT_ModuleLoader(): ES module loading
 - js_require(): CommonJS require() implementation
@@ -485,7 +485,7 @@ void jsrt_module_cache_clear(JSRT_ModuleCache* cache, JSContext* ctx);
 :STATUS: ✅ COMPLETE
 :END:
 
-Identify what functionality in src/std/module.c needs to be migrated vs. what can be deleted.
+Identify what functionality in src/module/module.c needs to be migrated vs. what can be deleted.
 
 **** Analysis Results
 
@@ -508,7 +508,7 @@ Identify what functionality in src/std/module.c needs to be migrated vs. what ca
 1. `JSRT_StdModuleBuildNotFoundStrings()` - Error formatting (can be migrated or kept)
 
 **** Subtasks
-- [X] Map all functions in src/std/module.c
+- [X] Map all functions in src/module/module.c
 - [X] Identify which have equivalents in src/module/
 - [X] Identify unique functionality
 - [X] Document migration strategy
@@ -526,7 +526,7 @@ Identify what functionality in src/std/module.c needs to be migrated vs. what ca
 
 Update the new system to provide QuickJS module loader callbacks.
 
-Currently `src/std/module.c` provides:
+Currently `src/module/module.c` provides:
 - `JSRT_StdModuleNormalize()` - Called by QuickJS for path resolution
 - `JSRT_StdModuleLoader()` - Called by QuickJS to load ES modules
 
@@ -553,8 +553,8 @@ Need to create bridge functions in `src/module/loaders/esm_loader.c`:
 - src/module/loaders/esm_loader.c: Added bridge callbacks
 - src/module/loaders/esm_loader.h: Exported bridge functions
 - src/module/protocols/file_handler.c: Support both URLs and plain paths
-- src/std/module.c: Made builtin init functions non-static, use bridge callbacks
-- src/std/module.h: Export builtin init functions and path utilities
+- src/module/module.c: Made builtin init functions non-static, use bridge callbacks
+- src/module/module.h: Export builtin init functions and path utilities
 - src/runtime.c: Initialize file handler
 
 **Test results**:
@@ -638,23 +638,23 @@ Update initialization functions to use new system.
 - Updated JSRT_StdModuleInit() to call jsrt_esm_normalize_callback() and jsrt_esm_loader_callback()
 - Updated JSRT_StdCommonJSInit() to use js_commonjs_require() from new loader
 - All init functions now delegate to src/module/ implementations
-- Maintained thin wrappers in src/std/module.c for API compatibility
+- Maintained thin wrappers in src/module/module.c for API compatibility
 - runtime.c integration verified and working
 
 **Changes**:
-- src/std/module.c: Updated init functions to use new bridge callbacks
-- src/std/module.h: Exports updated to expose bridge functions
+- src/module/module.c: Updated init functions to use new bridge callbacks
+- src/module/module.h: Exports updated to expose bridge functions
 - src/runtime.c: Initialization sequence unchanged (backward compatible)
 
 **** Subtasks
 - [X] Update JSRT_StdModuleInit() to use new ES loader callbacks
 - [X] Update JSRT_StdCommonJSInit() to use new require() function
 - [X] Move implementations to appropriate files in src/module/
-- [X] Keep thin wrappers in src/std/module.c if needed
-- [X] Update src/std/module.h exports
+- [X] Keep thin wrappers in src/module/module.c if needed
+- [X] Update src/module/module.h exports
 - [X] Verify runtime.c integration still works
 
-*** DONE [#A] Task 10.5: Remove duplicate code from src/std/module.c [S][R:HIGH][C:MEDIUM]
+*** DONE [#A] Task 10.5: Remove duplicate code from src/module/module.c [S][R:HIGH][C:MEDIUM]
 :PROPERTIES:
 :ID: 10.5
 :CREATED: 2025-10-23T00:00:00Z
@@ -735,7 +735,7 @@ After 3-6 months of production use with zero issues:
 - [X] Comment out old code first (no - used deprecation markers instead)
 - [X] Run tests to verify everything works
 - [X] Mark legacy code as deprecated with clear comments
-- [X] Update src/std/module.h exports (kept for bridge functions)
+- [X] Update src/module/module.h exports (kept for bridge functions)
 - [X] Check for any remaining references in other files
 
 *** DONE [#A] Task 10.6: Test and validate [P][R:HIGH][C:MEDIUM]
@@ -831,7 +831,7 @@ Update documentation to reflect consolidated architecture.
 - [X] Update docs/module-system-architecture.md
 - [X] Update docs/module-system-api.md (not needed - no API changes)
 - [X] Update docs/module-system-migration.md (not needed yet)
-- [X] Remove references to src/std/module.c (marked as deprecated instead)
+- [X] Remove references to src/module/module.c (marked as deprecated instead)
 - [X] Add note about consolidation in Phase 10
 - [X] Update any inline code comments (done inline during implementation)
 - [X] Update this plan document with completion status
@@ -1123,7 +1123,7 @@ Create main module loader orchestration logic
 :DEPS: 1.1
 :ESTIMATE: 2 hours
 :END:
-Migrate path helper functions from src/std/module.c
+Migrate path helper functions from src/module/module.c
 
 **** Subtasks
 - [X] Create path_util.c/h in src/module/resolver/
@@ -1554,7 +1554,7 @@ Integrate new module system into JSRT_Runtime
 - [X] Update JSRT_StdCommonJSInit()
 - [X] Add tests for runtime lifecycle
 
-*** DONE [#A] Task 6.2: Migrate src/std/module.c [S][R:HIGH][C:COMPLEX][D:6.1]
+*** DONE [#A] Task 6.2: Migrate src/module/module.c [S][R:HIGH][C:COMPLEX][D:6.1]
 :PROPERTIES:
 :ID: 6.2
 :CREATED: 2025-10-12T00:00:00Z
@@ -2025,7 +2025,7 @@ Improve protocol handler performance
 - Phases 0-8 successfully completed (October 2025)
 - 57/57 required tasks done (100%)
 - New module system in src/module/ fully functional
-- Legacy system in src/std/module.c kept for compatibility
+- Legacy system in src/module/module.c kept for compatibility
 - All tests passing with both systems running in parallel
 
 📄 **Documentation Links**:
@@ -2034,7 +2034,7 @@ Improve protocol handler performance
 - [[./module-loader/project-completion-summary.md][Complete Project Summary]]
 
 🔄 **New Work - Phase 10**: Consolidation (October 2025)
-- Remove duplicate code in src/std/module.c
+- Remove duplicate code in src/module/module.c
 - Complete migration to unified src/module/ system
 - Maintain zero regressions
 - 7 tasks remaining
@@ -2055,7 +2055,7 @@ Improve protocol handler performance
 - Note taken on [2025-10-12T00:00:00Z] \\
   Initial task plan created with 150 tasks across 9 phases
 - Note taken on [2025-10-12T00:00:00Z] \\
-  Analyzed existing codebase (src/std/module.c, src/http/module_loader.c, src/node/node_modules.c)
+  Analyzed existing codebase (src/module/module.c, src/http/module_loader.c, src/node/node_modules.c)
 - Note taken on [2025-10-12T00:00:00Z] \\
   Designed architecture with src/module/ directory structure
 - Note taken on [2025-10-12T00:00:00Z] \\
@@ -2234,7 +2234,7 @@ Improve protocol handler performance
 * 📚 References
 
 ** Existing Code
-- src/std/module.c - Current module implementation
+- src/module/module.c - Current module implementation
 - src/http/module_loader.c - HTTP module loading
 - src/node/node_modules.c - Node.js module registry
 - src/jsrt.c - Main entry point with URL handling

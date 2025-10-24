@@ -28,8 +28,8 @@ This guide helps developers migrate from jsrt's legacy module loading system to 
 
 ```
 Old:
-src/std/module.c       (All logic in one file)
-src/std/module.h
+src/module/module.c    (Legacy code, previously in src/std/)
+src/module/module.h
 
 New:
 src/module/
@@ -369,11 +369,12 @@ make wpt       # Run Web Platform Tests
 **Step 1**: Update header includes (if using module APIs directly)
 
 ```c
-// Before
+// Before (old location)
 #include "std/module.h"
 
-// After (if using new APIs)
-#include "module/module_loader.h"
+// After (new location and APIs)
+#include "module/module.h"          // For legacy compatibility functions
+#include "module/module_loader.h"   // For new module loader APIs
 ```
 
 **Step 2**: Update module loader usage (if using directly)
@@ -604,7 +605,7 @@ import data from 'myproto://resource';
 
 ### Source Code
 - **New System**: `src/module/`
-- **Legacy Compatibility**: `src/std/module.c`
+- **Legacy Compatibility**: `src/module/module.c` (moved from src/std/)
 - **Runtime Integration**: `src/runtime.c`
 
 ### Tests

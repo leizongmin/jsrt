@@ -244,8 +244,8 @@ Failed: 0 tests
 **Runtime Integration**:
 - `src/runtime.h` - Added `module_loader` field
 - `src/runtime.c` - Integrated lifecycle management
-- `src/std/module.h` - Renamed legacy functions
-- `src/std/module.c` - Updated function names
+- `src/module/module.h` - Renamed legacy functions
+- `src/module/module.c` - Updated function names
 - `CMakeLists.txt` - Added module system files
 
 ---

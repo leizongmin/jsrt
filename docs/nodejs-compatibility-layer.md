@@ -761,7 +761,7 @@ int js_node_path_init(JSContext* ctx, JSModuleDef* m) {
 
 ### Step 3: Update Module Loader
 
-Modify `src/std/module.c`:
+Modify `src/module/module.c`:
 
 ```c
 // Add at the top
@@ -1420,7 +1420,7 @@ Successfully implemented the core Node.js compatibility infrastructure:
    - Dependency management system
    - Error handling with Node.js-compatible error codes
 
-2. **Module Loader Integration** - Updated `src/std/module.c` to handle:
+2. **Module Loader Integration** - Updated `src/module/module.c` to handle:
    - `node:` prefix recognition in both CommonJS `require()` and ES `import`
    - Module normalization to prevent file system resolution
    - Conditional compilation with `JSRT_NODE_COMPAT` flag

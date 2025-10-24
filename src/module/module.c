@@ -32,15 +32,15 @@ static char* jsrt_realpath(const char* path, char* resolved_path) {
 
 #include "../http/module_loader.h"
 #include "../http/security.h"
-#include "../module/loaders/commonjs_loader.h"  // For new CommonJS loader
-#include "../module/loaders/esm_loader.h"       // For new ES module loader bridge
 #include "../node/process/process.h"
+#include "../std/assert.h"
+#include "../std/ffi.h"
 #include "../util/debug.h"
 #include "../util/file.h"
 #include "../util/json.h"
 #include "../util/path.h"
-#include "assert.h"
-#include "ffi.h"
+#include "loaders/commonjs_loader.h"  // For new CommonJS loader
+#include "loaders/esm_loader.h"       // For new ES module loader bridge
 extern JSValue JSRT_InitNodeWASI(JSContext* ctx);
 
 // ============================================================================

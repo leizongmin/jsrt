@@ -289,7 +289,37 @@ static bool jsrt_append_char(char** buf, size_t* capacity, size_t* length, char 
 }
 
 char* JSRT_RuntimeGetExceptionString(JSRT_Runtime* rt, JSValue e) {
-  const char* error = JS_ToCString(rt->ctx, e);
+  const char* error = NULL;
+  bool error_needs_free_cstring = true;  // Track if error came from JS_ToCString
+
+  // Handle special case where exception is an uninitialized value
+  // This can happen with ES module loading errors
+  if (JS_IsUninitialized(e)) {
+    char str[2048];
+    snprintf(str, sizeof(str), "Uninitialized exception");
+    return strdup(str);
+  }
+  // First try to get the 'message' property if it's an Error object
+  else if (JS_IsObject(e)) {
+    JSValue message_val = JS_GetPropertyStr(rt->ctx, e, "message");
+    if (JS_IsString(message_val)) {
+      error = JS_ToCString(rt->ctx, message_val);
+    }
+    JS_FreeValue(rt->ctx, message_val);
+  }
+
+  // Fallback to JS_ToCString
+  if (!error) {
+    error = JS_ToCString(rt->ctx, e);
+    // If JS_ToCString returns "[unsupported type]", replace with better message
+    if (error && strcmp(error, "[unsupported type]") == 0) {
+      char str[2048];
+      snprintf(str, sizeof(str), "Error: Exception object has unsupported type");
+      JS_FreeCString(rt->ctx, error);
+      return strdup(str);
+    }
+  }
+
   char str[2048];
 
   bool handled_module_not_found = false;

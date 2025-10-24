@@ -244,6 +244,7 @@ JSModuleDef* jsrt_load_esm_module(JSContext* ctx, JSRT_ModuleLoader* loader, con
   if (!module) {
     MODULE_DEBUG_ERROR("Failed to extract module definition: %s", resolved_path);
     JS_FreeValue(ctx, func_val);
+    jsrt_module_throw_error(ctx, JSRT_MODULE_LOAD_FAILED, "Failed to extract module definition from '%s'", resolved_path);
     return NULL;
   }
 
@@ -254,6 +255,14 @@ JSModuleDef* jsrt_load_esm_module(JSContext* ctx, JSRT_ModuleLoader* loader, con
   // Set up import.meta
   if (jsrt_setup_import_meta(ctx, module, loader, resolved_path) != 0) {
     MODULE_DEBUG_ERROR("Failed to setup import.meta for: %s", resolved_path);
+    // Ensure an exception is set
+    JSValue exception = JS_GetException(ctx);
+    if (JS_IsUninitialized(exception) || JS_IsNull(exception)) {
+      jsrt_module_throw_error(ctx, JSRT_MODULE_LOAD_FAILED, "Failed to setup import.meta for '%s'", resolved_path);
+    } else {
+      // Re-throw the exception
+      JS_Throw(ctx, exception);
+    }
     return NULL;
   }
 
@@ -328,6 +337,9 @@ char* jsrt_esm_normalize_callback(JSContext* ctx, const char* module_base_name, 
     if (resolved) {
       jsrt_resolved_path_free(resolved);
     }
+    // QuickJS expects a proper error to be set when returning NULL from normalize callback
+    // Throw an error here to ensure the exception is properly set
+    JS_ThrowReferenceError(ctx, "Cannot resolve module '%s'", module_name);
     return NULL;
   }
 
@@ -413,6 +425,7 @@ JSModuleDef* jsrt_esm_loader_callback(JSContext* ctx, const char* module_name, v
   JSRT_Runtime* rt = (JSRT_Runtime*)opaque;
   if (!rt || !rt->module_loader) {
     MODULE_DEBUG_ERROR("Module loader not available");
+    JS_ThrowReferenceError(ctx, "Module loader not available");
     return NULL;
   }
 
@@ -423,6 +436,15 @@ JSModuleDef* jsrt_esm_loader_callback(JSContext* ctx, const char* module_name, v
 
   if (!module) {
     MODULE_DEBUG_ERROR("Failed to load ES module: %s", module_name);
+    // jsrt_load_esm_module should have already thrown an exception
+    // If it didn't, throw a generic one
+    JSValue exception = JS_GetException(ctx);
+    if (JS_IsUninitialized(exception) || JS_IsNull(exception)) {
+      JS_ThrowReferenceError(ctx, "Cannot find module '%s'", module_name);
+    } else {
+      // Re-throw the exception that was already set
+      JS_Throw(ctx, exception);
+    }
     return NULL;
   }
 

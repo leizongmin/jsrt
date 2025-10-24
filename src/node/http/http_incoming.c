@@ -30,6 +30,7 @@ JSValue js_http_request_constructor(JSContext* ctx, JSValueConst new_target, int
   req->ctx = ctx;
   req->request_obj = JS_DupValue(ctx, obj);
   req->headers = JS_NewObject(ctx);
+  req->rawHeaders = JS_NewArray(ctx);
 
   // Phase 5.1.2: Initialize timeout fields
   req->timeout_timer = NULL;
@@ -88,6 +89,7 @@ JSValue js_http_request_constructor(JSContext* ctx, JSValueConst new_target, int
   JS_SetPropertyStr(ctx, obj, "url", JS_NewString(ctx, "/"));
   JS_SetPropertyStr(ctx, obj, "httpVersion", JS_NewString(ctx, "1.1"));
   JS_SetPropertyStr(ctx, obj, "headers", JS_DupValue(ctx, req->headers));
+  JS_SetPropertyStr(ctx, obj, "rawHeaders", JS_DupValue(ctx, req->rawHeaders));
 
   // Phase 4: Add Readable stream properties
   JSAtom readable_atom = JS_NewAtom(ctx, "readable");
@@ -786,6 +788,7 @@ void js_http_request_finalizer(JSRuntime* rt, JSValue val) {
     free(req->url);
     free(req->http_version);
     JS_FreeValueRT(rt, req->headers);
+    JS_FreeValueRT(rt, req->rawHeaders);
     JS_FreeValueRT(rt, req->socket);
 
     // Phase 5.1.2: Clean up timeout timer

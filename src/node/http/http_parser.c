@@ -260,6 +260,15 @@ int on_header_field(llhttp_t* parser, const char* at, size_t length) {
   if (conn->current_header_field && conn->current_header_value) {
     JSHttpRequest* req = JS_GetOpaque(conn->current_request, js_http_request_class_id);
     if (req) {
+      // Add to rawHeaders array [field, value, field, value, ...]
+      JSValue length_val = JS_GetPropertyStr(ctx, req->rawHeaders, "length");
+      uint32_t length = 0;
+      JS_ToUint32(ctx, &length, length_val);
+      JS_FreeValue(ctx, length_val);
+
+      JS_SetPropertyUint32(ctx, req->rawHeaders, length, JS_NewString(ctx, conn->current_header_field));
+      JS_SetPropertyUint32(ctx, req->rawHeaders, length + 1, JS_NewString(ctx, conn->current_header_value));
+
       // Normalize header name to lowercase
       char* lower_name = str_to_lower(conn->current_header_field);
       if (lower_name) {
@@ -333,6 +342,15 @@ int on_headers_complete(llhttp_t* parser) {
   if (conn->current_header_field && conn->current_header_value) {
     JSHttpRequest* req = JS_GetOpaque(conn->current_request, js_http_request_class_id);
     if (req) {
+      // Add to rawHeaders array
+      JSValue length_val = JS_GetPropertyStr(ctx, req->rawHeaders, "length");
+      uint32_t length = 0;
+      JS_ToUint32(ctx, &length, length_val);
+      JS_FreeValue(ctx, length_val);
+
+      JS_SetPropertyUint32(ctx, req->rawHeaders, length, JS_NewString(ctx, conn->current_header_field));
+      JS_SetPropertyUint32(ctx, req->rawHeaders, length + 1, JS_NewString(ctx, conn->current_header_value));
+
       char* lower_name = str_to_lower(conn->current_header_field);
       if (lower_name) {
         JSValue existing = JS_GetPropertyStr(ctx, req->headers, lower_name);

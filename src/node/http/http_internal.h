@@ -307,6 +307,7 @@ typedef struct {
   char* url;            /**< Request URL path */
   char* http_version;   /**< HTTP version string (e.g., "1.1") */
   JSValue headers;      /**< Request headers object */
+  JSValue rawHeaders;   /**< Raw headers array [name1, value1, name2, value2, ...] */
   JSValue socket;       /**< Associated net.Socket object */
   JSStreamData* stream; /**< Readable stream implementation (Phase 4) */
 

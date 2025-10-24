@@ -69,6 +69,11 @@ JSValue jsrt_init_unified_process_module(JSContext* ctx) {
   JS_SetPropertyStr(ctx, process, "nextTick", JS_NewCFunction(ctx, js_process_nextTick, "nextTick", 1));
   JS_SetPropertyStr(ctx, process, "memoryUsage", JS_NewCFunction(ctx, js_process_memoryUsage, "memoryUsage", 0));
 
+  // Standard I/O streams
+  JS_SetPropertyStr(ctx, process, "stdout", jsrt_create_stdout(ctx));
+  JS_SetPropertyStr(ctx, process, "stderr", jsrt_create_stderr(ctx));
+  JS_SetPropertyStr(ctx, process, "stdin", jsrt_create_stdin(ctx));
+
   // Store the module globally for reuse
   g_process_module = JS_DupValue(ctx, process);
 

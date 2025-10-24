@@ -1,11 +1,26 @@
 #include "events_internal.h"
 
-// Helper: Check if this is an EventEmitter (has _events property)
+// Helper: Check if this is an EventEmitter (has _events property or inherits from EventEmitter)
 bool is_event_emitter(JSContext* ctx, JSValueConst this_val) {
+  // First check if _events property already exists
   JSValue events_prop = JS_GetPropertyStr(ctx, this_val, "_events");
-  bool result = !JS_IsUndefined(events_prop);
+  if (!JS_IsUndefined(events_prop)) {
+    JS_FreeValue(ctx, events_prop);
+    return true;
+  }
   JS_FreeValue(ctx, events_prop);
-  return result;
+
+  // Check if this object inherits EventEmitter methods through util.inherits()
+  // by checking for characteristic EventEmitter methods in the prototype chain
+  JSValue on_method = JS_GetPropertyStr(ctx, this_val, "on");
+  JSValue emit_method = JS_GetPropertyStr(ctx, this_val, "emit");
+
+  bool has_emitter_methods = JS_IsFunction(ctx, on_method) && JS_IsFunction(ctx, emit_method);
+
+  JS_FreeValue(ctx, on_method);
+  JS_FreeValue(ctx, emit_method);
+
+  return has_emitter_methods;
 }
 
 // Helper: Get or create events object

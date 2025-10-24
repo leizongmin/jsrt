@@ -77,7 +77,23 @@ int main(int argc, char** argv) {
   }
 
   // If no embedded bytecode, handle regular file execution
-  ret = JSRT_CmdRunFile(command, compact_node, argc - script_arg_start, argv + script_arg_start);
+  // In compact-node mode, prepend argv[0] (executable path) to match Node.js behavior
+  // where process.argv[0] is the Node executable and process.argv[1] is the script
+  if (compact_node) {
+    // Create new argv array with executable path prepended
+    int new_argc = argc - script_arg_start + 1;
+    char** new_argv = (char**)malloc((new_argc + 1) * sizeof(char*));
+    new_argv[0] = argv[0];  // Executable path
+    for (int i = 0; i < argc - script_arg_start; i++) {
+      new_argv[i + 1] = argv[script_arg_start + i];
+    }
+    new_argv[new_argc] = NULL;
+
+    ret = JSRT_CmdRunFile(command, compact_node, new_argc, new_argv);
+    free(new_argv);
+  } else {
+    ret = JSRT_CmdRunFile(command, compact_node, argc - script_arg_start, argv + script_arg_start);
+  }
 
   return ret;
 }

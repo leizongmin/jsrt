@@ -257,6 +257,51 @@ static JSValue js_readable_from(JSContext* ctx, JSValueConst this_val, int argc,
 }
 
 // Add utility functions to stream module
+// Readable.toWeb(streamReadable) - Converts Node.js Readable to Web ReadableStream
+// Required for @hono/node-server compatibility
+//
+// This is a simplified implementation that creates a JavaScript wrapper
+// instead of a full C implementation with event handlers
+static JSValue js_readable_toWeb(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
+  if (argc < 1) {
+    return JS_ThrowTypeError(ctx, "Readable.toWeb() requires a Readable stream argument");
+  }
+
+  JSValue node_readable = argv[0];
+
+  // Create a JavaScript wrapper that bridges Node.js stream to Web stream
+  // This approach is simpler and avoids complex C callback management
+  const char* wrapper_code =
+    "(function(nodeReadable) {\n"
+    "  return new ReadableStream({\n"
+    "    start(controller) {\n"
+    "      nodeReadable.on('data', (chunk) => {\n"
+    "        controller.enqueue(chunk);\n"
+    "      });\n"
+    "      nodeReadable.on('end', () => {\n"
+    "        controller.close();\n"
+    "      });\n"
+    "      nodeReadable.on('error', (err) => {\n"
+    "        controller.error(err);\n"
+    "      });\n"
+    "    }\n"
+    "  });\n"
+    "})\n";
+
+  // Compile the wrapper function
+  JSValue wrapper_func = JS_Eval(ctx, wrapper_code, strlen(wrapper_code), "<Readable.toWeb>", JS_EVAL_TYPE_GLOBAL);
+  if (JS_IsException(wrapper_func)) {
+    return wrapper_func;
+  }
+
+  // Call the wrapper with the Node.js readable stream
+  JSValue args[] = {node_readable};
+  JSValue result = JS_Call(ctx, wrapper_func, JS_UNDEFINED, 1, args);
+  JS_FreeValue(ctx, wrapper_func);
+
+  return result;
+}
+
 void js_stream_init_utilities(JSContext* ctx, JSValue stream_module) {
   // Add pipeline() function
   JS_SetPropertyStr(ctx, stream_module, "pipeline", JS_NewCFunction(ctx, js_stream_pipeline, "pipeline", 2));
@@ -268,6 +313,7 @@ void js_stream_init_utilities(JSContext* ctx, JSValue stream_module) {
   JSValue readable_ctor = JS_GetPropertyStr(ctx, stream_module, "Readable");
   if (!JS_IsUndefined(readable_ctor)) {
     JS_SetPropertyStr(ctx, readable_ctor, "from", JS_NewCFunction(ctx, js_readable_from, "from", 2));
+    JS_SetPropertyStr(ctx, readable_ctor, "toWeb", JS_NewCFunction(ctx, js_readable_toWeb, "toWeb", 1));
     JS_FreeValue(ctx, readable_ctor);
   }
 }

@@ -1627,8 +1627,23 @@ void JSRT_StdCommonJSSetEntryPath(const char* path) {
 
   if (path) {
     entry_module_path = strdup(path);
-    // Note: We don't update the global require() here because it should remain bound to cwd
-    // for compatibility with existing tests that use paths like './test/module/file.js'
+
+    // Update global require() to use the entry path for correct node_modules resolution
+    // This ensures require() searches for modules starting from the script's directory,
+    // not from the current working directory
+    if (global_runtime && global_runtime->module_loader && global_runtime->ctx) {
+      JSRT_Debug("JSRT_StdCommonJSSetEntryPath: updating global require() with entry path='%s'", path);
+      JSValue global = JS_GetGlobalObject(global_runtime->ctx);
+      JSValue require_func = jsrt_create_require_function(global_runtime->ctx, global_runtime->module_loader, path);
+      if (!JS_IsException(require_func)) {
+        JSRT_Debug("JSRT_StdCommonJSSetEntryPath: global require() updated successfully");
+        JS_SetPropertyStr(global_runtime->ctx, global, "require", require_func);
+      } else {
+        JSRT_Debug("JSRT_StdCommonJSSetEntryPath: failed to update global require()");
+        JS_FreeValue(global_runtime->ctx, require_func);
+      }
+      JS_FreeValue(global_runtime->ctx, global);
+    }
   }
 }
 

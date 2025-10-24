@@ -3,7 +3,7 @@ const assert = require('jsrt:assert');
 // console.log('=== CommonJS Module Tests ===');
 
 // Test 1: Basic require
-const { greet, data } = require('./test/module/commonjs_module.js');
+const { greet, data } = require('./commonjs_module.js');
 const greeting = greet('World');
 assert.strictEqual(typeof greet, 'function', 'greet should be a function');
 assert.strictEqual(typeof greeting, 'string', 'greet should return a string');
@@ -13,7 +13,7 @@ console.log('data:', data);
 
 // Test 2: Nested require (require the same module again)
 console.log('\nTest 2: Nested require');
-const mod2 = require('./test/module/commonjs_module.js');
+const mod2 = require('./commonjs_module.js');
 const greeting2 = mod2.greet('Again');
 assert.strictEqual(
   typeof mod2.greet,

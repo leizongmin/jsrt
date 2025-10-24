@@ -7,11 +7,12 @@
     "url": "https://github.com/leizongmin/jsrt.git"
   },
   "scripts": {
-    "prettier": "prettier --write 'examples/**/*.{js,mjs}' 'test/**/*.{js,mjs}'"
+    "prettier": "prettier --write 'examples/**/*.{js,mjs}' 'test/**/*.{js,mjs}'",
+    "update-dev": "npm --registry https://registry.npmjs.org i @anthropic-ai/claude-code@latest @openai/codex@latest -D"
   },
   "devDependencies": {
-    "@anthropic-ai/claude-code": "^2.0.25",
-    "@openai/codex": "^0.47.0",
+    "@anthropic-ai/claude-code": "^2.0.26",
+    "@openai/codex": "^0.48.0",
     "async": "^3.2.5",
     "lodash": "^4.17.21",
     "moment": "^2.30.1",

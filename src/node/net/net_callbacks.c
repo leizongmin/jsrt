@@ -264,6 +264,9 @@ void on_connection(uv_stream_t* server, int status) {
     return;
   }
 
+  // Keep server-accepted sockets alive until the connection is handed to JS
+  jsrt_net_add_active_socket_ref(ctx, conn);
+
   // Accept the connection - use the same event loop as the server
   JSRT_Runtime* rt = JS_GetContextOpaque(ctx);
   uv_tcp_init(rt->uv_loop, &conn->handle);

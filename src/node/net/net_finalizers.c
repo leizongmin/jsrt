@@ -34,6 +34,19 @@ static void add_deferred_cleanup(void* ptr, char* string1, char* string2) {
   }
 }
 
+void jsrt_net_add_active_socket_ref(JSContext* ctx, JSNetConnection* conn) {
+  if (!ctx || !conn || JS_IsUndefined(conn->socket_obj) || JS_IsNull(conn->socket_obj)) {
+    return;
+  }
+
+  char prop_name[64];
+  snprintf(prop_name, sizeof(prop_name), "__active_socket_%p__", (void*)conn);
+  JSValue global = JS_GetGlobalObject(ctx);
+  JSRT_Debug("jsrt_net_add_active_socket_ref: storing global property '%s' for conn=%p", prop_name, conn);
+  JS_SetPropertyStr(ctx, global, prop_name, JS_DupValue(ctx, conn->socket_obj));
+  JS_FreeValue(ctx, global);
+}
+
 void jsrt_net_cleanup_deferred(void) {
   DeferredCleanup* current = deferred_cleanup_head;
   while (current) {
@@ -132,19 +145,16 @@ void js_socket_finalizer(JSRuntime* rt, JSValue val) {
     return;
   }
 
-  // If socket is connecting or connected, we MUST NOT finalize yet
-  // There are pending libuv callbacks that will try to use this socket
-  // The socket should only be finalized after it's been properly closed
-  if (conn->connecting || conn->connected) {
-    JSRT_Debug("js_socket_finalizer: socket is connecting/connected, skipping finalization");
-    return;
-  }
-
   // If close_count is -1, cleanup has already been deferred, skip finalization
   if (conn->close_count == -1) {
     JSRT_Debug("js_socket_finalizer: cleanup already deferred for conn=%p, skipping", conn);
     return;
   }
+
+  // Mark socket as destroyed to prevent further use
+  conn->destroyed = true;
+  conn->connecting = false;
+  conn->connected = false;
 
   // Remove from active sockets global properties if present
   // Only do this if we're actually going to finalize
@@ -159,11 +169,9 @@ void js_socket_finalizer(JSRuntime* rt, JSValue val) {
   // Mark socket object as invalid to prevent use-after-free in callbacks
   // Callbacks will check this and skip their work
   if (!JS_IsUndefined(conn->socket_obj)) {
-    JS_FreeValueRT(rt, conn->socket_obj);
     conn->socket_obj = JS_UNDEFINED;
   }
   if (!JS_IsUndefined(conn->client_request_obj)) {
-    JS_FreeValueRT(rt, conn->client_request_obj);
     conn->client_request_obj = JS_UNDEFINED;
   }
 

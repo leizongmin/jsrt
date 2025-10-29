@@ -290,6 +290,53 @@ static JSValue js_buffer_constructor(JSContext* ctx, JSValueConst this_val, int 
   return js_buffer_from(ctx, this_val, argc, argv);
 }
 
+// Buffer.byteLength(string[, encoding])
+static JSValue js_buffer_byte_length(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
+  if (argc < 1) {
+    return JS_ThrowTypeError(ctx, "Buffer.byteLength() requires at least 1 argument");
+  }
+
+  JSValue arg = argv[0];
+
+  // Handle string input
+  if (JS_IsString(arg)) {
+    const char* str = JS_ToCString(ctx, arg);
+    if (!str) {
+      return JS_EXCEPTION;
+    }
+
+    size_t byte_length = strlen(str);
+    JS_FreeCString(ctx, str);
+
+    return JS_NewInt64(ctx, byte_length);
+  }
+
+  // Handle Buffer/Uint8Array/TypedArray input
+  size_t buffer_size;
+  uint8_t* buffer_data = get_buffer_data(ctx, arg, &buffer_size);
+  if (buffer_data) {
+    return JS_NewInt64(ctx, buffer_size);
+  }
+
+  // Handle ArrayBuffer input
+  JSValue global_obj = JS_GetGlobalObject(ctx);
+  JSValue array_buffer_ctor = JS_GetPropertyStr(ctx, global_obj, "ArrayBuffer");
+  if (JS_IsInstanceOf(ctx, arg, array_buffer_ctor) > 0) {
+    size_t buffer_size;
+    uint8_t* buffer = JS_GetArrayBuffer(ctx, &buffer_size, arg);
+    JS_FreeValue(ctx, array_buffer_ctor);
+    JS_FreeValue(ctx, global_obj);
+
+    if (buffer) {
+      return JS_NewInt64(ctx, buffer_size);
+    }
+  }
+  JS_FreeValue(ctx, array_buffer_ctor);
+  JS_FreeValue(ctx, global_obj);
+
+  return JS_ThrowTypeError(ctx, "Buffer.byteLength() argument must be a string, Buffer, TypedArray, or ArrayBuffer");
+}
+
 // Buffer.concat(list[, totalLength])
 static JSValue js_buffer_concat(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
   if (argc < 1) {
@@ -371,12 +418,39 @@ JSValue JSRT_InitNodeBuffer(JSContext* ctx) {
   // Create Buffer constructor function
   JSValue Buffer = JS_NewCFunction2(ctx, js_buffer_constructor, "Buffer", 1, JS_CFUNC_constructor, 0);
 
+  // Ensure Buffer.prototype exists and inherits from Uint8Array.prototype for instanceof checks
+  JSValue global_obj = JS_GetGlobalObject(ctx);
+  JSValue uint8_array_ctor = JS_GetPropertyStr(ctx, global_obj, "Uint8Array");
+  JSValue uint8_array_proto = JS_UNDEFINED;
+  if (JS_IsFunction(ctx, uint8_array_ctor)) {
+    uint8_array_proto = JS_GetPropertyStr(ctx, uint8_array_ctor, "prototype");
+  }
+
+  if (JS_IsObject(uint8_array_proto)) {
+    JS_SetPropertyStr(ctx, Buffer, "prototype", JS_DupValue(ctx, uint8_array_proto));
+  } else {
+    JS_SetPropertyStr(ctx, Buffer, "prototype", JS_NewObject(ctx));
+  }
+
+  if (JS_SetPropertyStr(ctx, global_obj, "Buffer", JS_DupValue(ctx, Buffer)) < 0) {
+    JS_FreeValue(ctx, uint8_array_proto);
+    JS_FreeValue(ctx, uint8_array_ctor);
+    JS_FreeValue(ctx, global_obj);
+    JS_FreeValue(ctx, Buffer);
+    return JS_EXCEPTION;
+  }
+
+  JS_FreeValue(ctx, uint8_array_proto);
+  JS_FreeValue(ctx, uint8_array_ctor);
+  JS_FreeValue(ctx, global_obj);
+
   // Static methods on Buffer
   JS_SetPropertyStr(ctx, Buffer, "alloc", JS_NewCFunction(ctx, js_buffer_alloc, "alloc", 3));
   JS_SetPropertyStr(ctx, Buffer, "allocUnsafe", JS_NewCFunction(ctx, js_buffer_alloc_unsafe, "allocUnsafe", 1));
   JS_SetPropertyStr(ctx, Buffer, "from", JS_NewCFunction(ctx, js_buffer_from, "from", 2));
   JS_SetPropertyStr(ctx, Buffer, "isBuffer", JS_NewCFunction(ctx, js_buffer_is_buffer, "isBuffer", 1));
   JS_SetPropertyStr(ctx, Buffer, "concat", JS_NewCFunction(ctx, js_buffer_concat, "concat", 2));
+  JS_SetPropertyStr(ctx, Buffer, "byteLength", JS_NewCFunction(ctx, js_buffer_byte_length, "byteLength", 2));
 
   // Export Buffer as both named and default export for CommonJS
   JS_SetPropertyStr(ctx, buffer_obj, "Buffer", JS_DupValue(ctx, Buffer));

@@ -84,6 +84,23 @@ assert.ok(transform, 'Should create Transform instance');
 assert.strictEqual(transform.readable, true, 'Should be readable');
 assert.strictEqual(transform.writable, true, 'Should be writable');
 
+// Verify util.inherits() compatibility
+const util = require('node:util');
+function CustomTransform() {
+  Transform.call(this);
+}
+util.inherits(CustomTransform, Transform);
+const inherited = new CustomTransform();
+assert.ok(
+  inherited instanceof Transform,
+  'Custom transform should inherit from Transform'
+);
+assert.strictEqual(
+  typeof inherited.write,
+  'function',
+  'Custom transform exposes writable methods'
+);
+
 // console.log('✓ Transform stream works correctly');
 
 // console.log('\n=== All Node.js Stream tests passed! ===');

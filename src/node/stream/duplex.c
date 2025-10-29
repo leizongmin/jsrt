@@ -30,6 +30,7 @@ JSValue js_duplex_constructor(JSContext* ctx, JSValueConst new_target, int argc,
   }
 
   // Initialize base state (both readable and writable)
+  stream->magic = JS_STREAM_MAGIC;  // Set magic number for validation
   stream->readable = true;
   stream->writable = true;
   stream->destroyed = false;
@@ -76,7 +77,7 @@ JSValue js_duplex_constructor(JSContext* ctx, JSValueConst new_target, int argc,
 
 // Duplex.prototype.read - reuses Readable.read() logic
 static JSValue js_duplex_read(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
-  JSStreamData* stream = JS_GetOpaque(this_val, js_duplex_class_id);
+  JSStreamData* stream = js_stream_get_data(ctx, this_val, js_duplex_class_id);
   if (!stream) {
     return JS_ThrowTypeError(ctx, "Not a duplex stream");
   }
@@ -147,7 +148,7 @@ static JSValue js_duplex_read(JSContext* ctx, JSValueConst this_val, int argc, J
 
 // Duplex.prototype.write - reuses Writable.write() logic
 static JSValue js_duplex_write(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
-  JSStreamData* stream = JS_GetOpaque(this_val, js_duplex_class_id);
+  JSStreamData* stream = js_stream_get_data(ctx, this_val, js_duplex_class_id);
   if (!stream) {
     return JS_ThrowTypeError(ctx, "Not a duplex stream");
   }

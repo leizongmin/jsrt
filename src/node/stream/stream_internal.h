@@ -3,6 +3,7 @@
 
 #include <quickjs.h>
 #include <stdbool.h>
+#include <stdint.h>
 #include <stdlib.h>
 
 // Forward declare class IDs (defined in stream.c)
@@ -29,6 +30,7 @@ typedef struct {
 
 // Stream base class - all streams extend EventEmitter
 typedef struct {
+  uint32_t magic;
   // Note: event_emitter is stored as "_emitter" property on the stream object
   // NOT stored in this struct to avoid reference counting issues
   bool readable;
@@ -61,6 +63,12 @@ typedef struct {
   size_t write_callback_capacity;
 } JSStreamData;
 
+#define JS_STREAM_MAGIC 0x4a535452u  // 'JSTR'
+
+JSStreamData* js_stream_get_data(JSContext* ctx, JSValueConst this_val, JSClassID class_id);
+JSValue js_stream_get_impl_holder(JSContext* ctx, JSValueConst this_val, JSClassID class_id);
+int js_stream_attach_impl(JSContext* ctx, JSValueConst public_obj, JSValue holder);
+
 // event_emitter.c
 void parse_stream_options(JSContext* ctx, JSValueConst options_obj, StreamOptions* opts);
 JSValue init_stream_event_emitter(JSContext* ctx, JSValue stream_obj);
@@ -89,6 +97,7 @@ void js_duplex_init_prototype(JSContext* ctx, JSValue duplex_proto);
 // transform.c
 JSValue js_transform_constructor(JSContext* ctx, JSValueConst new_target, int argc, JSValueConst* argv);
 void js_transform_init_prototype(JSContext* ctx, JSValue transform_proto);
+JSValue js_transform_initialize(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv);
 
 // passthrough.c
 JSValue js_passthrough_constructor(JSContext* ctx, JSValueConst new_target, int argc, JSValueConst* argv);

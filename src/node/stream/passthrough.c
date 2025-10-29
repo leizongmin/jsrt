@@ -17,6 +17,7 @@ JSValue js_passthrough_constructor(JSContext* ctx, JSValueConst new_target, int 
   parse_stream_options(ctx, argc > 0 ? argv[0] : JS_UNDEFINED, &stream->options);
 
   // Initialize base state
+  stream->magic = JS_STREAM_MAGIC;  // Set magic number for validation
   stream->readable = true;
   stream->writable = true;
   stream->destroyed = false;
@@ -41,7 +42,7 @@ JSValue js_passthrough_constructor(JSContext* ctx, JSValueConst new_target, int 
 
 // PassThrough.prototype.write (pass data through)
 static JSValue js_passthrough_write(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
-  JSStreamData* stream = JS_GetOpaque(this_val, js_passthrough_class_id);
+  JSStreamData* stream = js_stream_get_data(ctx, this_val, js_passthrough_class_id);
   if (!stream) {
     return JS_ThrowTypeError(ctx, "Not a passthrough stream");
   }
@@ -70,7 +71,7 @@ static JSValue js_passthrough_write(JSContext* ctx, JSValueConst this_val, int a
 
 // PassThrough.prototype.read (use same as readable)
 static JSValue js_passthrough_read(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
-  JSStreamData* stream = JS_GetOpaque(this_val, js_passthrough_class_id);
+  JSStreamData* stream = js_stream_get_data(ctx, this_val, js_passthrough_class_id);
   if (!stream) {
     return JS_ThrowTypeError(ctx, "Not a passthrough stream");
   }
@@ -90,7 +91,7 @@ static JSValue js_passthrough_read(JSContext* ctx, JSValueConst this_val, int ar
 
 // PassThrough.prototype.push (use same as readable)
 static JSValue js_passthrough_push(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
-  JSStreamData* stream = JS_GetOpaque(this_val, js_passthrough_class_id);
+  JSStreamData* stream = js_stream_get_data(ctx, this_val, js_passthrough_class_id);
   if (!stream) {
     return JS_ThrowTypeError(ctx, "Not a passthrough stream");
   }

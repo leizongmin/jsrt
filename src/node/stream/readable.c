@@ -18,6 +18,7 @@ JSValue js_readable_constructor(JSContext* ctx, JSValueConst new_target, int arg
   parse_stream_options(ctx, argc > 0 ? argv[0] : JS_UNDEFINED, &stream->options);
 
   // Initialize base state
+  stream->magic = JS_STREAM_MAGIC;  // Set magic number for validation
   stream->readable = true;
   stream->writable = false;
   stream->destroyed = false;
@@ -51,7 +52,7 @@ JSValue js_readable_constructor(JSContext* ctx, JSValueConst new_target, int arg
 
 // Readable.prototype.read([size])
 static JSValue js_readable_read(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
-  JSStreamData* stream = JS_GetOpaque(this_val, js_readable_class_id);
+  JSStreamData* stream = js_stream_get_data(ctx, this_val, js_readable_class_id);
   if (!stream) {
     return JS_ThrowTypeError(ctx, "Not a readable stream");
   }
@@ -109,7 +110,7 @@ static JSValue js_readable_read(JSContext* ctx, JSValueConst this_val, int argc,
 
 // Readable.prototype.push(chunk, [encoding])
 static JSValue js_readable_push(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
-  JSStreamData* stream = JS_GetOpaque(this_val, js_readable_class_id);
+  JSStreamData* stream = js_stream_get_data(ctx, this_val, js_readable_class_id);
   if (!stream) {
     return JS_ThrowTypeError(ctx, "Not a readable stream");
   }
@@ -199,7 +200,7 @@ static JSValue js_readable_push(JSContext* ctx, JSValueConst this_val, int argc,
 
 // Readable.prototype.pause()
 static JSValue js_readable_pause(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
-  JSStreamData* stream = JS_GetOpaque(this_val, js_readable_class_id);
+  JSStreamData* stream = js_stream_get_data(ctx, this_val, js_readable_class_id);
   if (!stream) {
     return JS_ThrowTypeError(ctx, "Not a readable stream");
   }
@@ -214,7 +215,7 @@ static JSValue js_readable_pause(JSContext* ctx, JSValueConst this_val, int argc
 
 // Readable.prototype.resume()
 static JSValue js_readable_resume(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
-  JSStreamData* stream = JS_GetOpaque(this_val, js_readable_class_id);
+  JSStreamData* stream = js_stream_get_data(ctx, this_val, js_readable_class_id);
   if (!stream) {
     return JS_ThrowTypeError(ctx, "Not a readable stream");
   }
@@ -252,7 +253,7 @@ static JSValue js_readable_resume(JSContext* ctx, JSValueConst this_val, int arg
 
 // Readable.prototype.isPaused()
 static JSValue js_readable_is_paused(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
-  JSStreamData* stream = JS_GetOpaque(this_val, js_readable_class_id);
+  JSStreamData* stream = js_stream_get_data(ctx, this_val, js_readable_class_id);
   if (!stream) {
     return JS_UNDEFINED;
   }
@@ -262,7 +263,7 @@ static JSValue js_readable_is_paused(JSContext* ctx, JSValueConst this_val, int 
 
 // Readable.prototype.setEncoding(encoding)
 static JSValue js_readable_set_encoding(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
-  JSStreamData* stream = JS_GetOpaque(this_val, js_readable_class_id);
+  JSStreamData* stream = js_stream_get_data(ctx, this_val, js_readable_class_id);
   if (!stream) {
     return JS_ThrowTypeError(ctx, "Not a readable stream");
   }
@@ -283,7 +284,7 @@ static JSValue js_readable_set_encoding(JSContext* ctx, JSValueConst this_val, i
 
 // Readable.prototype.readable property getter
 static JSValue js_readable_get_readable(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
-  JSStreamData* stream = JS_GetOpaque(this_val, js_readable_class_id);
+  JSStreamData* stream = js_stream_get_data(ctx, this_val, js_readable_class_id);
   if (!stream) {
     return JS_UNDEFINED;
   }
@@ -293,7 +294,7 @@ static JSValue js_readable_get_readable(JSContext* ctx, JSValueConst this_val, i
 
 // Readable.prototype.pipe(destination, [options])
 static JSValue js_readable_pipe(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
-  JSStreamData* src = JS_GetOpaque(this_val, js_readable_class_id);
+  JSStreamData* src = js_stream_get_data(ctx, this_val, js_readable_class_id);
   if (!src) {
     return JS_ThrowTypeError(ctx, "Not a readable stream");
   }
@@ -363,7 +364,7 @@ static JSValue js_readable_pipe(JSContext* ctx, JSValueConst this_val, int argc,
 
 // Readable.prototype.unpipe([destination])
 static JSValue js_readable_unpipe(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
-  JSStreamData* src = JS_GetOpaque(this_val, js_readable_class_id);
+  JSStreamData* src = js_stream_get_data(ctx, this_val, js_readable_class_id);
   if (!src) {
     return JS_ThrowTypeError(ctx, "Not a readable stream");
   }

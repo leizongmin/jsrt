@@ -4,22 +4,14 @@
 // Transform stream implementation - extends Duplex with transformation logic
 // Reuses Duplex patterns and adds _transform() callback support
 
-JSValue js_transform_constructor(JSContext* ctx, JSValueConst new_target, int argc, JSValueConst* argv) {
-  JSValue obj = JS_NewObjectClass(ctx, js_transform_class_id);
-  if (JS_IsException(obj)) {
-    return obj;
-  }
-
+static int js_transform_setup(JSContext* ctx, JSValue public_obj, JSValue holder_obj, JSValueConst options_val) {
   JSStreamData* stream = calloc(1, sizeof(JSStreamData));
   if (!stream) {
-    JS_FreeValue(ctx, obj);
-    return JS_ThrowOutOfMemory(ctx);
+    JS_ThrowOutOfMemory(ctx);
+    return -1;
   }
 
-  // Parse options (first argument)
-  parse_stream_options(ctx, argc > 0 ? argv[0] : JS_UNDEFINED, &stream->options);
-
-  // Initialize as Duplex (both readable and writable)
+  stream->magic = JS_STREAM_MAGIC;
   stream->readable = true;
   stream->writable = true;
   stream->destroyed = false;
@@ -28,50 +20,111 @@ JSValue js_transform_constructor(JSContext* ctx, JSValueConst new_target, int ar
   stream->error_value = JS_UNDEFINED;
   stream->buffer_capacity = 16;
   stream->buffered_data = malloc(sizeof(JSValue) * stream->buffer_capacity);
+  if (!stream->buffered_data) {
+    free(stream);
+    JS_ThrowOutOfMemory(ctx);
+    return -1;
+  }
 
-  // Initialize Readable state
-  stream->flowing = false;
-  stream->reading = false;
-  stream->ended_emitted = false;
-  stream->readable_emitted = false;
-  stream->pipe_destinations = NULL;
-  stream->pipe_count = 0;
-  stream->pipe_capacity = 0;
+  parse_stream_options(ctx, options_val, &stream->options);
 
-  // Initialize Writable state
-  stream->writable_ended = false;
-  stream->writable_finished = false;
-  stream->writable_corked = 0;
-  stream->need_drain = false;
-  stream->write_callbacks = NULL;
-  stream->write_callback_count = 0;
-  stream->write_callback_capacity = 0;
+  JS_SetOpaque(holder_obj, stream);
 
-  JS_SetOpaque(obj, stream);
+  init_stream_event_emitter(ctx, public_obj);
 
-  // Initialize EventEmitter
-  init_stream_event_emitter(ctx, obj);
+  if (JS_DefinePropertyValueStr(ctx, public_obj, "readable", JS_NewBool(ctx, true), JS_PROP_WRITABLE) < 0)
+    goto fail;
+  if (JS_DefinePropertyValueStr(ctx, public_obj, "writable", JS_NewBool(ctx, true), JS_PROP_WRITABLE) < 0)
+    goto fail;
+  if (JS_DefinePropertyValueStr(ctx, public_obj, "destroyed", JS_NewBool(ctx, false), JS_PROP_WRITABLE) < 0)
+    goto fail;
 
-  // Set properties
-  JS_DefinePropertyValueStr(ctx, obj, "readable", JS_NewBool(ctx, true), JS_PROP_WRITABLE);
-  JS_DefinePropertyValueStr(ctx, obj, "writable", JS_NewBool(ctx, true), JS_PROP_WRITABLE);
-  JS_DefinePropertyValueStr(ctx, obj, "destroyed", JS_NewBool(ctx, false), JS_PROP_WRITABLE);
-
-  // Store transform callback if provided
-  if (argc > 0 && JS_IsObject(argv[0])) {
-    JSValue transform_fn = JS_GetPropertyStr(ctx, argv[0], "transform");
+  if (JS_IsObject(options_val)) {
+    JSValue transform_fn = JS_GetPropertyStr(ctx, options_val, "transform");
+    if (JS_IsException(transform_fn))
+      goto fail;
     if (JS_IsFunction(ctx, transform_fn)) {
-      JS_SetPropertyStr(ctx, obj, "_transform", transform_fn);
+      if (JS_SetPropertyStr(ctx, public_obj, "_transform", transform_fn) < 0)
+        goto fail;
     } else {
       JS_FreeValue(ctx, transform_fn);
     }
 
-    JSValue flush_fn = JS_GetPropertyStr(ctx, argv[0], "flush");
+    JSValue flush_fn = JS_GetPropertyStr(ctx, options_val, "flush");
+    if (JS_IsException(flush_fn))
+      goto fail;
     if (JS_IsFunction(ctx, flush_fn)) {
-      JS_SetPropertyStr(ctx, obj, "_flush", flush_fn);
+      if (JS_SetPropertyStr(ctx, public_obj, "_flush", flush_fn) < 0)
+        goto fail;
     } else {
       JS_FreeValue(ctx, flush_fn);
     }
+  }
+
+  return 0;
+
+fail:
+  JS_SetOpaque(holder_obj, NULL);
+  if (stream) {
+    if (stream->buffered_data) {
+      free(stream->buffered_data);
+    }
+    free(stream);
+  }
+  return -1;
+}
+
+JSValue js_transform_initialize(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
+  if (!JS_IsObject(this_val)) {
+    return JS_ThrowTypeError(ctx, "Transform initialization requires object context");
+  }
+
+  if (js_stream_get_data(ctx, this_val, js_transform_class_id)) {
+    return JS_DupValue(ctx, this_val);
+  }
+
+  JSValue holder = JS_NewObjectClass(ctx, js_transform_class_id);
+  if (JS_IsException(holder)) {
+    return holder;
+  }
+
+  JSValue target = JS_DupValue(ctx, this_val);
+  if (js_transform_setup(ctx, target, holder, argc > 0 ? argv[0] : JS_UNDEFINED) < 0) {
+    JS_FreeValue(ctx, target);
+    JS_SetOpaque(holder, NULL);
+    JS_FreeValue(ctx, holder);
+    return JS_EXCEPTION;
+  }
+  JS_FreeValue(ctx, target);
+
+  if (js_stream_attach_impl(ctx, this_val, holder) < 0) {
+    JS_SetOpaque(holder, NULL);
+    JS_FreeValue(ctx, holder);
+    return JS_EXCEPTION;
+  }
+
+  return JS_DupValue(ctx, this_val);
+}
+
+JSValue js_transform_constructor(JSContext* ctx, JSValueConst new_target, int argc, JSValueConst* argv) {
+  JSValue obj = JS_NewObjectClass(ctx, js_transform_class_id);
+  if (JS_IsException(obj)) {
+    return obj;
+  }
+
+  JSValue obj_dup = JS_DupValue(ctx, obj);
+  if (js_transform_setup(ctx, obj_dup, obj, argc > 0 ? argv[0] : JS_UNDEFINED) < 0) {
+    JS_FreeValue(ctx, obj_dup);
+    JS_SetOpaque(obj, NULL);
+    JS_FreeValue(ctx, obj);
+    return JS_EXCEPTION;
+  }
+  JS_FreeValue(ctx, obj_dup);
+
+  if (js_stream_attach_impl(ctx, obj, JS_DupValue(ctx, obj)) < 0) {
+    JS_SetOpaque(obj, NULL);
+    JS_FreeValue(ctx, obj);
+    return JS_EXCEPTION;
   }
 
   return obj;
@@ -117,7 +170,7 @@ static JSValue js_transform_default_transform(JSContext* ctx, JSValueConst this_
 
 // Transform.prototype.write - calls _transform()
 static JSValue js_transform_write(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
-  JSStreamData* stream = JS_GetOpaque(this_val, js_transform_class_id);
+  JSStreamData* stream = js_stream_get_data(ctx, this_val, js_transform_class_id);
   if (!stream) {
     return JS_ThrowTypeError(ctx, "Not a transform stream");
   }
@@ -183,7 +236,7 @@ static JSValue js_transform_write(JSContext* ctx, JSValueConst this_val, int arg
 
 // Transform.prototype.read - reuses Duplex.read() logic
 static JSValue js_transform_read(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
-  JSStreamData* stream = JS_GetOpaque(this_val, js_transform_class_id);
+  JSStreamData* stream = js_stream_get_data(ctx, this_val, js_transform_class_id);
   if (!stream) {
     return JS_ThrowTypeError(ctx, "Not a transform stream");
   }
@@ -216,7 +269,7 @@ static JSValue js_transform_read(JSContext* ctx, JSValueConst this_val, int argc
 
 // Transform.prototype.push - adds transformed data to readable side
 static JSValue js_transform_push(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
-  JSStreamData* stream = JS_GetOpaque(this_val, js_transform_class_id);
+  JSStreamData* stream = js_stream_get_data(ctx, this_val, js_transform_class_id);
   if (!stream) {
     return JS_ThrowTypeError(ctx, "Not a transform stream");
   }

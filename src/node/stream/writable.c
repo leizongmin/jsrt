@@ -18,6 +18,7 @@ JSValue js_writable_constructor(JSContext* ctx, JSValueConst new_target, int arg
   parse_stream_options(ctx, argc > 0 ? argv[0] : JS_UNDEFINED, &stream->options);
 
   // Initialize base state
+  stream->magic = JS_STREAM_MAGIC;  // Set magic number for validation
   stream->readable = false;
   stream->writable = true;
   stream->destroyed = false;
@@ -111,7 +112,7 @@ static void process_write_callbacks(JSContext* ctx, JSStreamData* stream, JSValu
 
 // Writable.prototype.write(chunk, [encoding], [callback])
 static JSValue js_writable_write(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
-  JSStreamData* stream = JS_GetOpaque(this_val, js_writable_class_id);
+  JSStreamData* stream = js_stream_get_data(ctx, this_val, js_writable_class_id);
   if (!stream) {
     return JS_ThrowTypeError(ctx, "Not a writable stream");
   }
@@ -200,7 +201,7 @@ static JSValue js_writable_write(JSContext* ctx, JSValueConst this_val, int argc
 
 // Writable.prototype.cork()
 static JSValue js_writable_cork(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
-  JSStreamData* stream = JS_GetOpaque(this_val, js_writable_class_id);
+  JSStreamData* stream = js_stream_get_data(ctx, this_val, js_writable_class_id);
   if (!stream) {
     return JS_ThrowTypeError(ctx, "Not a writable stream");
   }
@@ -211,7 +212,7 @@ static JSValue js_writable_cork(JSContext* ctx, JSValueConst this_val, int argc,
 
 // Writable.prototype.uncork()
 static JSValue js_writable_uncork(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
-  JSStreamData* stream = JS_GetOpaque(this_val, js_writable_class_id);
+  JSStreamData* stream = js_stream_get_data(ctx, this_val, js_writable_class_id);
   if (!stream) {
     return JS_ThrowTypeError(ctx, "Not a writable stream");
   }
@@ -230,7 +231,7 @@ static JSValue js_writable_uncork(JSContext* ctx, JSValueConst this_val, int arg
 
 // Writable.prototype.setDefaultEncoding(encoding)
 static JSValue js_writable_set_default_encoding(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
-  JSStreamData* stream = JS_GetOpaque(this_val, js_writable_class_id);
+  JSStreamData* stream = js_stream_get_data(ctx, this_val, js_writable_class_id);
   if (!stream) {
     return JS_ThrowTypeError(ctx, "Not a writable stream");
   }
@@ -259,7 +260,7 @@ static JSValue js_writable_set_default_encoding(JSContext* ctx, JSValueConst thi
 
 // Writable.prototype.end([chunk], [encoding], [callback])
 static JSValue js_writable_end(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
-  JSStreamData* stream = JS_GetOpaque(this_val, js_writable_class_id);
+  JSStreamData* stream = js_stream_get_data(ctx, this_val, js_writable_class_id);
   if (!stream) {
     return JS_ThrowTypeError(ctx, "Not a writable stream");
   }
@@ -320,7 +321,7 @@ static JSValue js_writable_end(JSContext* ctx, JSValueConst this_val, int argc, 
 
 // writable.writable
 static JSValue js_writable_get_writable(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
-  JSStreamData* stream = JS_GetOpaque(this_val, js_writable_class_id);
+  JSStreamData* stream = js_stream_get_data(ctx, this_val, js_writable_class_id);
   if (!stream) {
     return JS_UNDEFINED;
   }
@@ -329,7 +330,7 @@ static JSValue js_writable_get_writable(JSContext* ctx, JSValueConst this_val, i
 
 // writable.writableEnded
 static JSValue js_writable_get_writable_ended(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
-  JSStreamData* stream = JS_GetOpaque(this_val, js_writable_class_id);
+  JSStreamData* stream = js_stream_get_data(ctx, this_val, js_writable_class_id);
   if (!stream) {
     return JS_UNDEFINED;
   }
@@ -338,7 +339,7 @@ static JSValue js_writable_get_writable_ended(JSContext* ctx, JSValueConst this_
 
 // writable.writableFinished
 static JSValue js_writable_get_writable_finished(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
-  JSStreamData* stream = JS_GetOpaque(this_val, js_writable_class_id);
+  JSStreamData* stream = js_stream_get_data(ctx, this_val, js_writable_class_id);
   if (!stream) {
     return JS_UNDEFINED;
   }
@@ -347,7 +348,7 @@ static JSValue js_writable_get_writable_finished(JSContext* ctx, JSValueConst th
 
 // writable.writableLength
 static JSValue js_writable_get_writable_length(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
-  JSStreamData* stream = JS_GetOpaque(this_val, js_writable_class_id);
+  JSStreamData* stream = js_stream_get_data(ctx, this_val, js_writable_class_id);
   if (!stream) {
     return JS_UNDEFINED;
   }
@@ -357,7 +358,7 @@ static JSValue js_writable_get_writable_length(JSContext* ctx, JSValueConst this
 // writable.writableHighWaterMark
 static JSValue js_writable_get_writable_high_water_mark(JSContext* ctx, JSValueConst this_val, int argc,
                                                         JSValueConst* argv) {
-  JSStreamData* stream = JS_GetOpaque(this_val, js_writable_class_id);
+  JSStreamData* stream = js_stream_get_data(ctx, this_val, js_writable_class_id);
   if (!stream) {
     return JS_UNDEFINED;
   }
@@ -366,7 +367,7 @@ static JSValue js_writable_get_writable_high_water_mark(JSContext* ctx, JSValueC
 
 // writable.writableCorked
 static JSValue js_writable_get_writable_corked(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
-  JSStreamData* stream = JS_GetOpaque(this_val, js_writable_class_id);
+  JSStreamData* stream = js_stream_get_data(ctx, this_val, js_writable_class_id);
   if (!stream) {
     return JS_UNDEFINED;
   }
@@ -376,7 +377,7 @@ static JSValue js_writable_get_writable_corked(JSContext* ctx, JSValueConst this
 // writable.writableObjectMode
 static JSValue js_writable_get_writable_object_mode(JSContext* ctx, JSValueConst this_val, int argc,
                                                     JSValueConst* argv) {
-  JSStreamData* stream = JS_GetOpaque(this_val, js_writable_class_id);
+  JSStreamData* stream = js_stream_get_data(ctx, this_val, js_writable_class_id);
   if (!stream) {
     return JS_UNDEFINED;
   }

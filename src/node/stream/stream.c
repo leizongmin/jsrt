@@ -11,6 +11,63 @@ JSClassID js_duplex_class_id;
 JSClassID js_transform_class_id;
 JSClassID js_passthrough_class_id;
 
+static JSAtom stream_impl_atom = JS_ATOM_NULL;
+
+static JSStreamData* js_stream_try_get(JSValueConst obj, JSClassID class_id) {
+  if (!JS_IsObject(obj))
+    return NULL;
+  return JS_GetOpaque(obj, class_id);
+}
+
+JSValue js_stream_get_impl_holder(JSContext* ctx, JSValueConst this_val, JSClassID class_id) {
+  (void)class_id;
+  if (stream_impl_atom == JS_ATOM_NULL || !JS_IsObject(this_val))
+    return JS_UNDEFINED;
+
+  JSValue holder = JS_GetProperty(ctx, this_val, stream_impl_atom);
+  if (JS_IsException(holder))
+    return holder;
+
+  if (JS_IsUndefined(holder) || JS_IsNull(holder)) {
+    JS_FreeValue(ctx, holder);
+    return JS_UNDEFINED;
+  }
+
+  return holder;
+}
+
+JSStreamData* js_stream_get_data(JSContext* ctx, JSValueConst this_val, JSClassID class_id) {
+  JSStreamData* stream = js_stream_try_get(this_val, class_id);
+  if (stream) {
+    return stream->magic == JS_STREAM_MAGIC ? stream : NULL;
+  }
+
+  JSValue holder = js_stream_get_impl_holder(ctx, this_val, class_id);
+  if (JS_IsException(holder))
+    return NULL;
+
+  if (JS_IsUndefined(holder))
+    return NULL;
+
+  stream = js_stream_try_get(holder, class_id);
+  if (!stream || stream->magic != JS_STREAM_MAGIC) {
+    JS_FreeValue(ctx, holder);
+    return NULL;
+  }
+
+  JS_FreeValue(ctx, holder);
+  return stream;
+}
+
+int js_stream_attach_impl(JSContext* ctx, JSValueConst public_obj, JSValue holder) {
+  if (stream_impl_atom == JS_ATOM_NULL) {
+    stream_impl_atom = JS_NewAtom(ctx, "__jsrt_stream_impl");
+  }
+
+  int ret = JS_DefinePropertyValue(ctx, public_obj, stream_impl_atom, holder, JS_PROP_CONFIGURABLE | JS_PROP_WRITABLE);
+  return ret;
+}
+
 // Finalizer for all stream types
 static void js_stream_finalizer(JSRuntime* rt, JSValue obj) {
   JSStreamData* stream = JS_GetOpaque(obj, js_readable_class_id);
@@ -28,6 +85,11 @@ static void js_stream_finalizer(JSRuntime* rt, JSValue obj) {
   }
 
   if (stream) {
+    if (stream->magic != JS_STREAM_MAGIC) {
+      free(stream);
+      return;
+    }
+
     // Note: We do NOT free event_emitter here because it's stored as the "_emitter"
     // property on the stream object and will be freed automatically when the object
     // properties are cleaned up. Freeing it here would cause a double-free.
@@ -62,6 +124,7 @@ static void js_stream_finalizer(JSRuntime* rt, JSValue obj) {
     // Free option strings if allocated
     // Note: For now, options.encoding and options.defaultEncoding are assumed
     // to be string literals or static. If they become dynamic, add free logic here.
+    stream->magic = 0;
     free(stream);
   }
 }
@@ -75,19 +138,18 @@ static JSClassDef js_passthrough_class = {"PassThrough", .finalizer = js_stream_
 
 // Base method: stream.destroy([error])
 JSValue js_stream_destroy(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
-  // Try to get opaque data from any stream class
-  JSStreamData* stream = JS_GetOpaque(this_val, js_readable_class_id);
+  JSStreamData* stream = js_stream_get_data(ctx, this_val, js_readable_class_id);
   if (!stream) {
-    stream = JS_GetOpaque(this_val, js_writable_class_id);
+    stream = js_stream_get_data(ctx, this_val, js_writable_class_id);
   }
   if (!stream) {
-    stream = JS_GetOpaque(this_val, js_duplex_class_id);
+    stream = js_stream_get_data(ctx, this_val, js_duplex_class_id);
   }
   if (!stream) {
-    stream = JS_GetOpaque(this_val, js_transform_class_id);
+    stream = js_stream_get_data(ctx, this_val, js_transform_class_id);
   }
   if (!stream) {
-    stream = JS_GetOpaque(this_val, js_passthrough_class_id);
+    stream = js_stream_get_data(ctx, this_val, js_passthrough_class_id);
   }
 
   if (!stream) {
@@ -125,18 +187,18 @@ JSValue js_stream_destroy(JSContext* ctx, JSValueConst this_val, int argc, JSVal
 
 // Property getter: stream.destroyed
 JSValue js_stream_get_destroyed(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
-  JSStreamData* stream = JS_GetOpaque(this_val, js_readable_class_id);
+  JSStreamData* stream = js_stream_get_data(ctx, this_val, js_readable_class_id);
   if (!stream) {
-    stream = JS_GetOpaque(this_val, js_writable_class_id);
+    stream = js_stream_get_data(ctx, this_val, js_writable_class_id);
   }
   if (!stream) {
-    stream = JS_GetOpaque(this_val, js_duplex_class_id);
+    stream = js_stream_get_data(ctx, this_val, js_duplex_class_id);
   }
   if (!stream) {
-    stream = JS_GetOpaque(this_val, js_transform_class_id);
+    stream = js_stream_get_data(ctx, this_val, js_transform_class_id);
   }
   if (!stream) {
-    stream = JS_GetOpaque(this_val, js_passthrough_class_id);
+    stream = js_stream_get_data(ctx, this_val, js_passthrough_class_id);
   }
 
   if (!stream) {
@@ -148,18 +210,18 @@ JSValue js_stream_get_destroyed(JSContext* ctx, JSValueConst this_val, int argc,
 
 // Property getter: stream.errored
 JSValue js_stream_get_errored(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
-  JSStreamData* stream = JS_GetOpaque(this_val, js_readable_class_id);
+  JSStreamData* stream = js_stream_get_data(ctx, this_val, js_readable_class_id);
   if (!stream) {
-    stream = JS_GetOpaque(this_val, js_writable_class_id);
+    stream = js_stream_get_data(ctx, this_val, js_writable_class_id);
   }
   if (!stream) {
-    stream = JS_GetOpaque(this_val, js_duplex_class_id);
+    stream = js_stream_get_data(ctx, this_val, js_duplex_class_id);
   }
   if (!stream) {
-    stream = JS_GetOpaque(this_val, js_transform_class_id);
+    stream = js_stream_get_data(ctx, this_val, js_transform_class_id);
   }
   if (!stream) {
-    stream = JS_GetOpaque(this_val, js_passthrough_class_id);
+    stream = js_stream_get_data(ctx, this_val, js_passthrough_class_id);
   }
 
   if (!stream) {
@@ -175,15 +237,15 @@ JSValue js_stream_get_errored(JSContext* ctx, JSValueConst this_val, int argc, J
 
 // Writable.prototype.end - shared with PassThrough, Duplex, Transform
 static JSValue js_writable_end(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
-  JSStreamData* stream = JS_GetOpaque(this_val, js_writable_class_id);
+  JSStreamData* stream = js_stream_get_data(ctx, this_val, js_writable_class_id);
   if (!stream) {
-    stream = JS_GetOpaque(this_val, js_duplex_class_id);
+    stream = js_stream_get_data(ctx, this_val, js_duplex_class_id);
   }
   if (!stream) {
-    stream = JS_GetOpaque(this_val, js_transform_class_id);
+    stream = js_stream_get_data(ctx, this_val, js_transform_class_id);
   }
   if (!stream) {
-    stream = JS_GetOpaque(this_val, js_passthrough_class_id);
+    stream = js_stream_get_data(ctx, this_val, js_passthrough_class_id);
   }
   if (!stream) {
     return JS_ThrowTypeError(ctx, "Not a writable stream");
@@ -199,6 +261,10 @@ static JSValue js_writable_end(JSContext* ctx, JSValueConst this_val, int argc, 
 // Module initialization
 JSValue JSRT_InitNodeStream(JSContext* ctx) {
   JSValue stream_module = JS_NewObject(ctx);
+
+  if (stream_impl_atom == JS_ATOM_NULL) {
+    stream_impl_atom = JS_NewAtom(ctx, "__jsrt_stream_impl");
+  }
 
   // Ensure EventEmitter is available globally (needed for stream event handling)
   JSValue global = JS_GetGlobalObject(ctx);
@@ -242,6 +308,8 @@ JSValue JSRT_InitNodeStream(JSContext* ctx) {
   JSValue transform_ctor = JS_NewCFunction2(ctx, js_transform_constructor, "Transform", 1, JS_CFUNC_constructor, 0);
   JSValue passthrough_ctor =
       JS_NewCFunction2(ctx, js_passthrough_constructor, "PassThrough", 0, JS_CFUNC_constructor, 0);
+  JSValue transform_init_fn = JS_NewCFunction(ctx, js_transform_initialize, "__jsrt_initTransform", 1);
+  JSValue transform_wrapper = JS_UNDEFINED;
 
   // Create prototypes
   JSValue readable_proto = JS_NewObject(ctx);
@@ -371,7 +439,6 @@ JSValue JSRT_InitNodeStream(JSContext* ctx) {
   JS_SetPropertyStr(ctx, readable_proto, "constructor", JS_DupValue(ctx, readable_ctor));
   JS_SetPropertyStr(ctx, writable_proto, "constructor", JS_DupValue(ctx, writable_ctor));
   JS_SetPropertyStr(ctx, duplex_proto, "constructor", JS_DupValue(ctx, duplex_ctor));
-  JS_SetPropertyStr(ctx, transform_proto, "constructor", JS_DupValue(ctx, transform_ctor));
   JS_SetPropertyStr(ctx, passthrough_proto, "constructor", JS_DupValue(ctx, passthrough_ctor));
 
   // Set class prototypes
@@ -381,11 +448,52 @@ JSValue JSRT_InitNodeStream(JSContext* ctx) {
   JS_SetClassProto(ctx, js_transform_class_id, JS_DupValue(ctx, transform_proto));
   JS_SetClassProto(ctx, js_passthrough_class_id, JS_DupValue(ctx, passthrough_proto));
 
+  const char* transform_wrapper_src =
+      "(function(nativeCtor, init) {\n"
+      "  'use strict';\n"
+      "  function Transform(options) {\n"
+      "    if (!(this instanceof Transform)) {\n"
+      "      return new Transform(options);\n"
+      "    }\n"
+      "    init.call(this, options);\n"
+      "  }\n"
+      "  Transform.prototype = nativeCtor.prototype;\n"
+      "  Object.defineProperty(Transform.prototype, 'constructor', {\n"
+      "    value: Transform,\n"
+      "    writable: true,\n"
+      "    configurable: true\n"
+      "  });\n"
+      "  Object.setPrototypeOf(Transform, nativeCtor);\n"
+      "  Transform.__native = nativeCtor;\n"
+      "  return Transform;\n"
+      "})";
+
+  JSValue wrapper_factory = JS_Eval(ctx, transform_wrapper_src, strlen(transform_wrapper_src),
+                                    "<jsrt:stream-transform-wrapper>", JS_EVAL_TYPE_GLOBAL);
+  if (JS_IsException(wrapper_factory)) {
+    JS_FreeValue(ctx, transform_init_fn);
+    JS_FreeValue(ctx, stream_module);
+    return wrapper_factory;
+  }
+
+  JSValue factory_args[2] = {JS_DupValue(ctx, transform_ctor), JS_DupValue(ctx, transform_init_fn)};
+  JSValue transform_wrapper_local = JS_Call(ctx, wrapper_factory, JS_UNDEFINED, 2, factory_args);
+  JS_FreeValue(ctx, factory_args[0]);
+  JS_FreeValue(ctx, factory_args[1]);
+  JS_FreeValue(ctx, wrapper_factory);
+  JS_FreeValue(ctx, transform_init_fn);
+  if (JS_IsException(transform_wrapper_local)) {
+    JS_FreeValue(ctx, stream_module);
+    return transform_wrapper_local;
+  }
+
+  transform_wrapper = transform_wrapper_local;
+
   // Add to module
   JS_SetPropertyStr(ctx, stream_module, "Readable", readable_ctor);
   JS_SetPropertyStr(ctx, stream_module, "Writable", writable_ctor);
   JS_SetPropertyStr(ctx, stream_module, "Duplex", duplex_ctor);
-  JS_SetPropertyStr(ctx, stream_module, "Transform", transform_ctor);
+  JS_SetPropertyStr(ctx, stream_module, "Transform", transform_wrapper);
   JS_SetPropertyStr(ctx, stream_module, "PassThrough", passthrough_ctor);
 
   // Initialize Phase 5 utilities (pipeline, finished, Readable.from, etc.)

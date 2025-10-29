@@ -1,8 +1,8 @@
 ---
 Created: 2025-10-04T00:00:00Z
-Last Updated: 2025-10-06T01:40:00Z
-Status: 🟢 93.2% OVERALL COVERAGE - ALL CORE APIs COMPLETE!
-Overall Progress: 42 sync + 40 async + 31 Promise + 16 FileHandle methods (123/132 = 93.2%)
+Last Updated: 2025-10-29T08:45:00Z
+Status: 🟡 93.2% COVERAGE – stream-based factories pending follow-up
+Overall Progress: 42 sync + 40 async + 31 Promise + 16 FileHandle methods (123/132 = 93.2%) implemented; remaining work tracked below
 Phase 1: ✅ 100% COMPLETE (2025-10-06T01:40:00Z) - All 42 sync APIs including lchmodSync!
 Phase 2: ✅ 100% COMPLETE (2025-10-06T01:15:00Z) - 40 async callback APIs (100% coverage!)
 Phase 3: ✅ 100% COMPLETE (2025-10-06T00:15:00Z) - All 31 Promise APIs complete!
@@ -12,6 +12,42 @@ Phase A2: ✅ COMPLETED (2025-10-06T01:00:00Z) - FileHandle vectored I/O (readv,
 Phase 2.1: ✅ COMPLETED (2025-10-06T01:15:00Z) - Final 6 async APIs (truncate, ftruncate, fsync, fdatasync, mkdtemp, statfs)
 Latest Work: lchmodSync implementation complete! ALL CORE FS APIS IMPLEMENTED (93.2%)
 Test Status: All tests passing, WPT 90.6% (maintained)
+---
+
+## 🔄 Follow-up Optimization Plan (2025-10-29)
+
+### Motivation
+CLI workloads uncovered missing stream-based factories (`fs.createReadStream`, `fs.createWriteStream`) that are essential for interoperability with packages such as `loose-envify`. Without them, pipelines like `fs.createReadStream(...).pipe(transform).pipe(process.stdout)` fail immediately.
+
+### Goals
+1. Deliver Node-compatible read/write stream classes backed by the existing libuv async infrastructure.
+2. Expose `createReadStream` / `createWriteStream` helpers with option parity (`flags`, `mode`, `start`, `end`, `highWaterMark`, `encoding`).
+3. Ensure seamless interop with upcoming stream subsystem fixes (Transform dual-call support, stdio adapters).
+
+### Workstreams
+| ID | Task | Owner | Dependencies | Acceptance Criteria |
+|----|------|-------|--------------|---------------------|
+| FS-1 | Implement `fs.ReadStream` with async read loop and backpressure | FS core team | Stream plan M1 | Emits `open`, `ready`, `data`, `end`, `close`; honours `pause()`/`resume()` |
+| FS-2 | Export `fs.createReadStream()` factory | FS core team | FS-1 | Returns `fs.ReadStream`, supports `{ fd, flags, mode, start, end, highWaterMark, encoding }` |
+| FS-3 | Implement `fs.WriteStream` with buffered write queue | FS core team | Stream plan M1 | Supports `.write`, `.end`, `'finish'`, `.bytesWritten`, error propagation |
+| FS-4 | Export `fs.createWriteStream()` helper | FS core team | FS-3 | Handles append/truncate flags, integrates with piping |
+| FS-5 | Regression tests covering CLI scenario | QA + FS | FS-1..4 & Stream plan M2 | End-to-end: `fs.createReadStream(__filename)` → custom Transform → `process.stdout`; run `examples/node_modules/.bin/loose-envify` |
+
+### Timeline & Coordination
+- Target window: 2025-10-30 → 2025-11-05, aligned with stream follow-up milestones.
+- Requires coordination with stream/process teams for stdio stream exposure and Transform semantics fixes.
+
+### Risks & Mitigations
+- **Descriptor lifecycle**: ensure finalizers call `close`; add leak detection in ASAN runs.
+- **Backpressure correctness**: reuse stream buffer helpers; pause reads when `push()` returns false.
+- **Platform-specific flags**: validate Windows flags (`O_BINARY`, sharing modes) and add targeted tests.
+
+### Success Metrics
+- ✅ `typeof fs.createReadStream === 'function'` and piping into stdout works.
+- ✅ `fs.createReadStream(...).pipe(fs.createWriteStream(...))` replicates file contents byte-for-byte.
+- ✅ CLI regression suite (including `loose-envify`) exits 0 with transformed output.
+- ✅ No regressions in existing fs sync/async/promise/unit tests or WPT baselines.
+
 ---
 
 # Task Plan: Node.js fs Module Compatibility Implementation

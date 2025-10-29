@@ -1,9 +1,9 @@
 ---
 Created: 2025-10-08T00:00:00Z
-Last Updated: 2025-10-09T18:10:00Z
-Status: ✅ COMPLETE - All 6 Phases Implemented
-Overall Progress: 120/120 tasks (100%)
-API Coverage: 60+/60+ methods (100%)
+Last Updated: 2025-10-29T08:45:00Z
+Status: ⚠️ FOLLOW-UP REQUIRED – CLI compatibility gaps identified
+Overall Progress: 120/120 tasks (100%) baseline implementation
+API Coverage: 60+/60+ methods (100%) shipped, but gaps for subclassing + stdio streams remain
 ---
 
 # Node.js stream Module Implementation Plan
@@ -14,15 +14,13 @@ API Coverage: 60+/60+ methods (100%)
 Implement a complete Node.js-compatible `node:stream` module in jsrt that provides the streaming data interface used throughout Node.js, with full EventEmitter integration and support for all stream types.
 
 ### Current Status
-- ✅ **All stream classes implemented** in `src/node/stream/` (Readable, Writable, Duplex, Transform, PassThrough)
-- ✅ **EventEmitter fully integrated** into all stream classes
-- ✅ **WHATWG Streams patterns reused** for buffer management (40% code reuse)
-- ✅ **Complete EventEmitter integration** with all stream events working
-- ✅ **All stream events implemented** (data, end, error, finish, drain, pipe, unpipe, etc.)
-- ✅ **Full piping mechanism** with backpressure handling
-- ✅ **All utility functions** (pipeline, finished, Readable.from)
-- ✅ **Promises API** (node:stream/promises with pipeline, finished)
-- 🎯 **Achievement**: 60+ API methods with full Node.js compatibility - **100% COMPLETE**
+- ✅ **Baseline implementation** for Readable/Writable/Duplex/Transform/PassThrough and utilities was completed in Phases 1-6
+- ✅ **EventEmitter integration, piping and utilities** remain stable and fully covered by existing unit tests
+- ⚠️ **Newly discovered gaps** (2025-10-29) when running real-world CLIs such as `loose-envify`:
+  - `stream.Transform.call(this)` throws “must be called with new” because native constructors do not support legacy subclass semantics used by `util.inherits`
+  - `process.stdin`/`stdout` are plain objects without `pipe()` and do not expose readable/writable stream prototypes
+  - `fs.createReadStream` / `fs.ReadStream` factory APIs are unimplemented, preventing file-based piping workflows
+- 🎯 **Goal**: close these gaps to unblock Node CLI compatibility while preserving previous guarantees
 
 ### Key Success Factors
 1. **EventEmitter Integration**: All stream classes MUST extend EventEmitter (Node.js requirement)
@@ -137,6 +135,51 @@ emit_event(stream->event_emitter, "error", error_val);
 ```
 
 **Key Insight**: Reuse internal buffer/queue management logic, but rebuild class APIs to match Node.js specification.
+
+---
+
+## 🔄 Follow-up Optimization Plan (2025-10-29)
+
+### Objective
+Restore Node CLI compatibility by enabling native `Transform` subclassing semantics, wiring process stdio to real stream instances, and delivering the core file stream factories expected by packages such as `loose-envify`.
+
+### Scope
+1. **Constructor Semantics Fix**
+   - Allow `stream.Transform.call(this)` without `new` by teaching the native constructor to operate as both constructor and plain function, attaching the internal `JSStreamData` state to a hidden holder referenced by subclasses.
+   - Ensure `util.inherits(LooseEnvify, stream.Transform)` creates instances that pass all stream assertions and expose `_transform`/`_flush` overrides.
+
+2. **Process Standard IO Streams**
+   - Replace placeholder `process.stdin`/`stdout` objects with real `Readable`/`Writable` stream wrappers backed by libuv TTY or file descriptors.
+   - Provide `.pipe()`, `.resume()`, `.pause()`, and event emission so CLI tools can compose pipelines.
+
+3. **`fs.ReadStream` / `createReadStream`**
+   - Implement `fs.ReadStream` in `src/node/fs` using the existing async infrastructure and hook it into the stream module.
+   - Expose factories `fs.createReadStream()` / `fs.createWriteStream()` (write stream planned in follow-up) that integrate with piping/backpressure APIs.
+
+4. **Regression Coverage**
+   - Add targeted tests under `test/node/stream/` exercising `util.inherits` with `Transform`, stdin piping, and `createReadStream` → `Transform` → stdout flows.
+   - Include fixture that runs the `loose-envify` CLI script to ensure real package compatibility.
+
+### Milestones & Owners
+| Milestone | Description | Owner | ETA |
+|-----------|-------------|-------|-----|
+| M1 | Transform dual-call constructor & opaque holder | Streams team | 2025-11-01 |
+| M2 | Process stdio stream adapters (Readable/Writable) | Streams + Process | 2025-11-03 |
+| M3 | `fs.ReadStream` + piping integration | Streams + FS | 2025-11-05 |
+| M4 | End-to-end CLI regression tests | QA | 2025-11-06 |
+
+### Success Metrics
+- ✅ `require('stream').Transform.call({})` used via `util.inherits` works without throwing.
+- ✅ `typeof process.stdin.pipe === 'function'` and piping data through a Transform reaches stdout.
+- ✅ `fs.createReadStream(__filename)` returns a duplex compatible with piping into another stream.
+- ✅ `./bin/jsrt --compact-node ./examples/node_modules/.bin/loose-envify` exits 0 and transforms input.
+
+### Risks & Mitigations
+- **Memory ownership**: introduce a hidden native holder object to avoid double-free when subclass constructors run without `new`.
+  - *Mitigation*: add magic number validation and finalizer guard tests.
+- **Stdio blocking**: ensure libuv handles for stdin/out are properly initialized and respects non-blocking mode.
+  - *Mitigation*: reuse existing libuv loop in process module; gate new code behind feature flag until stabilized.
+- **Regression in existing stream tests**: run full stream test suite and add CLI scenario to CI smoke tests.
 
 ---
 

@@ -49,11 +49,15 @@ void setup_event_emitter_inheritance(JSContext* ctx, JSValue obj) {
 JSValue js_http_create_server(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
   JSValue server = js_http_server_constructor(ctx, JS_UNDEFINED, 0, NULL);
 
-  if (argc > 0 && JS_IsFunction(ctx, argv[0])) {
+  JSValueConst request_listener = (argc > 0 && JS_IsFunction(ctx, argv[0]))
+                                      ? argv[0]
+                                      : ((argc > 1 && JS_IsFunction(ctx, argv[1])) ? argv[1] : JS_UNDEFINED);
+
+  if (!JS_IsUndefined(request_listener)) {
     // Add request listener
     JSValue on_method = JS_GetPropertyStr(ctx, server, "on");
     if (JS_IsFunction(ctx, on_method)) {
-      JSValue args[] = {JS_NewString(ctx, "request"), JS_DupValue(ctx, argv[0])};
+      JSValue args[] = {JS_NewString(ctx, "request"), JS_DupValue(ctx, request_listener)};
       JS_Call(ctx, on_method, server, 2, args);
       JS_FreeValue(ctx, args[0]);
       JS_FreeValue(ctx, args[1]);

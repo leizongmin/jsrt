@@ -272,21 +272,21 @@ static JSValue js_readable_toWeb(JSContext* ctx, JSValueConst this_val, int argc
   // Create a JavaScript wrapper that bridges Node.js stream to Web stream
   // This approach is simpler and avoids complex C callback management
   const char* wrapper_code =
-    "(function(nodeReadable) {\n"
-    "  return new ReadableStream({\n"
-    "    start(controller) {\n"
-    "      nodeReadable.on('data', (chunk) => {\n"
-    "        controller.enqueue(chunk);\n"
-    "      });\n"
-    "      nodeReadable.on('end', () => {\n"
-    "        controller.close();\n"
-    "      });\n"
-    "      nodeReadable.on('error', (err) => {\n"
-    "        controller.error(err);\n"
-    "      });\n"
-    "    }\n"
-    "  });\n"
-    "})\n";
+      "(function(nodeReadable) {\n"
+      "  return new ReadableStream({\n"
+      "    start(controller) {\n"
+      "      nodeReadable.on('data', (chunk) => {\n"
+      "        controller.enqueue(chunk);\n"
+      "      });\n"
+      "      nodeReadable.on('end', () => {\n"
+      "        controller.close();\n"
+      "      });\n"
+      "      nodeReadable.on('error', (err) => {\n"
+      "        controller.error(err);\n"
+      "      });\n"
+      "    }\n"
+      "  });\n"
+      "})\n";
 
   // Compile the wrapper function
   JSValue wrapper_func = JS_Eval(ctx, wrapper_code, strlen(wrapper_code), "<Readable.toWeb>", JS_EVAL_TYPE_GLOBAL);

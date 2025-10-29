@@ -27,6 +27,7 @@ typedef struct JSRT_HeaderItem {
 
 typedef struct {
   JSRT_HeaderItem* first;
+  JSRT_HeaderItem* last;
 } JSRT_Headers;
 
 // Request structure
@@ -79,6 +80,10 @@ static void JSRT_HeadersSet(JSRT_Headers* headers, const char* name, const char*
 static const char* JSRT_HeadersGet(JSRT_Headers* headers, const char* name);
 static bool JSRT_HeadersHas(JSRT_Headers* headers, const char* name);
 static void JSRT_HeadersDelete(JSRT_Headers* headers, const char* name);
+static JSValue JSRT_HeadersEntries(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv);
+static JSValue JSRT_HeadersKeys(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv);
+static JSValue JSRT_HeadersValues(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv);
+static JSValue JSRT_HeadersForEach(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv);
 
 // Headers class implementation
 static void JSRT_HeadersFinalize(JSRuntime* rt, JSValue val) {
@@ -1204,6 +1209,7 @@ static void JSRT_FetchOnClose(uv_handle_t* handle) {
 static JSRT_Headers* JSRT_HeadersNew() {
   JSRT_Headers* headers = malloc(sizeof(JSRT_Headers));
   headers->first = NULL;
+  headers->last = NULL;
   return headers;
 }
 
@@ -1252,8 +1258,15 @@ static void JSRT_HeadersSet(JSRT_Headers* headers, const char* name, const char*
   JSRT_HeaderItem* new_item = malloc(sizeof(JSRT_HeaderItem));
   new_item->name = lower_name;
   new_item->value = strdup(value);
-  new_item->next = headers->first;
-  headers->first = new_item;
+  new_item->next = NULL;
+
+  if (!headers->first) {
+    headers->first = new_item;
+    headers->last = new_item;
+  } else {
+    headers->last->next = new_item;
+    headers->last = new_item;
+  }
 }
 
 static const char* JSRT_HeadersGet(JSRT_Headers* headers, const char* name) {
@@ -1299,20 +1312,146 @@ static void JSRT_HeadersDelete(JSRT_Headers* headers, const char* name) {
   }
   lower_name[name_len] = '\0';
 
-  JSRT_HeaderItem** current = &headers->first;
-  while (*current) {
-    if (strcmp((*current)->name, lower_name) == 0) {
-      JSRT_HeaderItem* to_delete = *current;
-      *current = to_delete->next;
+  JSRT_HeaderItem* current = headers->first;
+  JSRT_HeaderItem* prev = NULL;
+  while (current) {
+    if (strcmp(current->name, lower_name) == 0) {
+      JSRT_HeaderItem* to_delete = current;
+      if (prev) {
+        prev->next = to_delete->next;
+      } else {
+        headers->first = to_delete->next;
+      }
+      if (headers->last == to_delete) {
+        headers->last = prev;
+      }
+      current = to_delete->next;
       free(to_delete->name);
       free(to_delete->value);
       free(to_delete);
-      break;
+      continue;
     }
-    current = &(*current)->next;
+    prev = current;
+    current = current->next;
+  }
+
+  if (!headers->first) {
+    headers->last = NULL;
   }
 
   free(lower_name);
+}
+
+typedef enum {
+  JSRT_HEADERS_ITER_KEYS,
+  JSRT_HEADERS_ITER_VALUES,
+  JSRT_HEADERS_ITER_ENTRIES,
+} JSRT_HeadersIteratorKind;
+
+static JSValue JSRT_HeadersCreateIterator(JSContext* ctx, JSRT_Headers* headers, JSRT_HeadersIteratorKind kind) {
+  JSValue array = JS_NewArray(ctx);
+  uint32_t index = 0;
+
+  for (JSRT_HeaderItem* item = headers ? headers->first : NULL; item; item = item->next) {
+    switch (kind) {
+      case JSRT_HEADERS_ITER_KEYS:
+        JS_SetPropertyUint32(ctx, array, index++, JS_NewString(ctx, item->name));
+        break;
+      case JSRT_HEADERS_ITER_VALUES:
+        JS_SetPropertyUint32(ctx, array, index++, JS_NewString(ctx, item->value));
+        break;
+      case JSRT_HEADERS_ITER_ENTRIES: {
+        JSValue pair = JS_NewArray(ctx);
+        JS_SetPropertyUint32(ctx, pair, 0, JS_NewString(ctx, item->name));
+        JS_SetPropertyUint32(ctx, pair, 1, JS_NewString(ctx, item->value));
+        JS_SetPropertyUint32(ctx, array, index++, pair);
+        break;
+      }
+    }
+  }
+
+  JSValue global = JS_GetGlobalObject(ctx);
+  JSValue symbol = JS_GetPropertyStr(ctx, global, "Symbol");
+  JSValue iterator_symbol = JS_GetPropertyStr(ctx, symbol, "iterator");
+  JS_FreeValue(ctx, symbol);
+  JS_FreeValue(ctx, global);
+
+  JSAtom iterator_atom = JS_ValueToAtom(ctx, iterator_symbol);
+  JSValue iterator_method = JS_UNDEFINED;
+  if (iterator_atom != JS_ATOM_NULL) {
+    iterator_method = JS_GetProperty(ctx, array, iterator_atom);
+    JS_FreeAtom(ctx, iterator_atom);
+  }
+
+  JS_FreeValue(ctx, iterator_symbol);
+
+  if (!JS_IsFunction(ctx, iterator_method)) {
+    JS_FreeValue(ctx, iterator_method);
+    JS_FreeValue(ctx, array);
+    return JS_ThrowTypeError(ctx, "Iterator method unavailable");
+  }
+
+  JSValue iterator = JS_Call(ctx, iterator_method, array, 0, NULL);
+  JS_FreeValue(ctx, iterator_method);
+  JS_FreeValue(ctx, array);
+  return iterator;
+}
+
+static JSValue JSRT_HeadersEntries(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
+  JSRT_Headers* headers = JS_GetOpaque2(ctx, this_val, JSRT_HeadersClassID);
+  if (!headers) {
+    return JS_EXCEPTION;
+  }
+  return JSRT_HeadersCreateIterator(ctx, headers, JSRT_HEADERS_ITER_ENTRIES);
+}
+
+static JSValue JSRT_HeadersKeys(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
+  JSRT_Headers* headers = JS_GetOpaque2(ctx, this_val, JSRT_HeadersClassID);
+  if (!headers) {
+    return JS_EXCEPTION;
+  }
+  return JSRT_HeadersCreateIterator(ctx, headers, JSRT_HEADERS_ITER_KEYS);
+}
+
+static JSValue JSRT_HeadersValues(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
+  JSRT_Headers* headers = JS_GetOpaque2(ctx, this_val, JSRT_HeadersClassID);
+  if (!headers) {
+    return JS_EXCEPTION;
+  }
+  return JSRT_HeadersCreateIterator(ctx, headers, JSRT_HEADERS_ITER_VALUES);
+}
+
+static JSValue JSRT_HeadersForEach(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
+  JSRT_Headers* headers = JS_GetOpaque2(ctx, this_val, JSRT_HeadersClassID);
+  if (!headers) {
+    return JS_EXCEPTION;
+  }
+
+  if (argc < 1 || !JS_IsFunction(ctx, argv[0])) {
+    return JS_ThrowTypeError(ctx, "Callback must be a function");
+  }
+
+  JSValueConst callback = argv[0];
+  JSValueConst this_arg = (argc > 1) ? argv[1] : JS_UNDEFINED;
+
+  for (JSRT_HeaderItem* item = headers->first; item; item = item->next) {
+    JSValue value = JS_NewString(ctx, item->value);
+    JSValue name = JS_NewString(ctx, item->name);
+    JSValue headers_obj = JS_DupValue(ctx, this_val);
+    JSValue args[3] = {value, name, headers_obj};
+
+    JSValue result = JS_Call(ctx, callback, this_arg, 3, args);
+    JS_FreeValue(ctx, value);
+    JS_FreeValue(ctx, name);
+    JS_FreeValue(ctx, headers_obj);
+
+    if (JS_IsException(result)) {
+      return result;
+    }
+    JS_FreeValue(ctx, result);
+  }
+
+  return JS_UNDEFINED;
 }
 
 // Setup function
@@ -1326,6 +1465,26 @@ void JSRT_RuntimeSetupStdFetch(JSRT_Runtime* rt) {
   JS_SetPropertyStr(rt->ctx, headers_proto, "set", JS_NewCFunction(rt->ctx, JSRT_HeadersSetMethod, "set", 2));
   JS_SetPropertyStr(rt->ctx, headers_proto, "has", JS_NewCFunction(rt->ctx, JSRT_HeadersHasMethod, "has", 1));
   JS_SetPropertyStr(rt->ctx, headers_proto, "delete", JS_NewCFunction(rt->ctx, JSRT_HeadersDeleteMethod, "delete", 1));
+  JS_SetPropertyStr(rt->ctx, headers_proto, "entries", JS_NewCFunction(rt->ctx, JSRT_HeadersEntries, "entries", 0));
+  JS_SetPropertyStr(rt->ctx, headers_proto, "keys", JS_NewCFunction(rt->ctx, JSRT_HeadersKeys, "keys", 0));
+  JS_SetPropertyStr(rt->ctx, headers_proto, "values", JS_NewCFunction(rt->ctx, JSRT_HeadersValues, "values", 0));
+  JS_SetPropertyStr(rt->ctx, headers_proto, "forEach", JS_NewCFunction(rt->ctx, JSRT_HeadersForEach, "forEach", 1));
+
+  JSValue global = JS_GetGlobalObject(rt->ctx);
+  JSValue symbol_obj = JS_GetPropertyStr(rt->ctx, global, "Symbol");
+  JSValue iterator_symbol = JS_GetPropertyStr(rt->ctx, symbol_obj, "iterator");
+  JS_FreeValue(rt->ctx, symbol_obj);
+  JS_FreeValue(rt->ctx, global);
+
+  if (!JS_IsUndefined(iterator_symbol)) {
+    JSAtom iterator_atom = JS_ValueToAtom(rt->ctx, iterator_symbol);
+    if (iterator_atom != JS_ATOM_NULL) {
+      JS_SetProperty(rt->ctx, headers_proto, iterator_atom,
+                     JS_NewCFunction(rt->ctx, JSRT_HeadersEntries, "[Symbol.iterator]", 0));
+      JS_FreeAtom(rt->ctx, iterator_atom);
+    }
+  }
+  JS_FreeValue(rt->ctx, iterator_symbol);
 
   JS_SetClassProto(rt->ctx, JSRT_HeadersClassID, headers_proto);
 

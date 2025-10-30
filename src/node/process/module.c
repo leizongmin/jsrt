@@ -29,6 +29,7 @@ JSValue jsrt_init_unified_process_module(JSContext* ctx) {
   jsrt_process_init_nodejs();
   jsrt_process_init_properties();
   jsrt_process_init_signals();
+  jsrt_process_init_events();
 
   // Basic process information properties (as getters for Node.js compatibility)
   JS_DefinePropertyGetSet(ctx, process, JS_NewAtom(ctx, "pid"), JS_NewCFunction(ctx, js_process_get_pid, "get pid", 0),
@@ -73,6 +74,17 @@ JSValue jsrt_init_unified_process_module(JSContext* ctx) {
 
   // Signal handling (signals.c)
   JS_SetPropertyStr(ctx, process, "kill", JS_NewCFunction(ctx, js_process_kill, "kill", 2));
+
+  // Event handling (events.c)
+  JS_SetPropertyStr(ctx, process, "on", JS_NewCFunction(ctx, js_process_on_events, "on", 2));
+  JS_SetPropertyStr(ctx, process, "emit", JS_NewCFunction(ctx, js_process_emit_events, "emit", 1));
+  JS_SetPropertyStr(ctx, process, "emitWarning", JS_NewCFunction(ctx, js_process_emit_warning, "emitWarning", 3));
+  JS_SetPropertyStr(
+      ctx, process, "setUncaughtExceptionCaptureCallback",
+      JS_NewCFunction(ctx, js_process_set_uncaught_exception_capture, "setUncaughtExceptionCaptureCallback", 1));
+  JS_SetPropertyStr(
+      ctx, process, "hasUncaughtExceptionCaptureCallback",
+      JS_NewCFunction(ctx, js_process_has_uncaught_exception_capture, "hasUncaughtExceptionCaptureCallback", 0));
 
   // Standard I/O streams
   JS_SetPropertyStr(ctx, process, "stdout", jsrt_create_stdout(ctx));
@@ -141,6 +153,7 @@ void jsrt_process_cleanup(JSContext* ctx) {
   }
   jsrt_process_cleanup_properties();
   jsrt_process_cleanup_signals(ctx);
+  jsrt_process_cleanup_events(ctx);
 }
 
 // Legacy compatibility functions for existing code
@@ -183,4 +196,7 @@ void JSRT_RuntimeSetupStdProcess(JSRT_Runtime* rt) {
 
   // Setup signal handling
   jsrt_process_setup_signals(rt->ctx, process_obj, rt->uv_loop);
+
+  // Setup event handling
+  jsrt_process_setup_events(rt->ctx, process_obj);
 }

@@ -22,6 +22,9 @@ JSValue js_process_exit(JSContext* ctx, JSValueConst this_val, int argc, JSValue
       // If conversion fails, use default exit code 0
       exit_code = 0;
     }
+  } else {
+    // No argument provided, use exitCode property if set
+    exit_code = jsrt_process_get_exit_code_internal();
   }
 
   // Ensure exit code is in valid range (0-255 on most platforms)
@@ -30,6 +33,9 @@ JSValue js_process_exit(JSContext* ctx, JSValueConst this_val, int argc, JSValue
   } else if (exit_code > 255) {
     exit_code = exit_code & 0xFF;  // Truncate to 8 bits
   }
+
+  // Emit 'exit' event before exiting
+  jsrt_process_emit_exit(ctx, exit_code);
 
   // Exit the process immediately
   exit(exit_code);

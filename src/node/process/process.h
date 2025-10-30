@@ -80,6 +80,20 @@ JSValue js_process_on_with_signals(JSContext* ctx, JSValueConst this_val, int ar
 void jsrt_process_setup_signals(JSContext* ctx, JSValue process_obj, uv_loop_t* loop);
 void jsrt_process_cleanup_signals(JSContext* ctx);
 
+// Events (events.c)
+JSValue js_process_on_events(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv);
+JSValue js_process_emit_events(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv);
+JSValue js_process_emit_warning(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv);
+JSValue js_process_set_uncaught_exception_capture(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv);
+JSValue js_process_has_uncaught_exception_capture(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv);
+void jsrt_process_emit_exit(JSContext* ctx, int exit_code);
+void jsrt_process_emit_before_exit(JSContext* ctx, int exit_code);
+bool jsrt_process_emit_uncaught_exception(JSContext* ctx, JSValue error);
+bool jsrt_process_emit_unhandled_rejection(JSContext* ctx, JSValue reason, JSValue promise);
+void jsrt_process_emit_rejection_handled(JSContext* ctx, JSValue promise);
+void jsrt_process_setup_events(JSContext* ctx, JSValue process_obj);
+void jsrt_process_cleanup_events(JSContext* ctx);
+
 // Module initialization and export (module.c)
 JSValue jsrt_init_unified_process_module(JSContext* ctx);
 JSValue jsrt_get_process_module(JSContext* ctx);
@@ -110,6 +124,7 @@ void jsrt_process_init_nodejs(void);
 void jsrt_process_init_properties(void);
 void jsrt_process_cleanup_properties(void);
 void jsrt_process_init_signals(void);
+void jsrt_process_init_events(void);
 
 // IPC functions (process_ipc.c)
 void jsrt_process_setup_ipc(JSContext* ctx, JSValue process_obj, JSRT_Runtime* rt);

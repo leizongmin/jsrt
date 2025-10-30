@@ -134,10 +134,13 @@ static char* create_wrapper_code(const char* content, const char* resolved_path)
     return NULL;
   }
 
+  // CommonJS wrapper with line number fix registration
+  // Register module path for Error.stack line number adjustment (handled by error_stack_fix_cjs.js)
+  // The registration line ensures this file's path is tracked for line number adjustment
   snprintf(wrapper, wrapper_size,
            "(function(exports, require, module, __filename, __dirname) {\n"
-           "%s\n"
-           "})",
+           "globalThis.__jsrt_cjs_modules&&globalThis.__jsrt_cjs_modules.add(__filename);\n"
+           "%s\n})",
            content);
 
   return wrapper;

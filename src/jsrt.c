@@ -170,11 +170,14 @@ static int jsrt_cli_run_commonjs(JSRT_Runtime* rt, const char* eval_name, const 
     return -1;
   }
 
+  // CommonJS wrapper with line number fix registration
+  // Must match the format in commonjs_loader.c (2 lines before module code)
   snprintf(wrapper, wrapper_size,
            "(function() {\n"
+           "globalThis.__jsrt_cjs_modules&&globalThis.__jsrt_cjs_modules.add('%s');\n"
            "%s\n"
            "})",
-           code_start);
+           filename_value, code_start);
 
   JSValue func = JS_Eval(ctx, wrapper, strlen(wrapper), filename_value, JS_EVAL_TYPE_GLOBAL);
   free(wrapper);

@@ -103,6 +103,61 @@ static void jsrt_ensure_fetch_prototypes(JSRT_Runtime* rt) {
   jsrt_set_constructor_prototype(rt, "Headers", NULL, 0);
 }
 
+/**
+ * Setup Error.stack line number fix for CommonJS modules
+ * QuickJS reports line numbers relative to wrapper code which has +1 offset
+ */
+static void jsrt_setup_error_stack_fix(JSRT_Runtime* rt) {
+  JSContext* ctx = rt->ctx;
+
+  // Inline Error.stack fix script
+  // QuickJS doesn't use a getter for Error.prototype.stack, it's a regular property
+  // We need to override it when errors are created, not at the prototype level
+  // CommonJS wrapper adds 2 lines (function header + registration), so subtract 2 from line numbers
+  const char* error_stack_fix =
+      "globalThis.__jsrt_cjs_modules=globalThis.__jsrt_cjs_modules||new Set();"
+      // Store cwd for path normalization
+      "const __jsrt_cwd=process.cwd()+'/';"
+      // Wrap Error constructor to fix stack traces
+      "const OrigError=Error;"
+      "globalThis.Error=function Error(...args){"
+      "const err=new OrigError(...args);"
+      "if(err.stack){"
+      "let s=err.stack;"
+      // Always remove wrapper frame from stack trace
+      "s=s.split('\\n').filter(l=>!l.includes('<error_stack_fix_cjs>')).join('\\n');"
+      // Adjust line numbers for CommonJS modules (before path conversion)
+      "if(globalThis.__jsrt_cjs_modules&&globalThis.__jsrt_cjs_modules.size>0){"
+      "for(const f of globalThis.__jsrt_cjs_modules){"
+      "if(s.includes(f)){"
+      "const e=f.replace(/[.*+?^${}()|[\\]\\\\]/g,'\\\\$&');"
+      "const r=new RegExp('('+e+'):(\\\\d+):','g');"
+      "s=s.replace(r,(m,f,l)=>{"
+      "const adjusted=parseInt(l)-2;"
+      "return f+':'+(adjusted>0?adjusted:1)+':';"
+      "});"
+      "}"
+      "}"
+      "}"
+      // Convert absolute paths to relative paths for consistency with ESM
+      "s=s.replace(new RegExp(__jsrt_cwd.replace(/[.*+?^${}()|[\\]\\\\]/g,'\\\\$&'),'g'),'');"
+      "err.stack=s;"
+      "}"
+      "return err;"
+      "};"
+      "Error.prototype=OrigError.prototype;"
+      "Error.prototype.constructor=Error;"
+      // Copy static properties
+      "Object.setPrototypeOf(Error,OrigError);";
+
+  JSValue result = JS_Eval(ctx, error_stack_fix, strlen(error_stack_fix), "<error_stack_fix_cjs>", JS_EVAL_TYPE_GLOBAL);
+  if (JS_IsException(result)) {
+    JSRT_Debug("Failed to setup Error.stack fix for CommonJS");
+    js_std_dump_error(ctx);
+  }
+  JS_FreeValue(ctx, result);
+}
+
 JSRT_Runtime* JSRT_RuntimeNew() {
   JSRT_Runtime* rt = malloc(sizeof(JSRT_Runtime));
   rt->rt = JS_NewRuntime();
@@ -169,6 +224,9 @@ JSRT_Runtime* JSRT_RuntimeNew() {
   JSRT_RuntimeSetupStdWebAssembly(rt);
   JSRT_StdModuleInit(rt);
   JSRT_StdCommonJSInit(rt);
+
+  // Setup Error.stack line number fix for CommonJS modules
+  jsrt_setup_error_stack_fix(rt);
 
   return rt;
 }

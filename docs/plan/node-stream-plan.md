@@ -1,9 +1,10 @@
 ---
 Created: 2025-10-08T00:00:00Z
-Last Updated: 2025-10-29T08:45:00Z
-Status: ⚠️ FOLLOW-UP REQUIRED – CLI compatibility gaps identified
+Last Updated: 2025-10-30T10:00:00Z
+Status: ✅ BASELINE STABLE – all tests passing, CLI compatibility gaps tracked separately
 Overall Progress: 120/120 tasks (100%) baseline implementation
-API Coverage: 60+/60+ methods (100%) shipped, but gaps for subclassing + stdio streams remain
+API Coverage: 60+/60+ methods (100%) shipped, baseline fully functional
+Test Status: 239/239 project tests passing (100%), 11/11 stream tests passing
 ---
 
 # Node.js stream Module Implementation Plan
@@ -13,14 +14,17 @@ API Coverage: 60+/60+ methods (100%) shipped, but gaps for subclassing + stdio s
 ### Objective
 Implement a complete Node.js-compatible `node:stream` module in jsrt that provides the streaming data interface used throughout Node.js, with full EventEmitter integration and support for all stream types.
 
-### Current Status
-- ✅ **Baseline implementation** for Readable/Writable/Duplex/Transform/PassThrough and utilities was completed in Phases 1-6
-- ✅ **EventEmitter integration, piping and utilities** remain stable and fully covered by existing unit tests
-- ⚠️ **Newly discovered gaps** (2025-10-29) when running real-world CLIs such as `loose-envify`:
-  - `stream.Transform.call(this)` throws “must be called with new” because native constructors do not support legacy subclass semantics used by `util.inherits`
-  - `process.stdin`/`stdout` are plain objects without `pipe()` and do not expose readable/writable stream prototypes
-  - `fs.createReadStream` / `fs.ReadStream` factory APIs are unimplemented, preventing file-based piping workflows
-- 🎯 **Goal**: close these gaps to unblock Node CLI compatibility while preserving previous guarantees
+### Current Status (Updated 2025-10-30)
+- ✅ **Baseline implementation** for Readable/Writable/Duplex/Transform/PassThrough and utilities completed in Phases 1-6
+- ✅ **Critical bugfix applied** (2025-10-30): Fixed magic number initialization in all stream constructors
+- ✅ **All tests passing**: 239/239 project tests (100%), 11/11 stream tests (100%)
+- ✅ **EventEmitter integration, piping and utilities** stable and fully covered by unit tests
+- ✅ **Memory safety validated**: Zero leaks confirmed with ASAN
+- 🎯 **Known CLI compatibility gaps** (tracked in separate follow-up plan):
+  - `stream.Transform.call(this)` pattern for `util.inherits` subclassing
+  - `process.stdin`/`stdout` stream wrappers with pipe() support
+  - `fs.createReadStream` / `fs.createWriteStream` factory APIs
+- 📋 **Next Phase**: CLI compatibility features (see Follow-up Optimization Plan below)
 
 ### Key Success Factors
 1. **EventEmitter Integration**: All stream classes MUST extend EventEmitter (Node.js requirement)
@@ -138,7 +142,10 @@ emit_event(stream->event_emitter, "error", error_val);
 
 ---
 
-## 🔄 Follow-up Optimization Plan (2025-10-29)
+## 🔄 Follow-up Optimization Plan (Updated 2025-10-30)
+
+### Status Update
+✅ **Baseline Stabilized** (2025-10-30): Magic number initialization bug fixed, all 239 tests passing. Foundation is now solid for CLI compatibility work.
 
 ### Objective
 Restore Node CLI compatibility by enabling native `Transform` subclassing semantics, wiring process stdio to real stream instances, and delivering the core file stream factories expected by packages such as `loose-envify`.
@@ -161,12 +168,13 @@ Restore Node CLI compatibility by enabling native `Transform` subclassing semant
    - Include fixture that runs the `loose-envify` CLI script to ensure real package compatibility.
 
 ### Milestones & Owners
-| Milestone | Description | Owner | ETA |
-|-----------|-------------|-------|-----|
-| M1 | Transform dual-call constructor & opaque holder | Streams team | 2025-11-01 |
-| M2 | Process stdio stream adapters (Readable/Writable) | Streams + Process | 2025-11-03 |
-| M3 | `fs.ReadStream` + piping integration | Streams + FS | 2025-11-05 |
-| M4 | End-to-end CLI regression tests | QA | 2025-11-06 |
+| Milestone | Description | Owner | Status | ETA |
+|-----------|-------------|-------|--------|-----|
+| **M0** | **Baseline stabilization & bugfix** | **Streams team** | **✅ DONE** | **2025-10-30** |
+| M1 | Transform dual-call constructor & opaque holder | Streams team | 🔄 Ready to start | 2025-11-01 |
+| M2 | Process stdio stream adapters (Readable/Writable) | Streams + Process | ⏳ Waiting on M1 | 2025-11-03 |
+| M3 | `fs.ReadStream` + piping integration | Streams + FS | ⏳ Waiting on M1 | 2025-11-05 |
+| M4 | End-to-end CLI regression tests | QA | ⏳ Waiting on M1-3 | 2025-11-06 |
 
 ### Success Metrics
 - ✅ `require('stream').Transform.call({})` used via `util.inherits` works without throwing.
@@ -1455,6 +1463,39 @@ make wpt
 - **Features**: Promise-based pipeline() and finished(), full ES module support
 - **Module**: node:stream/promises registered and working
 - **Commit**: feat(node:stream): implement Phase 6 - Promises API
+
+### Bugfix: Magic Number Initialization ✅ FIXED (2025-10-30)
+
+**Problem Discovered**:
+- All stream tests failing with "Not a readable/writable stream" errors
+- 5/239 tests failing: test_basic.js, test_writable_backpressure.js, test_writable_core.js, test_writable_cork.js, test_writable_events.js
+- Root cause: `JSStreamData.magic` field not initialized in constructors
+
+**Root Cause Analysis**:
+The `js_stream_get_data()` validation function checks `stream->magic == JS_STREAM_MAGIC` (0x4a535452u = 'JSTR') to ensure type safety. Without initialization, this validation always failed, causing all stream method calls to return NULL and throw errors.
+
+**Fixes Applied**:
+| File | Line | Change |
+|------|------|--------|
+| readable.c | 21 | Added `stream->magic = JS_STREAM_MAGIC;` |
+| writable.c | 21 | Added `stream->magic = JS_STREAM_MAGIC;` |
+| duplex.c | 33 | Added `stream->magic = JS_STREAM_MAGIC;` |
+| passthrough.c | 20 | Added `stream->magic = JS_STREAM_MAGIC;` |
+| transform.c | 14 | Already correct (no change needed) |
+
+**Test Results After Fix**:
+- **Before**: 234/239 tests passing (98.0%)
+- **After**: 239/239 tests passing (**100%** ✨)
+- **Stream Tests**: 11/11 passing (100%)
+- **Memory Safety**: Zero leaks (ASAN validated)
+- **Commit**: 55846a9 - fix(stream): Initialize magic number in all stream constructors
+
+**Impact**:
+- ✅ All baseline stream functionality now working correctly
+- ✅ Readable streams: read(), push(), pause(), resume(), pipe()
+- ✅ Writable streams: write(), end(), cork(), uncork()
+- ✅ Duplex/Transform/PassThrough: all methods functional
+- ✅ Foundation ready for CLI compatibility work (see Follow-up Plan below)
 
 ---
 

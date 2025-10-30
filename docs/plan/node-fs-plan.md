@@ -1,20 +1,24 @@
 ---
 Created: 2025-10-04T00:00:00Z
-Last Updated: 2025-10-29T08:45:00Z
-Status: 🟡 93.2% COVERAGE – stream-based factories pending follow-up
-Overall Progress: 42 sync + 40 async + 31 Promise + 16 FileHandle methods (123/132 = 93.2%) implemented; remaining work tracked below
-Phase 1: ✅ 100% COMPLETE (2025-10-06T01:40:00Z) - All 42 sync APIs including lchmodSync!
-Phase 2: ✅ 100% COMPLETE (2025-10-06T01:15:00Z) - 40 async callback APIs (100% coverage!)
-Phase 3: ✅ 100% COMPLETE (2025-10-06T00:15:00Z) - All 31 Promise APIs complete!
+Last Updated: 2025-10-30T10:00:00Z
+Status: ✅ 93.2% COVERAGE – stream-based factories ready to implement
+Overall Progress: 42 sync + 40 async + 31 Promise + 16 FileHandle methods (123/132 = 93.2%) implemented
+Phase 1: ✅ 100% COMPLETE (2025-10-06T01:40:00Z) - All 42 sync APIs including lchmodSync
+Phase 2: ✅ 100% COMPLETE (2025-10-06T01:15:00Z) - 40 async callback APIs (100% coverage)
+Phase 3: ✅ 100% COMPLETE (2025-10-06T00:15:00Z) - All 31 Promise APIs complete
 Phase A1: ✅ COMPLETED (2025-10-06T00:00:00Z) - FileHandle file I/O (readFile, writeFile, appendFile)
 Phase B1: ✅ COMPLETED (2025-10-06T00:15:00Z) - Promise APIs (mkdtemp, truncate, copyFile, lchmod)
 Phase A2: ✅ COMPLETED (2025-10-06T01:00:00Z) - FileHandle vectored I/O (readv, writev, Symbol.asyncDispose)
 Phase 2.1: ✅ COMPLETED (2025-10-06T01:15:00Z) - Final 6 async APIs (truncate, ftruncate, fsync, fdatasync, mkdtemp, statfs)
-Latest Work: lchmodSync implementation complete! ALL CORE FS APIS IMPLEMENTED (93.2%)
-Test Status: All tests passing, WPT 90.6% (maintained)
+Latest Work: ALL CORE FS APIS IMPLEMENTED (93.2%)
+Test Status: All fs tests passing, WPT 90.6% (maintained), project tests 239/239 (100%)
+Stream Dependency: ✅ RESOLVED (2025-10-30) - stream module baseline stable, ready for ReadStream/WriteStream
 ---
 
-## 🔄 Follow-up Optimization Plan (2025-10-29)
+## 🔄 Follow-up Optimization Plan (Updated 2025-10-30)
+
+### Status Update
+✅ **Stream Dependency Resolved** (2025-10-30): The stream module baseline is now stable with all tests passing. The foundation is ready for implementing fs.ReadStream and fs.WriteStream.
 
 ### Motivation
 CLI workloads uncovered missing stream-based factories (`fs.createReadStream`, `fs.createWriteStream`) that are essential for interoperability with packages such as `loose-envify`. Without them, pipelines like `fs.createReadStream(...).pipe(transform).pipe(process.stdout)` fail immediately.
@@ -25,13 +29,13 @@ CLI workloads uncovered missing stream-based factories (`fs.createReadStream`, `
 3. Ensure seamless interop with upcoming stream subsystem fixes (Transform dual-call support, stdio adapters).
 
 ### Workstreams
-| ID | Task | Owner | Dependencies | Acceptance Criteria |
-|----|------|-------|--------------|---------------------|
-| FS-1 | Implement `fs.ReadStream` with async read loop and backpressure | FS core team | Stream plan M1 | Emits `open`, `ready`, `data`, `end`, `close`; honours `pause()`/`resume()` |
-| FS-2 | Export `fs.createReadStream()` factory | FS core team | FS-1 | Returns `fs.ReadStream`, supports `{ fd, flags, mode, start, end, highWaterMark, encoding }` |
-| FS-3 | Implement `fs.WriteStream` with buffered write queue | FS core team | Stream plan M1 | Supports `.write`, `.end`, `'finish'`, `.bytesWritten`, error propagation |
-| FS-4 | Export `fs.createWriteStream()` helper | FS core team | FS-3 | Handles append/truncate flags, integrates with piping |
-| FS-5 | Regression tests covering CLI scenario | QA + FS | FS-1..4 & Stream plan M2 | End-to-end: `fs.createReadStream(__filename)` → custom Transform → `process.stdout`; run `examples/node_modules/.bin/loose-envify` |
+| ID | Task | Owner | Dependencies | Status | Acceptance Criteria |
+|----|------|-------|--------------|--------|---------------------|
+| FS-1 | Implement `fs.ReadStream` with async read loop and backpressure | FS core team | ✅ Stream baseline (M0 done) | 🔄 Ready | Emits `open`, `ready`, `data`, `end`, `close`; honours `pause()`/`resume()` |
+| FS-2 | Export `fs.createReadStream()` factory | FS core team | FS-1 | ⏳ Blocked by FS-1 | Returns `fs.ReadStream`, supports `{ fd, flags, mode, start, end, highWaterMark, encoding }` |
+| FS-3 | Implement `fs.WriteStream` with buffered write queue | FS core team | ✅ Stream baseline (M0 done) | 🔄 Ready | Supports `.write`, `.end`, `'finish'`, `.bytesWritten`, error propagation |
+| FS-4 | Export `fs.createWriteStream()` helper | FS core team | FS-3 | ⏳ Blocked by FS-3 | Handles append/truncate flags, integrates with piping |
+| FS-5 | Regression tests covering CLI scenario | QA + FS | FS-1..4 & Stream M2 | ⏳ Blocked by FS-1..4 & Stream M2 | End-to-end: `fs.createReadStream(__filename)` → custom Transform → `process.stdout`; run `loose-envify` fixture |
 
 ### Timeline & Coordination
 - Target window: 2025-10-30 → 2025-11-05, aligned with stream follow-up milestones.

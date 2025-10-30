@@ -31,6 +31,8 @@ JSValue jsrt_init_unified_process_module(JSContext* ctx) {
   jsrt_process_init_signals();
   jsrt_process_init_events();
   jsrt_process_init_resources();
+  jsrt_process_init_advanced();
+  jsrt_process_init_stubs();
 
   // Basic process information properties (as getters for Node.js compatibility)
   JS_DefinePropertyGetSet(ctx, process, JS_NewAtom(ctx, "pid"), JS_NewCFunction(ctx, js_process_get_pid, "get pid", 0),
@@ -88,6 +90,22 @@ JSValue jsrt_init_unified_process_module(JSContext* ctx) {
   JS_SetPropertyStr(ctx, process, "constrainedMemory",
                     JS_NewCFunction(ctx, js_process_constrained_memory, "constrainedMemory", 0));
 
+  // Unix permissions (unix_permissions.c - Unix only)
+#ifndef _WIN32
+  JS_SetPropertyStr(ctx, process, "getuid", JS_NewCFunction(ctx, js_process_getuid, "getuid", 0));
+  JS_SetPropertyStr(ctx, process, "geteuid", JS_NewCFunction(ctx, js_process_geteuid, "geteuid", 0));
+  JS_SetPropertyStr(ctx, process, "getgid", JS_NewCFunction(ctx, js_process_getgid, "getgid", 0));
+  JS_SetPropertyStr(ctx, process, "getegid", JS_NewCFunction(ctx, js_process_getegid, "getegid", 0));
+  JS_SetPropertyStr(ctx, process, "setuid", JS_NewCFunction(ctx, js_process_setuid, "setuid", 1));
+  JS_SetPropertyStr(ctx, process, "seteuid", JS_NewCFunction(ctx, js_process_seteuid, "seteuid", 1));
+  JS_SetPropertyStr(ctx, process, "setgid", JS_NewCFunction(ctx, js_process_setgid, "setgid", 1));
+  JS_SetPropertyStr(ctx, process, "setegid", JS_NewCFunction(ctx, js_process_setegid, "setegid", 1));
+  JS_SetPropertyStr(ctx, process, "getgroups", JS_NewCFunction(ctx, js_process_getgroups, "getgroups", 0));
+  JS_SetPropertyStr(ctx, process, "setgroups", JS_NewCFunction(ctx, js_process_setgroups, "setgroups", 1));
+  JS_SetPropertyStr(ctx, process, "initgroups", JS_NewCFunction(ctx, js_process_initgroups, "initgroups", 2));
+  JS_SetPropertyStr(ctx, process, "umask", JS_NewCFunction(ctx, js_process_umask, "umask", 1));
+#endif
+
   // Signal handling (signals.c)
   JS_SetPropertyStr(ctx, process, "kill", JS_NewCFunction(ctx, js_process_kill, "kill", 2));
 
@@ -130,6 +148,32 @@ JSValue jsrt_init_unified_process_module(JSContext* ctx) {
                           JS_NewCFunction(ctx, js_process_get_features, "get features", 0), JS_UNDEFINED,
                           JS_PROP_CONFIGURABLE);
 
+  // Advanced features (advanced.c)
+  JS_SetPropertyStr(ctx, process, "loadEnvFile", JS_NewCFunction(ctx, js_process_load_env_file, "loadEnvFile", 1));
+  JS_SetPropertyStr(ctx, process, "getActiveResourcesInfo",
+                    JS_NewCFunction(ctx, js_process_get_active_resources_info, "getActiveResourcesInfo", 0));
+  JS_SetPropertyStr(ctx, process, "setSourceMapsEnabled",
+                    JS_NewCFunction(ctx, js_process_set_source_maps_enabled, "setSourceMapsEnabled", 1));
+  JS_DefinePropertyGetSet(ctx, process, JS_NewAtom(ctx, "sourceMapsEnabled"),
+                          JS_NewCFunction(ctx, js_process_get_source_maps_enabled, "get sourceMapsEnabled", 0),
+                          JS_UNDEFINED, JS_PROP_CONFIGURABLE);
+  JS_SetPropertyStr(ctx, process, "ref", JS_NewCFunction(ctx, js_process_ref, "ref", 0));
+  JS_SetPropertyStr(ctx, process, "unref", JS_NewCFunction(ctx, js_process_unref, "unref", 0));
+
+  // Stub implementations for future features (stubs.c)
+  JS_DefinePropertyGetSet(ctx, process, JS_NewAtom(ctx, "report"),
+                          JS_NewCFunction(ctx, js_process_get_report, "get report", 0), JS_UNDEFINED,
+                          JS_PROP_CONFIGURABLE);
+  JS_DefinePropertyGetSet(ctx, process, JS_NewAtom(ctx, "permission"),
+                          JS_NewCFunction(ctx, js_process_get_permission, "get permission", 0), JS_UNDEFINED,
+                          JS_PROP_CONFIGURABLE);
+  JS_DefinePropertyGetSet(ctx, process, JS_NewAtom(ctx, "finalization"),
+                          JS_NewCFunction(ctx, js_process_get_finalization, "get finalization", 0), JS_UNDEFINED,
+                          JS_PROP_CONFIGURABLE);
+  JS_SetPropertyStr(ctx, process, "dlopen", JS_NewCFunction(ctx, js_process_dlopen, "dlopen", 2));
+  JS_SetPropertyStr(ctx, process, "getBuiltinModule",
+                    JS_NewCFunction(ctx, js_process_get_builtin_module, "getBuiltinModule", 1));
+
   // Store the module globally for reuse
   g_process_module = JS_DupValue(ctx, process);
 
@@ -170,6 +214,7 @@ void jsrt_process_cleanup(JSContext* ctx) {
   jsrt_process_cleanup_properties();
   jsrt_process_cleanup_signals(ctx);
   jsrt_process_cleanup_events(ctx);
+  jsrt_process_cleanup_advanced(ctx);
 }
 
 // Legacy compatibility functions for existing code

@@ -135,8 +135,42 @@ void jsrt_process_init_signals(void);
 void jsrt_process_init_events(void);
 void jsrt_process_init_resources(void);
 
+// Unix permissions (unix_permissions.c - Unix only)
+#ifndef _WIN32
+JSValue js_process_getuid(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv);
+JSValue js_process_geteuid(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv);
+JSValue js_process_getgid(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv);
+JSValue js_process_getegid(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv);
+JSValue js_process_setuid(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv);
+JSValue js_process_seteuid(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv);
+JSValue js_process_setgid(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv);
+JSValue js_process_setegid(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv);
+JSValue js_process_getgroups(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv);
+JSValue js_process_setgroups(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv);
+JSValue js_process_initgroups(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv);
+JSValue js_process_umask(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv);
+#endif
+
 // IPC functions (process_ipc.c)
 void jsrt_process_setup_ipc(JSContext* ctx, JSValue process_obj, JSRT_Runtime* rt);
 void jsrt_process_cleanup_ipc(JSContext* ctx);
+
+// Advanced features (advanced.c)
+JSValue js_process_load_env_file(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv);
+JSValue js_process_get_active_resources_info(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv);
+JSValue js_process_set_source_maps_enabled(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv);
+JSValue js_process_get_source_maps_enabled(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv);
+JSValue js_process_ref(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv);
+JSValue js_process_unref(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv);
+void jsrt_process_init_advanced(void);
+void jsrt_process_cleanup_advanced(JSContext* ctx);
+
+// Stub implementations for future features (stubs.c)
+JSValue js_process_get_report(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv);
+JSValue js_process_get_permission(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv);
+JSValue js_process_get_finalization(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv);
+JSValue js_process_dlopen(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv);
+JSValue js_process_get_builtin_module(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv);
+void jsrt_process_init_stubs(void);
 
 #endif  // __JSRT_NODE_PROCESS_H__

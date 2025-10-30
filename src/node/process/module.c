@@ -28,6 +28,7 @@ JSValue jsrt_init_unified_process_module(JSContext* ctx) {
   jsrt_process_init_control();
   jsrt_process_init_nodejs();
   jsrt_process_init_properties();
+  jsrt_process_init_signals();
 
   // Basic process information properties (as getters for Node.js compatibility)
   JS_DefinePropertyGetSet(ctx, process, JS_NewAtom(ctx, "pid"), JS_NewCFunction(ctx, js_process_get_pid, "get pid", 0),
@@ -69,6 +70,9 @@ JSValue jsrt_init_unified_process_module(JSContext* ctx) {
   // Node.js specific functions
   JS_SetPropertyStr(ctx, process, "nextTick", JS_NewCFunction(ctx, js_process_nextTick, "nextTick", 1));
   JS_SetPropertyStr(ctx, process, "memoryUsage", JS_NewCFunction(ctx, js_process_memoryUsage, "memoryUsage", 0));
+
+  // Signal handling (signals.c)
+  JS_SetPropertyStr(ctx, process, "kill", JS_NewCFunction(ctx, js_process_kill, "kill", 2));
 
   // Standard I/O streams
   JS_SetPropertyStr(ctx, process, "stdout", jsrt_create_stdout(ctx));
@@ -136,6 +140,7 @@ void jsrt_process_cleanup(JSContext* ctx) {
     g_process_module = (JSValue){0};
   }
   jsrt_process_cleanup_properties();
+  jsrt_process_cleanup_signals(ctx);
 }
 
 // Legacy compatibility functions for existing code
@@ -175,4 +180,7 @@ void JSRT_RuntimeSetupStdProcess(JSRT_Runtime* rt) {
 
   // Setup IPC if this is a forked child process
   jsrt_process_setup_ipc(rt->ctx, process_obj, rt);
+
+  // Setup signal handling
+  jsrt_process_setup_signals(rt->ctx, process_obj, rt->uv_loop);
 }

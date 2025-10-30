@@ -73,6 +73,13 @@ JSValue js_process_get_release(JSContext* ctx, JSValueConst this_val, int argc, 
 JSValue js_process_get_features(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv);
 int jsrt_process_get_exit_code_internal(void);
 
+// Signals (signals.c)
+JSValue js_process_kill(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv);
+JSValue js_process_on_with_signals(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv,
+                                   uv_loop_t* loop);
+void jsrt_process_setup_signals(JSContext* ctx, JSValue process_obj, uv_loop_t* loop);
+void jsrt_process_cleanup_signals(JSContext* ctx);
+
 // Module initialization and export (module.c)
 JSValue jsrt_init_unified_process_module(JSContext* ctx);
 JSValue jsrt_get_process_module(JSContext* ctx);
@@ -102,6 +109,7 @@ void jsrt_process_init_control(void);
 void jsrt_process_init_nodejs(void);
 void jsrt_process_init_properties(void);
 void jsrt_process_cleanup_properties(void);
+void jsrt_process_init_signals(void);
 
 // IPC functions (process_ipc.c)
 void jsrt_process_setup_ipc(JSContext* ctx, JSValue process_obj, JSRT_Runtime* rt);

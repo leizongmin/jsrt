@@ -61,6 +61,18 @@ JSValue js_process_chdir(JSContext* ctx, JSValueConst this_val, int argc, JSValu
 JSValue js_process_nextTick(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv);
 JSValue js_process_memoryUsage(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv);
 
+// Properties (properties.c)
+JSValue js_process_get_execPath(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv);
+JSValue js_process_get_execArgv(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv);
+JSValue js_process_get_exitCode(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv);
+JSValue js_process_set_exitCode(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv);
+JSValue js_process_get_title(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv);
+JSValue js_process_set_title(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv);
+JSValue js_process_get_config(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv);
+JSValue js_process_get_release(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv);
+JSValue js_process_get_features(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv);
+int jsrt_process_get_exit_code_internal(void);
+
 // Module initialization and export (module.c)
 JSValue jsrt_init_unified_process_module(JSContext* ctx);
 JSValue jsrt_get_process_module(JSContext* ctx);
@@ -88,6 +100,8 @@ void jsrt_process_init_env(void);
 void jsrt_process_init_timing(void);
 void jsrt_process_init_control(void);
 void jsrt_process_init_nodejs(void);
+void jsrt_process_init_properties(void);
+void jsrt_process_cleanup_properties(void);
 
 // IPC functions (process_ipc.c)
 void jsrt_process_setup_ipc(JSContext* ctx, JSValue process_obj, JSRT_Runtime* rt);

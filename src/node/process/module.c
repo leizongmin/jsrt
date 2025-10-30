@@ -27,6 +27,7 @@ JSValue jsrt_init_unified_process_module(JSContext* ctx) {
   jsrt_process_init_timing();
   jsrt_process_init_control();
   jsrt_process_init_nodejs();
+  jsrt_process_init_properties();
 
   // Basic process information properties (as getters for Node.js compatibility)
   JS_DefinePropertyGetSet(ctx, process, JS_NewAtom(ctx, "pid"), JS_NewCFunction(ctx, js_process_get_pid, "get pid", 0),
@@ -74,6 +75,29 @@ JSValue jsrt_init_unified_process_module(JSContext* ctx) {
   JS_SetPropertyStr(ctx, process, "stderr", jsrt_create_stderr(ctx));
   JS_SetPropertyStr(ctx, process, "stdin", jsrt_create_stdin(ctx));
 
+  // Additional properties from properties.c
+  JS_DefinePropertyGetSet(ctx, process, JS_NewAtom(ctx, "execPath"),
+                          JS_NewCFunction(ctx, js_process_get_execPath, "get execPath", 0), JS_UNDEFINED,
+                          JS_PROP_CONFIGURABLE);
+  JS_DefinePropertyGetSet(ctx, process, JS_NewAtom(ctx, "execArgv"),
+                          JS_NewCFunction(ctx, js_process_get_execArgv, "get execArgv", 0), JS_UNDEFINED,
+                          JS_PROP_CONFIGURABLE);
+  JS_DefinePropertyGetSet(ctx, process, JS_NewAtom(ctx, "exitCode"),
+                          JS_NewCFunction(ctx, js_process_get_exitCode, "get exitCode", 0),
+                          JS_NewCFunction(ctx, js_process_set_exitCode, "set exitCode", 1), JS_PROP_CONFIGURABLE);
+  JS_DefinePropertyGetSet(ctx, process, JS_NewAtom(ctx, "title"),
+                          JS_NewCFunction(ctx, js_process_get_title, "get title", 0),
+                          JS_NewCFunction(ctx, js_process_set_title, "set title", 1), JS_PROP_CONFIGURABLE);
+  JS_DefinePropertyGetSet(ctx, process, JS_NewAtom(ctx, "config"),
+                          JS_NewCFunction(ctx, js_process_get_config, "get config", 0), JS_UNDEFINED,
+                          JS_PROP_CONFIGURABLE);
+  JS_DefinePropertyGetSet(ctx, process, JS_NewAtom(ctx, "release"),
+                          JS_NewCFunction(ctx, js_process_get_release, "get release", 0), JS_UNDEFINED,
+                          JS_PROP_CONFIGURABLE);
+  JS_DefinePropertyGetSet(ctx, process, JS_NewAtom(ctx, "features"),
+                          JS_NewCFunction(ctx, js_process_get_features, "get features", 0), JS_UNDEFINED,
+                          JS_PROP_CONFIGURABLE);
+
   // Store the module globally for reuse
   g_process_module = JS_DupValue(ctx, process);
 
@@ -111,6 +135,7 @@ void jsrt_process_cleanup(JSContext* ctx) {
     JS_FreeValue(ctx, g_process_module);
     g_process_module = (JSValue){0};
   }
+  jsrt_process_cleanup_properties();
 }
 
 // Legacy compatibility functions for existing code

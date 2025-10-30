@@ -60,6 +60,11 @@ JSValue js_process_chdir(JSContext* ctx, JSValueConst this_val, int argc, JSValu
 // Node.js specific features (nodejs.c)
 JSValue js_process_nextTick(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv);
 JSValue js_process_memoryUsage(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv);
+JSValue js_process_memory_usage_rss(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv);
+JSValue js_process_cpu_usage(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv);
+JSValue js_process_resource_usage(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv);
+JSValue js_process_available_memory(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv);
+JSValue js_process_constrained_memory(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv);
 
 // Properties (properties.c)
 JSValue js_process_get_execPath(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv);
@@ -125,6 +130,7 @@ void jsrt_process_init_properties(void);
 void jsrt_process_cleanup_properties(void);
 void jsrt_process_init_signals(void);
 void jsrt_process_init_events(void);
+void jsrt_process_init_resources(void);
 
 // IPC functions (process_ipc.c)
 void jsrt_process_setup_ipc(JSContext* ctx, JSValue process_obj, JSRT_Runtime* rt);

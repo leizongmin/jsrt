@@ -30,6 +30,7 @@ JSValue jsrt_init_unified_process_module(JSContext* ctx) {
   jsrt_process_init_properties();
   jsrt_process_init_signals();
   jsrt_process_init_events();
+  jsrt_process_init_resources();
 
   // Basic process information properties (as getters for Node.js compatibility)
   JS_DefinePropertyGetSet(ctx, process, JS_NewAtom(ctx, "pid"), JS_NewCFunction(ctx, js_process_get_pid, "get pid", 0),
@@ -70,7 +71,17 @@ JSValue jsrt_init_unified_process_module(JSContext* ctx) {
 
   // Node.js specific functions
   JS_SetPropertyStr(ctx, process, "nextTick", JS_NewCFunction(ctx, js_process_nextTick, "nextTick", 1));
-  JS_SetPropertyStr(ctx, process, "memoryUsage", JS_NewCFunction(ctx, js_process_memoryUsage, "memoryUsage", 0));
+
+  JSValue memoryUsage = JS_NewCFunction(ctx, js_process_memoryUsage, "memoryUsage", 0);
+  JS_SetPropertyStr(ctx, memoryUsage, "rss", JS_NewCFunction(ctx, js_process_memory_usage_rss, "rss", 0));
+  JS_SetPropertyStr(ctx, process, "memoryUsage", memoryUsage);
+
+  JS_SetPropertyStr(ctx, process, "cpuUsage", JS_NewCFunction(ctx, js_process_cpu_usage, "cpuUsage", 1));
+  JS_SetPropertyStr(ctx, process, "resourceUsage", JS_NewCFunction(ctx, js_process_resource_usage, "resourceUsage", 0));
+  JS_SetPropertyStr(ctx, process, "availableMemory",
+                    JS_NewCFunction(ctx, js_process_available_memory, "availableMemory", 0));
+  JS_SetPropertyStr(ctx, process, "constrainedMemory",
+                    JS_NewCFunction(ctx, js_process_constrained_memory, "constrainedMemory", 0));
 
   // Signal handling (signals.c)
   JS_SetPropertyStr(ctx, process, "kill", JS_NewCFunction(ctx, js_process_kill, "kill", 2));

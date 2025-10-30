@@ -62,13 +62,6 @@ JSValue js_process_chdir(JSContext* ctx, JSValueConst this_val, int argc, JSValu
 JSValue js_process_nextTick(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv);
 JSValue js_process_memoryUsage(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv);
 
-// Resources (resources.c)
-JSValue js_process_cpu_usage(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv);
-JSValue js_process_resource_usage(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv);
-JSValue js_process_memory_usage_rss(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv);
-JSValue js_process_available_memory(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv);
-JSValue js_process_constrained_memory(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv);
-
 // Properties (properties.c)
 JSValue js_process_get_execPath(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv);
 JSValue js_process_get_execArgv(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv);
@@ -101,6 +94,13 @@ bool jsrt_process_emit_unhandled_rejection(JSContext* ctx, JSValue reason, JSVal
 void jsrt_process_emit_rejection_handled(JSContext* ctx, JSValue promise);
 void jsrt_process_setup_events(JSContext* ctx, JSValue process_obj);
 void jsrt_process_cleanup_events(JSContext* ctx);
+
+// Resources (resources.c)
+JSValue js_process_cpu_usage(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv);
+JSValue js_process_resource_usage(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv);
+JSValue js_process_memory_usage_rss(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv);
+JSValue js_process_available_memory(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv);
+JSValue js_process_constrained_memory(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv);
 
 // Module initialization and export (module.c)
 JSValue jsrt_init_unified_process_module(JSContext* ctx);

@@ -62,7 +62,11 @@ JSValue jsrt_init_unified_process_module(JSContext* ctx) {
 
   // Timing functions
   JS_SetPropertyStr(ctx, process, "uptime", JS_NewCFunction(ctx, js_process_uptime, "uptime", 0));
-  JS_SetPropertyStr(ctx, process, "hrtime", JS_NewCFunction(ctx, js_process_hrtime, "hrtime", 1));
+
+  // hrtime with bigint() method
+  JSValue hrtime = JS_NewCFunction(ctx, js_process_hrtime, "hrtime", 1);
+  JS_SetPropertyStr(ctx, hrtime, "bigint", JS_NewCFunction(ctx, js_process_hrtime_bigint, "bigint", 0));
+  JS_SetPropertyStr(ctx, process, "hrtime", hrtime);
 
   // Process control functions
   JS_SetPropertyStr(ctx, process, "exit", JS_NewCFunction(ctx, js_process_exit, "exit", 1));
@@ -72,6 +76,7 @@ JSValue jsrt_init_unified_process_module(JSContext* ctx) {
   // Node.js specific functions
   JS_SetPropertyStr(ctx, process, "nextTick", JS_NewCFunction(ctx, js_process_nextTick, "nextTick", 1));
 
+  // Memory and resource monitoring
   JSValue memoryUsage = JS_NewCFunction(ctx, js_process_memoryUsage, "memoryUsage", 0);
   JS_SetPropertyStr(ctx, memoryUsage, "rss", JS_NewCFunction(ctx, js_process_memory_usage_rss, "rss", 0));
   JS_SetPropertyStr(ctx, process, "memoryUsage", memoryUsage);

@@ -51,6 +51,7 @@ JSValue js_process_get_env(JSContext* ctx, JSValueConst this_val, int argc, JSVa
 // Timing functions (timing.c)
 JSValue js_process_uptime(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv);
 JSValue js_process_hrtime(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv);
+JSValue js_process_hrtime_bigint(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv);
 
 // Process control (control.c)
 JSValue js_process_exit(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv);
@@ -60,9 +61,11 @@ JSValue js_process_chdir(JSContext* ctx, JSValueConst this_val, int argc, JSValu
 // Node.js specific features (nodejs.c)
 JSValue js_process_nextTick(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv);
 JSValue js_process_memoryUsage(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv);
-JSValue js_process_memory_usage_rss(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv);
+
+// Resources (resources.c)
 JSValue js_process_cpu_usage(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv);
 JSValue js_process_resource_usage(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv);
+JSValue js_process_memory_usage_rss(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv);
 JSValue js_process_available_memory(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv);
 JSValue js_process_constrained_memory(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv);
 

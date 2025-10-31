@@ -82,3 +82,4 @@ wpt/
 wpt-master.zip
 
 /.cache/
+/.ccls-cache/

@@ -158,6 +158,12 @@ JSValue JSRT_InitNodeFs(JSContext* ctx) {
   JS_SetPropertyStr(ctx, fs_module, "mkdtemp", JS_NewCFunction(ctx, js_fs_mkdtemp_async, "mkdtemp", 2));
   JS_SetPropertyStr(ctx, fs_module, "statfs", JS_NewCFunction(ctx, js_fs_statfs_async, "statfs", 2));
 
+  // Stream API
+  JS_SetPropertyStr(ctx, fs_module, "createReadStream",
+                    JS_NewCFunction(ctx, js_fs_create_read_stream, "createReadStream", 2));
+  JS_SetPropertyStr(ctx, fs_module, "createWriteStream",
+                    JS_NewCFunction(ctx, js_fs_create_write_stream, "createWriteStream", 2));
+
   // Constants
   JSValue constants = JS_NewObject(ctx);
   JS_SetPropertyStr(ctx, constants, "F_OK", JS_NewInt32(ctx, F_OK));

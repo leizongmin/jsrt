@@ -147,6 +147,10 @@ JSValue js_fs_promises_realpath(JSContext* ctx, JSValueConst this_val, int argc,
 JSValue js_fs_promises_rm(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv);
 JSValue js_fs_promises_cp(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv);
 JSValue js_fs_promises_chmod(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv);
+
+// Stream API - fs_streams.c
+JSValue js_fs_create_read_stream(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv);
+JSValue js_fs_create_write_stream(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv);
 JSValue js_fs_promises_lchmod(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv);
 JSValue js_fs_promises_chown(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv);
 JSValue js_fs_promises_lchown(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv);

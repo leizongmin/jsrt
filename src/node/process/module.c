@@ -120,10 +120,10 @@ JSValue jsrt_init_unified_process_module(JSContext* ctx) {
       ctx, process, "hasUncaughtExceptionCaptureCallback",
       JS_NewCFunction(ctx, js_process_has_uncaught_exception_capture, "hasUncaughtExceptionCaptureCallback", 0));
 
-  // Standard I/O streams
-  JS_SetPropertyStr(ctx, process, "stdout", jsrt_create_stdout(ctx));
-  JS_SetPropertyStr(ctx, process, "stderr", jsrt_create_stderr(ctx));
-  JS_SetPropertyStr(ctx, process, "stdin", jsrt_create_stdin(ctx));
+  // Standard I/O streams - use real stream objects
+  JS_SetPropertyStr(ctx, process, "stdout", jsrt_create_stdout_stream(ctx));
+  JS_SetPropertyStr(ctx, process, "stderr", jsrt_create_stderr_stream(ctx));
+  JS_SetPropertyStr(ctx, process, "stdin", jsrt_create_stdin_stream(ctx));
 
   // Additional properties from properties.c
   JS_DefinePropertyGetSet(ctx, process, JS_NewAtom(ctx, "execPath"),

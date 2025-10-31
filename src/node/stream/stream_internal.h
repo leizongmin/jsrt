@@ -86,6 +86,15 @@ JSValue js_stream_listener_count(JSContext* ctx, JSValueConst this_val, int argc
 JSValue js_readable_constructor(JSContext* ctx, JSValueConst new_target, int argc, JSValueConst* argv);
 void js_readable_init_prototype(JSContext* ctx, JSValue readable_proto);
 
+// Readable stream methods (exported for use in other modules like process)
+JSValue js_readable_pause(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv);
+JSValue js_readable_resume(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv);
+JSValue js_readable_is_paused(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv);
+JSValue js_readable_set_encoding(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv);
+JSValue js_readable_pipe(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv);
+JSValue js_readable_unpipe(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv);
+JSValue js_readable_push(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv);
+
 // writable.c
 JSValue js_writable_constructor(JSContext* ctx, JSValueConst new_target, int argc, JSValueConst* argv);
 void js_writable_init_prototype(JSContext* ctx, JSValue writable_proto);

@@ -113,10 +113,15 @@ JSValue JSRT_CreateProcessModule(JSContext* ctx);
 JSValue JSRT_InitNodeProcess(JSContext* ctx);
 int js_unified_process_init(JSContext* ctx, JSModuleDef* m);
 
-// stdio (stdout, stderr, stdin) - stdio.c
+// stdio (stdout, stderr, stdin) - stdio.c (legacy)
 JSValue jsrt_create_stdout(JSContext* ctx);
 JSValue jsrt_create_stderr(JSContext* ctx);
 JSValue jsrt_create_stdin(JSContext* ctx);
+
+// stdio streams - process_streams.c (new: real stream objects)
+JSValue jsrt_create_stdin_stream(JSContext* ctx);
+JSValue jsrt_create_stdout_stream(JSContext* ctx);
+JSValue jsrt_create_stderr_stream(JSContext* ctx);
 
 // Runtime setup function (replaces JSRT_RuntimeSetupStdProcess)
 void JSRT_RuntimeSetupStdProcess(JSRT_Runtime* rt);

@@ -3,6 +3,8 @@
 #include "../../util/debug.h"
 #include "child_process_internal.h"
 
+extern void js_std_dump_error(JSContext* ctx);
+
 // IPC message format:
 // [4 bytes: message length (uint32_t, little-endian)]
 // [N bytes: JSON-serialized message body]

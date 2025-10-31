@@ -198,9 +198,21 @@ JSValue js_readable_push(JSContext* ctx, JSValueConst this_val, int argc, JSValu
   return JS_NewBool(ctx, !backpressure);
 }
 
+// Helper to get stream data from any readable stream type
+static JSStreamData* get_readable_stream_data(JSContext* ctx, JSValueConst this_val) {
+  JSStreamData* stream = js_stream_get_data(ctx, this_val, js_readable_class_id);
+  if (!stream)
+    stream = js_stream_get_data(ctx, this_val, js_duplex_class_id);
+  if (!stream)
+    stream = js_stream_get_data(ctx, this_val, js_transform_class_id);
+  if (!stream)
+    stream = js_stream_get_data(ctx, this_val, js_passthrough_class_id);
+  return stream;
+}
+
 // Readable.prototype.pause()
 JSValue js_readable_pause(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
-  JSStreamData* stream = js_stream_get_data(ctx, this_val, js_readable_class_id);
+  JSStreamData* stream = get_readable_stream_data(ctx, this_val);
   if (!stream) {
     return JS_ThrowTypeError(ctx, "Not a readable stream");
   }
@@ -215,7 +227,7 @@ JSValue js_readable_pause(JSContext* ctx, JSValueConst this_val, int argc, JSVal
 
 // Readable.prototype.resume()
 JSValue js_readable_resume(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
-  JSStreamData* stream = js_stream_get_data(ctx, this_val, js_readable_class_id);
+  JSStreamData* stream = get_readable_stream_data(ctx, this_val);
   if (!stream) {
     return JS_ThrowTypeError(ctx, "Not a readable stream");
   }
@@ -253,7 +265,7 @@ JSValue js_readable_resume(JSContext* ctx, JSValueConst this_val, int argc, JSVa
 
 // Readable.prototype.isPaused()
 JSValue js_readable_is_paused(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
-  JSStreamData* stream = js_stream_get_data(ctx, this_val, js_readable_class_id);
+  JSStreamData* stream = get_readable_stream_data(ctx, this_val);
   if (!stream) {
     return JS_UNDEFINED;
   }
@@ -294,7 +306,7 @@ static JSValue js_readable_get_readable(JSContext* ctx, JSValueConst this_val, i
 
 // Readable.prototype.pipe(destination, [options])
 JSValue js_readable_pipe(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
-  JSStreamData* src = js_stream_get_data(ctx, this_val, js_readable_class_id);
+  JSStreamData* src = get_readable_stream_data(ctx, this_val);
   if (!src) {
     return JS_ThrowTypeError(ctx, "Not a readable stream");
   }
@@ -364,7 +376,7 @@ JSValue js_readable_pipe(JSContext* ctx, JSValueConst this_val, int argc, JSValu
 
 // Readable.prototype.unpipe([destination])
 JSValue js_readable_unpipe(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
-  JSStreamData* src = js_stream_get_data(ctx, this_val, js_readable_class_id);
+  JSStreamData* src = get_readable_stream_data(ctx, this_val);
   if (!src) {
     return JS_ThrowTypeError(ctx, "Not a readable stream");
   }

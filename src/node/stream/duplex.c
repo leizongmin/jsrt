@@ -209,10 +209,15 @@ void js_duplex_init_prototype(JSContext* ctx, JSValue duplex_proto) {
   JS_SetPropertyStr(ctx, duplex_proto, "read", JS_NewCFunction(ctx, js_duplex_read, "read", 1));
   JS_SetPropertyStr(ctx, duplex_proto, "push", JS_NewCFunction(ctx, js_duplex_read, "push", 2));  // Simplified
 
+  // Add all readable stream methods (pause, resume, pipe, etc.)
+  JS_SetPropertyStr(ctx, duplex_proto, "pause", JS_NewCFunction(ctx, js_readable_pause, "pause", 0));
+  JS_SetPropertyStr(ctx, duplex_proto, "resume", JS_NewCFunction(ctx, js_readable_resume, "resume", 0));
+  JS_SetPropertyStr(ctx, duplex_proto, "isPaused", JS_NewCFunction(ctx, js_readable_is_paused, "isPaused", 0));
+  JS_SetPropertyStr(ctx, duplex_proto, "setEncoding", JS_NewCFunction(ctx, js_readable_set_encoding, "setEncoding", 1));
+  JS_SetPropertyStr(ctx, duplex_proto, "pipe", JS_NewCFunction(ctx, js_readable_pipe, "pipe", 2));
+  JS_SetPropertyStr(ctx, duplex_proto, "unpipe", JS_NewCFunction(ctx, js_readable_unpipe, "unpipe", 1));
+
   // Writable methods
   JS_SetPropertyStr(ctx, duplex_proto, "write", JS_NewCFunction(ctx, js_duplex_write, "write", 3));
   // end() is shared, added in stream.c
-
-  // Note: Full implementation would include all Readable/Writable methods
-  // pause(), resume(), pipe(), unpipe(), cork(), uncork(), etc.
 }

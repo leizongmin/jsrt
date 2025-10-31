@@ -216,6 +216,10 @@ static void add_readable_methods(JSContext* ctx, JSValue stream_obj) {
 
 // Create stdin as a Readable stream
 JSValue jsrt_create_stdin_stream(JSContext* ctx) {
+  // Ensure stream classes are initialized before creating any streams
+  extern void jsrt_stream_init_classes(JSContext * ctx);
+  jsrt_stream_init_classes(ctx);
+
   // Create a Readable stream
   JSValue stdin_obj = js_readable_constructor(ctx, JS_UNDEFINED, 0, NULL);
   if (JS_IsException(stdin_obj)) {
@@ -250,6 +254,10 @@ JSValue jsrt_create_stdin_stream(JSContext* ctx) {
 
 // Create stdout as a Writable stream
 JSValue jsrt_create_stdout_stream(JSContext* ctx) {
+  // Ensure stream classes are initialized
+  extern void jsrt_stream_init_classes(JSContext * ctx);
+  jsrt_stream_init_classes(ctx);
+
   // Create a Writable stream
   JSValue stdout_obj = js_writable_constructor(ctx, JS_UNDEFINED, 0, NULL);
   if (JS_IsException(stdout_obj)) {
@@ -281,6 +289,10 @@ JSValue jsrt_create_stdout_stream(JSContext* ctx) {
 
 // Create stderr as a Writable stream
 JSValue jsrt_create_stderr_stream(JSContext* ctx) {
+  // Ensure stream classes are initialized
+  extern void jsrt_stream_init_classes(JSContext * ctx);
+  jsrt_stream_init_classes(ctx);
+
   // Create a Writable stream
   JSValue stderr_obj = js_writable_constructor(ctx, JS_UNDEFINED, 0, NULL);
   if (JS_IsException(stderr_obj)) {

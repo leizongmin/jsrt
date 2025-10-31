@@ -117,6 +117,9 @@ JSValue js_stream_destroy(JSContext* ctx, JSValueConst this_val, int argc, JSVal
 JSValue js_stream_get_destroyed(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv);
 JSValue js_stream_get_errored(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv);
 
+// Initialize stream classes (must be called before creating any streams)
+void jsrt_stream_init_classes(JSContext* ctx);
+
 // utilities.c - Phase 5 utility functions
 void js_stream_init_utilities(JSContext* ctx, JSValue stream_module);
 

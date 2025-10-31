@@ -258,6 +258,30 @@ static JSValue js_writable_end(JSContext* ctx, JSValueConst this_val, int argc, 
   return JS_UNDEFINED;
 }
 
+// Initialize stream classes - must be called before creating any streams
+void jsrt_stream_init_classes(JSContext* ctx) {
+  static bool classes_initialized = false;
+  if (classes_initialized) {
+    return;  // Already initialized
+  }
+
+  // Register class IDs
+  JS_NewClassID(&js_readable_class_id);
+  JS_NewClassID(&js_writable_class_id);
+  JS_NewClassID(&js_duplex_class_id);
+  JS_NewClassID(&js_transform_class_id);
+  JS_NewClassID(&js_passthrough_class_id);
+
+  // Create class definitions
+  JS_NewClass(JS_GetRuntime(ctx), js_readable_class_id, &js_readable_class);
+  JS_NewClass(JS_GetRuntime(ctx), js_writable_class_id, &js_writable_class);
+  JS_NewClass(JS_GetRuntime(ctx), js_duplex_class_id, &js_duplex_class);
+  JS_NewClass(JS_GetRuntime(ctx), js_transform_class_id, &js_transform_class);
+  JS_NewClass(JS_GetRuntime(ctx), js_passthrough_class_id, &js_passthrough_class);
+
+  classes_initialized = true;
+}
+
 // Module initialization
 JSValue JSRT_InitNodeStream(JSContext* ctx) {
   JSValue stream_module = JS_NewObject(ctx);
@@ -287,19 +311,8 @@ JSValue JSRT_InitNodeStream(JSContext* ctx) {
   }
   JS_FreeValue(ctx, global);
 
-  // Register class IDs
-  JS_NewClassID(&js_readable_class_id);
-  JS_NewClassID(&js_writable_class_id);
-  JS_NewClassID(&js_duplex_class_id);
-  JS_NewClassID(&js_transform_class_id);
-  JS_NewClassID(&js_passthrough_class_id);
-
-  // Create class definitions
-  JS_NewClass(JS_GetRuntime(ctx), js_readable_class_id, &js_readable_class);
-  JS_NewClass(JS_GetRuntime(ctx), js_writable_class_id, &js_writable_class);
-  JS_NewClass(JS_GetRuntime(ctx), js_duplex_class_id, &js_duplex_class);
-  JS_NewClass(JS_GetRuntime(ctx), js_transform_class_id, &js_transform_class);
-  JS_NewClass(JS_GetRuntime(ctx), js_passthrough_class_id, &js_passthrough_class);
+  // Ensure stream classes are initialized
+  jsrt_stream_init_classes(ctx);
 
   // Create constructors
   JSValue readable_ctor = JS_NewCFunction2(ctx, js_readable_constructor, "Readable", 1, JS_CFUNC_constructor, 0);
@@ -427,6 +440,11 @@ JSValue JSRT_InitNodeStream(JSContext* ctx) {
   JS_SetPropertyStr(ctx, duplex_proto, "end", JS_NewCFunction(ctx, js_writable_end, "end", 0));
   JS_SetPropertyStr(ctx, transform_proto, "end", JS_NewCFunction(ctx, js_writable_end, "end", 0));
   JS_SetPropertyStr(ctx, passthrough_proto, "end", JS_NewCFunction(ctx, js_writable_end, "end", 0));
+
+  // Set up prototype chain: PassThrough -> Transform -> Duplex -> Readable
+  JS_SetPrototype(ctx, duplex_proto, readable_proto);
+  JS_SetPrototype(ctx, transform_proto, duplex_proto);
+  JS_SetPrototype(ctx, passthrough_proto, transform_proto);
 
   // Set prototypes
   JS_SetPropertyStr(ctx, readable_ctor, "prototype", readable_proto);

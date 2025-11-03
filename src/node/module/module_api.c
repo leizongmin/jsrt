@@ -1385,6 +1385,7 @@ JSValue jsrt_module_find_package_json(JSContext* ctx, JSValueConst this_val, int
   }
 
   if (!search_dir) {
+    free(search_dir);
     return JS_UNDEFINED;
   }
 

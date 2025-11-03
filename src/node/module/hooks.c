@@ -23,15 +23,9 @@
 static void jsrt_hook_finalizer(JSRuntime* rt, JSValue val) {
   JSRTModuleHook* hook = JS_GetOpaque(val, 0);
   if (hook) {
-    JSContext* ctx = JS_GetRuntimeOpaque(rt);
-    if (ctx) {
-      if (!JS_IsNull(hook->resolve_fn)) {
-        JS_FreeValue(ctx, hook->resolve_fn);
-      }
-      if (!JS_IsNull(hook->load_fn)) {
-        JS_FreeValue(ctx, hook->load_fn);
-      }
-    }
+    // Don't access JSContext during finalization as it may be invalid
+    // Instead, we'll rely on the hook registry to clean up JSValues properly
+    // during explicit cleanup or when the context is still valid
     free(hook);
   }
 }

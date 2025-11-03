@@ -91,6 +91,13 @@ char* jsrt_resolve_symlink(const char* path);
  */
 char* jsrt_resolve_relative_path(const char* base_path, const char* relative_path);
 
+/**
+ * Validate a path for security (prevent path traversal attacks)
+ * @param path Path to validate
+ * @return true if path is safe, false if it contains potentially dangerous patterns
+ */
+bool jsrt_is_safe_path(const char* path);
+
 #ifdef __cplusplus
 }
 #endif

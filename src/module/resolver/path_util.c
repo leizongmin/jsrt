@@ -8,6 +8,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <strings.h>  // For strncasecmp
 
 #ifndef _WIN32
 #include <unistd.h>
@@ -229,4 +230,65 @@ char* jsrt_resolve_relative_path(const char* base_path, const char* relative_pat
 
   MODULE_DEBUG_RESOLVER("Resolved to '%s'", result);
   return result;
+}
+
+// ==== Security Validation ====
+
+bool jsrt_is_safe_path(const char* path) {
+  if (!path) {
+    return false;
+  }
+
+  // Check for null bytes
+  if (strchr(path, '\0') != path + strlen(path)) {
+    return false;
+  }
+
+  // Check for obvious path traversal patterns
+  if (strstr(path, "../") != NULL || strstr(path, "..\\") != NULL) {
+    return false;
+  }
+
+  // Check for patterns that might escape current directory
+  if (strstr(path, "%2e%2e") != NULL || strstr(path, "%2E%2E") != NULL) {
+    return false;  // URL encoded "../"
+  }
+
+  // Check for absolute paths that might access system directories
+  if (jsrt_is_absolute_path(path)) {
+    // On Unix, check for dangerous system paths
+    if (strncmp(path, "/etc/", 5) == 0 ||
+        strncmp(path, "/bin/", 5) == 0 ||
+        strncmp(path, "/sbin/", 6) == 0 ||
+        strncmp(path, "/usr/", 5) == 0 ||
+        strncmp(path, "/var/", 5) == 0 ||
+        strncmp(path, "/sys/", 5) == 0 ||
+        strncmp(path, "/proc/", 6) == 0) {
+      return false;
+    }
+
+    // On Windows, check for dangerous system paths
+    if (strncasecmp(path, "C:\\Windows\\", 12) == 0 ||
+        strncasecmp(path, "C:\\Program Files\\", 17) == 0 ||
+        strncasecmp(path, "C:\\ProgramData\\", 15) == 0) {
+      return false;
+    }
+  }
+
+  // Check for extremely long paths that might cause buffer overflows
+  if (strlen(path) > 4096) {
+    return false;
+  }
+
+  // Check for suspicious patterns
+  if (strstr(path, "://") != NULL) {
+    // Allow certain protocols but check for dangerous ones
+    if (strncasecmp(path, "file://", 7) != 0 &&
+        strncasecmp(path, "http://", 7) != 0 &&
+        strncasecmp(path, "https://", 8) != 0) {
+      return false;
+    }
+  }
+
+  return true;
 }

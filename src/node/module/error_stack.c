@@ -194,9 +194,11 @@ static char* transform_stack_frame(JSContext* ctx, JSRT_SourceMapCache* cache, c
       if (at_pos && paren_pos && paren_pos > at_pos) {
         size_t func_len = paren_pos - (at_pos + 3);
         if (func_len > 255) {
-          func_len = 255;
+          func_len = 255;  // Leave space for null terminator
         }
         memcpy(func_name, at_pos + 3, func_len);
+        // Always null-terminate the string
+        func_name[func_len] = '\0';
         // Trim trailing space
         while (func_len > 0 && func_name[func_len - 1] == ' ') {
           func_name[--func_len] = '\0';

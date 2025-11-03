@@ -398,8 +398,123 @@ JSValue jsrt_module_createRequire(JSContext* ctx, JSValueConst this_val, int arg
  * module.syncBuiltinESMExports() - Sync CommonJS/ESM exports
  */
 JSValue jsrt_module_syncBuiltinESMExports(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
-  // TODO: Implementation will sync built-in module exports
-  // For now, return undefined as placeholder
+  JSRT_Debug("module.syncBuiltinESMExports() called");
+
+  // Get runtime to access module loader
+  JSRT_Runtime* rt = JS_GetContextOpaque(ctx);
+  if (!rt || !rt->module_loader) {
+    JSRT_Debug("No runtime or module loader available");
+    return JS_UNDEFINED;
+  }
+
+  // Iterate through all builtin modules and sync their exports
+  // For now, we'll focus on node: modules that have both CJS and ESM versions
+
+  // Get the global object to access require/imported modules
+  JSValue global = JS_GetGlobalObject(ctx);
+
+  // List of builtin modules that may need syncing
+  const char* builtin_modules[] = {"fs",   "path",  "os",     "util", "events", "buffer",      "stream", "net",
+                                   "http", "https", "crypto", "zlib", "url",    "querystring", NULL};
+
+  int synced_count = 0;
+
+  for (int i = 0; builtin_modules[i]; i++) {
+    const char* module_name = builtin_modules[i];
+
+    // Try to get CommonJS version (require)
+    char cjs_require_code[256];
+    snprintf(cjs_require_code, sizeof(cjs_require_code),
+             "(function() { try { return require('%s'); } catch(e) { return undefined; } })()", module_name);
+
+    JSValue cjs_module =
+        JS_Eval(ctx, cjs_require_code, strlen(cjs_require_code), "<sync_builtin_esm>", JS_EVAL_TYPE_GLOBAL);
+
+    if (JS_IsException(cjs_module)) {
+      JS_FreeValue(ctx, cjs_module);
+      continue;  // Skip modules that don't exist in CJS
+    }
+
+    // Try to get ESM version (import)
+    char esm_import_code[256];
+    snprintf(
+        esm_import_code, sizeof(esm_import_code),
+        "(function() { try { return globalThis.node && globalThis.node['%s']; } catch(e) { return undefined; } })()",
+        module_name);
+
+    JSValue esm_module =
+        JS_Eval(ctx, esm_import_code, strlen(esm_import_code), "<sync_builtin_esm>", JS_EVAL_TYPE_GLOBAL);
+
+    if (JS_IsException(esm_module)) {
+      JS_FreeValue(ctx, cjs_module);
+      JS_FreeValue(ctx, esm_module);
+      continue;  // Skip modules that don't exist in ESM
+    }
+
+    // If both exist and are objects, sync properties from CJS to ESM
+    if (!JS_IsUndefined(cjs_module) && !JS_IsUndefined(esm_module) && JS_IsObject(cjs_module) &&
+        JS_IsObject(esm_module)) {
+      // Get property names of CJS module
+      JSPropertyEnum* props;
+      uint32_t prop_count;
+
+      int ret = JS_GetOwnPropertyNames(ctx, &props, &prop_count, cjs_module, JS_GPN_STRING_MASK | JS_GPN_ENUM_ONLY);
+
+      if (ret >= 0) {
+        int synced_props = 0;
+
+        // Copy each property from CJS to ESM
+        for (uint32_t j = 0; j < prop_count; j++) {
+          JSValue prop_name = JS_AtomToString(ctx, props[j].atom);
+
+          if (!JS_IsException(prop_name)) {
+            const char* prop_str = JS_ToCString(ctx, prop_name);
+
+            if (prop_str) {
+              // Skip properties that already exist in ESM module
+              JSValue existing_prop = JS_GetPropertyStr(ctx, esm_module, prop_str);
+              bool has_existing = !JS_IsUndefined(existing_prop) && !JS_IsException(existing_prop);
+              JS_FreeValue(ctx, existing_prop);
+
+              if (!has_existing) {
+                // Copy property from CJS to ESM
+                JSValue prop_value = JS_GetPropertyStr(ctx, cjs_module, prop_str);
+
+                if (!JS_IsException(prop_value)) {
+                  if (JS_SetPropertyStr(ctx, esm_module, prop_str, JS_DupValue(ctx, prop_value)) >= 0) {
+                    synced_props++;
+                  }
+                  JS_FreeValue(ctx, prop_value);
+                }
+              }
+
+              JS_FreeCString(ctx, prop_str);
+            }
+
+            JS_FreeValue(ctx, prop_name);
+          }
+        }
+
+        // Free property enumeration
+        for (uint32_t j = 0; j < prop_count; j++) {
+          JS_FreeAtom(ctx, props[j].atom);
+        }
+        js_free_rt(JS_GetRuntime(ctx), props);
+
+        if (synced_props > 0) {
+          JSRT_Debug("Synced %d properties from CommonJS to ESM for module '%s'", synced_props, module_name);
+          synced_count++;
+        }
+      }
+    }
+
+    JS_FreeValue(ctx, cjs_module);
+    JS_FreeValue(ctx, esm_module);
+  }
+
+  JS_FreeValue(ctx, global);
+
+  JSRT_Debug("module.syncBuiltinESMExports() completed, synced %d modules", synced_count);
   return JS_UNDEFINED;
 }
 
@@ -1565,6 +1680,238 @@ static JSValue jsrt_module_get_compile_cache_stats(JSContext* ctx, JSValueConst 
 }
 
 /**
+ * Module.getStatistics() - Get module loading statistics
+ */
+static JSValue jsrt_module_get_statistics(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
+  JSRT_Debug("Module.getStatistics() called");
+
+  // Get runtime to access module loader
+  JSRT_Runtime* rt = JS_GetContextOpaque(ctx);
+  if (!rt || !rt->module_loader) {
+    JSRT_Debug("No runtime or module loader available for statistics");
+    return JS_UNDEFINED;
+  }
+
+  JSRT_ModuleLoader* loader = rt->module_loader;
+
+  // Create statistics object
+  JSValue stats = JS_NewObject(ctx);
+  if (JS_IsException(stats)) {
+    return stats;
+  }
+
+  // Basic loading statistics
+  JS_SetPropertyStr(ctx, stats, "loadsTotal", JS_NewInt64(ctx, loader->loads_total));
+  JS_SetPropertyStr(ctx, stats, "loadsSuccess", JS_NewInt64(ctx, loader->loads_success));
+  JS_SetPropertyStr(ctx, stats, "loadsFailed", JS_NewInt64(ctx, loader->loads_failed));
+
+  // Calculate success rate
+  double success_rate = loader->loads_total > 0 ? (double)loader->loads_success / loader->loads_total * 100.0 : 0.0;
+  JS_SetPropertyStr(ctx, stats, "successRate", JS_NewFloat64(ctx, success_rate));
+
+  // Cache statistics
+  JS_SetPropertyStr(ctx, stats, "cacheHits", JS_NewInt64(ctx, loader->cache_hits));
+  JS_SetPropertyStr(ctx, stats, "cacheMisses", JS_NewInt64(ctx, loader->cache_misses));
+
+  // Calculate cache hit rate
+  uint64_t total_cache_requests = loader->cache_hits + loader->cache_misses;
+  double cache_hit_rate = total_cache_requests > 0 ? (double)loader->cache_hits / total_cache_requests * 100.0 : 0.0;
+  JS_SetPropertyStr(ctx, stats, "cacheHitRate", JS_NewFloat64(ctx, cache_hit_rate));
+
+  // Memory usage
+  JS_SetPropertyStr(ctx, stats, "memoryUsed", JS_NewInt64(ctx, loader->memory_used));
+
+  // Get detailed cache statistics if available
+  if (loader->cache) {
+    uint64_t cache_hits = 0, cache_misses = 0;
+    size_t cache_size = 0, cache_memory_used = 0;
+
+    jsrt_module_cache_get_stats(loader->cache, &cache_hits, &cache_misses, &cache_size, &cache_memory_used);
+
+    JSValue cache_stats = JS_NewObject(ctx);
+    JS_SetPropertyStr(ctx, cache_stats, "hits", JS_NewInt64(ctx, cache_hits));
+    JS_SetPropertyStr(ctx, cache_stats, "misses", JS_NewInt64(ctx, cache_misses));
+    JS_SetPropertyStr(ctx, cache_stats, "size", JS_NewInt64(ctx, cache_size));
+    JS_SetPropertyStr(ctx, cache_stats, "maxSize", JS_NewInt64(ctx, loader->max_cache_size));
+
+    // Calculate cache utilization
+    double cache_utilization = loader->max_cache_size > 0 ? (double)cache_size / loader->max_cache_size * 100.0 : 0.0;
+    JS_SetPropertyStr(ctx, cache_stats, "utilization", JS_NewFloat64(ctx, cache_utilization));
+
+    JS_SetPropertyStr(ctx, stats, "moduleCache", cache_stats);
+  }
+
+  // Get compile cache statistics if available
+  JSRT_CompileCacheConfig* compile_cache = jsrt_module_get_compile_cache(ctx);
+  if (compile_cache && jsrt_compile_cache_is_enabled(compile_cache)) {
+    uint64_t cc_hits = 0, cc_misses = 0, cc_writes = 0, cc_errors = 0, cc_evictions = 0;
+    size_t cc_current_size = 0, cc_size_limit = 0;
+
+    jsrt_compile_cache_get_stats(compile_cache, &cc_hits, &cc_misses, &cc_writes, &cc_errors, &cc_evictions,
+                                 &cc_current_size, &cc_size_limit);
+
+    JSValue cc_stats = JS_NewObject(ctx);
+    JS_SetPropertyStr(ctx, cc_stats, "hits", JS_NewInt64(ctx, cc_hits));
+    JS_SetPropertyStr(ctx, cc_stats, "misses", JS_NewInt64(ctx, cc_misses));
+    JS_SetPropertyStr(ctx, cc_stats, "writes", JS_NewInt64(ctx, cc_writes));
+    JS_SetPropertyStr(ctx, cc_stats, "errors", JS_NewInt64(ctx, cc_errors));
+    JS_SetPropertyStr(ctx, cc_stats, "evictions", JS_NewInt64(ctx, cc_evictions));
+    JS_SetPropertyStr(ctx, cc_stats, "currentSize", JS_NewInt64(ctx, cc_current_size));
+    JS_SetPropertyStr(ctx, cc_stats, "sizeLimit", JS_NewInt64(ctx, cc_size_limit));
+
+    // Calculate compile cache hit rate
+    uint64_t total_cc_requests = cc_hits + cc_misses;
+    double cc_hit_rate = total_cc_requests > 0 ? (double)cc_hits / total_cc_requests * 100.0 : 0.0;
+    JS_SetPropertyStr(ctx, cc_stats, "hitRate", JS_NewFloat64(ctx, cc_hit_rate));
+
+    // Calculate compile cache utilization
+    double cc_utilization = cc_size_limit > 0 ? (double)cc_current_size / cc_size_limit * 100.0 : 0.0;
+    JS_SetPropertyStr(ctx, cc_stats, "utilization", JS_NewFloat64(ctx, cc_utilization));
+
+    JS_SetPropertyStr(ctx, stats, "compileCache", cc_stats);
+  }
+
+  // Configuration info
+  JSValue config = JS_NewObject(ctx);
+  JS_SetPropertyStr(ctx, config, "cacheEnabled", JS_NewBool(ctx, loader->enable_cache));
+  JS_SetPropertyStr(ctx, config, "httpImportsEnabled", JS_NewBool(ctx, loader->enable_http_imports));
+  JS_SetPropertyStr(ctx, config, "nodeCompatEnabled", JS_NewBool(ctx, loader->enable_node_compat));
+  JS_SetPropertyStr(ctx, config, "maxCacheSize", JS_NewInt64(ctx, loader->max_cache_size));
+  JS_SetPropertyStr(ctx, stats, "configuration", config);
+
+  return stats;
+}
+
+/**
+ * module.reloadModule(path) - Hot reload a module
+ */
+static JSValue jsrt_module_reload_module(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
+  JSRT_Debug("module.reloadModule() called");
+
+  if (argc < 1) {
+    return JS_ThrowTypeError(ctx, "Missing path argument");
+  }
+
+  const char* path = JS_ToCString(ctx, argv[0]);
+  if (!path) {
+    return JS_EXCEPTION;
+  }
+
+  // Get runtime to access module loader
+  JSRT_Runtime* rt = JS_GetContextOpaque(ctx);
+  if (!rt || !rt->module_loader) {
+    JS_FreeCString(ctx, path);
+    return JS_ThrowTypeError(ctx, "No module loader available");
+  }
+
+  JSRT_ModuleLoader* loader = rt->module_loader;
+
+  // Create result object
+  JSValue result = JS_NewObject(ctx);
+  if (JS_IsException(result)) {
+    JS_FreeCString(ctx, path);
+    return result;
+  }
+
+  // Get initial statistics for comparison
+  uint64_t initial_loads = loader->loads_total;
+  uint64_t initial_success = loader->loads_success;
+  uint64_t initial_failed = loader->loads_failed;
+
+  JSRT_Debug("Attempting to reload module: %s", path);
+
+  // First, resolve the path to ensure it's in the right format for cache lookup
+  JSRT_ResolvedPath* resolved = jsrt_resolve_path(ctx, path, NULL, false);
+  if (!resolved || !resolved->resolved_path) {
+    // If resolution failed, it might be a builtin module
+    // Try treating it as a builtin module (node: prefix)
+    char builtin_path[256];
+    snprintf(builtin_path, sizeof(builtin_path), "node:%s", path);
+
+    jsrt_resolved_path_free(resolved);
+    resolved = jsrt_resolve_path(ctx, builtin_path, NULL, false);
+
+    if (!resolved || !resolved->resolved_path) {
+      JS_SetPropertyStr(ctx, result, "error", JS_NewString(ctx, "Failed to resolve module path"));
+      JS_SetPropertyStr(ctx, result, "reloadSuccess", JS_FALSE);
+      JS_FreeCString(ctx, path);
+      if (resolved) {
+        jsrt_resolved_path_free(resolved);
+      }
+      return result;
+    }
+  }
+
+  // Invalidate the module in cache
+  int invalidate_result = jsrt_invalidate_module(loader, resolved->resolved_path);
+  bool was_cached = (invalidate_result == 0);
+
+  // Note: Module._cache clearing is not needed since reloadModule() already
+  // updates the module in our internal cache and require() will get the updated version
+
+  // Try to reload the module
+  JSValue reloaded_module = JS_UNDEFINED;
+  bool reload_success = false;
+  const char* error_message = NULL;
+
+  if (!JS_IsUndefined(argv[0])) {
+    // Attempt to load the module using resolved path
+    reloaded_module = jsrt_load_module(loader, resolved->resolved_path, NULL);
+
+    if (JS_IsException(reloaded_module)) {
+      // Get error message
+      JSValue exception = JS_GetException(ctx);
+      if (!JS_IsUndefined(exception) && !JS_IsNull(exception)) {
+        error_message = JS_ToCString(ctx, exception);
+      }
+      JS_FreeValue(ctx, exception);
+      reload_success = false;
+    } else {
+      reload_success = true;
+    }
+  }
+
+  // Calculate statistics delta
+  uint64_t new_loads = loader->loads_total - initial_loads;
+  uint64_t new_success = loader->loads_success - initial_success;
+  uint64_t new_failed = loader->loads_failed - initial_failed;
+
+  // Populate result object
+  JS_SetPropertyStr(ctx, result, "path", JS_NewString(ctx, path));
+  JS_SetPropertyStr(ctx, result, "resolvedPath", JS_NewString(ctx, resolved->resolved_path));
+  JS_SetPropertyStr(ctx, result, "wasCached", JS_NewBool(ctx, was_cached));
+  JS_SetPropertyStr(ctx, result, "reloadSuccess", JS_NewBool(ctx, reload_success));
+
+  if (error_message) {
+    JS_SetPropertyStr(ctx, result, "error", JS_NewString(ctx, error_message));
+    JS_FreeCString(ctx, error_message);
+  }
+
+  // Statistics changes
+  JSValue stats_delta = JS_NewObject(ctx);
+  JS_SetPropertyStr(ctx, stats_delta, "loadsAttempted", JS_NewInt64(ctx, new_loads));
+  JS_SetPropertyStr(ctx, stats_delta, "loadsSuccessful", JS_NewInt64(ctx, new_success));
+  JS_SetPropertyStr(ctx, stats_delta, "loadsFailed", JS_NewInt64(ctx, new_failed));
+  JS_SetPropertyStr(ctx, result, "statistics", stats_delta);
+
+  // Return the reloaded module exports if successful
+  if (reload_success && !JS_IsUndefined(reloaded_module)) {
+    JS_SetPropertyStr(ctx, result, "exports", JS_DupValue(ctx, reloaded_module));
+  }
+
+  JS_FreeValue(ctx, reloaded_module);
+  JS_FreeCString(ctx, path);
+  if (resolved) {
+    jsrt_resolved_path_free(resolved);
+  }
+
+  JSRT_Debug("Module reload completed for %s: success=%s, was_cached=%s", path, reload_success ? "true" : "false",
+             was_cached ? "true" : "false");
+
+  return result;
+}
+
+/**
  * Module.wrap(script) - Wrap script in CommonJS wrapper
  */
 static JSValue jsrt_module_wrap(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
@@ -1651,6 +1998,8 @@ JSValue JSRT_InitNodeModule(JSContext* ctx) {
                     JS_NewCFunction(ctx, jsrt_module_clear_compile_cache, "clearCompileCache", 0));
   JS_SetPropertyStr(ctx, ctor, "getCompileCacheStats",
                     JS_NewCFunction(ctx, jsrt_module_get_compile_cache_stats, "getCompileCacheStats", 0));
+  JS_SetPropertyStr(ctx, ctor, "getStatistics", JS_NewCFunction(ctx, jsrt_module_get_statistics, "getStatistics", 0));
+  JS_SetPropertyStr(ctx, ctor, "reloadModule", JS_NewCFunction(ctx, jsrt_module_reload_module, "reloadModule", 1));
 
   // Add Module.wrapper property (array with wrapper parts)
   JSValue wrapper = JS_NewArray(ctx);
@@ -1710,6 +2059,10 @@ JSValue JSRT_InitNodeModule(JSContext* ctx) {
                     JS_NewCFunction(ctx, jsrt_module_clear_compile_cache, "clearCompileCache", 0));
   JS_SetPropertyStr(ctx, module_obj, "getCompileCacheStats",
                     JS_NewCFunction(ctx, jsrt_module_get_compile_cache_stats, "getCompileCacheStats", 0));
+  JS_SetPropertyStr(ctx, module_obj, "getStatistics",
+                    JS_NewCFunction(ctx, jsrt_module_get_statistics, "getStatistics", 0));
+  JS_SetPropertyStr(ctx, module_obj, "reloadModule",
+                    JS_NewCFunction(ctx, jsrt_module_reload_module, "reloadModule", 1));
 
   JSValue compile_cache_status = JS_NewObject(ctx);
   JS_SetPropertyStr(ctx, compile_cache_status, "ENABLED", JS_NewInt32(ctx, JSRT_COMPILE_CACHE_ENABLED));
@@ -1795,6 +2148,14 @@ int js_node_module_init(JSContext* ctx, JSModuleDef* m) {
   JSValue get_compile_cache_stats = JS_GetPropertyStr(ctx, module_obj, "getCompileCacheStats");
   JS_SetModuleExport(ctx, m, "getCompileCacheStats", JS_DupValue(ctx, get_compile_cache_stats));
   JS_FreeValue(ctx, get_compile_cache_stats);
+
+  JSValue get_statistics = JS_GetPropertyStr(ctx, module_obj, "getStatistics");
+  JS_SetModuleExport(ctx, m, "getStatistics", JS_DupValue(ctx, get_statistics));
+  JS_FreeValue(ctx, get_statistics);
+
+  JSValue reload_module = JS_GetPropertyStr(ctx, module_obj, "reloadModule");
+  JS_SetModuleExport(ctx, m, "reloadModule", JS_DupValue(ctx, reload_module));
+  JS_FreeValue(ctx, reload_module);
 
   JSValue module_constants = JS_GetPropertyStr(ctx, module_obj, "constants");
   JS_SetModuleExport(ctx, m, "constants", JS_DupValue(ctx, module_constants));

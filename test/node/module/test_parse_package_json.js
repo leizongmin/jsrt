@@ -37,7 +37,7 @@ function testBasicParsing() {
     name: 'test-package',
     version: '1.0.0',
     description: 'A test package',
-    main: 'index.js'
+    main: 'index.js',
   };
   const packagePath = createPackageJson(tempDir, packageContent);
 
@@ -45,14 +45,18 @@ function testBasicParsing() {
     const result = parsePackageJSON(packagePath);
 
     if (typeof result === 'object' && result !== null) {
-      if (result.name === packageContent.name &&
-          result.version === packageContent.version &&
-          result.description === packageContent.description &&
-          result.main === packageContent.main) {
+      if (
+        result.name === packageContent.name &&
+        result.version === packageContent.version &&
+        result.description === packageContent.description &&
+        result.main === packageContent.main
+      ) {
         console.log('✅ PASS: Parsed package.json correctly');
         return true;
       } else {
-        console.log(`❌ FAIL: Content mismatch. Expected name=${packageContent.name}, version=${packageContent.version}, got name=${result.name}, version=${result.version}`);
+        console.log(
+          `❌ FAIL: Content mismatch. Expected name=${packageContent.name}, version=${packageContent.version}, got name=${result.name}, version=${result.version}`
+        );
         return false;
       }
     } else {
@@ -77,19 +81,19 @@ function testComplexParsing() {
     scripts: {
       start: 'node index.js',
       test: 'jest',
-      build: 'webpack'
+      build: 'webpack',
     },
     dependencies: {
       express: '^4.18.0',
-      lodash: '^4.17.21'
+      lodash: '^4.17.21',
     },
     devDependencies: {
-      jest: '^28.0.0'
+      jest: '^28.0.0',
     },
     repository: {
       type: 'git',
-      url: 'https://github.com/user/repo.git'
-    }
+      url: 'https://github.com/user/repo.git',
+    },
   };
   const packagePath = createPackageJson(tempDir, packageContent);
 
@@ -97,18 +101,23 @@ function testComplexParsing() {
     const result = parsePackageJSON(packagePath);
 
     if (typeof result === 'object' && result !== null) {
-      if (result.name === packageContent.name &&
-          typeof result.scripts === 'object' &&
-          result.scripts.start === packageContent.scripts.start &&
-          typeof result.dependencies === 'object' &&
-          result.dependencies.express === packageContent.dependencies.express &&
-          typeof result.repository === 'object' &&
-          result.repository.type === packageContent.repository.type) {
+      if (
+        result.name === packageContent.name &&
+        typeof result.scripts === 'object' &&
+        result.scripts.start === packageContent.scripts.start &&
+        typeof result.dependencies === 'object' &&
+        result.dependencies.express === packageContent.dependencies.express &&
+        typeof result.repository === 'object' &&
+        result.repository.type === packageContent.repository.type
+      ) {
         console.log('✅ PASS: Parsed complex package.json correctly');
         return true;
       } else {
         console.log(`❌ FAIL: Complex content mismatch`);
-        console.log('Expected scripts:', JSON.stringify(packageContent.scripts));
+        console.log(
+          'Expected scripts:',
+          JSON.stringify(packageContent.scripts)
+        );
         console.log('Got scripts:', JSON.stringify(result.scripts));
         return false;
       }
@@ -135,10 +144,15 @@ function testInvalidJson() {
 
   try {
     const result = parsePackageJSON(packagePath);
-    console.log(`❌ FAIL: Expected error for invalid JSON, but got result: ${typeof result}`);
+    console.log(
+      `❌ FAIL: Expected error for invalid JSON, but got result: ${typeof result}`
+    );
     return false;
   } catch (error) {
-    if (error.message.includes('parsePackageJSON') || error.name === 'SyntaxError') {
+    if (
+      error.message.includes('parsePackageJSON') ||
+      error.name === 'SyntaxError'
+    ) {
       console.log('✅ PASS: Correctly threw error for invalid JSON');
       return true;
     } else {
@@ -156,10 +170,15 @@ function testNonExistentFile() {
 
   try {
     const result = parsePackageJSON('/non/existent/path/package.json');
-    console.log(`❌ FAIL: Expected error for non-existent file, but got result: ${typeof result}`);
+    console.log(
+      `❌ FAIL: Expected error for non-existent file, but got result: ${typeof result}`
+    );
     return false;
   } catch (error) {
-    if (error.message.includes('parsePackageJSON') && error.message.includes('failed to read file')) {
+    if (
+      error.message.includes('parsePackageJSON') &&
+      error.message.includes('failed to read file')
+    ) {
       console.log('✅ PASS: Correctly threw error for non-existent file');
       return true;
     } else {
@@ -183,7 +202,9 @@ function testEmptyPackage() {
         console.log('✅ PASS: Parsed empty package.json correctly');
         return true;
       } else {
-        console.log(`❌ FAIL: Expected empty object, got keys: ${Object.keys(result)}`);
+        console.log(
+          `❌ FAIL: Expected empty object, got keys: ${Object.keys(result)}`
+        );
         return false;
       }
     } else {
@@ -205,7 +226,7 @@ function runAllTests() {
     testComplexParsing,
     testInvalidJson,
     testNonExistentFile,
-    testEmptyPackage
+    testEmptyPackage,
   ];
 
   let passed = 0;

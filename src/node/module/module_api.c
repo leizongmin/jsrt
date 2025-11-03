@@ -1,13 +1,18 @@
 #include "module_api.h"
+#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <sys/stat.h>
+#include <unistd.h>
 #include "../../module/core/module_cache.h"
 #include "../../module/core/module_context.h"
 #include "../../module/core/module_loader.h"
 #include "../../module/loaders/commonjs_loader.h"
 #include "../../module/resolver/path_resolver.h"
+#include "../../module/resolver/path_util.h"
 #include "../../runtime.h"
 #include "../../util/debug.h"
+#include "../../util/file.h"
 #include "../node_modules.h"
 #include "compile_cache.h"
 #include "hooks.h"
@@ -22,6 +27,18 @@ static JSClassDef jsrt_module_class = {
     .class_name = "Module",
     .finalizer = jsrt_module_finalizer,
 };
+
+// Helper function to duplicate a string
+static char* jsrt_strdup(const char* str) {
+  if (!str)
+    return NULL;
+  size_t len = strlen(str);
+  char* dup = malloc(len + 1);
+  if (dup) {
+    memcpy(dup, str, len + 1);
+  }
+  return dup;
+}
 
 static JSRT_CompileCacheConfig* jsrt_module_get_compile_cache(JSContext* ctx) {
   JSRT_Runtime* rt = JS_GetContextOpaque(ctx);
@@ -1158,6 +1175,271 @@ JSValue jsrt_module_compile(JSContext* ctx, JSValueConst this_val, int argc, JSV
   return JS_UNDEFINED;
 }
 
+/**
+ * Package.json utilities
+ */
+
+// Cache for package.json lookups to avoid repeated filesystem access
+typedef struct {
+  char* path;          // Directory path
+  char* package_json;  // Path to package.json file (if found)
+  time_t mtime;        // Modification time for cache invalidation
+} JSRT_PackageJSONCache;
+
+static JSRT_PackageJSONCache* package_json_cache = NULL;
+static size_t package_json_cache_size = 0;
+static size_t package_json_cache_capacity = 32;
+
+/**
+ * Find the nearest package.json file by searching upward from a given path.
+ *
+ * @param ctx JavaScript context
+ * @param this_val The 'this' value (not used)
+ * @param argc Number of arguments
+ * @param argv Arguments: [specifier, base]
+ * @return JSValue: Path to package.json file or undefined
+ */
+JSValue jsrt_module_find_package_json(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
+  // Parse arguments
+  if (argc < 1) {
+    return JS_ThrowTypeError(ctx, "findPackageJSON: at least 1 argument required (specifier)");
+  }
+
+  const char* specifier = JS_ToCString(ctx, argv[0]);
+  if (!specifier) {
+    return JS_ThrowTypeError(ctx, "findPackageJSON: specifier must be a string");
+  }
+
+  // Get base path if provided, otherwise use current working directory
+  char* base_path = NULL;
+  if (argc >= 2 && !JS_IsUndefined(argv[1]) && !JS_IsNull(argv[1])) {
+    const char* base_str = JS_ToCString(ctx, argv[1]);
+    if (!base_str) {
+      JS_FreeCString(ctx, specifier);
+      return JS_ThrowTypeError(ctx, "findPackageJSON: base must be a string");
+    }
+    base_path = jsrt_strdup(base_str);
+    JS_FreeCString(ctx, base_str);
+  } else {
+    // Use current working directory as base
+    base_path = getcwd(NULL, 0);
+  }
+
+  if (!base_path) {
+    JS_FreeCString(ctx, specifier);
+    return JS_UNDEFINED;
+  }
+
+  // Resolve specifier to absolute path
+  char* resolved_path = NULL;
+  if (jsrt_is_absolute_path(specifier)) {
+    resolved_path = jsrt_strdup(specifier);
+  } else if (jsrt_is_relative_path(specifier)) {
+    // For relative paths, join with base directory
+    resolved_path = jsrt_path_join(base_path, specifier);
+  } else {
+    // Treat as file path relative to base
+    resolved_path = jsrt_path_join(base_path, specifier);
+  }
+
+  JS_FreeCString(ctx, specifier);
+  free(base_path);
+
+  if (!resolved_path) {
+    return JS_UNDEFINED;
+  }
+
+  // If resolved path looks like a file (has extension or doesn't end with /), get its directory
+  char* search_dir = resolved_path;
+
+  // Check if the resolved path looks like a file by checking if it has an extension or doesn't end with a separator
+  const char* last_sep = jsrt_find_last_separator(resolved_path);
+  const char* last_dot = strrchr(resolved_path, '.');
+  bool looks_like_file = (last_sep && last_dot && last_dot > last_sep);
+
+  // Try to check if it's actually a file
+  JSRT_ReadFileResult file_check = JSRT_ReadFile(resolved_path);
+  if (file_check.error == JSRT_READ_FILE_OK || looks_like_file) {
+    // It's a file or looks like one, get parent directory
+    char* parent_dir = jsrt_get_parent_directory(resolved_path);
+    free(resolved_path);
+    search_dir = parent_dir;
+    JSRT_ReadFileResultFree(&file_check);
+  } else {
+    JSRT_ReadFileResultFree(&file_check);
+  }
+
+  if (!search_dir) {
+    return JS_UNDEFINED;
+  }
+
+  // Search upward for package.json
+  char* package_json_path = NULL;
+  char* current_dir = jsrt_strdup(search_dir);
+  int max_iterations = 50;  // Prevent infinite loops
+  int iteration = 0;
+
+  while (current_dir && iteration < max_iterations) {
+    iteration++;
+    // Check cache first
+    bool cache_hit = false;
+    for (size_t i = 0; i < package_json_cache_size; i++) {
+      if (strcmp(package_json_cache[i].path, current_dir) == 0) {
+        // Check if cache entry is still valid
+        struct stat st;
+        if (stat(current_dir, &st) == 0 && st.st_mtime == package_json_cache[i].mtime) {
+          if (package_json_cache[i].package_json) {
+            package_json_path = jsrt_strdup(package_json_cache[i].package_json);
+          }
+          cache_hit = true;
+          break;
+        } else {
+          // Cache entry is stale, remove it
+          free(package_json_cache[i].path);
+          free(package_json_cache[i].package_json);
+          // Move remaining entries
+          for (size_t j = i; j < package_json_cache_size - 1; j++) {
+            package_json_cache[j] = package_json_cache[j + 1];
+          }
+          package_json_cache_size--;
+          i--;  // Adjust index since we removed an entry
+        }
+      }
+    }
+
+    if (cache_hit) {
+      break;
+    }
+
+    // Construct path to package.json in current directory
+    char* candidate_path = jsrt_path_join(current_dir, "package.json");
+    if (!candidate_path) {
+      break;
+    }
+
+    // Check if package.json exists
+    JSRT_ReadFileResult result = JSRT_ReadFile(candidate_path);
+    bool found = (result.error == JSRT_READ_FILE_OK);
+    JSRT_ReadFileResultFree(&result);
+
+    if (found) {
+      package_json_path = candidate_path;
+
+      // Cache the result
+      // Ensure cache has capacity
+      if (package_json_cache_size >= package_json_cache_capacity) {
+        // Remove oldest entry (simple FIFO)
+        if (package_json_cache_size > 0) {
+          free(package_json_cache[0].path);
+          free(package_json_cache[0].package_json);
+          // Move remaining entries
+          for (size_t i = 0; i < package_json_cache_size - 1; i++) {
+            package_json_cache[i] = package_json_cache[i + 1];
+          }
+          package_json_cache_size--;
+        }
+      }
+
+      // Add new cache entry
+      struct stat st;
+      if (stat(current_dir, &st) == 0) {
+        package_json_cache[package_json_cache_size].path = jsrt_strdup(current_dir);
+        package_json_cache[package_json_cache_size].package_json = jsrt_strdup(candidate_path);
+        package_json_cache[package_json_cache_size].mtime = st.st_mtime;
+        package_json_cache_size++;
+      }
+      break;
+    }
+
+    free(candidate_path);
+
+    // Move to parent directory
+    char* parent_dir = jsrt_get_parent_directory(current_dir);
+    char* old_dir = current_dir;
+    current_dir = parent_dir;
+    free(old_dir);
+
+    // Stop if we've reached the root or can't go higher
+    if (!current_dir || strcmp(current_dir, ".") == 0 || strcmp(current_dir, "..") == 0) {
+      break;
+    }
+  }
+
+  // current_dir is already freed in the loop, but handle the case where loop didn't run
+  if (current_dir) {
+    free(current_dir);
+  }
+  free(search_dir);
+
+  JSValue result;
+  if (package_json_path) {
+    // Remove './' prefix if present for cleaner output
+    char* clean_path = package_json_path;
+    if (strstr(package_json_path, "/./") != NULL) {
+      // Replace "/./" with "/" in the path
+      size_t len = strlen(package_json_path);
+      char* temp = malloc(len + 1);
+      if (temp) {
+        char* src = (char*)package_json_path;
+        char* dst = temp;
+        while (*src) {
+          if (strncmp(src, "/./", 3) == 0) {
+            *dst++ = '/';
+            src += 3;
+          } else {
+            *dst++ = *src++;
+          }
+        }
+        *dst = '\0';
+        free(package_json_path);
+        clean_path = temp;
+      }
+    }
+    result = JS_NewString(ctx, clean_path);
+    free(clean_path);
+  } else {
+    result = JS_UNDEFINED;
+  }
+
+  return result;
+}
+
+/**
+ * Parse a package.json file and return its contents as a JavaScript object.
+ *
+ * @param ctx JavaScript context
+ * @param this_val The 'this' value (not used)
+ * @param argc Number of arguments
+ * @param argv Arguments: [path]
+ * @return JSValue: Parsed package.json object or throw error
+ */
+JSValue jsrt_module_parse_package_json(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
+  if (argc < 1) {
+    return JS_ThrowTypeError(ctx, "parsePackageJSON: 1 argument required (path)");
+  }
+
+  const char* path = JS_ToCString(ctx, argv[0]);
+  if (!path) {
+    return JS_ThrowTypeError(ctx, "parsePackageJSON: path must be a string");
+  }
+
+  // Read the file
+  JSRT_ReadFileResult result = JSRT_ReadFile(path);
+  if (result.error != JSRT_READ_FILE_OK) {
+    JS_FreeCString(ctx, path);
+    return JS_ThrowTypeError(ctx, "parsePackageJSON: failed to read file '%s': %s", path,
+                             JSRT_ReadFileErrorToString(result.error));
+  }
+
+  // Parse JSON
+  JSValue json_obj = JS_ParseJSON(ctx, result.data, result.size, "package.json");
+
+  JSRT_ReadFileResultFree(&result);
+  JS_FreeCString(ctx, path);
+
+  return json_obj;
+}
+
 static JSValue jsrt_module_enable_compile_cache(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
   JSRT_CompileCacheConfig* config = jsrt_module_get_compile_cache(ctx);
   if (!config) {
@@ -1326,6 +1608,16 @@ static JSValue jsrt_module_wrap(JSContext* ctx, JSValueConst this_val, int argc,
  * Initialize node:module API
  */
 JSValue JSRT_InitNodeModule(JSContext* ctx) {
+  // Initialize package.json cache if not already initialized
+  if (!package_json_cache) {
+    package_json_cache = malloc(package_json_cache_capacity * sizeof(JSRT_PackageJSONCache));
+    if (!package_json_cache) {
+      JS_ThrowOutOfMemory(ctx);
+      return JS_EXCEPTION;
+    }
+    memset(package_json_cache, 0, package_json_cache_capacity * sizeof(JSRT_PackageJSONCache));
+  }
+
   // Create Module class
   JS_NewClassID(&jsrt_module_class_id);
   JS_NewClass(JS_GetRuntime(ctx), jsrt_module_class_id, &jsrt_module_class);
@@ -1404,6 +1696,10 @@ JSValue JSRT_InitNodeModule(JSContext* ctx) {
                     JS_NewCFunction(ctx, jsrt_module_set_source_maps_support, "setSourceMapsSupport", 2));
   JS_SetPropertyStr(ctx, module_obj, "registerHooks",
                     JS_NewCFunction(ctx, jsrt_module_register_hooks, "registerHooks", 1));
+  JS_SetPropertyStr(ctx, module_obj, "findPackageJSON",
+                    JS_NewCFunction(ctx, jsrt_module_find_package_json, "findPackageJSON", 2));
+  JS_SetPropertyStr(ctx, module_obj, "parsePackageJSON",
+                    JS_NewCFunction(ctx, jsrt_module_parse_package_json, "parsePackageJSON", 1));
   JS_SetPropertyStr(ctx, module_obj, "enableCompileCache",
                     JS_NewCFunction(ctx, jsrt_module_enable_compile_cache, "enableCompileCache", 1));
   JS_SetPropertyStr(ctx, module_obj, "getCompileCacheDir",

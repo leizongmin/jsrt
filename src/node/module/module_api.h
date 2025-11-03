@@ -45,6 +45,10 @@ JSValue jsrt_module_get_source_maps_support(JSContext* ctx, JSValueConst this_va
 JSValue jsrt_module_set_source_maps_support(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv);
 JSValue jsrt_module_register_hooks(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv);
 
+// Package.json utilities
+JSValue jsrt_module_find_package_json(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv);
+JSValue jsrt_module_parse_package_json(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv);
+
 // Module class constructor
 JSValue jsrt_module_constructor(JSContext* ctx, JSValueConst new_target, int argc, JSValueConst* argv);
 

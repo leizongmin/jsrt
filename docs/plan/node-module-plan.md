@@ -1411,16 +1411,18 @@ Create examples demonstrating hook usage.
 - ✅ Manual validation of docs against implemented ergonomics to avoid drift
 - ✅ All examples run successfully with and without --trace-module-hooks flag
 
-** TODO [#B] Phase 5: Package.json Utilities [PS][R:LOW][C:MEDIUM][D:phase-3] :utils:
+** DONE [#B] Phase 5: Package.json Utilities [PS][R:LOW][C:MEDIUM][D:phase-3] :utils:
+CLOSED: [2025-11-03 13:00]
 :PROPERTIES:
 :ID: phase-5
 :CREATED: 2025-10-31T00:00:00Z
+:COMPLETED: 2025-11-03T13:00:00Z
 :DEPS: phase-3
-:PROGRESS: 0/12
-:COMPLETION: 0%
+:PROGRESS: 12/12
+:COMPLETION: 100%
 :END:
 
-Implement package.json lookup and parsing utilities.
+✅ Implemented package.json lookup and parsing utilities.
 
 *** Objectives
 - Mirror Node.js helper utilities for package metadata discovery within `node:module`.
@@ -1437,22 +1439,24 @@ Implement package.json lookup and parsing utilities.
 - Regression tests comparing outputs against Node.js reference runs.
 - Benchmark upward search cost to ensure sub-millisecond lookups after warm cache.
 
-*** TODO [#A] Task 5.1: module.findPackageJSON() Implementation [S][R:LOW][C:MEDIUM]
+*** DONE [#A] Task 5.1: module.findPackageJSON() Implementation [S][R:LOW][C:MEDIUM]
+CLOSED: [2025-11-03 13:00]
 :PROPERTIES:
 :ID: 5.1
 :CREATED: 2025-10-31T00:00:00Z
+:COMPLETED: 2025-11-03T13:00:00Z
 :DEPS: phase-3
 :END:
 
-Find nearest package.json file.
+✅ Find nearest package.json file.
 
 **** Subtasks
-- [ ] Implement ~module.findPackageJSON(specifier[, base])~
-- [ ] Resolve ~specifier~ to absolute path
-- [ ] Search upward for ~package.json~ (parent directories)
-- [ ] Return absolute path to ~package.json~ or ~undefined~
-- [ ] Cache package.json paths for performance
-- [ ] Handle file vs directory specifiers
+- [X] Implement ~module.findPackageJSON(specifier[, base])~
+- [X] Resolve ~specifier~ to absolute path
+- [X] Search upward for ~package.json~ (parent directories)
+- [X] Return absolute path to ~package.json~ or ~undefined~
+- [X] Cache package.json paths for performance
+- [X] Handle file vs directory specifiers
 
 **** Search Algorithm
 #+BEGIN_EXAMPLE
@@ -1476,21 +1480,23 @@ Stop at first found, or return undefined
 - Regression tests comparing results with Node.js behavior on representative paths.
 - Stress test invoking lookup repeatedly to confirm caching gains without stale data.
 
-*** TODO [#B] Task 5.2: Package.json Parsing Utilities [P][R:LOW][C:SIMPLE][D:5.1]
+*** DONE [#B] Task 5.2: Package.json Parsing Utilities [P][R:LOW][C:SIMPLE][D:5.1]
+CLOSED: [2025-11-03 13:00]
 :PROPERTIES:
 :ID: 5.2
 :CREATED: 2025-10-31T00:00:00Z
+:COMPLETED: 2025-11-03T13:00:00Z
 :DEPS: 5.1
 :END:
 
-Helper functions for package.json manipulation.
+✅ Helper functions for package.json manipulation.
 
 **** Subtasks
-- [ ] Implement ~parsePackageJSON(path)~ helper
-- [ ] Validate package.json format
-- [ ] Extract common fields (~name~, ~version~, ~main~, ~exports~, ~type~)
-- [ ] Cache parsed package.json data
-- [ ] Handle malformed package.json gracefully
+- [X] Implement ~parsePackageJSON(path)~ helper
+- [X] Validate package.json format
+- [X] Extract common fields (~name~, ~version~, ~main~, ~exports~, ~type~)
+- [X] Cache parsed package.json data
+- [X] Handle malformed package.json gracefully
 
 **** Testing
 - Introduce fixture packages with malformed JSON to verify graceful degradation.
@@ -1804,10 +1810,10 @@ Complete documentation and examples.
 :END:
 
 ** Current Status
-- Phase: Phase 4 COMPLETED ✅ (Module Hooks - Basic)
-- Progress: 145/171 tasks (84.8%)
-- Active: Tasks 4.5 & 4.6 completed - Phase 4 complete!
-- All 32 tasks in Phase 4 implemented and tested
+- Phase: Phase 5 COMPLETED ✅ (Package.json Utilities)
+- Progress: 157/171 tasks (91.8%)
+- Active: Phase 5 complete - ready to proceed with Phase 6!
+- All 12 tasks in Phase 5 implemented and tested
 
 ** Completed (Phase 1)
 1. [X] Task 1.1: Project Structure Setup
@@ -1911,9 +1917,9 @@ Complete documentation and examples.
   ✅ Created examples/module/hooks-transform.js with complete transformation pipeline
   ✅ Documented comprehensive API in docs/module-hooks.md (200+ lines)
   ✅ Added TypeScript definitions in types/module.d.ts
-- Phase 4 COMPLETE: 32/32 tasks (100%), Progress: 145/171 (84.8%)
-- All 16 module tests passing, all examples tested and working
-- Ready to proceed with Phase 5: Package.json Utilities
+- Phase 5 COMPLETE: 12/12 tasks (100%), Progress: 157/171 (91.8%)
+- All package.json utilities implemented and tested with comprehensive test coverage
+- Ready to proceed with Phase 6: Advanced Features
 
 ** 2025-11-03T09:27:00Z - Task 4.4: Load Hook Execution COMPLETED ✅
 - Completed all 8 subtasks for resolve hook execution

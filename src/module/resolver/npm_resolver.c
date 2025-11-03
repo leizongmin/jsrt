@@ -94,8 +94,12 @@ char* jsrt_resolve_package_main(JSContext* ctx, const char* package_dir, bool is
   free(package_json_path);
 
   char* main_entry = NULL;
+  bool package_is_esm = false;
 
   if (pkg) {
+    // Check package type for fallback decision
+    package_is_esm = jsrt_package_is_esm(pkg);
+
     // Get main entry from package.json
     char* entry_point = jsrt_package_get_main(pkg, is_esm);
     if (entry_point) {
@@ -107,9 +111,11 @@ char* jsrt_resolve_package_main(JSContext* ctx, const char* package_dir, bool is
 
   // Fallback to index.js or index.mjs
   if (!main_entry) {
-    const char* default_file = is_esm ? "index.mjs" : "index.js";
+    // Use package type, not request type, for determining default index file
+    const char* default_file = (package_is_esm && is_esm) ? "index.mjs" : "index.js";
     main_entry = jsrt_path_join(package_dir, default_file);
-    MODULE_DEBUG_RESOLVER("No main in package.json, falling back to '%s'", default_file);
+    MODULE_DEBUG_RESOLVER("No main in package.json, falling back to '%s' (package_is_esm=%d, is_esm=%d)", default_file,
+                          package_is_esm, is_esm);
   }
 
   MODULE_DEBUG_RESOLVER("Resolved package main to '%s'", main_entry ? main_entry : "NULL");
@@ -280,29 +286,38 @@ char* jsrt_resolve_npm_module(JSContext* ctx, const char* module_name, const cha
 
   // If there's a subpath, try to resolve it
   if (subpath) {
+    MODULE_DEBUG_RESOLVER("Resolving package with subpath: %s", subpath);
+
     // First try exports field
     size_t subpath_len = strlen(subpath) + 3;  // "./" + subpath + \0
     char* subpath_with_dot = (char*)malloc(subpath_len);
     if (subpath_with_dot) {
       snprintf(subpath_with_dot, subpath_len, "./%s", subpath);
+      MODULE_DEBUG_RESOLVER("Trying exports resolution for subpath: %s", subpath_with_dot);
       result = jsrt_resolve_package_exports(ctx, package_dir, subpath_with_dot, is_esm);
+      MODULE_DEBUG_RESOLVER("Exports resolution result: %s", result ? result : "NULL");
       free(subpath_with_dot);
     }
 
     // If exports didn't work, try direct path
     if (!result) {
       result = jsrt_path_join(package_dir, subpath);
+      MODULE_DEBUG_RESOLVER("Fallback to direct path: %s", result);
     }
 
     free(subpath);
   } else {
+    MODULE_DEBUG_RESOLVER("Resolving package main entry (no subpath)");
+
     // No subpath - resolve package main
     // First try exports field with "."
     result = jsrt_resolve_package_exports(ctx, package_dir, ".", is_esm);
+    MODULE_DEBUG_RESOLVER("Package main exports resolution result: %s", result ? result : "NULL");
 
     // If exports didn't work, use traditional main resolution
     if (!result) {
       result = jsrt_resolve_package_main(ctx, package_dir, is_esm);
+      MODULE_DEBUG_RESOLVER("Package main fallback resolution result: %s", result ? result : "NULL");
     }
   }
 

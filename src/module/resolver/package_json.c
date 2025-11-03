@@ -236,8 +236,21 @@ char* jsrt_package_resolve_exports(const JSRT_PackageJson* pkg, const char* subp
   JSValue export_value = JS_GetPropertyStr(ctx, pkg->exports, subpath);
   if (JS_IsUndefined(export_value)) {
     JS_FreeValue(ctx, export_value);
-    MODULE_DEBUG_RESOLVER("Subpath '%s' not found in exports", subpath);
-    return NULL;
+
+    // If subpath not found and it's the main entry ('.'), try 'default' export
+    if (strcmp(subpath, ".") == 0) {
+      MODULE_DEBUG_RESOLVER("Subpath '%s' not found in exports, trying 'default' export", subpath);
+      export_value = JS_GetPropertyStr(ctx, pkg->exports, "default");
+      if (JS_IsUndefined(export_value)) {
+        JS_FreeValue(ctx, export_value);
+        MODULE_DEBUG_RESOLVER("No 'default' export found either");
+        return NULL;
+      }
+      MODULE_DEBUG_RESOLVER("Found 'default' export for main entry");
+    } else {
+      MODULE_DEBUG_RESOLVER("Subpath '%s' not found in exports", subpath);
+      return NULL;
+    }
   }
 
   char* result = NULL;

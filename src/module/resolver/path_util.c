@@ -257,19 +257,14 @@ bool jsrt_is_safe_path(const char* path) {
   // Check for absolute paths that might access system directories
   if (jsrt_is_absolute_path(path)) {
     // On Unix, check for dangerous system paths
-    if (strncmp(path, "/etc/", 5) == 0 ||
-        strncmp(path, "/bin/", 5) == 0 ||
-        strncmp(path, "/sbin/", 6) == 0 ||
-        strncmp(path, "/usr/", 5) == 0 ||
-        strncmp(path, "/var/", 5) == 0 ||
-        strncmp(path, "/sys/", 5) == 0 ||
+    if (strncmp(path, "/etc/", 5) == 0 || strncmp(path, "/bin/", 5) == 0 || strncmp(path, "/sbin/", 6) == 0 ||
+        strncmp(path, "/usr/", 5) == 0 || strncmp(path, "/var/", 5) == 0 || strncmp(path, "/sys/", 5) == 0 ||
         strncmp(path, "/proc/", 6) == 0) {
       return false;
     }
 
     // On Windows, check for dangerous system paths
-    if (strncasecmp(path, "C:\\Windows\\", 12) == 0 ||
-        strncasecmp(path, "C:\\Program Files\\", 17) == 0 ||
+    if (strncasecmp(path, "C:\\Windows\\", 12) == 0 || strncasecmp(path, "C:\\Program Files\\", 17) == 0 ||
         strncasecmp(path, "C:\\ProgramData\\", 15) == 0) {
       return false;
     }
@@ -283,8 +278,7 @@ bool jsrt_is_safe_path(const char* path) {
   // Check for suspicious patterns
   if (strstr(path, "://") != NULL) {
     // Allow certain protocols but check for dangerous ones
-    if (strncasecmp(path, "file://", 7) != 0 &&
-        strncasecmp(path, "http://", 7) != 0 &&
+    if (strncasecmp(path, "file://", 7) != 0 && strncasecmp(path, "http://", 7) != 0 &&
         strncasecmp(path, "https://", 8) != 0) {
       return false;
     }

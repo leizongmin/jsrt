@@ -16,6 +16,7 @@
 #include "module/module.h"
 #include "module/protocols/file_handler.h"
 #include "module/protocols/protocol_registry.h"
+#include "node/module/sourcemap.h"
 #include "node/net/net_internal.h"
 #include "node/process/process.h"
 #include "node/process/process_node.h"
@@ -200,6 +201,12 @@ JSRT_Runtime* JSRT_RuntimeNew() {
     JSRT_Debug("Failed to create module loader");
   }
 
+  // Initialize source map cache (16 buckets default)
+  rt->source_map_cache = jsrt_source_map_cache_init(rt->ctx, 16);
+  if (!rt->source_map_cache) {
+    JSRT_Debug("Failed to create source map cache");
+  }
+
   JSRT_RuntimeSetupStdConsole(rt);
   JSRT_RuntimeSetupStdTimer(rt);
   JSRT_RuntimeSetupStdEncoding(rt);
@@ -243,6 +250,12 @@ void JSRT_RuntimeFree(JSRT_Runtime* rt) {
   if (rt->module_loader) {
     jsrt_module_loader_free(rt->module_loader);
     rt->module_loader = NULL;
+  }
+
+  // Cleanup source map cache
+  if (rt->source_map_cache) {
+    jsrt_source_map_cache_free(rt->rt, rt->source_map_cache);
+    rt->source_map_cache = NULL;
   }
 
   // Cleanup protocol registry

@@ -539,28 +539,30 @@ Module.wrapper = [
 :ID: phase-2
 :CREATED: 2025-10-31T00:00:00Z
 :DEPS: phase-1
-:PROGRESS: 0/28
-:COMPLETION: 0%
+:PROGRESS: 6/71
+:COMPLETION: 8.5%
 :END:
 
 Implement source map parsing, lookup, and the SourceMap class.
 
-*** TODO [#A] Task 2.1: Source Map Infrastructure [S][R:MED][C:MEDIUM]
+*** DONE [#A] Task 2.1: Source Map Infrastructure [S][R:MED][C:MEDIUM]
+CLOSED: [2025-11-03 03:13]
 :PROPERTIES:
 :ID: 2.1
 :CREATED: 2025-10-31T00:00:00Z
+:COMPLETED: 2025-11-03T03:13:00Z
 :DEPS: phase-1
 :END:
 
 Set up source map storage and management.
 
 **** Subtasks
-- [ ] Create ~src/node/module/sourcemap.c~ and ~.h~
-- [ ] Define ~SourceMap~ data structure
-- [ ] Add to build system
-- [ ] Create source map registry (path → source map mapping)
-- [ ] Implement source map storage lifecycle
-- [ ] Add cleanup on module unload
+- [X] Create ~src/node/module/sourcemap.c~ and ~.h~
+- [X] Define ~SourceMap~ data structure
+- [X] Add to build system
+- [X] Create source map registry (path → source map mapping)
+- [X] Implement source map storage lifecycle
+- [X] Add cleanup on module unload
 
 **** Data Structure
 #+BEGIN_SRC c
@@ -1406,17 +1408,17 @@ Complete documentation and examples.
 
 * 🚀 Execution Dashboard
 :PROPERTIES:
-:CURRENT_PHASE: Phase 1 - COMPLETED ✅
-:PROGRESS: 10/153
-:COMPLETION: 6.5%
-:ACTIVE_TASK: Phase 1 Complete - Ready for Phase 2
-:UPDATED: 2025-11-03T02:37:00Z
+:CURRENT_PHASE: Phase 2 - IN PROGRESS 🔄
+:PROGRESS: 16/153
+:COMPLETION: 10.5%
+:ACTIVE_TASK: Task 2.2 - Source Map Parsing (VLQ Decoder)
+:UPDATED: 2025-11-03T03:13:00Z
 :END:
 
 ** Current Status
-- Phase: Phase 1 COMPLETED ✅
-- Progress: 10/153 tasks (6.5%)
-- Active: All Phase 1 tasks complete, ready for Phase 2 (Source Maps)
+- Phase: Phase 2 IN PROGRESS 🔄 (Source Map Support)
+- Progress: 16/153 tasks (10.5%)
+- Active: Task 2.1 complete ✅, starting Task 2.2 (VLQ Decoder)
 
 ** Completed (Phase 1)
 1. [X] Task 1.1: Project Structure Setup
@@ -1430,25 +1432,30 @@ Complete documentation and examples.
 9. [X] Task 1.9: Module._extensions Implementation
 10. [X] Task 1.10: Module Compilation Methods
 
+** Completed (Phase 2)
+1. [X] Task 2.1: Source Map Infrastructure ✅
+
 ** Next Steps (Phase 2)
-1. [ ] Task 2.1: Source Map Infrastructure
-2. [ ] Task 2.2: Source Map Parsing
-3. [ ] Task 2.3: SourceMap Class Implementation
+1. [ ] Task 2.2: Source Map Parsing (VLQ Decoder) ← IN PROGRESS
+2. [ ] Task 2.3: SourceMap Class Implementation
+3. [ ] Task 2.4: SourceMap.findEntry() Method
 
 ** Phase Overview
 | Phase | Title | Tasks | Status | Completion |
 |-------|-------|-------|--------|------------|
 | 1 | Foundation & Core API | 10 | ✅ DONE | 100% |
-| 2 | Source Map Support | 28 | TODO | 0% |
+| 2 | Source Map Support | 71 | 🔄 IN PROGRESS | 8.5% |
 | 3 | Compilation Cache | 26 | TODO | 0% |
 | 4 | Module Hooks (Basic) | 32 | TODO | 0% |
 | 5 | Package.json Utilities | 12 | TODO | 0% |
 | 6 | Advanced Features | 15 | TODO | 0% |
 | 7 | Testing & QA | 5 | TODO | 0% |
-| **Total** | | **128** | | **7.8%** |
+| **Total** | | **171** | | **9.4%** |
 
 * 📜 History & Updates
 :LOGBOOK:
+- Note taken on [2025-11-03T03:13:00Z] \\
+  Task 2.1 COMPLETED: Source map infrastructure implemented (cache, lifecycle, runtime integration)
 - Note taken on [2025-11-03T02:37:00Z] \\
   Phase 1 COMPLETED: All 10 core module API tasks implemented and tested
 - Note taken on [2025-10-31T00:00:00Z] \\
@@ -1458,6 +1465,7 @@ Complete documentation and examples.
 ** Recent Changes
 | Timestamp | Action | Task ID | Details |
 |-----------|--------|---------|---------|
+| 2025-11-03T03:13:00Z | Completed | 2.1 | Source map cache & infrastructure, tests passing ✅ |
 | 2025-11-03T02:37:00Z | Completed | Phase 1 | All 10 tasks done, 100% tests passing |
 | 2025-11-03T02:36:00Z | Completed | 1.10 | Module._compile() and compilation methods |
 | 2025-11-03T02:35:00Z | Completed | 1.5 | module.createRequire() for ESM contexts |

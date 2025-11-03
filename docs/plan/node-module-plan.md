@@ -539,8 +539,8 @@ Module.wrapper = [
 :ID: phase-2
 :CREATED: 2025-10-31T00:00:00Z
 :DEPS: phase-1
-:PROGRESS: 27/71
-:COMPLETION: 38.0%
+:PROGRESS: 33/71
+:COMPLETION: 46.5%
 :END:
 
 Implement source map parsing, lookup, and the SourceMap class.
@@ -677,22 +677,24 @@ Implement zero-indexed position lookup.
 // Or {} if no mapping found
 #+END_SRC
 
-*** TODO [#A] Task 2.5: SourceMap.findOrigin() Method [S][R:MED][C:MEDIUM][D:2.3]
+*** DONE [#A] Task 2.5: SourceMap.findOrigin() Method [S][R:MED][C:MEDIUM][D:2.3]
+CLOSED: [2025-11-03 03:36]
 :PROPERTIES:
 :ID: 2.5
 :CREATED: 2025-10-31T00:00:00Z
+:COMPLETED: 2025-11-03T03:36:00Z
 :DEPS: 2.3
 :END:
 
 Implement one-indexed position lookup (for Error stacks).
 
 **** Subtasks
-- [ ] Implement ~sourceMap.findOrigin(lineNumber, columnNumber)~
-- [ ] Convert one-indexed to zero-indexed
-- [ ] Call ~findEntry()~ internally
-- [ ] Convert result back to one-indexed
-- [ ] Return ~{ fileName, lineNumber, columnNumber, name }~
-- [ ] Handle missing mappings
+- [X] Implement ~sourceMap.findOrigin(lineNumber, columnNumber)~
+- [X] Convert one-indexed to zero-indexed
+- [X] Call ~findEntry()~ internally
+- [X] Convert result back to one-indexed
+- [X] Return ~{ fileName, lineNumber, columnNumber, name }~
+- [X] Handle missing mappings
 
 **** Return Format
 #+BEGIN_SRC javascript
@@ -1415,16 +1417,16 @@ Complete documentation and examples.
 * 🚀 Execution Dashboard
 :PROPERTIES:
 :CURRENT_PHASE: Phase 2 - IN PROGRESS 🔄
-:PROGRESS: 37/171
-:COMPLETION: 21.6%
-:ACTIVE_TASK: Task 2.5 - SourceMap.findOrigin() Method
-:UPDATED: 2025-11-03T03:31:00Z
+:PROGRESS: 43/171
+:COMPLETION: 25.1%
+:ACTIVE_TASK: Task 2.6 - module.findSourceMap() Implementation
+:UPDATED: 2025-11-03T03:36:00Z
 :END:
 
 ** Current Status
 - Phase: Phase 2 IN PROGRESS 🔄 (Source Map Support)
-- Progress: 37/171 tasks (21.6%)
-- Active: Task 2.4 complete ✅ (SourceMap.findEntry()), ready for Task 2.5 (findOrigin)
+- Progress: 43/171 tasks (25.1%)
+- Active: Task 2.5 complete ✅ (SourceMap.findOrigin()), ready for Task 2.6 (module.findSourceMap)
 
 ** Completed (Phase 1)
 1. [X] Task 1.1: Project Structure Setup
@@ -1443,26 +1445,29 @@ Complete documentation and examples.
 2. [X] Task 2.2: Source Map Parsing & VLQ Decoder ✅
 3. [X] Task 2.3: SourceMap Class Implementation ✅
 4. [X] Task 2.4: SourceMap.findEntry() Method ✅
+5. [X] Task 2.5: SourceMap.findOrigin() Method ✅
 
 ** Next Steps (Phase 2)
-1. [ ] Task 2.5: SourceMap.findOrigin() Method ← READY TO START
-2. [ ] Task 2.6: module.findSourceMap() Implementation
-3. [ ] Task 2.7: Source Map Support Configuration
+1. [ ] Task 2.6: module.findSourceMap() Implementation ← READY TO START
+2. [ ] Task 2.7: Source Map Support Configuration
+3. [ ] Task 2.8: Error Stack Integration
 
 ** Phase Overview
 | Phase | Title | Tasks | Status | Completion |
 |-------|-------|-------|--------|------------|
 | 1 | Foundation & Core API | 10 | ✅ DONE | 100% |
-| 2 | Source Map Support | 71 | 🔄 IN PROGRESS | 38.0% |
+| 2 | Source Map Support | 71 | 🔄 IN PROGRESS | 46.5% |
 | 3 | Compilation Cache | 26 | TODO | 0% |
 | 4 | Module Hooks (Basic) | 32 | TODO | 0% |
 | 5 | Package.json Utilities | 12 | TODO | 0% |
 | 6 | Advanced Features | 15 | TODO | 0% |
 | 7 | Testing & QA | 5 | TODO | 0% |
-| **Total** | | **171** | | **21.6%** |
+| **Total** | | **171** | | **25.1%** |
 
 * 📜 History & Updates
 :LOGBOOK:
+- Note taken on [2025-11-03T03:36:00Z] \\
+  Task 2.5 COMPLETED: SourceMap.findOrigin() method (1-indexed wrapper around findEntry, 13/13 tests passing)
 - Note taken on [2025-11-03T03:31:00Z] \\
   Task 2.4 COMPLETED: SourceMap.findEntry() method (binary search, VLQ decoding to mappings, 13/13 tests passing)
 - Note taken on [2025-11-03T03:23:00Z] \\
@@ -1480,6 +1485,7 @@ Complete documentation and examples.
 ** Recent Changes
 | Timestamp | Action | Task ID | Details |
 |-----------|--------|---------|---------|
+| 2025-11-03T03:36:00Z | Completed | 2.5 | SourceMap.findOrigin() 1-indexed wrapper, calls findEntry internally, 13/13 tests passing ✅ |
 | 2025-11-03T03:31:00Z | Completed | 2.4 | SourceMap.findEntry() with binary search, VLQ→mapping conversion, 13/13 tests passing ✅ |
 | 2025-11-03T03:23:00Z | Completed | 2.3 | SourceMap class with payload, findEntry, findOrigin, 13/13 tests passing ✅ |
 | 2025-11-03T03:19:00Z | Completed | 2.2 | VLQ decoder & JSON parsing, 12/12 module tests passing ✅ |

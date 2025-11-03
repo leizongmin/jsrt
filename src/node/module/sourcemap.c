@@ -897,10 +897,71 @@ static JSValue jsrt_source_map_find_origin(JSContext* ctx, JSValueConst this_val
   int32_t line_offset = line_number - 1;
   int32_t column_offset = column_number - 1;
 
-  // TODO: Task 2.5 will implement by calling findEntry internally
-  JSRT_Debug("findOrigin called with line=%d, column=%d (not yet implemented)", line_number, column_number);
+  // Call findEntry internally with zero-indexed offsets
+  JSValue argv_entry[2];
+  argv_entry[0] = JS_NewInt32(ctx, line_offset);
+  argv_entry[1] = JS_NewInt32(ctx, column_offset);
 
+  JSValue entry = jsrt_source_map_find_entry(ctx, this_val, 2, argv_entry);
+  JS_FreeValue(ctx, argv_entry[0]);
+  JS_FreeValue(ctx, argv_entry[1]);
+
+  if (JS_IsException(entry)) {
+    return JS_EXCEPTION;
+  }
+
+  // Check if entry is empty (no mapping found)
+  JSPropertyEnum* props = NULL;
+  uint32_t count = 0;
+  if (JS_GetOwnPropertyNames(ctx, &props, &count, entry, JS_GPN_ENUM_ONLY) < 0) {
+    JS_FreeValue(ctx, entry);
+    return JS_EXCEPTION;
+  }
+
+  if (count == 0) {
+    // No mapping found, return undefined
+    js_free(ctx, props);
+    JS_FreeValue(ctx, entry);
+    return JS_UNDEFINED;
+  }
+  js_free(ctx, props);
+
+  // Extract fields from entry and convert to findOrigin format
   JSValue result = JS_NewObject(ctx);
+
+  // Get originalSource → fileName
+  JSValue original_source = JS_GetPropertyStr(ctx, entry, "originalSource");
+  if (!JS_IsUndefined(original_source)) {
+    JS_SetPropertyStr(ctx, result, "fileName", original_source);
+  }
+
+  // Get originalLine and convert to 1-indexed → lineNumber
+  JSValue original_line = JS_GetPropertyStr(ctx, entry, "originalLine");
+  if (JS_IsNumber(original_line)) {
+    int32_t line_val;
+    JS_ToInt32(ctx, &line_val, original_line);
+    JS_SetPropertyStr(ctx, result, "lineNumber", JS_NewInt32(ctx, line_val + 1));
+  }
+  JS_FreeValue(ctx, original_line);
+
+  // Get originalColumn and convert to 1-indexed → columnNumber
+  JSValue original_column = JS_GetPropertyStr(ctx, entry, "originalColumn");
+  if (JS_IsNumber(original_column)) {
+    int32_t col_val;
+    JS_ToInt32(ctx, &col_val, original_column);
+    JS_SetPropertyStr(ctx, result, "columnNumber", JS_NewInt32(ctx, col_val + 1));
+  }
+  JS_FreeValue(ctx, original_column);
+
+  // Get name (optional)
+  JSValue name = JS_GetPropertyStr(ctx, entry, "name");
+  if (!JS_IsUndefined(name)) {
+    JS_SetPropertyStr(ctx, result, "name", name);
+  } else {
+    JS_FreeValue(ctx, name);
+  }
+
+  JS_FreeValue(ctx, entry);
   return result;
 }
 

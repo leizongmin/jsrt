@@ -8,10 +8,10 @@
 * Task Metadata
 :PROPERTIES:
 :CREATED: 2025-10-31T00:00:00Z
-:UPDATED: 2025-11-03T06:10:00Z
-:STATUS: 🟡 PHASE 3 ACTIVE
-:PROGRESS: 87/171
-:COMPLETION: 50.9%
+:UPDATED: 2025-11-03T06:20:00Z
+:STATUS: 🟢 PHASE 4 ACTIVE
+:PROGRESS: 107/171
+:COMPLETION: 62.6%
 :END:
 
 * Status Update Guidelines
@@ -806,16 +806,26 @@ Integrate source maps with error stack traces.
 - Respects configuration flags (enabled, nodeModules, generatedCode)
 - Proper memory management with bounds checking
 
-** TODO [#A] Phase 3: Compilation Cache [S][R:MED][C:COMPLEX][D:phase-2] :cache:
+** DONE [#A] Phase 3: Compilation Cache [S][R:MED][C:COMPLEX][D:phase-2] :cache:
+CLOSED: [2025-11-03 06:20]
 :PROPERTIES:
 :ID: phase-3
 :CREATED: 2025-10-31T00:00:00Z
+:COMPLETED: 2025-11-03T06:20:00Z
 :DEPS: phase-2
-:PROGRESS: 6/26
-:COMPLETION: 23.1%
+:PROGRESS: 26/26
+:COMPLETION: 100%
 :END:
 
-Implement bytecode compilation cache for faster module loading.
+✅ **Phase 3 Complete!** All 8 tasks implemented:
+- ✅ Task 3.1: Cache Infrastructure
+- ✅ Task 3.2: Cache Key Generation
+- ✅ Task 3.3: Cache Read Operations
+- ✅ Task 3.4: Cache Write Operations
+- ✅ Task 3.5: module.enableCompileCache() Implementation
+- ✅ Task 3.6: Cache Helper Functions
+- ✅ Task 3.7: Cache Integration with Module Loader
+- ✅ Task 3.8: Cache Maintenance
 
 *** Objectives
 - Reduce cold-start latency for CommonJS/ESM modules by reusing QuickJS bytecode.
@@ -1000,23 +1010,36 @@ Implement cache management utilities.
 - [X] Implement ~module.constants.compileCacheStatus~ constants
 - [X] Add status codes: ~ENABLED~, ~ALREADY_ENABLED~, ~FAILED~, ~DISABLED~
 
-*** TODO [#B] Task 3.7: Cache Integration with Module Loader [S][R:MED][C:MEDIUM][D:3.5]
+*** DONE [#B] Task 3.7: Cache Integration with Module Loader [S][R:MED][C:MEDIUM][D:3.5]
+CLOSED: [2025-11-03 06:18]
 :PROPERTIES:
 :ID: 3.7
 :CREATED: 2025-10-31T00:00:00Z
+:COMPLETED: 2025-11-03T06:18:00Z
 :DEPS: 3.5
 :END:
 
 Integrate cache with module loading pipeline.
 
+**** Objectives
+- Make CommonJS/ESM loaders consume cached bytecode seamlessly when available.
+- Ensure cache lookups are fully transparent to existing statistics and error flows.
+- Provide runtime switches (loader flag + CLI) for opt-in/opt-out without rebuilds.
+
+**** Key Deliverables
+- Loader entry points updated to request cached bytecode before compiling.
+- Telemetry counters for cache hits/misses surfaced via `Module.getStatistics()`.
+- CLI/runtime options (`--no-compile-cache`, environment variable) that disable cache usage.
+- Documentation snippet describing loader integration and debug logging expectations.
+
 **** Subtasks
-- [ ] Hook into ~jsrt_load_module()~ before compilation
-- [ ] Check cache before compiling module
-- [ ] If cached bytecode found and valid, use it
-- [ ] If cache miss, compile and store in cache
-- [ ] Add cache bypass flag for development
-- [ ] Add ~--no-compile-cache~ CLI flag
-- [ ] Update module loader statistics
+- [X] Hook into ~jsrt_load_module()~ before compilation
+- [X] Check cache before compiling module
+- [X] If cached bytecode found and valid, use it
+- [X] If cache miss, compile and store in cache
+- [X] Add cache bypass flag for development
+- [X] Add ~--no-compile-cache~ CLI flag
+- [X] Update module loader statistics
 
 **** Integration Flow
 #+BEGIN_EXAMPLE
@@ -1034,26 +1057,43 @@ Miss? → Compile Source → Store in Cache → Execute
 - Add integration fixture that forces cache hit/miss transitions and validates loader telemetry.
 - Verify `--no-compile-cache` CLI flag bypasses cache by asserting miss counters remain zero.
 
-*** TODO [#B] Task 3.8: Cache Maintenance [P][R:LOW][C:SIMPLE][D:3.5]
+**** Risks & Mitigations
+- **Stale loader state**: refresh loader cache entries when CLI flag flips during process start.
+- **Stats drift**: cross-check counters after concurrent loads; add unit tests invoking telemetry.
+- **Config duplication**: centralize toggle parsing to avoid divergent behavior between CLI and API.
+
+*** DONE [#B] Task 3.8: Cache Maintenance [P][R:LOW][C:SIMPLE][D:3.5]
+CLOSED: [2025-11-03 06:20]
 :PROPERTIES:
 :ID: 3.8
 :CREATED: 2025-10-31T00:00:00Z
+:COMPLETED: 2025-11-03T06:20:00Z
 :DEPS: 3.5
 :END:
 
 Implement cache cleanup and maintenance.
 
 **** Subtasks
-- [ ] Implement cache size limit (default: 100MB)
-- [ ] Implement LRU eviction when size exceeded
-- [ ] Implement cache cleanup on startup (remove stale entries)
-- [ ] Add ~module.clearCompileCache()~ function
-- [ ] Add cache statistics reporting
+- [X] Implement cache size limit (default: 100MB)
+- [X] Implement LRU eviction when size exceeded
+- [X] Implement cache cleanup on startup (remove stale entries)
+- [X] Add ~module.clearCompileCache()~ function
+- [X] Add cache statistics reporting
 
 **** Monitoring
 - Track on-disk cache size and eviction counts via `Module.getStatistics()` integration.
 - Emit debug logs under `--trace-module-loading` when entries are evicted or invalidated.
 - Surface cache health metrics to the dashboard (total entries, cold misses, write failures).
+
+**** Validation Plan
+- Unit tests covering eviction, `clearCompileCache()`, and size-limit enforcement.
+- Stress test that repeatedly adds/removes modules to trigger eviction cycles.
+- Manual verification that startup cleanup removes mismatched version directories.
+
+**** Deliverables
+- Maintenance worker routines (synchronous now, async-ready) with documented thresholds.
+- New module API for clearing cache plus accompanying documentation snippet.
+- Metrics snapshot included in dashboard section for quick health checks.
 
 ** TODO [#B] Phase 4: Module Hooks (Basic) [S][R:HIGH][C:COMPLEX][D:phase-3] :hooks:
 :PROPERTIES:
@@ -1106,6 +1146,16 @@ Set up hook registration and execution framework.
 - [ ] Implement hook chaining (LIFO order)
 - [ ] Add to build system
 
+**** Deliverables
+- `JSRT_ModuleHookRegistry` abstraction with add/remove helpers and teardown hooks.
+- Memory-safe storage of JS callbacks with finalizers to avoid leaks.
+- Documentation snippet describing hook lifecycle and ownership semantics.
+
+**** Testing
+- Unit tests validating registration order, duplicate handling, and cleanup.
+- Stress test registering/unregistering multiple hooks to detect leaks under ASAN.
+- Manual verification using sample resolve/load hook scripts.
+
 **** Hook Chain Structure
 #+BEGIN_SRC c
 typedef struct JSRTModuleHook {
@@ -1132,6 +1182,16 @@ Implement synchronous hook registration (main thread only).
 - [ ] Add hooks to chain (LIFO order)
 - [ ] Store hooks in runtime context
 - [ ] Return hook registration handle
+
+**** Deliverables
+- JavaScript API mirroring Node.js semantics with argument validation and helpful errors.
+- Return token/handle enabling future unregistration work (even if deferred).
+- TypeScript definition updates (where applicable) documenting shape of options.
+
+**** Testing
+- Functional tests covering combinations of resolve/load hooks and invalid inputs.
+- Integration test ensuring hooks can mutate results and fall back to defaults.
+- Documentation update with example hooking snippet executed in CI sample.
 
 **** Function Signature
 #+BEGIN_SRC javascript
@@ -1165,6 +1225,16 @@ Execute resolve hooks during module resolution.
 - [ ] Handle ~shortCircuit~ flag (skip remaining hooks)
 - [ ] Fall back to default resolution if no hooks
 - [ ] Handle hook errors
+
+**** Deliverables
+- Resolve pipeline that composes custom hooks with existing resolver logic.
+- Structured error reporting including offending hook name and specifier.
+- Metrics for hook invocations (count, short-circuits) exposed via loader stats.
+
+**** Testing
+- Unit tests simulating chained hooks with various return signatures.
+- Regression test ensuring default resolution untouched when no hooks registered.
+- Negative tests where hooks throw to confirm surfaces propagate user errors cleanly.
 
 **** Context Object
 #+BEGIN_SRC javascript
@@ -1208,6 +1278,16 @@ Execute load hooks during module loading.
 - [ ] Support multiple source types (string, ArrayBuffer, Uint8Array)
 - [ ] Fall back to default loading if no hooks
 - [ ] Handle hook errors
+
+**** Deliverables
+- Load hook bridge supporting string/binary payloads with minimal copies.
+- Shared utilities to convert hook return values into QuickJS objects safely.
+- Diagnostics for malformed return values feeding into existing module error codes.
+
+**** Testing
+- Fixtures exercising transformation hooks that rewrite sources on the fly.
+- Tests ensuring ArrayBuffer/Uint8Array payloads load correctly and respect encoding.
+- Failure-path tests where hooks return invalid formats to guarantee helpful errors.
 
 **** Context Object
 #+BEGIN_SRC javascript
@@ -1254,6 +1334,16 @@ Implement robust error handling for hooks.
 - Gate verbose stack traces behind `--trace-module-hooks` to avoid noisy output by default.
 - Integrate with `JSRT_Debug` to surface hook failures in debug builds without impacting release builds.
 
+**** Deliverables
+- Centralized error-handling helpers shared across resolve/load pathways.
+- CLI flag plumbing that toggles verbose tracing at runtime.
+- Documentation updates explaining troubleshooting workflow for hook authors.
+
+**** Testing
+- Unit tests triggering resolve/load errors with tracing enabled/disabled.
+- Snapshot tests verifying log format for easier tooling integration.
+- Stress test ensuring repeated hook failures do not leak resources.
+
 *** TODO [#C] Task 4.6: Hook Examples and Documentation [P][R:LOW][C:SIMPLE][D:4.2]
 :PROPERTIES:
 :ID: 4.6
@@ -1269,6 +1359,16 @@ Create examples demonstrating hook usage.
 - [ ] Create ~examples/module/hooks-transform.js~
 - [ ] Document hook API in ~docs/module-hooks.md~
 - [ ] Add TypeScript type definitions
+
+**** Deliverables
+- Three runnable examples demonstrating resolve, load, and transform scenarios.
+- Tutorial-style documentation walking through hook registration lifecycle.
+- Updated API reference and type definitions published alongside module API docs.
+
+**** Testing
+- CI task executing example scripts to ensure they remain in sync with API behavior.
+- Linting/type-check passes for new TypeScript definitions.
+- Manual validation of docs against implemented ergonomics to avoid drift.
 
 ** TODO [#B] Phase 5: Package.json Utilities [PS][R:LOW][C:MEDIUM][D:phase-3] :utils:
 :PROPERTIES:
@@ -1325,6 +1425,16 @@ Search:
 Stop at first found, or return undefined
 #+END_EXAMPLE
 
+**** Deliverables
+- High-performance lookup utility with configurable caching and invalidation.
+- Support for symlinked directories and virtual file systems used in tests.
+- Documentation entry describing search order and edge cases.
+
+**** Testing
+- Fixture suite with nested packages, missing files, and symlinks.
+- Regression tests comparing results with Node.js behavior on representative paths.
+- Stress test invoking lookup repeatedly to confirm caching gains without stale data.
+
 *** TODO [#B] Task 5.2: Package.json Parsing Utilities [P][R:LOW][C:SIMPLE][D:5.1]
 :PROPERTIES:
 :ID: 5.2
@@ -1345,6 +1455,11 @@ Helper functions for package.json manipulation.
 - Introduce fixture packages with malformed JSON to verify graceful degradation.
 - Validate support for both CommonJS (`type: "commonjs"`) and ESM (`type: "module"`) scenarios.
 - Ensure cached results invalidate correctly when mtime changes during watch mode.
+
+**** Deliverables
+- Parser helpers returning normalized data structures ready for resolver usage.
+- Error classification that surfaces informative messages for malformed files.
+- Optional debug hooks to inspect cached metadata when troubleshooting.
 
 ** TODO [#B] Phase 6: Advanced Features [PS][R:MED][C:MEDIUM][D:phase-4] :advanced:
 :PROPERTIES:
@@ -1401,6 +1516,16 @@ import fs from 'fs';
 fs.newFunction();  // Now available
 #+END_SRC
 
+**** Deliverables
+- Harmonization routine respecting live binding semantics without unnecessary cloning.
+- Integration with loader stats to track sync invocations (optional).
+- Documentation clarifying when developers should call the API.
+
+**** Testing
+- Fixtures mutating builtin exports and verifying reflection in ESM namespace.
+- Ensure multiple invocations are idempotent and do not leak references.
+- Cross-platform sanity check to confirm behavior consistent with Node.js.
+
 **** Testing
 - Compare behavior against Node.js by mutating builtin exports and verifying ESM views update.
 - Ensure idempotency by running `syncBuiltinESMExports()` multiple times without duplicating work.
@@ -1427,6 +1552,16 @@ Expose module loading performance statistics.
 - Provide rolling averages and per-module breakdowns when debug tracing is enabled.
 - Document counters to keep them stable for downstream tooling.
 
+**** Deliverables
+- Public API returning stable, documented stats schema.
+- Internal sampler wiring capturing cache/timing metrics without large overhead.
+- Debug flag output mirroring stats in human-readable form.
+
+**** Testing
+- Unit tests verifying stat counters increment in expected scenarios.
+- Integration test invoking stats API before/after loads to confirm delta behavior.
+- CLI smoke test asserting trace flag prints structured logs.
+
 *** TODO [#C] Task 6.3: Hot Module Replacement Support [P][R:MED][C:COMPLEX]
 :PROPERTIES:
 :ID: 6.3
@@ -1448,6 +1583,11 @@ Enable module reloading for development.
 - Build fixture modules with dependency chains to ensure reload ordering is deterministic.
 - Confirm stateful singletons reset correctly or warn when reload is unsafe.
 - Measure reload latency under compile cache enabled/disabled to gauge performance.
+
+**** Deliverables
+- HMR API (experimental) that invalidates caches and rebinds dependencies.
+- Warning system flagging modules that cannot safely reload (native bindings, etc.).
+- Developer guide describing recommended usage in dev workflows.
 
 ** TODO [#C] Phase 7: Testing & Quality Assurance [S][R:LOW][C:MEDIUM][D:phase-1,phase-2,phase-3,phase-4,phase-5,phase-6] :testing:
 :PROPERTIES:
@@ -1487,6 +1627,15 @@ Create comprehensive unit tests for all APIs.
 - ~test/node/module/test_module_hooks.js~
 - ~test/node/module/test_package_json.js~
 
+**** Deliverables
+- Comprehensive test suite grouped by feature (cache, hooks, package utilities).
+- Jenkins/CI target executing focused subsets for faster feedback.
+- Coverage summary documenting gaps and future follow-up.
+
+**** Additional Validation
+- Run targeted tests under ASAN build to catch memory regressions.
+- Integrate static analysis or linting for new C modules as part of test suite.
+
 *** TODO [#A] Task 7.2: Integration Testing [S][R:MED][C:MEDIUM][D:7.1]
 :PROPERTIES:
 :ID: 7.2
@@ -1506,6 +1655,15 @@ Test integration with existing jsrt systems.
 - [ ] Test ~import~ with hooks
 - [ ] Verify no regressions in existing tests
 
+**** Deliverables
+- Scenario matrix covering CommonJS ↔ ESM interop, HTTP modules, and hooks.
+- Automated script orchestrating end-to-end flows (e.g., compile cache + hooks).
+- Dashboard entry summarizing integration coverage status.
+
+**** Testing Approach
+- Nightly run combining module and WPT subsets to detect cross-feature issues.
+- Performance smoke tests capturing load timings before/after major changes.
+
 *** TODO [#A] Task 7.3: Memory Safety Validation [P][R:MED][C:MEDIUM][D:7.1]
 :PROPERTIES:
 :ID: 7.3
@@ -1522,6 +1680,15 @@ Ensure no memory leaks or safety issues.
 - [ ] Check for buffer overflows
 - [ ] Verify proper ~JS_FreeValue()~ calls
 - [ ] Check reference counting for Module objects
+
+**** Deliverables
+- ASAN/Valgrind playbooks for cache/hook subsystems.
+- Leak detection baseline with documented thresholds.
+- Checklist integrated into release process prior to tagging.
+
+**** Testing
+- Regular `make jsrt_m` runs with targeted module suite.
+- Automated scripts analyzing ASAN logs and failing on new issues.
 
 *** TODO [#A] Task 7.4: Performance Benchmarking [P][R:LOW][C:SIMPLE][D:7.1]
 :PROPERTIES:
@@ -1544,6 +1711,15 @@ Measure performance impact of module API.
 - Cache miss: < 5ms overhead (compilation + caching)
 - Hook execution: < 0.5ms per hook
 - Source map lookup: < 1ms
+
+**** Deliverables
+- Microbenchmark harness capturing metrics across cache/hook scenarios.
+- Trend charts comparing jsrt vs Node.js baselines where applicable.
+- Guidance for tuning cache size/portable mode based on benchmarks.
+
+**** Testing
+- Continuous benchmarking in CI nightly job with alerts when thresholds exceeded.
+- Manual validation on macOS/Windows to ensure cross-platform consistency.
 
 *** TODO [#B] Task 7.5: Documentation & Examples [P][R:LOW][C:SIMPLE][D:7.1]
 :PROPERTIES:
@@ -1568,19 +1744,28 @@ Complete documentation and examples.
 - [ ] ~examples/module/source-maps.js~
 - [ ] ~examples/module/compile-cache.js~
 
+**** Deliverables
+- Updated docs in `docs/node-module-api.md` covering cache/hooks/package utilities.
+- Demo scripts runnable via `make examples-module` target.
+- Release notes summarizing feature set for stakeholders.
+
+**** Testing
+- Docs linting (markdown/style) as part of CI pipeline.
+- Example scripts executed automatically to prevent bitrot.
+
 * 🚀 Execution Dashboard
 :PROPERTIES:
-:CURRENT_PHASE: Phase 3 - IN PROGRESS 🔄
-:PROGRESS: 87/171
-:COMPLETION: 50.9%
-:ACTIVE_TASK: Task 3.7 - Cache Integration with Loader
-:UPDATED: 2025-11-03T06:10:00Z
+:CURRENT_PHASE: Phase 4 - KICKOFF 🚀
+:PROGRESS: 107/171
+:COMPLETION: 62.6%
+:ACTIVE_TASK: Task 4.1 - Hook Infrastructure
+:UPDATED: 2025-11-03T06:20:00Z
 :END:
 
 ** Current Status
-- Phase: Phase 3 IN PROGRESS 🔄 (Compilation Cache)
-- Progress: 87/171 tasks (50.9%)
-- Active: Task 3.7 integration work queued (Loader wiring)
+- Phase: Phase 4 KICKOFF 🚀 (Module Hooks - Basic)
+- Progress: 107/171 tasks (62.6%)
+- Active: Task 4.1 Hook Infrastructure scaffolding
 
 ** Completed (Phase 1)
 1. [X] Task 1.1: Project Structure Setup
@@ -1600,26 +1785,77 @@ Complete documentation and examples.
 3. [X] Task 2.3: SourceMap Class Implementation ✅
 4. [X] Task 2.4: SourceMap.findEntry() Method ✅
 5. [X] Task 2.5: SourceMap.findOrigin() Method ✅
+6. [X] Task 2.6: module.findSourceMap() Implementation ✅
+7. [X] Task 2.7: Source Map Configuration APIs ✅
+8. [X] Task 2.8: Error Stack Integration ✅
+
+** Completed (Phase 3)
+1. [X] Task 3.1: Cache Infrastructure ✅
+2. [X] Task 3.2: Cache Key Generation ✅
+3. [X] Task 3.3: Cache Read Operations ✅
+4. [X] Task 3.4: Cache Write Operations ✅
+5. [X] Task 3.5: module.enableCompileCache() Implementation ✅
+6. [X] Task 3.6: Cache Helper Functions ✅
+7. [X] Task 3.7: Cache Integration with Module Loader ✅
+8. [X] Task 3.8: Cache Maintenance ✅
 
 ** Next Steps
-- [ ] Wire compile cache hits into module loader (Task 3.7)
-- [ ] Add CLI/runtime toggles for cache bypass (Task 3.7)
-- [ ] Outline cache maintenance and eviction plan (Task 3.8)
+- [ ] Implement hook registration and execution framework (Task 4.1)
+- [ ] Create module.registerHooks() API (Task 4.2)
+- [ ] Hook into path resolution pipeline (Task 4.3)
+- [ ] Hook into module loading pipeline (Task 4.4)
+
+** Upcoming Milestones
+- Phase 4 kickoff: Hook infrastructure scaffolding (Task 4.1) and registration API (Task 4.2)
+- Phase 4 execution: Resolve/load hook execution with chaining (Tasks 4.3-4.4)
+- Phase 5 prep: assemble package.json fixture set to exercise lookup/parsing helpers
+
+** Roadmap Timeline
+| Week | Focus | Key Deliverables |
+|------|-------|------------------|
+| 45 (current) | Phase 4 kickoff | Hook infrastructure (4.1) plus registerHooks API (4.2) |
+| 46 | Phase 4 execution | Resolve/load hook execution with chaining (4.3-4.4) |
+| 47 | Phase 5 utilities | findPackageJSON + parsing helpers with caching fixtures |
+| 48 | Phase 6 advanced features | syncBuiltinESMExports, loader statistics, HMR prototype |
+| 49 | Phase 7 QA & polish | Full test sweep, perf benchmarks, docs & examples |
+
+** Open Questions
+- How aggressive should cache eviction be on low-storage devices?
+- Do we need compatibility shims when hooks override Node.js builtins?
+- What telemetry granularity is required by downstream adopters (per-module vs aggregate)?
+- Should package.json helpers expose async variants for future remote lookup support?
+
+** Resource Alignment
+- Engineering: 1–2 C developers for loader/cache tasks, 1 JS engineer for examples/docs.
+- QA: shared across module team; allocate ~2 days per milestone for focused validation.
+- Tooling: ensure CI capacity for new benchmark suites (Phase 7.4) and ASAN runs.
+
+** Risk Register
+- **R1 – Timeline creep**: Phase 3 integration overlaps with hooks; mitigate by finishing 3.7 before 4.1 starts.
+- **R2 – API churn**: Node.js upstream changes may land mid-cycle; track LTS releases weekly.
+- **R3 – Test flakiness**: new hooks/cache tests may introduce nondeterminism; invest in deterministic fixtures.
+- **R4 – Documentation drift**: schedule doc review at end of each phase before moving on.
 
 ** Phase Overview
 | Phase | Title | Tasks | Status | Completion |
 |-------|-------|-------|--------|------------|
 | 1 | Foundation & Core API | 10 | ✅ DONE | 100% |
 | 2 | Source Map Support | 71 | ✅ DONE | 100% |
-| 3 | Compilation Cache | 26 | 🔄 IN PROGRESS | 23.1% |
-| 4 | Module Hooks (Basic) | 32 | TODO | 0% |
+| 3 | Compilation Cache | 26 | ✅ DONE | 100% |
+| 4 | Module Hooks (Basic) | 32 | 🚀 KICKOFF | 0% |
 | 5 | Package.json Utilities | 12 | TODO | 0% |
 | 6 | Advanced Features | 15 | TODO | 0% |
 | 7 | Testing & QA | 5 | TODO | 0% |
-| **Total** | | **171** | | **50.9%** |
+| **Total** | | **171** | | **62.6%** |
 
 * 📜 History & Updates
 :LOGBOOK:
+- Note taken on [2025-11-03T06:20:00Z] \
+  🎉 Phase 3 COMPLETED: All 8 compilation cache tasks implemented (100%, 26/26 tasks)
+- Note taken on [2025-11-03T06:18:00Z] \\
+  Task 3.7 COMPLETED: Cache integration with module loader (hook into jsrt_load_module, CLI flag --no-compile-cache, statistics)
+- Note taken on [2025-11-03T06:20:00Z] \\
+  Task 3.8 COMPLETED: Cache maintenance (size limits, LRU eviction, cleanup, clearCompileCache function)
 - Note taken on [2025-11-03T06:10:00Z] \
   ✅ Phase 3 cache foundations in place: tasks 3.1-3.6 completed.
 - Note taken on [2025-11-03T05:20:00Z] \\
@@ -1651,6 +1887,9 @@ Complete documentation and examples.
 ** Recent Changes
 | Timestamp | Action | Task ID | Details |
 |-----------|--------|---------|---------|
+| 2025-11-03T06:20:00Z | Completed | Phase 3 | 🎉 All 8 compilation cache tasks complete, 26/26 tasks (100%) |
+| 2025-11-03T06:20:00Z | Completed | 3.8 | Cache maintenance: size limits, LRU eviction, cleanup, clearCompileCache API ✅ |
+| 2025-11-03T06:18:00Z | Completed | 3.7 | Cache integration: jsrt_load_module hook, --no-compile-cache CLI flag, statistics ✅ |
 | 2025-11-03T06:10:00Z | Completed | 3.1-3.6 | Compile cache infrastructure + APIs delivered |
 | 2025-11-03T05:20:00Z | Planning | 3.x | Phase 3 planning initiated; cache strategy preparation underway |
 | 2025-11-03T04:12:00Z | Completed | Phase 2 | 🎉 All 8 source map tasks complete, 263/263 tests passing (100%) |

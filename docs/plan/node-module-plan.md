@@ -8,10 +8,10 @@
 * Task Metadata
 :PROPERTIES:
 :CREATED: 2025-10-31T00:00:00Z
-:UPDATED: 2025-10-31T00:00:00Z
-:STATUS: 🟡 PLANNING
-:PROGRESS: 0/153
-:COMPLETION: 0%
+:UPDATED: 2025-11-03T04:12:00Z
+:STATUS: 🟢 IN PROGRESS
+:PROGRESS: 81/171
+:COMPLETION: 47.4%
 :END:
 
 * Status Update Guidelines
@@ -534,16 +534,28 @@ Module.wrapper = [
 - ~require~, ~__filename~, ~__dirname~ are available in modules
 - Errors have correct stack traces
 
-** TODO [#A] Phase 2: Source Map Support [S][R:MED][C:COMPLEX][D:phase-1] :sourcemap:
+** DONE [#A] Phase 2: Source Map Support [S][R:MED][C:COMPLEX][D:phase-1] :sourcemap:
+CLOSED: [2025-11-03 04:12]
 :PROPERTIES:
 :ID: phase-2
 :CREATED: 2025-10-31T00:00:00Z
+:COMPLETED: 2025-11-03T04:12:00Z
 :DEPS: phase-1
-:PROGRESS: 33/71
-:COMPLETION: 46.5%
+:PROGRESS: 71/71
+:COMPLETION: 100%
 :END:
 
-Implement source map parsing, lookup, and the SourceMap class.
+✅ Implement source map parsing, lookup, and the SourceMap class.
+
+**Phase 2 Complete!** All 8 tasks implemented:
+- ✅ Task 2.1: Source Map Infrastructure
+- ✅ Task 2.2: VLQ Decoder & Parsing
+- ✅ Task 2.3: SourceMap Class
+- ✅ Task 2.4: findEntry Method
+- ✅ Task 2.5: findOrigin Method
+- ✅ Task 2.6: findSourceMap Function
+- ✅ Task 2.7: Configuration APIs
+- ✅ Task 2.8: Error Stack Integration
 
 *** DONE [#A] Task 2.1: Source Map Infrastructure [S][R:MED][C:MEDIUM]
 CLOSED: [2025-11-03 03:13]
@@ -758,28 +770,41 @@ const config = module.getSourceMapsSupport();
 // { enabled: true, nodeModules: true, generatedCode: true }
 #+END_SRC
 
-*** TODO [#B] Task 2.8: Source Map Integration with Errors [S][R:MED][C:COMPLEX][D:2.6,2.7]
+*** DONE [#B] Task 2.8: Source Map Integration with Errors [S][R:MED][C:COMPLEX][D:2.6,2.7]
+CLOSED: [2025-11-03 04:12]
 :PROPERTIES:
 :ID: 2.8
 :CREATED: 2025-10-31T00:00:00Z
+:COMPLETED: 2025-11-03T04:12:00Z
 :DEPS: 2.6,2.7
 :END:
 
 Integrate source maps with error stack traces.
 
 **** Subtasks
-- [ ] Hook into QuickJS error stack generation
-- [ ] For each stack frame, check if source map exists
-- [ ] If source map found, map generated position to original
-- [ ] Replace file/line/column in stack trace with original values
-- [ ] Respect ~sourceMapSupport~ configuration
-- [ ] Handle ~nodeModules~ filtering
-- [ ] Handle ~generatedCode~ (eval/Function) if enabled
-- [ ] Preserve unmapped frames as-is
+- [X] Hook into QuickJS error stack generation
+- [X] For each stack frame, check if source map exists
+- [X] If source map found, map generated position to original
+- [X] Replace file/line/column in stack trace with original values
+- [X] Respect ~sourceMapSupport~ configuration
+- [X] Handle ~nodeModules~ filtering
+- [X] Handle ~generatedCode~ (eval/Function) if enabled
+- [X] Preserve unmapped frames as-is
 
 **** Integration Point
-- Hook: QuickJS error preparation callback
-- Alternative: Post-process stack traces in ~Error.prepareStackTrace~
+- ✅ Error constructor wrapper approach
+- Wraps global Error constructor with ~jsrt_error_wrapper~
+- Auto-transforms stack traces when source maps enabled
+- Preserves original Error in ~__OriginalError__~
+
+**** Implementation Notes
+- Created ~src/node/module/error_stack.c/h~
+- Integrated into runtime initialization
+- Parses stack traces line by line
+- Performs source map lookups via ~findSourceMap()~
+- Maps positions via ~sourceMap.findOrigin()~
+- Respects configuration flags (enabled, nodeModules, generatedCode)
+- Proper memory management with bounds checking
 
 ** TODO [#A] Phase 3: Compilation Cache [S][R:MED][C:COMPLEX][D:phase-2] :cache:
 :PROPERTIES:
@@ -1447,25 +1472,38 @@ Complete documentation and examples.
 4. [X] Task 2.4: SourceMap.findEntry() Method ✅
 5. [X] Task 2.5: SourceMap.findOrigin() Method ✅
 
-** Next Steps (Phase 2)
-1. [ ] Task 2.6: module.findSourceMap() Implementation ← READY TO START
-2. [ ] Task 2.7: Source Map Support Configuration
-3. [ ] Task 2.8: Error Stack Integration
+** Next Steps
+🎉 **Phase 2 Complete!** All source map tasks finished.
+
+**Phase 2 Tasks (All Done):**
+1. [X] Task 2.6: module.findSourceMap() Implementation
+2. [X] Task 2.7: Source Map Support Configuration
+3. [X] Task 2.8: Error Stack Integration
+
+**Next: Phase 3 - Compilation Cache** (26 tasks remaining)
 
 ** Phase Overview
 | Phase | Title | Tasks | Status | Completion |
 |-------|-------|-------|--------|------------|
 | 1 | Foundation & Core API | 10 | ✅ DONE | 100% |
-| 2 | Source Map Support | 71 | 🔄 IN PROGRESS | 46.5% |
+| 2 | Source Map Support | 71 | ✅ DONE | 100% |
 | 3 | Compilation Cache | 26 | TODO | 0% |
 | 4 | Module Hooks (Basic) | 32 | TODO | 0% |
 | 5 | Package.json Utilities | 12 | TODO | 0% |
 | 6 | Advanced Features | 15 | TODO | 0% |
 | 7 | Testing & QA | 5 | TODO | 0% |
-| **Total** | | **171** | | **25.1%** |
+| **Total** | | **171** | | **47.4%** |
 
 * 📜 History & Updates
 :LOGBOOK:
+- Note taken on [2025-11-03T04:12:00Z] \\
+  🎉 Phase 2 COMPLETED: All 8 source map tasks implemented (100%, 263/263 tests passing)
+- Note taken on [2025-11-03T04:12:00Z] \\
+  Task 2.8 COMPLETED: Error stack integration with source maps (Error wrapper, stack transformation, configuration filtering)
+- Note taken on [2025-11-03T04:07:00Z] \\
+  Task 2.7 COMPLETED: Source map configuration APIs (getSourceMapsSupport, setSourceMapsSupport with enabled/nodeModules/generatedCode flags)
+- Note taken on [2025-11-03T04:02:00Z] \\
+  Task 2.6 COMPLETED: module.findSourceMap() with comprehensive discovery (inline, external, adjacent .map files)
 - Note taken on [2025-11-03T03:36:00Z] \\
   Task 2.5 COMPLETED: SourceMap.findOrigin() method (1-indexed wrapper around findEntry, 13/13 tests passing)
 - Note taken on [2025-11-03T03:31:00Z] \\
@@ -1485,6 +1523,10 @@ Complete documentation and examples.
 ** Recent Changes
 | Timestamp | Action | Task ID | Details |
 |-----------|--------|---------|---------|
+| 2025-11-03T04:12:00Z | Completed | Phase 2 | 🎉 All 8 source map tasks complete, 263/263 tests passing (100%) |
+| 2025-11-03T04:12:00Z | Completed | 2.8 | Error stack integration: wrapper, transformation, filtering, 13/13 module tests ✅ |
+| 2025-11-03T04:07:00Z | Completed | 2.7 | Configuration APIs: get/setSourceMapsSupport with flags, 13/13 module tests ✅ |
+| 2025-11-03T04:02:00Z | Completed | 2.6 | module.findSourceMap() with inline/external/adjacent discovery, 13/13 tests ✅ |
 | 2025-11-03T03:36:00Z | Completed | 2.5 | SourceMap.findOrigin() 1-indexed wrapper, calls findEntry internally, 13/13 tests passing ✅ |
 | 2025-11-03T03:31:00Z | Completed | 2.4 | SourceMap.findEntry() with binary search, VLQ→mapping conversion, 13/13 tests passing ✅ |
 | 2025-11-03T03:23:00Z | Completed | 2.3 | SourceMap class with payload, findEntry, findOrigin, 13/13 tests passing ✅ |

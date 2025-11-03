@@ -73,6 +73,7 @@ JSValue js_process_get_config(JSContext* ctx, JSValueConst this_val, int argc, J
 JSValue js_process_get_release(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv);
 JSValue js_process_get_features(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv);
 int jsrt_process_get_exit_code_internal(void);
+const char* jsrt_process_get_exec_path_internal(void);
 
 // Signals (signals.c)
 JSValue js_process_kill(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv);

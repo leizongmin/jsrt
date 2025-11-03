@@ -1,5 +1,6 @@
 // Test cwd (working directory) option
 const child_process = require('node:child_process');
+const fs = require('node:fs');
 const path = require('node:path');
 
 let tests_passed = 0;
@@ -28,8 +29,13 @@ function test_cwd_valid() {
   });
 
   child.on('exit', (code) => {
+    const actualPath = output.trim();
+    const expectedPath = fs.realpathSync('/tmp');
     assert(code === 0, 'Process exited successfully');
-    assert(output.trim() === '/tmp', 'Process ran in correct directory');
+    assert(
+      actualPath === expectedPath,
+      `Process ran in correct directory (expected: ${expectedPath}, got: ${actualPath})`
+    );
   });
 }
 

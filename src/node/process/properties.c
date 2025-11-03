@@ -191,6 +191,10 @@ int jsrt_process_get_exit_code_internal(void) {
   return g_exit_code_set ? g_exit_code : 0;
 }
 
+const char* jsrt_process_get_exec_path_internal(void) {
+  return get_executable_path();
+}
+
 // Initialization function
 void jsrt_process_init_properties(void) {
   // Pre-cache executable path at startup

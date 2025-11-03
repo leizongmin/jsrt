@@ -1,5 +1,6 @@
 #include <unistd.h>
 #include "../../util/debug.h"
+#include "../process/process.h"
 #include "child_process_internal.h"
 
 // ChildProcess.prototype.send(message[, sendHandle][, options][, callback])
@@ -146,18 +147,11 @@ JSValue js_child_process_fork(JSContext* ctx, JSValueConst this_val, int argc, J
   JS_SetPropertyUint32(ctx, stdio, 3, JS_NewString(ctx, "ipc"));
   JS_SetPropertyStr(ctx, fork_options, "stdio", stdio);
 
-  // Build command: use jsrt binary path
-  // Try to read /proc/self/exe on Linux
-  char exec_path_buf[4096];
-  const char* exec_path = "jsrt";  // Fallback
-
-#ifdef __linux__
-  ssize_t len = readlink("/proc/self/exe", exec_path_buf, sizeof(exec_path_buf) - 1);
-  if (len > 0) {
-    exec_path_buf[len] = '\0';
-    exec_path = exec_path_buf;
+  // Build command: use current jsrt executable path
+  const char* exec_path = jsrt_process_get_exec_path_internal();
+  if (!exec_path || exec_path[0] == '\0') {
+    exec_path = "jsrt";  // Final fallback if path detection fails
   }
-#endif
 
   // Build args: [module_path, ...user_args]
   JSValue spawn_args = JS_NewArray(ctx);

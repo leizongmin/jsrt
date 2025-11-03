@@ -16,6 +16,7 @@
 #include "module/module.h"
 #include "module/protocols/file_handler.h"
 #include "module/protocols/protocol_registry.h"
+#include "node/module/error_stack.h"
 #include "node/module/sourcemap.h"
 #include "node/net/net_internal.h"
 #include "node/process/process.h"
@@ -205,6 +206,13 @@ JSRT_Runtime* JSRT_RuntimeNew() {
   rt->source_map_cache = jsrt_source_map_cache_init(rt->ctx, 16);
   if (!rt->source_map_cache) {
     JSRT_Debug("Failed to create source map cache");
+  }
+
+  // Initialize error stack integration with source maps
+  if (rt->source_map_cache) {
+    if (!jsrt_error_stack_init(rt->ctx, rt->source_map_cache)) {
+      JSRT_Debug("Failed to initialize error stack integration");
+    }
   }
 
   JSRT_RuntimeSetupStdConsole(rt);

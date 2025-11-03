@@ -9,6 +9,7 @@
 #include "../../runtime.h"
 #include "../../util/debug.h"
 #include "../node_modules.h"
+#include "compile_cache.h"
 #include "sourcemap.h"
 
 // Module class ID for opaque data
@@ -20,6 +21,68 @@ static JSClassDef jsrt_module_class = {
     .class_name = "Module",
     .finalizer = jsrt_module_finalizer,
 };
+
+static JSRT_CompileCacheConfig* jsrt_module_get_compile_cache(JSContext* ctx) {
+  JSRT_Runtime* rt = JS_GetContextOpaque(ctx);
+  if (!rt) {
+    return NULL;
+  }
+  return rt->compile_cache;
+}
+
+static const char* jsrt_compile_cache_status_message(JSRT_CompileCacheStatus status) {
+  switch (status) {
+    case JSRT_COMPILE_CACHE_ENABLED:
+      return "enabled";
+    case JSRT_COMPILE_CACHE_ALREADY_ENABLED:
+      return "already_enabled";
+    case JSRT_COMPILE_CACHE_FAILED:
+      return "failed";
+    case JSRT_COMPILE_CACHE_DISABLED:
+      return "disabled";
+    default:
+      return "unknown";
+  }
+}
+
+static JSValue jsrt_module_build_compile_cache_result(JSContext* ctx, JSRT_CompileCacheStatus status,
+                                                      JSRT_CompileCacheConfig* config) {
+  JSValue result = JS_NewObject(ctx);
+  if (JS_IsException(result)) {
+    return result;
+  }
+
+  if (JS_SetPropertyStr(ctx, result, "status", JS_NewInt32(ctx, status)) < 0) {
+    JS_FreeValue(ctx, result);
+    return JS_EXCEPTION;
+  }
+
+  JSValue message = JS_NewString(ctx, jsrt_compile_cache_status_message(status));
+  if (JS_IsException(message)) {
+    JS_FreeValue(ctx, result);
+    return message;
+  }
+  if (JS_SetPropertyStr(ctx, result, "message", message) < 0) {
+    JS_FreeValue(ctx, result);
+    return JS_EXCEPTION;
+  }
+
+  if (config && jsrt_compile_cache_is_enabled(config)) {
+    const char* directory = jsrt_compile_cache_get_directory(config);
+    if (directory) {
+      if (JS_SetPropertyStr(ctx, result, "directory", JS_NewString(ctx, directory)) < 0) {
+        JS_FreeValue(ctx, result);
+        return JS_EXCEPTION;
+      }
+    }
+    if (JS_SetPropertyStr(ctx, result, "portable", JS_NewBool(ctx, config->portable)) < 0) {
+      JS_FreeValue(ctx, result);
+      return JS_EXCEPTION;
+    }
+  }
+
+  return result;
+}
 
 /**
  * Module class finalizer - cleanup module data
@@ -1001,6 +1064,87 @@ JSValue jsrt_module_compile(JSContext* ctx, JSValueConst this_val, int argc, JSV
   return JS_UNDEFINED;
 }
 
+static JSValue jsrt_module_enable_compile_cache(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
+  JSRT_CompileCacheConfig* config = jsrt_module_get_compile_cache(ctx);
+  if (!config) {
+    return jsrt_module_build_compile_cache_result(ctx, JSRT_COMPILE_CACHE_FAILED, NULL);
+  }
+
+  const char* directory_arg = NULL;
+  const char* directory_cstr = NULL;
+  bool portable = config->portable;
+
+  if (argc >= 1 && !JS_IsUndefined(argv[0]) && !JS_IsNull(argv[0])) {
+    if (JS_IsString(argv[0])) {
+      directory_cstr = JS_ToCString(ctx, argv[0]);
+      if (!directory_cstr) {
+        return JS_EXCEPTION;
+      }
+      directory_arg = directory_cstr;
+    } else if (JS_IsObject(argv[0])) {
+      JSValue dir_val = JS_GetPropertyStr(ctx, argv[0], "directory");
+      if (JS_IsException(dir_val)) {
+        return dir_val;
+      }
+      if (JS_IsString(dir_val)) {
+        directory_cstr = JS_ToCString(ctx, dir_val);
+        if (!directory_cstr) {
+          JS_FreeValue(ctx, dir_val);
+          return JS_EXCEPTION;
+        }
+        directory_arg = directory_cstr;
+      }
+      JS_FreeValue(ctx, dir_val);
+
+      JSValue portable_val = JS_GetPropertyStr(ctx, argv[0], "portable");
+      if (JS_IsException(portable_val)) {
+        if (directory_cstr) {
+          JS_FreeCString(ctx, directory_cstr);
+        }
+        return portable_val;
+      }
+      if (!JS_IsUndefined(portable_val)) {
+        portable = JS_ToBool(ctx, portable_val);
+      }
+      JS_FreeValue(ctx, portable_val);
+    } else {
+      return JS_ThrowTypeError(ctx, "enableCompileCache expects a string path or options object");
+    }
+  }
+
+  JSRT_CompileCacheStatus status = jsrt_compile_cache_enable(ctx, config, directory_arg, portable);
+
+  if (directory_cstr) {
+    JS_FreeCString(ctx, directory_cstr);
+  }
+
+  return jsrt_module_build_compile_cache_result(ctx, status, config);
+}
+
+static JSValue jsrt_module_get_compile_cache_dir(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
+  JSRT_CompileCacheConfig* config = jsrt_module_get_compile_cache(ctx);
+  if (!config || !jsrt_compile_cache_is_enabled(config)) {
+    return JS_UNDEFINED;
+  }
+
+  const char* directory = jsrt_compile_cache_get_directory(config);
+  if (!directory) {
+    return JS_UNDEFINED;
+  }
+
+  return JS_NewString(ctx, directory);
+}
+
+static JSValue jsrt_module_flush_compile_cache(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
+  JSRT_CompileCacheConfig* config = jsrt_module_get_compile_cache(ctx);
+  if (!config || !jsrt_compile_cache_is_enabled(config)) {
+    return JS_NewInt32(ctx, JSRT_COMPILE_CACHE_DISABLED);
+  }
+
+  int rc = jsrt_compile_cache_flush(config);
+  return JS_NewInt32(ctx, rc);
+}
+
 /**
  * Module.wrap(script) - Wrap script in CommonJS wrapper
  */
@@ -1068,6 +1212,12 @@ JSValue JSRT_InitNodeModule(JSContext* ctx) {
   JS_SetPropertyStr(ctx, ctor, "_resolveFilename",
                     JS_NewCFunction(ctx, jsrt_module_resolve_filename, "_resolveFilename", 4));
   JS_SetPropertyStr(ctx, ctor, "wrap", JS_NewCFunction(ctx, jsrt_module_wrap, "wrap", 1));
+  JS_SetPropertyStr(ctx, ctor, "enableCompileCache",
+                    JS_NewCFunction(ctx, jsrt_module_enable_compile_cache, "enableCompileCache", 1));
+  JS_SetPropertyStr(ctx, ctor, "getCompileCacheDir",
+                    JS_NewCFunction(ctx, jsrt_module_get_compile_cache_dir, "getCompileCacheDir", 0));
+  JS_SetPropertyStr(ctx, ctor, "flushCompileCache",
+                    JS_NewCFunction(ctx, jsrt_module_flush_compile_cache, "flushCompileCache", 0));
 
   // Add Module.wrapper property (array with wrapper parts)
   JSValue wrapper = JS_NewArray(ctx);
@@ -1111,6 +1261,25 @@ JSValue JSRT_InitNodeModule(JSContext* ctx) {
                     JS_NewCFunction(ctx, jsrt_module_get_source_maps_support, "getSourceMapsSupport", 0));
   JS_SetPropertyStr(ctx, module_obj, "setSourceMapsSupport",
                     JS_NewCFunction(ctx, jsrt_module_set_source_maps_support, "setSourceMapsSupport", 2));
+  JS_SetPropertyStr(ctx, module_obj, "enableCompileCache",
+                    JS_NewCFunction(ctx, jsrt_module_enable_compile_cache, "enableCompileCache", 1));
+  JS_SetPropertyStr(ctx, module_obj, "getCompileCacheDir",
+                    JS_NewCFunction(ctx, jsrt_module_get_compile_cache_dir, "getCompileCacheDir", 0));
+  JS_SetPropertyStr(ctx, module_obj, "flushCompileCache",
+                    JS_NewCFunction(ctx, jsrt_module_flush_compile_cache, "flushCompileCache", 0));
+
+  JSValue compile_cache_status = JS_NewObject(ctx);
+  JS_SetPropertyStr(ctx, compile_cache_status, "ENABLED", JS_NewInt32(ctx, JSRT_COMPILE_CACHE_ENABLED));
+  JS_SetPropertyStr(ctx, compile_cache_status, "ALREADY_ENABLED", JS_NewInt32(ctx, JSRT_COMPILE_CACHE_ALREADY_ENABLED));
+  JS_SetPropertyStr(ctx, compile_cache_status, "FAILED", JS_NewInt32(ctx, JSRT_COMPILE_CACHE_FAILED));
+  JS_SetPropertyStr(ctx, compile_cache_status, "DISABLED", JS_NewInt32(ctx, JSRT_COMPILE_CACHE_DISABLED));
+
+  JSValue constants = JS_NewObject(ctx);
+  JS_SetPropertyStr(ctx, constants, "compileCacheStatus", JS_DupValue(ctx, compile_cache_status));
+
+  JS_DefinePropertyValueStr(ctx, ctor, "constants", JS_DupValue(ctx, constants), JS_PROP_ENUMERABLE);
+  JS_DefinePropertyValueStr(ctx, module_obj, "constants", constants, JS_PROP_ENUMERABLE | JS_PROP_CONFIGURABLE);
+  JS_FreeValue(ctx, compile_cache_status);
 
   // Initialize SourceMap class (for source map support)
   if (!jsrt_source_map_class_init(ctx, module_obj)) {
@@ -1159,6 +1328,22 @@ int js_node_module_init(JSContext* ctx, JSModuleDef* m) {
   JSValue set_source_maps_support = JS_GetPropertyStr(ctx, module_obj, "setSourceMapsSupport");
   JS_SetModuleExport(ctx, m, "setSourceMapsSupport", JS_DupValue(ctx, set_source_maps_support));
   JS_FreeValue(ctx, set_source_maps_support);
+
+  JSValue enable_compile_cache = JS_GetPropertyStr(ctx, module_obj, "enableCompileCache");
+  JS_SetModuleExport(ctx, m, "enableCompileCache", JS_DupValue(ctx, enable_compile_cache));
+  JS_FreeValue(ctx, enable_compile_cache);
+
+  JSValue get_compile_cache_dir = JS_GetPropertyStr(ctx, module_obj, "getCompileCacheDir");
+  JS_SetModuleExport(ctx, m, "getCompileCacheDir", JS_DupValue(ctx, get_compile_cache_dir));
+  JS_FreeValue(ctx, get_compile_cache_dir);
+
+  JSValue flush_compile_cache = JS_GetPropertyStr(ctx, module_obj, "flushCompileCache");
+  JS_SetModuleExport(ctx, m, "flushCompileCache", JS_DupValue(ctx, flush_compile_cache));
+  JS_FreeValue(ctx, flush_compile_cache);
+
+  JSValue module_constants = JS_GetPropertyStr(ctx, module_obj, "constants");
+  JS_SetModuleExport(ctx, m, "constants", JS_DupValue(ctx, module_constants));
+  JS_FreeValue(ctx, module_constants);
 
   // Export default
   JS_SetModuleExport(ctx, m, "default", module_obj);

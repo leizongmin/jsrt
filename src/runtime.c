@@ -16,6 +16,7 @@
 #include "module/module.h"
 #include "module/protocols/file_handler.h"
 #include "module/protocols/protocol_registry.h"
+#include "node/module/compile_cache.h"
 #include "node/module/error_stack.h"
 #include "node/module/sourcemap.h"
 #include "node/net/net_internal.h"
@@ -215,6 +216,12 @@ JSRT_Runtime* JSRT_RuntimeNew() {
     }
   }
 
+  // Initialize compilation cache (disabled by default)
+  rt->compile_cache = jsrt_compile_cache_init(rt->ctx);
+  if (!rt->compile_cache) {
+    JSRT_Debug("Failed to create compilation cache");
+  }
+
   JSRT_RuntimeSetupStdConsole(rt);
   JSRT_RuntimeSetupStdTimer(rt);
   JSRT_RuntimeSetupStdEncoding(rt);
@@ -264,6 +271,11 @@ void JSRT_RuntimeFree(JSRT_Runtime* rt) {
   if (rt->source_map_cache) {
     jsrt_source_map_cache_free(rt->rt, rt->source_map_cache);
     rt->source_map_cache = NULL;
+  }
+
+  if (rt->compile_cache) {
+    jsrt_compile_cache_free(rt->compile_cache);
+    rt->compile_cache = NULL;
   }
 
   // Cleanup protocol registry

@@ -8,10 +8,10 @@
 * Task Metadata
 :PROPERTIES:
 :CREATED: 2025-10-31T00:00:00Z
-:UPDATED: 2025-11-03T04:12:00Z
-:STATUS: 🟢 IN PROGRESS
-:PROGRESS: 81/171
-:COMPLETION: 47.4%
+:UPDATED: 2025-11-03T06:10:00Z
+:STATUS: 🟡 PHASE 3 ACTIVE
+:PROGRESS: 87/171
+:COMPLETION: 50.9%
 :END:
 
 * Status Update Guidelines
@@ -811,28 +811,53 @@ Integrate source maps with error stack traces.
 :ID: phase-3
 :CREATED: 2025-10-31T00:00:00Z
 :DEPS: phase-2
-:PROGRESS: 0/26
-:COMPLETION: 0%
+:PROGRESS: 6/26
+:COMPLETION: 23.1%
 :END:
 
 Implement bytecode compilation cache for faster module loading.
 
-*** TODO [#A] Task 3.1: Cache Infrastructure [S][R:MED][C:MEDIUM]
+*** Objectives
+- Reduce cold-start latency for CommonJS/ESM modules by reusing QuickJS bytecode.
+- Provide configurable cache behavior (directory, portability, eviction) exposed via `node:module` APIs.
+- Preserve correctness across jsrt/QuickJS version changes through strict metadata validation.
+- Maintain compatibility with existing module loader semantics, including circular dependency handling.
+
+*** Key Deliverables
+- Persistent cache backend with versioned metadata and atomic writes.
+- JavaScript APIs for enabling, inspecting, flushing, and clearing the compile cache.
+- Integration hooks within `jsrt_load_module()` for transparent cache usage.
+- Instrumentation for per-module cache hit/miss telemetry surfaced to debugging tools.
+
+*** Validation Plan
+- Unit tests covering cache enable/disable flows, portable mode, and eviction boundaries.
+- Integration tests exercising cache lookups across CommonJS, ESM, JSON, and builtin modules.
+- ASAN runs focused on cache lifecycle (creation, reuse, eviction) to guarantee memory safety.
+- Benchmark harness measuring load times with cache disabled/enabled to quantify improvements.
+
+*** Risks & Mitigations
+- **Stale Bytecode**: mitigate via strict version/mtime checks and automatic invalidation on mismatch.
+- **Disk Failures**: design cache writes to fail gracefully and surface warnings without breaking loads.
+- **Cross-Platform Paths**: normalize paths and hashing to prevent collisions on Windows vs Unix systems.
+- **Concurrency**: serialize cache access through libuv async work queue to avoid races when future worker threads call into the loader.
+
+*** DONE [#A] Task 3.1: Cache Infrastructure [S][R:MED][C:MEDIUM]
 :PROPERTIES:
 :ID: 3.1
 :CREATED: 2025-10-31T00:00:00Z
 :DEPS: phase-2
+:CLOSED: 2025-11-03T06:10:00Z
 :END:
 
 Set up compilation cache storage and management.
 
 **** Subtasks
-- [ ] Create ~src/node/module/compile_cache.c~ and ~.h~
-- [ ] Define cache directory structure
-- [ ] Implement cache directory creation
-- [ ] Implement cache entry format (bytecode + metadata)
-- [ ] Add cache versioning (invalidate on jsrt version change)
-- [ ] Add to build system
+- [X] Create ~src/node/module/compile_cache.c~ and ~.h~
+- [X] Define cache directory structure
+- [X] Implement cache directory creation
+- [X] Implement cache entry format (bytecode + metadata)
+- [X] Add cache versioning (invalidate on jsrt version change)
+- [X] Add to build system
 
 **** Cache Structure
 #+BEGIN_EXAMPLE
@@ -848,45 +873,47 @@ Set up compilation cache storage and management.
 - Metadata: Source path, mtime, jsrt version, QuickJS version
 - Bytecode: QuickJS bytecode from ~JS_WriteObject()~
 
-*** TODO [#A] Task 3.2: Cache Key Generation [S][R:LOW][C:MEDIUM][D:3.1]
+*** DONE [#A] Task 3.2: Cache Key Generation [S][R:LOW][C:MEDIUM][D:3.1]
 :PROPERTIES:
 :ID: 3.2
 :CREATED: 2025-10-31T00:00:00Z
 :DEPS: 3.1
+:CLOSED: 2025-11-03T06:10:00Z
 :END:
 
 Generate stable cache keys for modules.
 
 **** Subtasks
-- [ ] Implement hash function (SHA-256 or FNV-1a)
-- [ ] Hash source file absolute path
-- [ ] Hash file modification time (mtime)
-- [ ] Hash file content (optional, for portability)
-- [ ] Combine hashes into cache key
-- [ ] Implement ~portable~ mode (content-based hashing)
+- [X] Implement hash function (SHA-256 or FNV-1a)
+- [X] Hash source file absolute path
+- [X] Hash file modification time (mtime)
+- [X] Hash file content (optional, for portability)
+- [X] Combine hashes into cache key
+- [X] Implement ~portable~ mode (content-based hashing)
 
 **** Portable Mode
 - ~portable: false~: Hash path + mtime (fast, not relocatable)
 - ~portable: true~: Hash content only (slow, survives directory moves)
 
-*** TODO [#A] Task 3.3: Cache Read Operations [S][R:MED][C:MEDIUM][D:3.2]
+*** DONE [#A] Task 3.3: Cache Read Operations [S][R:MED][C:MEDIUM][D:3.2]
 :PROPERTIES:
 :ID: 3.3
 :CREATED: 2025-10-31T00:00:00Z
 :DEPS: 3.2
+:CLOSED: 2025-11-03T06:10:00Z
 :END:
 
 Load compiled bytecode from cache.
 
 **** Subtasks
-- [ ] Implement ~jsrt_cache_lookup(path)~
-- [ ] Generate cache key from path
-- [ ] Check if cache entry exists
-- [ ] Validate cache entry metadata (version, mtime)
-- [ ] Load bytecode from ~.jsc~ file
-- [ ] Deserialize bytecode with ~JS_ReadObject()~
-- [ ] Return compiled module or NULL if invalid/missing
-- [ ] Update cache statistics (hits/misses)
+- [X] Implement ~jsrt_cache_lookup(path)~
+- [X] Generate cache key from path
+- [X] Check if cache entry exists
+- [X] Validate cache entry metadata (version, mtime)
+- [X] Load bytecode from ~.jsc~ file
+- [X] Deserialize bytecode with ~JS_ReadObject()~
+- [X] Return compiled module or NULL if invalid/missing
+- [X] Update cache statistics (hits/misses)
 
 **** Validation Checks
 - jsrt version matches
@@ -894,48 +921,50 @@ Load compiled bytecode from cache.
 - Source file mtime matches (non-portable mode)
 - Bytecode format is valid
 
-*** TODO [#A] Task 3.4: Cache Write Operations [S][R:MED][C:MEDIUM][D:3.2]
+*** DONE [#A] Task 3.4: Cache Write Operations [S][R:MED][C:MEDIUM][D:3.2]
 :PROPERTIES:
 :ID: 3.4
 :CREATED: 2025-10-31T00:00:00Z
 :DEPS: 3.2
+:CLOSED: 2025-11-03T06:10:00Z
 :END:
 
 Save compiled bytecode to cache.
 
 **** Subtasks
-- [ ] Implement ~jsrt_cache_store(path, bytecode)~
-- [ ] Generate cache key from path
-- [ ] Serialize bytecode with ~JS_WriteObject()~
-- [ ] Write bytecode to ~.jsc~ file
-- [ ] Write metadata (path, mtime, versions)
-- [ ] Handle disk write errors gracefully
-- [ ] Implement atomic write (temp file + rename)
-- [ ] Update cache statistics
+- [X] Implement ~jsrt_cache_store(path, bytecode)~
+- [X] Generate cache key from path
+- [X] Serialize bytecode with ~JS_WriteObject()~
+- [X] Write bytecode to ~.jsc~ file
+- [X] Write metadata (path, mtime, versions)
+- [X] Handle disk write errors gracefully
+- [X] Implement atomic write (temp file + rename)
+- [X] Update cache statistics
 
 **** Error Handling
 - Disk full → log warning, continue without caching
 - Permission denied → disable cache for session
 - Corrupted cache → delete and recreate
 
-*** TODO [#A] Task 3.5: module.enableCompileCache() Implementation [S][R:MED][C:MEDIUM][D:3.3,3.4]
+*** DONE [#A] Task 3.5: module.enableCompileCache() Implementation [S][R:MED][C:MEDIUM][D:3.3,3.4]
 :PROPERTIES:
 :ID: 3.5
 :CREATED: 2025-10-31T00:00:00Z
 :DEPS: 3.3,3.4
+:CLOSED: 2025-11-03T06:10:00Z
 :END:
 
 Enable compilation cache with configuration.
 
 **** Subtasks
-- [ ] Implement ~module.enableCompileCache([options])~
-- [ ] Accept string parameter (cache directory)
-- [ ] Accept object parameter (~{ directory, portable }~)
-- [ ] Set cache directory (default: ~$HOME/.jsrt/compile-cache/~)
-- [ ] Set portable mode flag
-- [ ] Initialize cache directory
-- [ ] Return status object ~{ status, message, directory }~
-- [ ] Handle already-enabled case
+- [X] Implement ~module.enableCompileCache([options])~
+- [X] Accept string parameter (cache directory)
+- [X] Accept object parameter (~{ directory, portable }~)
+- [X] Set cache directory (default: ~$HOME/.jsrt/compile-cache/~)
+- [X] Set portable mode flag
+- [X] Initialize cache directory
+- [X] Return status object ~{ status, message, directory }~
+- [X] Handle already-enabled case
 
 **** Return Status Values
 - ~module.constants.compileCacheStatus.ENABLED~ (0)
@@ -953,22 +982,23 @@ console.log(result);
 // { status: 0, message: 'success', directory: '/tmp/jsrt-cache' }
 #+END_SRC
 
-*** TODO [#A] Task 3.6: Cache Helper Functions [P][R:LOW][C:SIMPLE][D:3.5]
+*** DONE [#A] Task 3.6: Cache Helper Functions [P][R:LOW][C:SIMPLE][D:3.5]
 :PROPERTIES:
 :ID: 3.6
 :CREATED: 2025-10-31T00:00:00Z
 :DEPS: 3.5
+:CLOSED: 2025-11-03T06:10:00Z
 :END:
 
 Implement cache management utilities.
 
 **** Subtasks
-- [ ] Implement ~module.getCompileCacheDir()~
-- [ ] Return cache directory or ~undefined~ if disabled
-- [ ] Implement ~module.flushCompileCache()~
-- [ ] Write all pending cache entries to disk
-- [ ] Implement ~module.constants.compileCacheStatus~ constants
-- [ ] Add status codes: ~ENABLED~, ~ALREADY_ENABLED~, ~FAILED~, ~DISABLED~
+- [X] Implement ~module.getCompileCacheDir()~
+- [X] Return cache directory or ~undefined~ if disabled
+- [X] Implement ~module.flushCompileCache()~
+- [X] Write all pending cache entries to disk
+- [X] Implement ~module.constants.compileCacheStatus~ constants
+- [X] Add status codes: ~ENABLED~, ~ALREADY_ENABLED~, ~FAILED~, ~DISABLED~
 
 *** TODO [#B] Task 3.7: Cache Integration with Module Loader [S][R:MED][C:MEDIUM][D:3.5]
 :PROPERTIES:
@@ -999,6 +1029,11 @@ Hit? → Load Bytecode → Execute
 Miss? → Compile Source → Store in Cache → Execute
 #+END_EXAMPLE
 
+**** Testing
+- Execute `make test N=node/module/compile-cache` with cache toggled on/off to ensure parity.
+- Add integration fixture that forces cache hit/miss transitions and validates loader telemetry.
+- Verify `--no-compile-cache` CLI flag bypasses cache by asserting miss counters remain zero.
+
 *** TODO [#B] Task 3.8: Cache Maintenance [P][R:LOW][C:SIMPLE][D:3.5]
 :PROPERTIES:
 :ID: 3.8
@@ -1015,6 +1050,11 @@ Implement cache cleanup and maintenance.
 - [ ] Add ~module.clearCompileCache()~ function
 - [ ] Add cache statistics reporting
 
+**** Monitoring
+- Track on-disk cache size and eviction counts via `Module.getStatistics()` integration.
+- Emit debug logs under `--trace-module-loading` when entries are evicted or invalidated.
+- Surface cache health metrics to the dashboard (total entries, cold misses, write failures).
+
 ** TODO [#B] Phase 4: Module Hooks (Basic) [S][R:HIGH][C:COMPLEX][D:phase-3] :hooks:
 :PROPERTIES:
 :ID: phase-4
@@ -1025,6 +1065,30 @@ Implement cache cleanup and maintenance.
 :END:
 
 Implement basic module resolution and loading hooks (synchronous only).
+
+*** Objectives
+- Allow embedders to customize resolution/loading without forking the runtime.
+- Maintain compatibility with Node.js hook semantics for synchronous workflows.
+- Ensure hook chaining can short-circuit or delegate while preserving native error states.
+- Expose ergonomic JavaScript APIs mirroring `module.registerHooks()` behavior.
+
+*** Key Deliverables
+- Hook registry with deterministic LIFO ordering and safe finalization.
+- `nextResolve`/`nextLoad` trampoline implementations with argument validation.
+- Context objects aligned with WinterCG expectations (conditions, parentURL, import attributes).
+- Debug tracing surface for hook invocation order and return payloads.
+
+*** Validation Plan
+- Unit tests covering chained resolve/load hooks, error propagation, and short-circuit flow.
+- Integration tests combining hooks with compile cache to ensure interoperability.
+- Manual scenarios exercising HTTP/file protocol handlers under hook overrides.
+- Performance budget verifying hook overhead stays below 0.5ms per invocation.
+
+*** Risks & Mitigations
+- **Hook Misbehavior**: sandbox by cloning context objects and validating return structures.
+- **Reentrancy**: guard against recursive registration/execution via runtime flags.
+- **Performance Regression**: add microbenchmarks and disable hooks when none are registered.
+- **Debuggability**: provide `--trace-module-hooks` output and leverage `JSRT_Debug` for internal tracing.
 
 *** TODO [#A] Task 4.1: Hook Infrastructure [S][R:HIGH][C:MEDIUM]
 :PROPERTIES:
@@ -1120,6 +1184,11 @@ Execute resolve hooks during module resolution.
 }
 #+END_SRC
 
+**** Testing
+- Simulate chained resolve hooks with mixed shortCircuit settings to verify delegation order.
+- Validate error paths by forcing hooks to throw and confirming propagated stack traces.
+- Ensure default resolver runs when hook chain returns `undefined` or empty result.
+
 *** TODO [#A] Task 4.4: Load Hook Execution [S][R:MED][C:COMPLEX][D:4.2]
 :PROPERTIES:
 :ID: 4.4
@@ -1158,6 +1227,11 @@ Execute load hooks during module loading.
 }
 #+END_SRC
 
+**** Testing
+- Create fixtures that transform source text to confirm hooks can mutate content.
+- Assert binary payloads (ArrayBuffer/Uint8Array) pass through without copies.
+- Combine load hooks with compile cache to ensure transformed sources are not incorrectly reused.
+
 *** TODO [#B] Task 4.5: Hook Error Handling [P][R:MED][C:MEDIUM][D:4.3,4.4]
 :PROPERTIES:
 :ID: 4.5
@@ -1174,6 +1248,11 @@ Implement robust error handling for hooks.
 - [ ] Allow hooks to throw and abort loading
 - [ ] Log hook errors to stderr
 - [ ] Add ~--trace-module-hooks~ debug flag
+
+**** Logging Strategy
+- Emit concise hook identifier, specifier, and phase when logging to stderr.
+- Gate verbose stack traces behind `--trace-module-hooks` to avoid noisy output by default.
+- Integrate with `JSRT_Debug` to surface hook failures in debug builds without impacting release builds.
 
 *** TODO [#C] Task 4.6: Hook Examples and Documentation [P][R:LOW][C:SIMPLE][D:4.2]
 :PROPERTIES:
@@ -1201,6 +1280,21 @@ Create examples demonstrating hook usage.
 :END:
 
 Implement package.json lookup and parsing utilities.
+
+*** Objectives
+- Mirror Node.js helper utilities for package metadata discovery within `node:module`.
+- Provide fast upward traversal with memoization to minimize filesystem hits.
+- Normalize package metadata for reuse by resolver, compile cache, and tooling APIs.
+
+*** Key Deliverables
+- Lookup helpers (`module.findPackageJSON`, `parsePackageJSON`) with cached results.
+- Optional interface for returning parsed exports/imports maps in canonical form.
+- Tests covering mixed `type` fields, nested `exports`, and conditional exports resolution.
+
+*** Validation Plan
+- File-system fixtures with nested package hierarchies and symlinked node_modules directories.
+- Regression tests comparing outputs against Node.js reference runs.
+- Benchmark upward search cost to ensure sub-millisecond lookups after warm cache.
 
 *** TODO [#A] Task 5.1: module.findPackageJSON() Implementation [S][R:LOW][C:MEDIUM]
 :PROPERTIES:
@@ -1247,6 +1341,11 @@ Helper functions for package.json manipulation.
 - [ ] Cache parsed package.json data
 - [ ] Handle malformed package.json gracefully
 
+**** Testing
+- Introduce fixture packages with malformed JSON to verify graceful degradation.
+- Validate support for both CommonJS (`type: "commonjs"`) and ESM (`type: "module"`) scenarios.
+- Ensure cached results invalidate correctly when mtime changes during watch mode.
+
 ** TODO [#B] Phase 6: Advanced Features [PS][R:MED][C:MEDIUM][D:phase-4] :advanced:
 :PROPERTIES:
 :ID: phase-6
@@ -1257,6 +1356,21 @@ Helper functions for package.json manipulation.
 :END:
 
 Implement advanced module features and optimizations.
+
+*** Objectives
+- Close the compatibility gap with Node.js advanced module management APIs.
+- Surface runtime diagnostics (statistics, tracing) to empower JS tooling.
+- Enable development workflows such as hot module replacement without destabilizing core loader.
+
+*** Key Deliverables
+- Synchronization helpers between CommonJS and ESM namespaces (`syncBuiltinESMExports`).
+- Telemetry APIs exposing loader statistics and cache performance.
+- Hot reload plumbing that safely re-evaluates modules while respecting dependency graphs.
+
+*** Validation Plan
+- Golden tests comparing statistics output against internal counters.
+- Manual hot-reload scenarios targeting nested dependency trees.
+- Performance measurements ensuring instrumentation overhead stays within defined budgets.
 
 *** TODO [#A] Task 6.1: module.syncBuiltinESMExports() Implementation [P][R:LOW][C:SIMPLE]
 :PROPERTIES:
@@ -1287,6 +1401,11 @@ import fs from 'fs';
 fs.newFunction();  // Now available
 #+END_SRC
 
+**** Testing
+- Compare behavior against Node.js by mutating builtin exports and verifying ESM views update.
+- Ensure idempotency by running `syncBuiltinESMExports()` multiple times without duplicating work.
+- Validate no-op on runtimes without ESM counterparts to avoid unnecessary allocations.
+
 *** TODO [#C] Task 6.2: Module Loading Statistics [P][R:LOW][C:SIMPLE]
 :PROPERTIES:
 :ID: 6.2
@@ -1302,6 +1421,11 @@ Expose module loading performance statistics.
 - [ ] Track compilation times
 - [ ] Expose ~Module.getStatistics()~ function
 - [ ] Add ~--trace-module-loading~ debug flag
+
+**** Output Format
+- Return structured object `{ totals, cache, timings }` with numeric fields for easy consumption.
+- Provide rolling averages and per-module breakdowns when debug tracing is enabled.
+- Document counters to keep them stable for downstream tooling.
 
 *** TODO [#C] Task 6.3: Hot Module Replacement Support [P][R:MED][C:COMPLEX]
 :PROPERTIES:
@@ -1319,6 +1443,11 @@ Enable module reloading for development.
 - [ ] Update existing references (if possible)
 - [ ] Trigger reload callbacks
 - [ ] Handle module dependency updates
+
+**** Testing
+- Build fixture modules with dependency chains to ensure reload ordering is deterministic.
+- Confirm stateful singletons reset correctly or warn when reload is unsafe.
+- Measure reload latency under compile cache enabled/disabled to gauge performance.
 
 ** TODO [#C] Phase 7: Testing & Quality Assurance [S][R:LOW][C:MEDIUM][D:phase-1,phase-2,phase-3,phase-4,phase-5,phase-6] :testing:
 :PROPERTIES:
@@ -1441,17 +1570,17 @@ Complete documentation and examples.
 
 * 🚀 Execution Dashboard
 :PROPERTIES:
-:CURRENT_PHASE: Phase 2 - IN PROGRESS 🔄
-:PROGRESS: 43/171
-:COMPLETION: 25.1%
-:ACTIVE_TASK: Task 2.6 - module.findSourceMap() Implementation
-:UPDATED: 2025-11-03T03:36:00Z
+:CURRENT_PHASE: Phase 3 - IN PROGRESS 🔄
+:PROGRESS: 87/171
+:COMPLETION: 50.9%
+:ACTIVE_TASK: Task 3.7 - Cache Integration with Loader
+:UPDATED: 2025-11-03T06:10:00Z
 :END:
 
 ** Current Status
-- Phase: Phase 2 IN PROGRESS 🔄 (Source Map Support)
-- Progress: 43/171 tasks (25.1%)
-- Active: Task 2.5 complete ✅ (SourceMap.findOrigin()), ready for Task 2.6 (module.findSourceMap)
+- Phase: Phase 3 IN PROGRESS 🔄 (Compilation Cache)
+- Progress: 87/171 tasks (50.9%)
+- Active: Task 3.7 integration work queued (Loader wiring)
 
 ** Completed (Phase 1)
 1. [X] Task 1.1: Project Structure Setup
@@ -1473,29 +1602,28 @@ Complete documentation and examples.
 5. [X] Task 2.5: SourceMap.findOrigin() Method ✅
 
 ** Next Steps
-🎉 **Phase 2 Complete!** All source map tasks finished.
-
-**Phase 2 Tasks (All Done):**
-1. [X] Task 2.6: module.findSourceMap() Implementation
-2. [X] Task 2.7: Source Map Support Configuration
-3. [X] Task 2.8: Error Stack Integration
-
-**Next: Phase 3 - Compilation Cache** (26 tasks remaining)
+- [ ] Wire compile cache hits into module loader (Task 3.7)
+- [ ] Add CLI/runtime toggles for cache bypass (Task 3.7)
+- [ ] Outline cache maintenance and eviction plan (Task 3.8)
 
 ** Phase Overview
 | Phase | Title | Tasks | Status | Completion |
 |-------|-------|-------|--------|------------|
 | 1 | Foundation & Core API | 10 | ✅ DONE | 100% |
 | 2 | Source Map Support | 71 | ✅ DONE | 100% |
-| 3 | Compilation Cache | 26 | TODO | 0% |
+| 3 | Compilation Cache | 26 | 🔄 IN PROGRESS | 23.1% |
 | 4 | Module Hooks (Basic) | 32 | TODO | 0% |
 | 5 | Package.json Utilities | 12 | TODO | 0% |
 | 6 | Advanced Features | 15 | TODO | 0% |
 | 7 | Testing & QA | 5 | TODO | 0% |
-| **Total** | | **171** | | **47.4%** |
+| **Total** | | **171** | | **50.9%** |
 
 * 📜 History & Updates
 :LOGBOOK:
+- Note taken on [2025-11-03T06:10:00Z] \
+  ✅ Phase 3 cache foundations in place: tasks 3.1-3.6 completed.
+- Note taken on [2025-11-03T05:20:00Z] \\
+  📋 Phase 3 planning initiated: cache infrastructure groundwork defined, progress metrics updated to 81/171 (47.4%).
 - Note taken on [2025-11-03T04:12:00Z] \\
   🎉 Phase 2 COMPLETED: All 8 source map tasks implemented (100%, 263/263 tests passing)
 - Note taken on [2025-11-03T04:12:00Z] \\
@@ -1523,6 +1651,8 @@ Complete documentation and examples.
 ** Recent Changes
 | Timestamp | Action | Task ID | Details |
 |-----------|--------|---------|---------|
+| 2025-11-03T06:10:00Z | Completed | 3.1-3.6 | Compile cache infrastructure + APIs delivered |
+| 2025-11-03T05:20:00Z | Planning | 3.x | Phase 3 planning initiated; cache strategy preparation underway |
 | 2025-11-03T04:12:00Z | Completed | Phase 2 | 🎉 All 8 source map tasks complete, 263/263 tests passing (100%) |
 | 2025-11-03T04:12:00Z | Completed | 2.8 | Error stack integration: wrapper, transformation, filtering, 13/13 module tests ✅ |
 | 2025-11-03T04:07:00Z | Completed | 2.7 | Configuration APIs: get/setSourceMapsSupport with flags, 13/13 module tests ✅ |

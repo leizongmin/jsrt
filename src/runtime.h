@@ -14,6 +14,9 @@ typedef struct JSRT_ModuleLoader JSRT_ModuleLoader;
 // Forward declaration for source map cache
 typedef struct JSRT_SourceMapCache JSRT_SourceMapCache;
 
+// Forward declaration for compile cache
+typedef struct JSRT_CompileCacheConfig JSRT_CompileCacheConfig;
+
 typedef struct {
   JSRuntime* rt;
   JSContext* ctx;
@@ -35,6 +38,9 @@ typedef struct {
 
   // Source map cache (for node:module source map support)
   JSRT_SourceMapCache* source_map_cache;
+
+  // Compilation cache (for node:module bytecode cache)
+  JSRT_CompileCacheConfig* compile_cache;
 } JSRT_Runtime;
 
 JSRT_Runtime* JSRT_RuntimeNew();

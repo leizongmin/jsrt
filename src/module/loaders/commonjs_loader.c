@@ -5,6 +5,7 @@
 #include "commonjs_loader.h"
 #include <stdlib.h>
 #include <string.h>
+#include "../../node/module/compile_cache.h"
 #include "../../runtime.h"  // For JSRT_Runtime
 #include "../core/module_cache.h"
 #include "../core/module_loader.h"
@@ -179,42 +180,82 @@ JSValue jsrt_load_commonjs_module(JSContext* ctx, JSRT_ModuleLoader* loader, con
     return jsrt_module_throw_error(ctx, JSRT_MODULE_INTERNAL_ERROR, "Failed to track module loading state");
   }
 
-  // Load module content via protocol dispatcher
-  JSRT_ReadFileResult file_result = jsrt_load_content_by_protocol(resolved_path);
-  if (file_result.error != JSRT_READ_FILE_OK) {
-    jsrt_pop_loading_commonjs(loader);
-    return jsrt_module_throw_error(ctx, JSRT_MODULE_LOAD_FAILED, "Failed to load module '%s': %s",
-                                   specifier ? specifier : resolved_path,
-                                   JSRT_ReadFileErrorToString(file_result.error));
+  JSRT_Runtime* runtime = (JSRT_Runtime*)JS_GetContextOpaque(ctx);
+  JSRT_CompileCacheConfig* compile_cache = runtime ? runtime->compile_cache : NULL;
+  bool compile_cache_enabled = compile_cache && jsrt_compile_cache_is_enabled(compile_cache);
+  JSValue compiled_bytecode = JS_UNDEFINED;
+  bool bytecode_cache_hit = false;
+
+  if (compile_cache_enabled) {
+    compiled_bytecode = jsrt_compile_cache_lookup(ctx, compile_cache, resolved_path);
+    if (!JS_IsUndefined(compiled_bytecode)) {
+      bytecode_cache_hit = true;
+      MODULE_DEBUG_LOADER("Compile cache HIT for CommonJS bytecode: %s", resolved_path);
+    }
   }
 
-  MODULE_DEBUG_LOADER("Loaded content for %s (%zu bytes)", resolved_path, file_result.size);
+  // Load module content via protocol dispatcher
+  JSRT_ReadFileResult file_result = {0};
+  char* wrapper_code = NULL;
+
+  if (!bytecode_cache_hit) {
+    file_result = jsrt_load_content_by_protocol(resolved_path);
+    if (file_result.error != JSRT_READ_FILE_OK) {
+      jsrt_pop_loading_commonjs(loader);
+      return jsrt_module_throw_error(ctx, JSRT_MODULE_LOAD_FAILED, "Failed to load module '%s': %s",
+                                     specifier ? specifier : resolved_path,
+                                     JSRT_ReadFileErrorToString(file_result.error));
+    }
+
+    MODULE_DEBUG_LOADER("Loaded content for %s (%zu bytes)", resolved_path, file_result.size);
+
+    wrapper_code = create_wrapper_code(file_result.data, resolved_path);
+    JSRT_ReadFileResultFree(&file_result);
+
+    if (!wrapper_code) {
+      jsrt_pop_loading_commonjs(loader);
+      return jsrt_module_throw_error(ctx, JSRT_MODULE_INTERNAL_ERROR, "Failed to create wrapper code");
+    }
+
+    int eval_flags = JS_EVAL_TYPE_GLOBAL | JS_EVAL_FLAG_COMPILE_ONLY;
+    compiled_bytecode = JS_Eval(ctx, wrapper_code, strlen(wrapper_code), resolved_path, eval_flags);
+    free(wrapper_code);
+    wrapper_code = NULL;
+
+    if (JS_IsException(compiled_bytecode)) {
+      jsrt_pop_loading_commonjs(loader);
+      return JS_EXCEPTION;
+    }
+
+    if (compile_cache_enabled) {
+      if (!jsrt_compile_cache_store(ctx, compile_cache, resolved_path, compiled_bytecode)) {
+        MODULE_DEBUG_LOADER("Compile cache store failed for %s", resolved_path);
+      }
+    }
+  }
+
+  JSValue func = JS_EvalFunction(ctx, compiled_bytecode);
+  compiled_bytecode = JS_UNDEFINED;
+
+  if (JS_IsException(func)) {
+    jsrt_pop_loading_commonjs(loader);
+    return JS_EXCEPTION;
+  }
 
   // Create module and exports objects
   JSValue module = JS_NewObject(ctx);
   if (JS_IsException(module)) {
-    JSRT_ReadFileResultFree(&file_result);
+    JS_FreeValue(ctx, func);
     jsrt_pop_loading_commonjs(loader);
     return JS_EXCEPTION;
   }
 
   JSValue exports = JS_NewObject(ctx);
   if (JS_IsException(exports)) {
+    JS_FreeValue(ctx, func);
     JS_FreeValue(ctx, module);
-    JSRT_ReadFileResultFree(&file_result);
     jsrt_pop_loading_commonjs(loader);
     return JS_EXCEPTION;
-  }
-
-  // Create wrapper code before setting properties (to avoid leaks if wrapper creation fails)
-  char* wrapper_code = create_wrapper_code(file_result.data, resolved_path);
-  JSRT_ReadFileResultFree(&file_result);
-
-  if (!wrapper_code) {
-    JS_FreeValue(ctx, module);
-    JS_FreeValue(ctx, exports);
-    jsrt_pop_loading_commonjs(loader);
-    return jsrt_module_throw_error(ctx, JSRT_MODULE_INTERNAL_ERROR, "Failed to create wrapper code");
   }
 
   // Set module properties (check for exceptions)
@@ -230,16 +271,6 @@ JSValue jsrt_load_commonjs_module(JSContext* ctx, JSRT_ModuleLoader* loader, con
   }
 
   // Compile wrapper function
-  JSValue func = JS_Eval(ctx, wrapper_code, strlen(wrapper_code), resolved_path, JS_EVAL_TYPE_GLOBAL);
-  free(wrapper_code);
-
-  if (JS_IsException(func)) {
-    JS_FreeValue(ctx, module);
-    JS_FreeValue(ctx, exports);
-    jsrt_pop_loading_commonjs(loader);
-    return JS_EXCEPTION;
-  }
-
   // Create require function for this module
   JSValue require_func = jsrt_create_require_function(ctx, loader, resolved_path);
   if (JS_IsException(require_func)) {

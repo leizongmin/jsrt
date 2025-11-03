@@ -40,6 +40,7 @@ JSValue jsrt_module_builtinModules(JSContext* ctx);
 JSValue jsrt_module_isBuiltin(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv);
 JSValue jsrt_module_createRequire(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv);
 JSValue jsrt_module_syncBuiltinESMExports(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv);
+JSValue jsrt_module_find_source_map(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv);
 
 // Module class constructor
 JSValue jsrt_module_constructor(JSContext* ctx, JSValueConst new_target, int argc, JSValueConst* argv);

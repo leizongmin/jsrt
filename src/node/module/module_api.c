@@ -230,6 +230,33 @@ JSValue jsrt_module_syncBuiltinESMExports(JSContext* ctx, JSValueConst this_val,
 }
 
 /**
+ * module.findSourceMap(path) - Find source map for file
+ */
+JSValue jsrt_module_find_source_map(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
+  if (argc < 1) {
+    return JS_ThrowTypeError(ctx, "Missing path argument");
+  }
+
+  const char* path = JS_ToCString(ctx, argv[0]);
+  if (!path) {
+    return JS_EXCEPTION;
+  }
+
+  // Get runtime to access source map cache
+  JSRT_Runtime* rt = JS_GetContextOpaque(ctx);
+  if (!rt || !rt->source_map_cache) {
+    JS_FreeCString(ctx, path);
+    return JS_UNDEFINED;
+  }
+
+  // Find source map (returns SourceMap instance or undefined)
+  JSValue result = jsrt_find_source_map(ctx, rt->source_map_cache, path);
+  JS_FreeCString(ctx, path);
+
+  return result;
+}
+
+/**
  * Property getters/setters
  */
 
@@ -1005,6 +1032,8 @@ JSValue JSRT_InitNodeModule(JSContext* ctx) {
                     JS_NewCFunction(ctx, jsrt_module_createRequire, "createRequire", 1));
   JS_SetPropertyStr(ctx, module_obj, "syncBuiltinESMExports",
                     JS_NewCFunction(ctx, jsrt_module_syncBuiltinESMExports, "syncBuiltinESMExports", 0));
+  JS_SetPropertyStr(ctx, module_obj, "findSourceMap",
+                    JS_NewCFunction(ctx, jsrt_module_find_source_map, "findSourceMap", 1));
 
   // Initialize SourceMap class (for source map support)
   if (!jsrt_source_map_class_init(ctx, module_obj)) {
@@ -1041,6 +1070,10 @@ int js_node_module_init(JSContext* ctx, JSModuleDef* m) {
   JSValue sync_exports = JS_GetPropertyStr(ctx, module_obj, "syncBuiltinESMExports");
   JS_SetModuleExport(ctx, m, "syncBuiltinESMExports", JS_DupValue(ctx, sync_exports));
   JS_FreeValue(ctx, sync_exports);
+
+  JSValue find_source_map = JS_GetPropertyStr(ctx, module_obj, "findSourceMap");
+  JS_SetModuleExport(ctx, m, "findSourceMap", JS_DupValue(ctx, find_source_map));
+  JS_FreeValue(ctx, find_source_map);
 
   // Export default
   JS_SetModuleExport(ctx, m, "default", module_obj);

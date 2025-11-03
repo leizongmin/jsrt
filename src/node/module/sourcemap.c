@@ -996,7 +996,10 @@ bool jsrt_source_map_class_init(JSContext* ctx, JSValue module_obj) {
 
   // Set prototype on constructor
   JS_SetConstructorBit(ctx, source_map_ctor, true);
-  JS_SetPropertyStr(ctx, source_map_ctor, "prototype", proto);
+  JS_SetPropertyStr(ctx, source_map_ctor, "prototype", JS_DupValue(ctx, proto));
+
+  // IMPORTANT: Set the class prototype so JS_NewObjectClass() will use it
+  JS_SetClassProto(ctx, jsrt_source_map_class_id, proto);
 
   // Add SourceMap to module exports (for internal use)
   // Note: Not exposed in public node:module API, only used internally
@@ -1016,6 +1019,7 @@ JSValue jsrt_source_map_create_instance(JSContext* ctx, JSRT_SourceMap* map) {
   }
 
   // Create new SourceMap instance
+  // JS_NewObjectClass() automatically uses the prototype set via JS_SetClassProto()
   JSValue obj = JS_NewObjectClass(ctx, jsrt_source_map_class_id);
   if (JS_IsException(obj)) {
     return obj;
@@ -1030,16 +1034,337 @@ JSValue jsrt_source_map_create_instance(JSContext* ctx, JSRT_SourceMap* map) {
 }
 
 // ============================================================================
-// Source Map Lookup (Stub - to be implemented in Task 2.6)
+// Source Map Lookup (Task 2.6)
 // ============================================================================
 
+/**
+ * Read file contents
+ * Returns allocated string that must be freed, or NULL on error
+ */
+static char* read_file_contents(const char* path) {
+  FILE* f = fopen(path, "rb");
+  if (!f) {
+    return NULL;
+  }
+
+  // Get file size
+  fseek(f, 0, SEEK_END);
+  long size = ftell(f);
+  fseek(f, 0, SEEK_SET);
+
+  if (size < 0 || size > 100 * 1024 * 1024) {  // Limit to 100MB
+    fclose(f);
+    return NULL;
+  }
+
+  // Allocate and read
+  char* content = malloc(size + 1);
+  if (!content) {
+    fclose(f);
+    return NULL;
+  }
+
+  size_t read_size = fread(content, 1, size, f);
+  fclose(f);
+
+  if (read_size != (size_t)size) {
+    free(content);
+    return NULL;
+  }
+
+  content[size] = '\0';
+  return content;
+}
+
+/**
+ * Find sourceMappingURL comment in file content
+ * Searches for: //# sourceMappingURL=... or /*# sourceMappingURL=... *\/
+ * Returns allocated URL string or NULL
+ */
+static char* find_source_mapping_url(const char* content) {
+  if (!content) {
+    return NULL;
+  }
+
+  // Search from end of file (source maps are typically at the end)
+  const char* url_marker = "sourceMappingURL=";
+  size_t content_len = strlen(content);
+  const char* last_occurrence = NULL;
+
+  // Find last occurrence of sourceMappingURL
+  const char* pos = content;
+  while ((pos = strstr(pos, url_marker)) != NULL) {
+    last_occurrence = pos;
+    pos += strlen(url_marker);
+  }
+
+  if (!last_occurrence) {
+    return NULL;
+  }
+
+  // Extract URL (from = to end of line or */)
+  const char* url_start = last_occurrence + strlen(url_marker);
+  const char* url_end = url_start;
+
+  // Find end of URL (newline, */ for block comment, or end of file)
+  while (*url_end && *url_end != '\n' && *url_end != '\r') {
+    if (url_end[0] == '*' && url_end[1] == '/') {
+      break;
+    }
+    url_end++;
+  }
+
+  // Trim whitespace from end
+  while (url_end > url_start && (url_end[-1] == ' ' || url_end[-1] == '\t')) {
+    url_end--;
+  }
+
+  size_t url_len = url_end - url_start;
+  if (url_len == 0) {
+    return NULL;
+  }
+
+  char* url = malloc(url_len + 1);
+  if (!url) {
+    return NULL;
+  }
+
+  memcpy(url, url_start, url_len);
+  url[url_len] = '\0';
+  return url;
+}
+
+/**
+ * Decode base64-encoded inline source map
+ * Returns JSValue containing the decoded JSON object
+ */
+static JSValue decode_inline_source_map(JSContext* ctx, const char* data_url) {
+  // Check if it's a data URL
+  const char* base64_prefix = "data:application/json;base64,";
+  const char* charset_prefix = "data:application/json;charset=utf-8;base64,";
+
+  const char* base64_data = NULL;
+  if (strncmp(data_url, base64_prefix, strlen(base64_prefix)) == 0) {
+    base64_data = data_url + strlen(base64_prefix);
+  } else if (strncmp(data_url, charset_prefix, strlen(charset_prefix)) == 0) {
+    base64_data = data_url + strlen(charset_prefix);
+  } else {
+    return JS_UNDEFINED;
+  }
+
+  // Decode base64
+  size_t base64_len = strlen(base64_data);
+  size_t decoded_len = (base64_len * 3) / 4 + 1;  // Conservative estimate
+  char* decoded = js_malloc(ctx, decoded_len);
+  if (!decoded) {
+    return JS_EXCEPTION;
+  }
+
+  // Use QuickJS's JSON.parse to parse the decoded string
+  // First, decode base64 manually
+  const char* b64_chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+  size_t out_pos = 0;
+  uint32_t val = 0;
+  int val_b = -8;
+
+  for (size_t i = 0; i < base64_len; i++) {
+    char c = base64_data[i];
+    if (c == '=' || c == '\n' || c == '\r' || c == ' ') {
+      continue;
+    }
+
+    const char* p = strchr(b64_chars, c);
+    if (!p) {
+      js_free(ctx, decoded);
+      return JS_UNDEFINED;
+    }
+
+    val = (val << 6) | (p - b64_chars);
+    val_b += 6;
+
+    if (val_b >= 0) {
+      decoded[out_pos++] = (val >> val_b) & 0xFF;
+      val_b -= 8;
+    }
+  }
+
+  decoded[out_pos] = '\0';
+
+  // Parse JSON
+  JSValue json_str = JS_NewStringLen(ctx, decoded, out_pos);
+  js_free(ctx, decoded);
+
+  if (JS_IsException(json_str)) {
+    return JS_EXCEPTION;
+  }
+
+  // Get JSON.parse
+  JSValue global = JS_GetGlobalObject(ctx);
+  JSValue json_obj = JS_GetPropertyStr(ctx, global, "JSON");
+  JSValue parse_fn = JS_GetPropertyStr(ctx, json_obj, "parse");
+  JS_FreeValue(ctx, global);
+  JS_FreeValue(ctx, json_obj);
+
+  if (JS_IsException(parse_fn)) {
+    JS_FreeValue(ctx, json_str);
+    return JS_EXCEPTION;
+  }
+
+  // Call JSON.parse
+  JSValue result = JS_Call(ctx, parse_fn, JS_UNDEFINED, 1, &json_str);
+  JS_FreeValue(ctx, parse_fn);
+  JS_FreeValue(ctx, json_str);
+
+  return result;
+}
+
+/**
+ * Construct absolute path for external source map file
+ * Returns allocated path string or NULL
+ */
+static char* resolve_source_map_path(const char* file_path, const char* map_url) {
+  // If map_url is absolute, use it directly
+  if (map_url[0] == '/') {
+    return strdup(map_url);
+  }
+
+  // Get directory of file_path
+  const char* last_slash = strrchr(file_path, '/');
+  if (!last_slash) {
+    // file_path has no directory, use map_url as-is
+    return strdup(map_url);
+  }
+
+  size_t dir_len = last_slash - file_path + 1;
+  size_t url_len = strlen(map_url);
+  char* resolved = malloc(dir_len + url_len + 1);
+  if (!resolved) {
+    return NULL;
+  }
+
+  memcpy(resolved, file_path, dir_len);
+  memcpy(resolved + dir_len, map_url, url_len + 1);
+
+  return resolved;
+}
+
 JSValue jsrt_find_source_map(JSContext* ctx, JSRT_SourceMapCache* cache, const char* path) {
-  // TODO: Implement in Task 2.6 (module.findSourceMap)
-  // This will:
-  // 1. Check cache
-  // 2. Look for inline source maps
-  // 3. Look for external .map files
-  // 4. Parse and cache if found
-  JSRT_Debug("jsrt_find_source_map: TODO - implement in Task 2.6");
-  return JS_UNDEFINED;
+  if (!ctx || !cache || !path) {
+    return JS_UNDEFINED;
+  }
+
+  // Check if source maps are enabled
+  if (!cache->enabled) {
+    return JS_UNDEFINED;
+  }
+
+  // Check cache first
+  JSRT_SourceMap* cached = jsrt_source_map_cache_lookup(cache, path);
+  if (cached) {
+    JSRT_Debug("Source map cache HIT for: %s", path);
+    return jsrt_source_map_create_instance(ctx, cached);
+  }
+
+  JSRT_Debug("Source map cache MISS for: %s, searching...", path);
+
+  // Read file content
+  char* content = read_file_contents(path);
+  if (!content) {
+    JSRT_Debug("Failed to read file: %s", path);
+    return JS_UNDEFINED;
+  }
+
+  // Find sourceMappingURL comment
+  char* map_url = find_source_mapping_url(content);
+  JSValue source_map_json = JS_UNDEFINED;
+
+  if (map_url) {
+    JSRT_Debug("Found sourceMappingURL: %s", map_url);
+
+    // Check if it's an inline data URL
+    if (strncmp(map_url, "data:", 5) == 0) {
+      source_map_json = decode_inline_source_map(ctx, map_url);
+      if (JS_IsException(source_map_json)) {
+        free(map_url);
+        free(content);
+        return JS_EXCEPTION;
+      }
+    } else {
+      // External .map file
+      char* map_path = resolve_source_map_path(path, map_url);
+      if (map_path) {
+        char* map_content = read_file_contents(map_path);
+        if (map_content) {
+          // Parse JSON
+          JSValue global = JS_GetGlobalObject(ctx);
+          JSValue json_obj = JS_GetPropertyStr(ctx, global, "JSON");
+          JSValue parse_fn = JS_GetPropertyStr(ctx, json_obj, "parse");
+          JS_FreeValue(ctx, global);
+          JS_FreeValue(ctx, json_obj);
+
+          if (!JS_IsException(parse_fn)) {
+            JSValue json_str = JS_NewString(ctx, map_content);
+            source_map_json = JS_Call(ctx, parse_fn, JS_UNDEFINED, 1, &json_str);
+            JS_FreeValue(ctx, parse_fn);
+            JS_FreeValue(ctx, json_str);
+          }
+          free(map_content);
+        }
+        free(map_path);
+      }
+    }
+    free(map_url);
+  }
+
+  // If no sourceMappingURL found, try looking for .map file with same name
+  if (JS_IsUndefined(source_map_json)) {
+    size_t path_len = strlen(path);
+    char* map_path = malloc(path_len + 5);  // +4 for ".map" + 1 for null
+    if (map_path) {
+      snprintf(map_path, path_len + 5, "%s.map", path);
+      char* map_content = read_file_contents(map_path);
+      if (map_content) {
+        JSRT_Debug("Found adjacent .map file: %s", map_path);
+
+        // Parse JSON
+        JSValue global = JS_GetGlobalObject(ctx);
+        JSValue json_obj = JS_GetPropertyStr(ctx, global, "JSON");
+        JSValue parse_fn = JS_GetPropertyStr(ctx, json_obj, "parse");
+        JS_FreeValue(ctx, global);
+        JS_FreeValue(ctx, json_obj);
+
+        if (!JS_IsException(parse_fn)) {
+          JSValue json_str = JS_NewString(ctx, map_content);
+          source_map_json = JS_Call(ctx, parse_fn, JS_UNDEFINED, 1, &json_str);
+          JS_FreeValue(ctx, parse_fn);
+          JS_FreeValue(ctx, json_str);
+        }
+        free(map_content);
+      }
+      free(map_path);
+    }
+  }
+
+  free(content);
+
+  if (JS_IsUndefined(source_map_json) || JS_IsException(source_map_json)) {
+    JSRT_Debug("No source map found for: %s", path);
+    return JS_UNDEFINED;
+  }
+
+  // Parse source map
+  JSRT_SourceMap* map = jsrt_source_map_parse(ctx, source_map_json);
+  JS_FreeValue(ctx, source_map_json);
+
+  if (!map) {
+    JSRT_Debug("Failed to parse source map for: %s", path);
+    return JS_UNDEFINED;
+  }
+
+  // Cache the parsed source map
+  jsrt_source_map_cache_store(ctx, cache, path, map);
+  JSRT_Debug("Cached source map for: %s", path);
+
+  // Create and return SourceMap instance
+  return jsrt_source_map_create_instance(ctx, map);
 }

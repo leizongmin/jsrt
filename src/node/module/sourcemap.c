@@ -405,6 +405,134 @@ static bool decode_vlq_mappings(JSContext* ctx, const char* mappings, int32_t** 
 }
 
 // ============================================================================
+// Source Map Mappings Builder (Task 2.4)
+// ============================================================================
+
+/**
+ * Build decoded mappings array from VLQ-encoded mappings string
+ * Converts relative VLQ values into absolute JSRT_SourceMapping structs
+ *
+ * Source Map v3 format:
+ * - Semicolons (;) separate lines
+ * - Commas (,) separate segments within a line
+ * - Each segment has 1, 4, or 5 VLQ values:
+ *   1. Generated column (delta from previous column or 0 for first in line)
+ *   2. Source file index (delta, optional)
+ *   3. Original line (delta, optional)
+ *   4. Original column (delta, optional)
+ *   5. Name index (delta, optional)
+ */
+static bool jsrt_source_map_build_mappings(JSContext* ctx, JSRT_SourceMap* map) {
+  if (!map || !map->mappings) {
+    return false;
+  }
+
+  // Estimate capacity (rough: one mapping per 5 characters)
+  size_t estimated_capacity = strlen(map->mappings) / 5 + 100;
+  JSRT_SourceMapping* mappings = js_malloc(ctx, estimated_capacity * sizeof(JSRT_SourceMapping));
+  if (!mappings) {
+    return false;
+  }
+
+  size_t mappings_count = 0;
+  size_t mappings_capacity = estimated_capacity;
+
+  // State tracking for delta decoding
+  int32_t generated_line = 0;
+  int32_t generated_column = 0;
+  int32_t source_index = 0;
+  int32_t original_line = 0;
+  int32_t original_column = 0;
+  int32_t name_index = 0;
+
+  const char* ptr = map->mappings;
+
+  while (*ptr != '\0') {
+    // Handle line separator
+    if (*ptr == ';') {
+      generated_line++;
+      generated_column = 0;  // Reset column at start of new line
+      ptr++;
+      continue;
+    }
+
+    // Handle segment separator
+    if (*ptr == ',') {
+      ptr++;
+      continue;
+    }
+
+    // Decode VLQ segment (1, 4, or 5 values)
+    int32_t values[5];
+    int value_count = 0;
+
+    // Decode up to 5 values
+    while (*ptr != '\0' && *ptr != ',' && *ptr != ';' && value_count < 5) {
+      if (!decode_vlq_value(&ptr, &values[value_count])) {
+        JSRT_Debug("Failed to decode VLQ value at position %ld", ptr - map->mappings);
+        js_free(ctx, mappings);
+        return false;
+      }
+      value_count++;
+    }
+
+    // Must have at least 1 value (generated column)
+    if (value_count < 1) {
+      continue;
+    }
+
+    // Apply deltas
+    generated_column += values[0];
+
+    // Create mapping
+    JSRT_SourceMapping mapping;
+    mapping.generated_line = generated_line;
+    mapping.generated_column = generated_column;
+    mapping.source_index = -1;
+    mapping.original_line = -1;
+    mapping.original_column = -1;
+    mapping.name_index = -1;
+
+    // If we have source information (4 or 5 values)
+    if (value_count >= 4) {
+      source_index += values[1];
+      original_line += values[2];
+      original_column += values[3];
+
+      mapping.source_index = source_index;
+      mapping.original_line = original_line;
+      mapping.original_column = original_column;
+
+      // Optional name index
+      if (value_count >= 5) {
+        name_index += values[4];
+        mapping.name_index = name_index;
+      }
+    }
+
+    // Grow array if needed
+    if (mappings_count >= mappings_capacity) {
+      mappings_capacity *= 2;
+      JSRT_SourceMapping* new_mappings = js_realloc(ctx, mappings, mappings_capacity * sizeof(JSRT_SourceMapping));
+      if (!new_mappings) {
+        js_free(ctx, mappings);
+        return false;
+      }
+      mappings = new_mappings;
+    }
+
+    mappings[mappings_count++] = mapping;
+  }
+
+  // Store in map
+  map->decoded_mappings = mappings;
+  map->decoded_mappings_count = mappings_count;
+
+  JSRT_Debug("Built %zu mappings from VLQ string", mappings_count);
+  return true;
+}
+
+// ============================================================================
 // Source Map Parsing (Task 2.2)
 // ============================================================================
 
@@ -558,22 +686,14 @@ JSRT_SourceMap* jsrt_source_map_parse(JSContext* ctx, JSValue payload) {
     goto error;
   }
 
-  // Decode VLQ mappings
-  int32_t* decoded_values = NULL;
-  size_t decoded_count = 0;
-  if (!decode_vlq_mappings(ctx, map->mappings, &decoded_values, &decoded_count)) {
-    JSRT_Debug("Failed to decode VLQ mappings");
+  // Decode VLQ mappings and build mapping structs
+  if (!jsrt_source_map_build_mappings(ctx, map)) {
+    JSRT_Debug("Failed to build source map mappings");
     goto error;
   }
 
-  // TODO: Task 2.3+ will convert decoded_values into JSRT_SourceMapping structs
-  // For now, store the raw decoded values
-  if (decoded_values) {
-    js_free(ctx, decoded_values);  // Will be used in Task 2.3
-  }
-
-  JSRT_Debug("Source map parsed successfully: version=%s, sources=%zu, names=%zu", map->version, map->sources_count,
-             map->names_count);
+  JSRT_Debug("Source map parsed successfully: version=%s, sources=%zu, names=%zu, mappings=%zu", map->version,
+             map->sources_count, map->names_count, map->decoded_mappings_count);
 
   return map;
 
@@ -658,11 +778,87 @@ static JSValue jsrt_source_map_find_entry(JSContext* ctx, JSValueConst this_val,
     return JS_ThrowRangeError(ctx, "lineOffset and columnOffset must be non-negative");
   }
 
-  // TODO: Task 2.4 will implement the actual binary search in decoded mappings
-  // For now, return empty object
-  JSRT_Debug("findEntry called with line=%d, column=%d (not yet implemented)", line_offset, column_offset);
+  // If no mappings, return empty object
+  if (!map->decoded_mappings || map->decoded_mappings_count == 0) {
+    return JS_NewObject(ctx);
+  }
 
+  // Binary search for line, then linear search for column
+  // Mappings are sorted by generated_line, then generated_column
+
+  // Find first mapping for the target line
+  size_t left = 0;
+  size_t right = map->decoded_mappings_count;
+  size_t line_start = SIZE_MAX;
+
+  // Binary search to find any mapping on the target line
+  while (left < right) {
+    size_t mid = left + (right - left) / 2;
+    if (map->decoded_mappings[mid].generated_line < line_offset) {
+      left = mid + 1;
+    } else if (map->decoded_mappings[mid].generated_line > line_offset) {
+      right = mid;
+    } else {
+      // Found a mapping on target line, but need to find the first one
+      line_start = mid;
+      // Continue searching left to find the first mapping on this line
+      right = mid;
+    }
+  }
+
+  // If we found a mapping on the target line, find the first one
+  if (line_start != SIZE_MAX) {
+    while (line_start > 0 && map->decoded_mappings[line_start - 1].generated_line == line_offset) {
+      line_start--;
+    }
+  } else if (left < map->decoded_mappings_count && map->decoded_mappings[left].generated_line == line_offset) {
+    line_start = left;
+  } else {
+    // No mapping found for this line
+    return JS_NewObject(ctx);
+  }
+
+  // Linear search within the line for the closest column <= target column
+  JSRT_SourceMapping* best_mapping = NULL;
+  for (size_t i = line_start; i < map->decoded_mappings_count; i++) {
+    JSRT_SourceMapping* mapping = &map->decoded_mappings[i];
+
+    // Stop if we've moved to a different line
+    if (mapping->generated_line != line_offset) {
+      break;
+    }
+
+    // Find the mapping with largest column <= target column
+    if (mapping->generated_column <= column_offset) {
+      best_mapping = mapping;
+    } else {
+      // Columns are sorted, so we can stop
+      break;
+    }
+  }
+
+  // If no suitable mapping found, return empty object
+  if (!best_mapping) {
+    return JS_NewObject(ctx);
+  }
+
+  // Build result object
   JSValue result = JS_NewObject(ctx);
+  JS_SetPropertyStr(ctx, result, "generatedLine", JS_NewInt32(ctx, best_mapping->generated_line));
+  JS_SetPropertyStr(ctx, result, "generatedColumn", JS_NewInt32(ctx, best_mapping->generated_column));
+
+  // Add source information if available
+  if (best_mapping->source_index >= 0 && (size_t)best_mapping->source_index < map->sources_count) {
+    JS_SetPropertyStr(ctx, result, "originalSource", JS_NewString(ctx, map->sources[best_mapping->source_index]));
+    JS_SetPropertyStr(ctx, result, "originalLine", JS_NewInt32(ctx, best_mapping->original_line));
+    JS_SetPropertyStr(ctx, result, "originalColumn", JS_NewInt32(ctx, best_mapping->original_column));
+
+    // Add name if available
+    if (best_mapping->name_index >= 0 && (size_t)best_mapping->name_index < map->names_count) {
+      JS_SetPropertyStr(ctx, result, "name", JS_NewString(ctx, map->names[best_mapping->name_index]));
+    }
+  }
+
   return result;
 }
 

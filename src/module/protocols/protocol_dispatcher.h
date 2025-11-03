@@ -65,4 +65,7 @@ char* jsrt_extract_protocol(const char* url);
  */
 bool jsrt_has_protocol(const char* url);
 
+// Note: Load hook utilities are only implemented in the .c file
+// to avoid circular dependencies with module API headers
+
 #endif  // __JSRT_MODULE_PROTOCOL_DISPATCHER_H__

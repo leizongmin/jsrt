@@ -320,7 +320,8 @@ cleanup:
   return status;
 }
 
-int JSRT_CmdRunFile(const char* filename, bool compact_node, bool compile_cache_allowed, int argc, char** argv) {
+int JSRT_CmdRunFile(const char* filename, bool compact_node, bool compile_cache_allowed, bool module_hook_trace,
+                    int argc, char** argv) {
   // Store command line arguments for process module
   jsrt_argc = argc;
   jsrt_argv = argv;
@@ -334,6 +335,9 @@ int JSRT_CmdRunFile(const char* filename, bool compact_node, bool compile_cache_
 
   // Set compile cache allowed flag
   JSRT_RuntimeSetCompileCacheAllowed(rt, compile_cache_allowed);
+
+  // Enable module hook tracing if requested
+  JSRT_RuntimeSetModuleHookTrace(rt, module_hook_trace);
 
   JSRT_ReadFileResult file = JSRT_ReadFileResultDefault();
   JSRT_EvalResult res = JSRT_EvalResultDefault();
@@ -408,7 +412,7 @@ end:
   return ret;
 }
 
-int JSRT_CmdRunStdin(bool compact_node, bool compile_cache_allowed, int argc, char** argv) {
+int JSRT_CmdRunStdin(bool compact_node, bool compile_cache_allowed, bool module_hook_trace, int argc, char** argv) {
   // Store command line arguments for process module
   jsrt_argc = argc;
   jsrt_argv = argv;
@@ -422,6 +426,9 @@ int JSRT_CmdRunStdin(bool compact_node, bool compile_cache_allowed, int argc, ch
 
   // Set compile cache allowed flag
   JSRT_RuntimeSetCompileCacheAllowed(rt, compile_cache_allowed);
+
+  // Enable module hook tracing if requested
+  JSRT_RuntimeSetModuleHookTrace(rt, module_hook_trace);
 
   JSRT_EvalResult res = JSRT_EvalResultDefault();
   JSRT_EvalResult res2 = JSRT_EvalResultDefault();

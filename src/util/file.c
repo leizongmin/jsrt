@@ -92,6 +92,10 @@ const char* JSRT_ReadFileErrorToString(JSRT_ReadFileError error) {
       return "JSRT_READ_FILE_ERROR_OUT_OF_MEMORY";
     case JSRT_READ_FILE_ERROR_READ_ERROR:
       return "JSRT_READ_FILE_ERROR_READ_ERROR";
+    case JSRT_READ_FILE_ERROR_INVALID_DATA:
+      return "JSRT_READ_FILE_ERROR_INVALID_DATA";
+    case JSRT_READ_FILE_ERROR_NO_HOOK_RESULT:
+      return "JSRT_READ_FILE_ERROR_NO_HOOK_RESULT";
     default:
       return "Unknown error";
   }

@@ -8,7 +8,7 @@
 * Task Metadata
 :PROPERTIES:
 :CREATED: 2025-10-31T00:00:00Z
-:UPDATED: 2025-11-03T09:45:00Z
+:UPDATED: 2025-11-03T10:20:00Z
 :STATUS: 🟢 PHASE 4 COMPLETED - 32/32 TASKS (100%)
 :PROGRESS: 145/171
 :COMPLETION: 84.8%
@@ -1800,7 +1800,7 @@ Complete documentation and examples.
 :PROGRESS: 145/171
 :COMPLETION: 84.8%
 :ACTIVE_TASK: Phase 5 - Package.json Utilities (ready to start)
-:UPDATED: 2025-11-03T09:45:00Z
+:UPDATED: 2025-11-03T10:20:00Z
 :END:
 
 ** Current Status
@@ -1924,6 +1924,9 @@ Complete documentation and examples.
 - Created comprehensive test suite validating all functionality
 - All existing tests continue to pass - no regressions introduced
 :LOGBOOK:
+- Note taken on [2025-11-03T10:20:00Z] \\
+  🔧 TEST FIX: Fixed make test failures - resolved logic bug in commonjs_loader.c causing "Failed to create wrapper code" error
+  Fixed hook loading condition logic where empty file_result.error was incorrectly treated as hook-provided content, restored 100% test pass rate (268/268 tests passing)
 - Note taken on [2025-11-03T09:45:00Z] \\
   🎉 Phase 4 COMPLETED: All 32 module hook tasks finished (100%), progress updated to 145/171 (84.8%)
 - Note taken on [2025-11-03T09:45:00Z] \\
@@ -1983,6 +1986,7 @@ Complete documentation and examples.
 ** Recent Changes
 | Timestamp | Action | Task ID | Details |
 |-----------|--------|---------|---------|
+| 2025-11-03T10:20:00Z | Fixed | Test Infrastructure | 🔧 Fixed make test failures: Resolved logic bug in commonjs_loader.c, restored 100% test pass rate (268/268) |
 | 2025-11-03T09:45:00Z | Completed | Phase 4 | 🎉 Phase 4 COMPLETED: All 32 module hook tasks finished (100%), progress 145/171 (84.8%) |
 | 2025-11-03T09:45:00Z | Completed | 4.6 | Hook Examples & Documentation: 3 examples, comprehensive docs, TypeScript types ✅ |
 | 2025-11-03T09:45:00Z | Completed | 4.5 | Hook Error Handling: exception wrapping, stderr logging, --trace-module-hooks flag ✅ |

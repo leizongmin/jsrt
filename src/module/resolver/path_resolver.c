@@ -17,6 +17,8 @@
 #include <unistd.h>
 #endif
 
+#include "../../node/module/hooks.h"
+#include "../../runtime.h"
 #include "../../util/file.h"
 #include "../util/module_debug.h"
 #include "npm_resolver.h"
@@ -135,6 +137,57 @@ JSRT_ResolvedPath* jsrt_resolve_path(JSContext* ctx, const char* specifier, cons
   }
 
   MODULE_DEBUG_RESOLVER("Resolving specifier '%s' from base '%s'", specifier, base_path ? base_path : "(null)");
+
+  // Check for resolve hooks first (Task 4.3: Resolve Hook Execution)
+  JSRT_Runtime* rt = JS_GetContextOpaque(ctx);
+  if (rt && rt->hook_registry && jsrt_hook_get_count(rt->hook_registry) > 0) {
+    MODULE_DEBUG_RESOLVER("Executing resolve hooks before normal resolution");
+
+    // Build hook context
+    JSRTHookContext hook_context = {0};
+    hook_context.specifier = specifier;
+    hook_context.base_path = base_path;
+    hook_context.resolved_url = NULL;
+    hook_context.is_main_module = (base_path == NULL);  // No base path means main module
+    hook_context.condition_count = 0;
+    hook_context.user_data = NULL;
+
+    // Set default conditions for Node.js compatibility
+    char* conditions[] = {"node", "default", NULL};
+
+    // Execute enhanced resolve hooks
+    char* hook_result = jsrt_hook_execute_resolve_enhanced(rt->hook_registry, specifier, &hook_context, conditions);
+    if (hook_result) {
+      MODULE_DEBUG_RESOLVER("Resolve hook returned: %s", hook_result);
+
+      // Create resolved path from hook result
+      JSRT_ResolvedPath* hook_resolved = (JSRT_ResolvedPath*)calloc(1, sizeof(JSRT_ResolvedPath));
+      if (hook_resolved) {
+        hook_resolved->resolved_path = hook_result;
+        hook_resolved->type = JSRT_SPECIFIER_BARE;  // Hook result type
+        hook_resolved->is_url = (strstr(hook_result, "://") != NULL);
+        hook_resolved->is_builtin = false;
+
+        // Extract protocol if URL
+        if (hook_resolved->is_url) {
+          if (strncmp(hook_result, "http://", 7) == 0) {
+            hook_resolved->protocol = strdup("http");
+          } else if (strncmp(hook_result, "https://", 8) == 0) {
+            hook_resolved->protocol = strdup("https");
+          } else if (strncmp(hook_result, "file://", 7) == 0) {
+            hook_resolved->protocol = strdup("file");
+          }
+        }
+
+        MODULE_DEBUG_RESOLVER("Using hook resolution result: %s", hook_result);
+        return hook_resolved;
+      }
+
+      free(hook_result);  // Cleanup if allocation failed
+    }
+
+    MODULE_DEBUG_RESOLVER("Resolve hooks did not return a result, continuing with normal resolution");
+  }
 
   // Parse the specifier
   JSRT_ModuleSpecifier* spec = jsrt_parse_specifier(specifier);

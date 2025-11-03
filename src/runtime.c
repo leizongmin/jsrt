@@ -847,6 +847,13 @@ void JSRT_RuntimeGetCompileCacheStats(JSRT_Runtime* rt, uint64_t* hits, uint64_t
   }
 }
 
+void JSRT_RuntimeSetModuleHookTrace(JSRT_Runtime* rt, bool enabled) {
+  if (rt && rt->hook_registry) {
+    jsrt_hook_set_trace(rt->hook_registry, enabled);
+    JSRT_Debug("Module hook trace: %s", enabled ? "enabled" : "disabled");
+  }
+}
+
 static void jsrt_debug_handle_walker(uv_handle_t* handle, void* arg) {
 #ifdef DEBUG
   (void)arg;  // Unused in release builds

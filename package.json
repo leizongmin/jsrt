@@ -11,8 +11,8 @@
     "update-dev": "npm --registry https://registry.npmjs.org i @anthropic-ai/claude-code@latest @openai/codex@latest -D"
   },
   "devDependencies": {
-    "@anthropic-ai/claude-code": "^2.0.26",
-    "@openai/codex": "^0.48.0",
+    "@anthropic-ai/claude-code": "^2.0.31",
+    "@openai/codex": "^0.53.0",
     "async": "^3.2.5",
     "lodash": "^4.17.21",
     "moment": "^2.30.1",

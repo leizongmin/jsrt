@@ -90,6 +90,7 @@ void JSRT_RuntimeSetCompactNodeMode(JSRT_Runtime* rt, bool enabled);
 void JSRT_RuntimeSetCompileCacheAllowed(JSRT_Runtime* rt, bool allowed);
 void JSRT_RuntimeGetCompileCacheStats(JSRT_Runtime* rt, uint64_t* hits, uint64_t* misses, uint64_t* writes,
                                       uint64_t* errors, uint64_t* evictions, size_t* current_size, size_t* size_limit);
+void JSRT_RuntimeSetModuleHookTrace(JSRT_Runtime* rt, bool enabled);
 
 typedef struct {
   uint8_t* data;

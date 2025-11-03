@@ -22,16 +22,17 @@ int main(int argc, char** argv) {
     return ret;  // Successfully executed embedded bytecode
   }
 
-  // Handle explicit stdin flag
-  if (argc == 2 && strcmp(argv[1], "-") == 0) {
-    ret = JSRT_CmdRunStdin(false, true, argc, argv);
-    return ret;
-  }
-
   // Check for compact-node flag (enabled by default)
   bool compact_node = true;
   bool compile_cache_allowed = true;
+  bool module_hook_trace = false;
   int script_arg_start = 1;
+
+  // Handle explicit stdin flag
+  if (argc == 2 && strcmp(argv[1], "-") == 0) {
+    ret = JSRT_CmdRunStdin(false, true, module_hook_trace, argc, argv);
+    return ret;
+  }
 
   // Check for JSRT_NO_COMPILE_CACHE environment variable
   const char* no_cache_env = getenv("JSRT_NO_COMPILE_CACHE");
@@ -51,6 +52,9 @@ int main(int argc, char** argv) {
     } else if (strcmp(argv[i], "--no-compile-cache") == 0) {
       compile_cache_allowed = false;
       script_arg_start++;
+    } else if (strcmp(argv[i], "--trace-module-hooks") == 0) {
+      module_hook_trace = true;
+      script_arg_start++;
     } else {
       // Stop processing flags when we hit a non-flag
       break;
@@ -60,7 +64,7 @@ int main(int argc, char** argv) {
   if (argc < script_arg_start + 1) {
     // If no embedded bytecode and no arguments, check for piped stdin input
     if (!isatty(STDIN_FILENO)) {
-      ret = JSRT_CmdRunStdin(compact_node, compile_cache_allowed, argc, argv);
+      ret = JSRT_CmdRunStdin(compact_node, compile_cache_allowed, module_hook_trace, argc, argv);
       return ret;
     }
 
@@ -109,11 +113,11 @@ int main(int argc, char** argv) {
     }
     new_argv[new_argc] = NULL;
 
-    ret = JSRT_CmdRunFile(command, compact_node, compile_cache_allowed, new_argc, new_argv);
+    ret = JSRT_CmdRunFile(command, compact_node, compile_cache_allowed, module_hook_trace, new_argc, new_argv);
     free(new_argv);
   } else {
-    ret =
-        JSRT_CmdRunFile(command, compact_node, compile_cache_allowed, argc - script_arg_start, argv + script_arg_start);
+    ret = JSRT_CmdRunFile(command, compact_node, compile_cache_allowed, module_hook_trace, argc - script_arg_start,
+                          argv + script_arg_start);
   }
 
   return ret;
@@ -142,6 +146,10 @@ void PrintHelp(bool is_error) {
           "                                        - Provide __dirname and __filename\n"
           "                                        - Expose global process object\n"
           "  --no-compact-node                     Disable compact Node.js mode\n"
+          "\n"
+          "Module System:\n"
+          "  --no-compile-cache                    Disable compilation cache\n"
+          "  --trace-module-hooks                  Enable verbose hook execution tracing\n"
           "\n");
 }
 

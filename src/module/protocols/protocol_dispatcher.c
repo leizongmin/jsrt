@@ -10,6 +10,16 @@
 #include "../util/module_debug.h"
 #include "protocol_registry.h"
 
+// Include hooks for load hook execution
+#ifdef JSRT_NODE_COMPAT
+#include "../../node/module/hooks.h"
+#include "../../node/module/module_api.h"
+#include "../../runtime.h"
+
+// Forward declaration to avoid circular dependencies
+typedef struct JSRTHookLoadResult JSRTHookLoadResult;
+#endif
+
 /**
  * Extract protocol from URL
  */
@@ -122,3 +132,58 @@ JSRT_ReadFileResult jsrt_load_content_by_protocol(const char* url) {
 
   return result;
 }
+
+#ifdef JSRT_NODE_COMPAT
+/**
+ * Convert load hook result to file result
+ *
+ * Converts a JSRTHookLoadResult to JSRT_ReadFileResult for integration
+ * with the existing protocol loading system.
+ *
+ * @param hook_result Load hook result (can be NULL)
+ * @return File result structure
+ */
+JSRT_ReadFileResult jsrt_hook_result_to_file_result(JSRTHookLoadResult* hook_result) {
+  JSRT_ReadFileResult result = JSRT_ReadFileResultDefault();
+
+  if (!hook_result) {
+    result.error = JSRT_READ_FILE_ERROR_NO_HOOK_RESULT;
+    return result;
+  }
+
+  switch (hook_result->source_type) {
+    case JSRT_HOOK_SOURCE_STRING:
+      if (hook_result->source.string) {
+        result.data = hook_result->source.string;
+        result.size = strlen(hook_result->source.string);
+        result.error = JSRT_READ_FILE_OK;
+        MODULE_DEBUG_PROTOCOL("Converted string hook result to file result (%zu bytes)", result.size);
+      } else {
+        result.error = JSRT_READ_FILE_ERROR_INVALID_DATA;
+      }
+      break;
+
+    case JSRT_HOOK_SOURCE_ARRAY_BUFFER:
+    case JSRT_HOOK_SOURCE_UINT8_ARRAY:
+      if (hook_result->source.binary.data) {
+        result.data = (char*)hook_result->source.binary.data;
+        result.size = hook_result->source.binary.size;
+        result.error = JSRT_READ_FILE_OK;
+        MODULE_DEBUG_PROTOCOL("Converted binary hook result to file result (%zu bytes)", result.size);
+      } else {
+        result.error = JSRT_READ_FILE_ERROR_INVALID_DATA;
+      }
+      break;
+
+    default:
+      MODULE_DEBUG_ERROR("Unsupported hook source type: %d", hook_result->source_type);
+      result.error = JSRT_READ_FILE_ERROR_INVALID_DATA;
+      break;
+  }
+
+  return result;
+}
+
+// Note: The actual hook integration will be done in the module loaders
+// This file just provides utilities for converting hook results
+#endif  // JSRT_NODE_COMPAT

@@ -7,6 +7,17 @@
 #include <string.h>
 #include "../../node/module/compile_cache.h"
 #include "../../runtime.h"  // For JSRT_Runtime
+
+// Include hooks for load hook execution
+#ifdef JSRT_NODE_COMPAT
+#include "../../node/module/hooks.h"
+#include "../../node/module/module_api.h"
+#include "../../util/file.h"  // For JSRT_ReadFileResult
+
+// Forward declaration for hook result conversion
+JSRT_ReadFileResult jsrt_hook_result_to_file_result(JSRTHookLoadResult* hook_result);
+#endif
+
 #include "../core/module_cache.h"
 #include "../core/module_loader.h"
 #include "../protocols/protocol_dispatcher.h"
@@ -127,6 +138,11 @@ static char* create_wrapper_code(const char* content, const char* resolved_path)
   //   <module code>
   // })
 
+  if (!content) {
+    MODULE_DEBUG_LOADER("Error: content is NULL in create_wrapper_code");
+    return NULL;
+  }
+
   size_t content_len = strlen(content);
   size_t wrapper_size = content_len + 256;  // Extra space for wrapper
 
@@ -138,11 +154,34 @@ static char* create_wrapper_code(const char* content, const char* resolved_path)
   // CommonJS wrapper with line number fix registration
   // Register module path for Error.stack line number adjustment (handled by error_stack_fix_cjs.js)
   // The registration line ensures this file's path is tracked for line number adjustment
-  snprintf(wrapper, wrapper_size,
-           "(function(exports, require, module, __filename, __dirname) {\n"
-           "globalThis.__jsrt_cjs_modules&&globalThis.__jsrt_cjs_modules.add(__filename);\n"
-           "%s\n})",
-           content);
+  int written = snprintf(wrapper, wrapper_size,
+                         "(function(exports, require, module, __filename, __dirname) {\n"
+                         "globalThis.__jsrt_cjs_modules&&globalThis.__jsrt_cjs_modules.add(__filename);\n"
+                         "%s\n})",
+                         content);
+
+  // Check if snprintf was truncated
+  if (written < 0 || (size_t)written >= wrapper_size) {
+    MODULE_DEBUG_LOADER("Wrapper code truncated (written=%d, size=%zu), reallocating", written, wrapper_size);
+    free(wrapper);
+    wrapper_size = written + 1;  // Include null terminator
+    if (wrapper_size <= 0) {     // Handle snprintf error
+      return NULL;
+    }
+    wrapper = malloc(wrapper_size);
+    if (!wrapper) {
+      return NULL;
+    }
+    written = snprintf(wrapper, wrapper_size,
+                       "(function(exports, require, module, __filename, __dirname) {\n"
+                       "globalThis.__jsrt_cjs_modules&&globalThis.__jsrt_cjs_modules.add(__filename);\n"
+                       "%s\n})",
+                       content);
+    if (written < 0 || (size_t)written >= wrapper_size) {
+      free(wrapper);
+      return NULL;
+    }
+  }
 
   return wrapper;
 }
@@ -194,12 +233,58 @@ JSValue jsrt_load_commonjs_module(JSContext* ctx, JSRT_ModuleLoader* loader, con
     }
   }
 
-  // Load module content via protocol dispatcher
+  // Load module content via protocol dispatcher (with load hook support)
   JSRT_ReadFileResult file_result = {0};
   char* wrapper_code = NULL;
 
   if (!bytecode_cache_hit) {
+#ifdef JSRT_NODE_COMPAT
+    // Try load hooks first if they're registered
+    JSRT_Runtime* runtime = (JSRT_Runtime*)JS_GetContextOpaque(ctx);
+    JSRTHookRegistry* hook_registry = runtime ? runtime->hook_registry : NULL;
+
+    if (hook_registry && jsrt_hook_get_count(hook_registry) > 0) {
+      // Create hook context
+      JSRTHookContext hook_context = {0};
+      hook_context.specifier = specifier ? specifier : resolved_path;
+      hook_context.base_path = "";  // TODO: Determine base path from resolved_path
+      hook_context.resolved_url = resolved_path;
+      hook_context.is_main_module = false;  // TODO: Determine if main module
+      hook_context.condition_count = 1;
+      hook_context.conditions[0] = "require";
+      hook_context.conditions[1] = "node";
+
+      // Execute enhanced load hooks
+      char* conditions[] = {"require", "node", NULL};
+      JSRTHookLoadResult* hook_result =
+          jsrt_hook_execute_load_enhanced(hook_registry, resolved_path, &hook_context, "commonjs", conditions);
+
+      if (hook_result) {
+        file_result = jsrt_hook_result_to_file_result(hook_result);
+
+        if (file_result.error == JSRT_READ_FILE_OK) {
+          // Free hook result structure but not the data (now owned by file_result)
+          if (hook_result->format)
+            free(hook_result->format);
+          free(hook_result);
+        } else {
+          jsrt_hook_load_result_free(hook_result);
+          // Fall through to normal loading
+          file_result = jsrt_load_content_by_protocol(resolved_path);
+        }
+      } else {
+        // No hook result, use normal loading
+        file_result = jsrt_load_content_by_protocol(resolved_path);
+      }
+    } else {
+      // No hooks registered, use normal loading
+      file_result = jsrt_load_content_by_protocol(resolved_path);
+    }
+#else
+    // Normal loading path when Node.js compatibility is disabled
     file_result = jsrt_load_content_by_protocol(resolved_path);
+#endif
+
     if (file_result.error != JSRT_READ_FILE_OK) {
       jsrt_pop_loading_commonjs(loader);
       return jsrt_module_throw_error(ctx, JSRT_MODULE_LOAD_FAILED, "Failed to load module '%s': %s",

@@ -129,7 +129,9 @@ JSRT_SourceMapCache* jsrt_source_map_cache_init(JSContext* ctx, size_t capacity)
 
   cache->capacity = capacity;
   cache->size = 0;
-  cache->enabled = true;  // Enabled by default
+  cache->enabled = true;          // Enabled by default
+  cache->node_modules = false;    // Exclude node_modules by default
+  cache->generated_code = false;  // Exclude eval/Function by default
 
   return cache;
 }
@@ -232,6 +234,34 @@ void jsrt_source_map_cache_set_enabled(JSRT_SourceMapCache* cache, bool enabled)
 
 bool jsrt_source_map_cache_is_enabled(JSRT_SourceMapCache* cache) {
   return cache ? cache->enabled : false;
+}
+
+void jsrt_source_map_cache_set_config(JSRT_SourceMapCache* cache, bool enabled, bool node_modules,
+                                      bool generated_code) {
+  if (cache) {
+    cache->enabled = enabled;
+    cache->node_modules = node_modules;
+    cache->generated_code = generated_code;
+  }
+}
+
+void jsrt_source_map_cache_get_config(JSRT_SourceMapCache* cache, bool* enabled, bool* node_modules,
+                                      bool* generated_code) {
+  if (cache) {
+    if (enabled)
+      *enabled = cache->enabled;
+    if (node_modules)
+      *node_modules = cache->node_modules;
+    if (generated_code)
+      *generated_code = cache->generated_code;
+  } else {
+    if (enabled)
+      *enabled = false;
+    if (node_modules)
+      *node_modules = false;
+    if (generated_code)
+      *generated_code = false;
+  }
 }
 
 // ============================================================================

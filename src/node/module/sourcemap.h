@@ -67,13 +67,15 @@ typedef struct JSRT_SourceMapCacheEntry {
 
 /**
  * Source map cache
- * Global cache for parsed source maps
+ * Global cache for parsed source maps with configuration
  */
 typedef struct JSRT_SourceMapCache {
   JSRT_SourceMapCacheEntry** buckets;  // Hash table buckets
   size_t capacity;                     // Number of buckets
   size_t size;                         // Number of entries
   bool enabled;                        // Source maps enabled flag
+  bool node_modules;                   // Include node_modules in mappings
+  bool generated_code;                 // Support eval() and new Function()
 } JSRT_SourceMapCache;
 
 // ============================================================================
@@ -144,6 +146,25 @@ void jsrt_source_map_cache_set_enabled(JSRT_SourceMapCache* cache, bool enabled)
  * @return true if enabled, false otherwise
  */
 bool jsrt_source_map_cache_is_enabled(JSRT_SourceMapCache* cache);
+
+/**
+ * Set source map configuration (Task 2.7)
+ * @param cache Source map cache
+ * @param enabled Enable source maps
+ * @param node_modules Include node_modules in mappings
+ * @param generated_code Support eval/Function code
+ */
+void jsrt_source_map_cache_set_config(JSRT_SourceMapCache* cache, bool enabled, bool node_modules, bool generated_code);
+
+/**
+ * Get source map configuration (Task 2.7)
+ * @param cache Source map cache
+ * @param enabled Output: enabled flag
+ * @param node_modules Output: node_modules flag
+ * @param generated_code Output: generated_code flag
+ */
+void jsrt_source_map_cache_get_config(JSRT_SourceMapCache* cache, bool* enabled, bool* node_modules,
+                                      bool* generated_code);
 
 // ============================================================================
 // Source Map Parsing (Phase 2 Task 2.2)

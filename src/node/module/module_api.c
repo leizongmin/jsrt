@@ -257,6 +257,79 @@ JSValue jsrt_module_find_source_map(JSContext* ctx, JSValueConst this_val, int a
 }
 
 /**
+ * module.getSourceMapsSupport() - Get source map configuration
+ */
+JSValue jsrt_module_get_source_maps_support(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
+  // Get runtime to access source map cache
+  JSRT_Runtime* rt = JS_GetContextOpaque(ctx);
+  if (!rt || !rt->source_map_cache) {
+    // Return default configuration if cache not available
+    JSValue result = JS_NewObject(ctx);
+    JS_SetPropertyStr(ctx, result, "enabled", JS_FALSE);
+    JS_SetPropertyStr(ctx, result, "nodeModules", JS_FALSE);
+    JS_SetPropertyStr(ctx, result, "generatedCode", JS_FALSE);
+    return result;
+  }
+
+  // Get current configuration
+  bool enabled, node_modules, generated_code;
+  jsrt_source_map_cache_get_config(rt->source_map_cache, &enabled, &node_modules, &generated_code);
+
+  // Build result object
+  JSValue result = JS_NewObject(ctx);
+  JS_SetPropertyStr(ctx, result, "enabled", JS_NewBool(ctx, enabled));
+  JS_SetPropertyStr(ctx, result, "nodeModules", JS_NewBool(ctx, node_modules));
+  JS_SetPropertyStr(ctx, result, "generatedCode", JS_NewBool(ctx, generated_code));
+
+  return result;
+}
+
+/**
+ * module.setSourceMapsSupport(enabled[, options]) - Set source map configuration
+ */
+JSValue jsrt_module_set_source_maps_support(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
+  if (argc < 1) {
+    return JS_ThrowTypeError(ctx, "Missing enabled argument");
+  }
+
+  // Get runtime to access source map cache
+  JSRT_Runtime* rt = JS_GetContextOpaque(ctx);
+  if (!rt || !rt->source_map_cache) {
+    return JS_UNDEFINED;
+  }
+
+  // Get enabled flag
+  bool enabled = JS_ToBool(ctx, argv[0]);
+
+  // Get optional configuration
+  bool node_modules = false;
+  bool generated_code = false;
+
+  if (argc >= 2 && JS_IsObject(argv[1])) {
+    JSValue options = argv[1];
+
+    // Get nodeModules flag
+    JSValue node_modules_val = JS_GetPropertyStr(ctx, options, "nodeModules");
+    if (JS_IsBool(node_modules_val)) {
+      node_modules = JS_ToBool(ctx, node_modules_val);
+    }
+    JS_FreeValue(ctx, node_modules_val);
+
+    // Get generatedCode flag
+    JSValue generated_code_val = JS_GetPropertyStr(ctx, options, "generatedCode");
+    if (JS_IsBool(generated_code_val)) {
+      generated_code = JS_ToBool(ctx, generated_code_val);
+    }
+    JS_FreeValue(ctx, generated_code_val);
+  }
+
+  // Set configuration
+  jsrt_source_map_cache_set_config(rt->source_map_cache, enabled, node_modules, generated_code);
+
+  return JS_UNDEFINED;
+}
+
+/**
  * Property getters/setters
  */
 
@@ -1034,6 +1107,10 @@ JSValue JSRT_InitNodeModule(JSContext* ctx) {
                     JS_NewCFunction(ctx, jsrt_module_syncBuiltinESMExports, "syncBuiltinESMExports", 0));
   JS_SetPropertyStr(ctx, module_obj, "findSourceMap",
                     JS_NewCFunction(ctx, jsrt_module_find_source_map, "findSourceMap", 1));
+  JS_SetPropertyStr(ctx, module_obj, "getSourceMapsSupport",
+                    JS_NewCFunction(ctx, jsrt_module_get_source_maps_support, "getSourceMapsSupport", 0));
+  JS_SetPropertyStr(ctx, module_obj, "setSourceMapsSupport",
+                    JS_NewCFunction(ctx, jsrt_module_set_source_maps_support, "setSourceMapsSupport", 2));
 
   // Initialize SourceMap class (for source map support)
   if (!jsrt_source_map_class_init(ctx, module_obj)) {
@@ -1074,6 +1151,14 @@ int js_node_module_init(JSContext* ctx, JSModuleDef* m) {
   JSValue find_source_map = JS_GetPropertyStr(ctx, module_obj, "findSourceMap");
   JS_SetModuleExport(ctx, m, "findSourceMap", JS_DupValue(ctx, find_source_map));
   JS_FreeValue(ctx, find_source_map);
+
+  JSValue get_source_maps_support = JS_GetPropertyStr(ctx, module_obj, "getSourceMapsSupport");
+  JS_SetModuleExport(ctx, m, "getSourceMapsSupport", JS_DupValue(ctx, get_source_maps_support));
+  JS_FreeValue(ctx, get_source_maps_support);
+
+  JSValue set_source_maps_support = JS_GetPropertyStr(ctx, module_obj, "setSourceMapsSupport");
+  JS_SetModuleExport(ctx, m, "setSourceMapsSupport", JS_DupValue(ctx, set_source_maps_support));
+  JS_FreeValue(ctx, set_source_maps_support);
 
   // Export default
   JS_SetModuleExport(ctx, m, "default", module_obj);

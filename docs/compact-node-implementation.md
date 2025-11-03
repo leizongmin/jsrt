@@ -1,10 +1,10 @@
-# --compact-node Implementation Summary
+# Compact Node Mode Implementation Summary
 
 ## Overview
-This document describes the implementation of the `--compact-node` command-line flag for jsrt, which enables enhanced Node.js compatibility mode.
+This document describes the implementation of jsrt's compact Node.js compatibility mode. The runtime now enables this mode by default; it can be explicitly disabled with the `--no-compact-node` command-line flag. The legacy `--compact-node` flag remains accepted for compatibility but is no longer required.
 
 ## Feature Description
-The `--compact-node` flag allows jsrt to run Node.js code with minimal modifications by:
+Compact Node.js mode allows jsrt to run Node.js code with minimal modifications by:
 1. **Module Loading Without Prefix**: Both `require('os')` and `require('node:os')` resolve to the same Node.js module
 2. **ES Module Support**: Both `import os from 'os'` and `import os from 'node:os'` work
 3. **Submodule Support**: Paths like `require('stream/promises')` are automatically resolved to `node:stream/promises`
@@ -23,11 +23,18 @@ The `--compact-node` flag allows jsrt to run Node.js code with minimal modificat
 - `src/jsrt.c`: 
   - Updated `JSRT_CmdRunFile()` and `JSRT_CmdRunStdin()` to accept and use compact_node flag
 - `src/main.c`: 
-  - Parse `--compact-node` flag before script execution
-  - Updated help message to document the flag
+  - Parse compact-node command-line flags before script execution (default on, `--no-compact-node` disables)
+  - Updated help message to document the mode and disable flag
 
 **Usage:**
 ```bash
+# Enabled by default
+jsrt script.js [args]
+
+# Disable compact Node.js behavior
+jsrt --no-compact-node script.js [args]
+
+# Legacy flag (optional)
 jsrt --compact-node script.js [args]
 ```
 
@@ -39,7 +46,7 @@ jsrt --compact-node script.js [args]
   - In `js_require()`: Added bare-name fallback logic for CommonJS modules
   - In `JSRT_ModuleNormalize()`: Added bare-name fallback logic for ES modules
 
-**Resolution Flow (with --compact-node):**
+**Resolution Flow (with compact mode enabled):**
 1. Check for `jsrt:` prefix → load jsrt module
 2. Check for `node:` prefix → load node module
 3. **NEW**: If bare name AND compact mode AND is node module → prepend `node:` and load
@@ -50,7 +57,7 @@ jsrt --compact-node script.js [args]
 
 **Example:**
 ```javascript
-// With --compact-node, these are equivalent:
+// With compact-node mode (default), these are equivalent:
 const os = require('os');           // ← resolved to node:os
 const os = require('node:os');      // ← explicit prefix
 
@@ -91,9 +98,9 @@ console.log(process.cwd());     // Works: prints current working directory
 
 ### Phase 5: Testing & Validation
 **Files Added:**
-- `test/node/compact/test_compact_node_basic.js`: Tests basic compact-node functionality
-- `test/node/compact/test_compact_node_disabled.js`: Tests that compact mode is correctly disabled without flag
-- `test/node/compact/test_compact_node_esm.mjs`: Tests ES module support with compact-node
+- `test/node/compact/test_compact_node_basic.js`: Tests that compact mode works by default
+- `test/node/compact/test_compact_node_disabled.js`: Tests that compact mode is correctly disabled when requested
+- `test/node/compact/test_compact_node_esm.mjs`: Tests ES module support with explicit compact-node flag
 - `examples/compact_node_example.js`: Real-world example demonstrating the feature
 
 **Files Modified:**
@@ -107,10 +114,9 @@ console.log(process.cwd());     // Works: prints current working directory
 ## Backward Compatibility
 ✅ **100% Backward Compatible**
 
-Without the `--compact-node` flag, behavior is unchanged:
-- Bare module names (e.g., `require('os')`) throw "Cannot find module" error
-- Explicit prefixes (e.g., `require('node:os')`) continue to work
-- All existing tests pass without modification
+- Compact mode remains available by default for existing workflows
+- The `--compact-node` flag still functions but is optional
+- A new `--no-compact-node` flag restores the legacy non-compact behavior when needed
 
 ## Module Caching
 Module caching works correctly - `require('os')` and `require('node:os')` return the same cached module instance in compact mode.
@@ -124,7 +130,7 @@ This matches Node.js behavior.
 
 ## Performance Impact
 Minimal - the implementation adds a single map lookup to check if a bare name is a Node.js module. This only occurs when:
-1. `--compact-node` flag is set
+1. Compact mode is enabled (default; not disabled via `--no-compact-node`)
 2. Module name has no prefix (jsrt:, node:, http://, etc.)
 3. Module name is not a relative or absolute path
 
@@ -146,13 +152,13 @@ console.log('Path join:', path.join('a', 'b', 'c'));
 ```
 
 ```bash
-# Run with compact-node mode
-jsrt --compact-node script.js
+# Run with default compact-node mode
+jsrt script.js
 # Output: Platform: linux
 #         Path join: a/b/c
 
-# Run without compact-node mode (will fail)
-jsrt script.js
+# Disable compact-node mode (will fail)
+jsrt --no-compact-node script.js
 # Output: ReferenceError: Cannot find module 'os'
 ```
 

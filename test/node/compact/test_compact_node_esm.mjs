@@ -1,4 +1,4 @@
-// Test ES modules with --compact-node flag
+// Test ES modules with explicit --compact-node flag for compatibility
 // This test should be run with: jsrt --compact-node test_compact_node_esm.mjs
 
 import os from 'os';

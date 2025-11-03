@@ -819,13 +819,15 @@ foreach(test_file ${JSRT_TEST_JS_FILES})
     string(REPLACE "\\" "_" test_name ${test_name})
     
     # Check if this is a compact-node test
-    if(test_file MATCHES "test/node/compact/test_compact_node_basic\\.js" OR
-       test_file MATCHES "test/node/compact/test_compact_node_esm\\.mjs")
-        # Add test with --compact-node flag for compact mode tests
+    if(test_file MATCHES "test/node/compact/test_compact_node_basic\\.js")
+        # Compact mode should be active by default
+        add_test(NAME ${test_name} COMMAND jsrt ${test_file})
+    elseif(test_file MATCHES "test/node/compact/test_compact_node_esm\\.mjs")
+        # Ensure legacy flag still works for ES module scenarios
         add_test(NAME ${test_name} COMMAND jsrt --compact-node ${test_file})
     elseif(test_file MATCHES "test/node/compact/test_compact_node_disabled\\.js")
-        # This test should run WITHOUT --compact-node flag
-        add_test(NAME ${test_name} COMMAND jsrt ${test_file})
+        # This test should explicitly disable compact-node mode
+        add_test(NAME ${test_name} COMMAND jsrt --no-compact-node ${test_file})
     else()
         # Regular test without special flags
         add_test(NAME ${test_name} COMMAND jsrt ${test_file})

@@ -1,16 +1,16 @@
 // Test that compact-node mode does NOT affect normal operation
-// This test should be run WITHOUT --compact-node flag: jsrt test_compact_node_disabled.js
+// This test should be run with compact mode disabled: jsrt --no-compact-node test_compact_node_disabled.js
 
 const assert = require('jsrt:assert');
 
 console.log(
-  '\nTest 1: Bare module names should NOT resolve without --compact-node'
+  '\nTest 1: Bare module names should NOT resolve when compact mode is disabled'
 );
 let osLoadFailed = false;
 try {
   const os = require('os');
   console.log(
-    '  ❌ ERROR: require("os") should have failed without --compact-node'
+    '  ❌ ERROR: require("os") should have failed with compact mode disabled'
   );
   process.exit(1);
 } catch (e) {
@@ -28,7 +28,7 @@ console.log('  ✓ require("node:os") works');
 console.log('  ✓ require("node:path") works');
 
 console.log(
-  '\nTest 3: Process should still be global (not affected by --compact-node)'
+  '\nTest 3: Process should still be global (not affected by compact mode)'
 );
 assert(typeof process !== 'undefined', 'process should be globally available');
 assert(

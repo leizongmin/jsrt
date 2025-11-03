@@ -1,5 +1,5 @@
-// Test basic --compact-node functionality
-// This test should be run with: jsrt --compact-node test_compact_node_basic.js
+// Test that compact-node functionality is enabled by default
+// This test should be run with: jsrt test_compact_node_basic.js
 
 const assert = require('jsrt:assert');
 

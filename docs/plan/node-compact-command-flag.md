@@ -17,7 +17,7 @@
 * 📋 Executive Summary
 
 ** Feature Overview
-Implement a =--compact-node= command-line flag that enables enhanced Node.js compatibility mode, allowing jsrt to run Node.js code with minimal modifications.
+Implement a =--compact-node= command-line flag that enables enhanced Node.js compatibility mode, allowing jsrt to run Node.js code with minimal modifications. *(Update: the runtime now enables this mode by default; pass =--no-compact-node= to disable it.)*
 
 ** Core Behaviors
 1. **Module Loading Without Prefix**: Both =require('os')= and =require('node:os')= resolve to the same Node.js module
@@ -1054,4 +1054,3 @@ Phase 1 → Phase 2 → Phase 4 → Phase 5
 - Task 5.3: Performance benchmarking
 
 These can be implemented in future iterations if needed.
-

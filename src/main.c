@@ -28,13 +28,18 @@ int main(int argc, char** argv) {
     return ret;
   }
 
-  // Check for --compact-node flag
-  bool compact_node = false;
+  // Check for compact-node flag (enabled by default)
+  bool compact_node = true;
   int script_arg_start = 1;
 
-  if (argc >= 2 && strcmp(argv[1], "--compact-node") == 0) {
-    compact_node = true;
-    script_arg_start = 2;
+  if (argc >= 2) {
+    if (strcmp(argv[1], "--compact-node") == 0) {
+      compact_node = true;
+      script_arg_start = 2;
+    } else if (strcmp(argv[1], "--no-compact-node") == 0) {
+      compact_node = false;
+      script_arg_start = 2;
+    }
   }
 
   if (argc < script_arg_start + 1) {
@@ -106,7 +111,7 @@ void PrintHelp(bool is_error) {
           "License:  MIT\n"
           "\n"
           "Usage: jsrt <filename> [args]            Run script file\n"
-          "       jsrt --compact-node <file> [args] Run with Node.js compact mode\n"
+          "       jsrt --no-compact-node <file> [args] Disable Node.js compact mode\n"
           "       jsrt <url> [args]                 Run script from URL\n"
           "       jsrt build <filename> [target]    Create self-contained binary file\n"
           "       jsrt repl                         Run REPL\n"
@@ -116,10 +121,11 @@ void PrintHelp(bool is_error) {
           "       echo 'code' | jsrt                Pipe JavaScript code from stdin\n"
           "\n"
           "Node.js Compatibility:\n"
-          "  --compact-node                        Enable compact Node.js mode:\n"
+          "  Enabled by default                   Compact Node.js mode is always on:\n"
           "                                        - Load modules without 'node:' prefix\n"
           "                                        - Provide __dirname and __filename\n"
           "                                        - Expose global process object\n"
+          "  --no-compact-node                     Disable compact Node.js mode\n"
           "\n");
 }
 

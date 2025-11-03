@@ -235,16 +235,350 @@ bool jsrt_source_map_cache_is_enabled(JSRT_SourceMapCache* cache) {
 }
 
 // ============================================================================
-// Source Map Parsing (Stub - to be implemented in Task 2.2)
+// Base64 Decoder for VLQ (Source Map v3)
 // ============================================================================
 
+// Base64 character mapping for Source Map VLQ
+// Valid characters: A-Z, a-z, 0-9, +, /
+static const int8_t base64_decode_table[128] = {
+    -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,  // 0-15
+    -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1,  // 16-31
+    -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, -1, 62, -1, -1, -1, 63,  // 32-47 ('+' = 62, '/' = 63)
+    52, 53, 54, 55, 56, 57, 58, 59, 60, 61, -1, -1, -1, -1, -1, -1,  // 48-63 ('0'-'9' = 52-61)
+    -1, 0,  1,  2,  3,  4,  5,  6,  7,  8,  9,  10, 11, 12, 13, 14,  // 64-79 ('A'-'O' = 0-14)
+    15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, -1, -1, -1, -1, -1,  // 80-95 ('P'-'Z' = 15-25)
+    -1, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 36, 37, 38, 39, 40,  // 96-111 ('a'-'o' = 26-40)
+    41, 42, 43, 44, 45, 46, 47, 48, 49, 50, 51, -1, -1, -1, -1, -1   // 112-127 ('p'-'z' = 41-51)
+};
+
+/**
+ * Decode a single Base64 character to 6-bit value
+ * @param c Character to decode
+ * @return 6-bit value (0-63) or -1 if invalid
+ */
+static inline int8_t decode_base64_char(char c) {
+  if (c < 0 || c >= 128) {
+    return -1;
+  }
+  return base64_decode_table[(unsigned char)c];
+}
+
+// ============================================================================
+// VLQ Decoder (Variable-Length Quantity) for Source Map v3
+// ============================================================================
+
+// VLQ Constants
+#define VLQ_BASE_SHIFT 5                            // 5 bits per character
+#define VLQ_BASE (1 << VLQ_BASE_SHIFT)              // 32
+#define VLQ_BASE_MASK (VLQ_BASE - 1)                // 31 (0b11111)
+#define VLQ_CONTINUATION_BIT (1 << VLQ_BASE_SHIFT)  // 32 (0b100000)
+
+/**
+ * Decode a single VLQ value from a Base64-encoded string
+ *
+ * VLQ encoding (Source Map v3 spec):
+ * - Each Base64 character represents 6 bits
+ * - Bit 5 (0x20): continuation flag (1 = more characters follow, 0 = last)
+ * - Bits 0-4: data bits
+ * - For the first character of a value: bit 0 is the sign bit
+ *
+ * @param str Pointer to Base64 string (will be advanced)
+ * @param value Output: decoded integer value
+ * @return true on success, false on error
+ */
+static bool decode_vlq_value(const char** str, int32_t* value) {
+  if (!str || !*str || !value) {
+    return false;
+  }
+
+  int32_t result = 0;
+  int32_t shift = 0;
+  bool continuation = true;
+  bool first = true;
+
+  while (continuation) {
+    char c = **str;
+    if (c == '\0') {
+      // Unexpected end of string
+      return false;
+    }
+
+    int8_t digit = decode_base64_char(c);
+    if (digit < 0) {
+      // Invalid Base64 character
+      return false;
+    }
+
+    (*str)++;  // Advance pointer
+
+    // Check continuation bit (bit 5)
+    continuation = (digit & VLQ_CONTINUATION_BIT) != 0;
+
+    // Extract data bits (bits 0-4)
+    int32_t data_bits = digit & VLQ_BASE_MASK;
+
+    if (first) {
+      // First character: bit 0 is sign, bits 1-4 are data
+      first = false;
+      bool negative = (data_bits & 1) != 0;
+      data_bits >>= 1;  // Remove sign bit
+      result = data_bits;
+      shift = 4;  // Already consumed 4 data bits
+
+      // Apply sign if negative
+      if (negative) {
+        result = -result;
+      }
+    } else {
+      // Subsequent characters: all 5 bits are data
+      result += data_bits << shift;
+      shift += 5;
+    }
+
+    // Prevent overflow (reasonable limit: 32 bits)
+    if (shift > 31) {
+      return false;
+    }
+  }
+
+  *value = result;
+  return true;
+}
+
+/**
+ * Decode VLQ-encoded mappings string into array of integers
+ *
+ * @param ctx QuickJS context
+ * @param mappings VLQ-encoded mappings string
+ * @param values Output array of decoded integers
+ * @param count Output count of decoded integers
+ * @return true on success, false on error
+ */
+static bool decode_vlq_mappings(JSContext* ctx, const char* mappings, int32_t** values, size_t* count) {
+  if (!ctx || !mappings || !values || !count) {
+    return false;
+  }
+
+  // Estimate size (rough: average 2 chars per value)
+  size_t estimated_size = strlen(mappings) / 2 + 100;
+  int32_t* result = js_malloc(ctx, estimated_size * sizeof(int32_t));
+  if (!result) {
+    return false;
+  }
+
+  size_t result_count = 0;
+  size_t result_capacity = estimated_size;
+  const char* ptr = mappings;
+
+  while (*ptr != '\0') {
+    // Skip separators (';' for line, ',' for segment)
+    if (*ptr == ';' || *ptr == ',') {
+      ptr++;
+      continue;
+    }
+
+    // Decode one VLQ value
+    int32_t value;
+    if (!decode_vlq_value(&ptr, &value)) {
+      JSRT_Debug("Failed to decode VLQ value at position %ld", ptr - mappings);
+      js_free(ctx, result);
+      return false;
+    }
+
+    // Grow array if needed
+    if (result_count >= result_capacity) {
+      result_capacity *= 2;
+      int32_t* new_result = js_realloc(ctx, result, result_capacity * sizeof(int32_t));
+      if (!new_result) {
+        js_free(ctx, result);
+        return false;
+      }
+      result = new_result;
+    }
+
+    result[result_count++] = value;
+  }
+
+  *values = result;
+  *count = result_count;
+  return true;
+}
+
+// ============================================================================
+// Source Map Parsing (Task 2.2)
+// ============================================================================
+
+/**
+ * Parse Source Map v3 JSON payload
+ * Implements Task 2.2: Source Map Parsing
+ */
 JSRT_SourceMap* jsrt_source_map_parse(JSContext* ctx, JSValue payload) {
-  // TODO: Implement in Task 2.2 (Source Map Parsing)
-  // This will include:
-  // - JSON validation
-  // - VLQ decoding
-  // - Building decoded_mappings array
-  JSRT_Debug("jsrt_source_map_parse: TODO - implement in Task 2.2");
+  if (!ctx || JS_IsUndefined(payload) || JS_IsNull(payload)) {
+    return NULL;
+  }
+
+  // Validate payload is an object
+  if (!JS_IsObject(payload)) {
+    JSRT_Debug("Source map payload is not an object");
+    return NULL;
+  }
+
+  // Create new source map
+  JSRT_SourceMap* map = jsrt_source_map_new(ctx);
+  if (!map) {
+    return NULL;
+  }
+
+  // Keep payload alive
+  map->payload = JS_DupValue(ctx, payload);
+
+  // Extract 'version' field (required, must be 3)
+  JSValue version_val = JS_GetPropertyStr(ctx, payload, "version");
+  if (JS_IsException(version_val) || JS_IsUndefined(version_val)) {
+    JSRT_Debug("Source map missing 'version' field");
+    goto error;
+  }
+
+  int32_t version;
+  if (JS_ToInt32(ctx, &version, version_val) < 0 || version != 3) {
+    JSRT_Debug("Source map version must be 3, got: %d", version);
+    JS_FreeValue(ctx, version_val);
+    goto error;
+  }
+  JS_FreeValue(ctx, version_val);
+
+  map->version = js_strdup(ctx, "3");
+  if (!map->version) {
+    goto error;
+  }
+
+  // Extract 'file' field (optional)
+  JSValue file_val = JS_GetPropertyStr(ctx, payload, "file");
+  if (!JS_IsUndefined(file_val) && !JS_IsNull(file_val)) {
+    const char* file_str = JS_ToCString(ctx, file_val);
+    if (file_str) {
+      map->file = js_strdup(ctx, file_str);
+      JS_FreeCString(ctx, file_str);
+    }
+  }
+  JS_FreeValue(ctx, file_val);
+
+  // Extract 'sourceRoot' field (optional)
+  JSValue source_root_val = JS_GetPropertyStr(ctx, payload, "sourceRoot");
+  if (!JS_IsUndefined(source_root_val) && !JS_IsNull(source_root_val)) {
+    const char* source_root_str = JS_ToCString(ctx, source_root_val);
+    if (source_root_str) {
+      map->source_root = js_strdup(ctx, source_root_str);
+      JS_FreeCString(ctx, source_root_str);
+    }
+  }
+  JS_FreeValue(ctx, source_root_val);
+
+  // Extract 'sources' array (required)
+  JSValue sources_val = JS_GetPropertyStr(ctx, payload, "sources");
+  if (JS_IsException(sources_val) || !JS_IsArray(ctx, sources_val)) {
+    JSRT_Debug("Source map missing or invalid 'sources' array");
+    JS_FreeValue(ctx, sources_val);
+    goto error;
+  }
+
+  JSValue sources_len_val = JS_GetPropertyStr(ctx, sources_val, "length");
+  uint32_t sources_len;
+  if (JS_ToUint32(ctx, &sources_len, sources_len_val) < 0) {
+    JS_FreeValue(ctx, sources_len_val);
+    JS_FreeValue(ctx, sources_val);
+    goto error;
+  }
+  JS_FreeValue(ctx, sources_len_val);
+
+  if (sources_len > 0) {
+    map->sources = js_mallocz(ctx, sources_len * sizeof(char*));
+    if (!map->sources) {
+      JS_FreeValue(ctx, sources_val);
+      goto error;
+    }
+    map->sources_count = sources_len;
+
+    for (uint32_t i = 0; i < sources_len; i++) {
+      JSValue source_val = JS_GetPropertyUint32(ctx, sources_val, i);
+      const char* source_str = JS_ToCString(ctx, source_val);
+      if (source_str) {
+        map->sources[i] = js_strdup(ctx, source_str);
+        JS_FreeCString(ctx, source_str);
+      }
+      JS_FreeValue(ctx, source_val);
+    }
+  }
+  JS_FreeValue(ctx, sources_val);
+
+  // Extract 'names' array (optional)
+  JSValue names_val = JS_GetPropertyStr(ctx, payload, "names");
+  if (!JS_IsUndefined(names_val) && !JS_IsNull(names_val) && JS_IsArray(ctx, names_val)) {
+    JSValue names_len_val = JS_GetPropertyStr(ctx, names_val, "length");
+    uint32_t names_len;
+    if (JS_ToUint32(ctx, &names_len, names_len_val) == 0 && names_len > 0) {
+      map->names = js_mallocz(ctx, names_len * sizeof(char*));
+      if (map->names) {
+        map->names_count = names_len;
+        for (uint32_t i = 0; i < names_len; i++) {
+          JSValue name_val = JS_GetPropertyUint32(ctx, names_val, i);
+          const char* name_str = JS_ToCString(ctx, name_val);
+          if (name_str) {
+            map->names[i] = js_strdup(ctx, name_str);
+            JS_FreeCString(ctx, name_str);
+          }
+          JS_FreeValue(ctx, name_val);
+        }
+      }
+    }
+    JS_FreeValue(ctx, names_len_val);
+  }
+  JS_FreeValue(ctx, names_val);
+
+  // Extract 'mappings' string (required)
+  JSValue mappings_val = JS_GetPropertyStr(ctx, payload, "mappings");
+  if (JS_IsException(mappings_val) || JS_IsUndefined(mappings_val)) {
+    JSRT_Debug("Source map missing 'mappings' field");
+    JS_FreeValue(ctx, mappings_val);
+    goto error;
+  }
+
+  const char* mappings_str = JS_ToCString(ctx, mappings_val);
+  if (!mappings_str) {
+    JS_FreeValue(ctx, mappings_val);
+    goto error;
+  }
+
+  // Store original mappings string
+  map->mappings = js_strdup(ctx, mappings_str);
+  JS_FreeCString(ctx, mappings_str);
+  JS_FreeValue(ctx, mappings_val);
+
+  if (!map->mappings) {
+    goto error;
+  }
+
+  // Decode VLQ mappings
+  int32_t* decoded_values = NULL;
+  size_t decoded_count = 0;
+  if (!decode_vlq_mappings(ctx, map->mappings, &decoded_values, &decoded_count)) {
+    JSRT_Debug("Failed to decode VLQ mappings");
+    goto error;
+  }
+
+  // TODO: Task 2.3+ will convert decoded_values into JSRT_SourceMapping structs
+  // For now, store the raw decoded values
+  if (decoded_values) {
+    js_free(ctx, decoded_values);  // Will be used in Task 2.3
+  }
+
+  JSRT_Debug("Source map parsed successfully: version=%s, sources=%zu, names=%zu", map->version, map->sources_count,
+             map->names_count);
+
+  return map;
+
+error:
+  jsrt_source_map_free(JS_GetRuntime(ctx), map);
   return NULL;
 }
 

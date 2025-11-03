@@ -539,8 +539,8 @@ Module.wrapper = [
 :ID: phase-2
 :CREATED: 2025-10-31T00:00:00Z
 :DEPS: phase-1
-:PROGRESS: 6/71
-:COMPLETION: 8.5%
+:PROGRESS: 14/71
+:COMPLETION: 19.7%
 :END:
 
 Implement source map parsing, lookup, and the SourceMap class.
@@ -581,24 +581,26 @@ typedef struct {
 } JSRTSourceMap;
 #+END_SRC
 
-*** TODO [#A] Task 2.2: Source Map Parsing [S][R:MED][C:COMPLEX][D:2.1]
+*** DONE [#A] Task 2.2: Source Map Parsing [S][R:MED][C:COMPLEX][D:2.1]
+CLOSED: [2025-11-03 03:19]
 :PROPERTIES:
 :ID: 2.2
 :CREATED: 2025-10-31T00:00:00Z
+:COMPLETED: 2025-11-03T03:19:00Z
 :DEPS: 2.1
 :END:
 
 Parse Source Map v3 format.
 
 **** Subtasks
-- [ ] Implement JSON parsing for source map payload
-- [ ] Validate source map version (must be 3)
-- [ ] Extract source map fields (~version~, ~sources~, ~mappings~, etc.)
-- [ ] Implement VLQ (Variable-Length Quantity) decoder
-- [ ] Decode mappings string into position mappings
-- [ ] Build internal mapping table (generated line/col → original line/col)
-- [ ] Handle optional fields (~sourcesContent~, ~names~, ~sourceRoot~)
-- [ ] Handle invalid/malformed source maps gracefully
+- [X] Implement JSON parsing for source map payload
+- [X] Validate source map version (must be 3)
+- [X] Extract source map fields (~version~, ~sources~, ~mappings~, etc.)
+- [X] Implement VLQ (Variable-Length Quantity) decoder
+- [X] Decode mappings string into position mappings
+- [X] Build internal mapping table (generated line/col → original line/col)
+- [X] Handle optional fields (~sourcesContent~, ~names~, ~sourceRoot~)
+- [X] Handle invalid/malformed source maps gracefully
 
 **** VLQ Decoding
 Reference: Source Map v3 spec for VLQ encoding format
@@ -1409,16 +1411,16 @@ Complete documentation and examples.
 * 🚀 Execution Dashboard
 :PROPERTIES:
 :CURRENT_PHASE: Phase 2 - IN PROGRESS 🔄
-:PROGRESS: 16/153
-:COMPLETION: 10.5%
-:ACTIVE_TASK: Task 2.2 - Source Map Parsing (VLQ Decoder)
-:UPDATED: 2025-11-03T03:13:00Z
+:PROGRESS: 24/171
+:COMPLETION: 14.0%
+:ACTIVE_TASK: Task 2.3 - SourceMap Class Implementation
+:UPDATED: 2025-11-03T03:19:00Z
 :END:
 
 ** Current Status
 - Phase: Phase 2 IN PROGRESS 🔄 (Source Map Support)
-- Progress: 16/153 tasks (10.5%)
-- Active: Task 2.1 complete ✅, starting Task 2.2 (VLQ Decoder)
+- Progress: 24/171 tasks (14.0%)
+- Active: Task 2.2 complete ✅ (VLQ decoder), starting Task 2.3 (SourceMap class)
 
 ** Completed (Phase 1)
 1. [X] Task 1.1: Project Structure Setup
@@ -1434,26 +1436,29 @@ Complete documentation and examples.
 
 ** Completed (Phase 2)
 1. [X] Task 2.1: Source Map Infrastructure ✅
+2. [X] Task 2.2: Source Map Parsing & VLQ Decoder ✅
 
 ** Next Steps (Phase 2)
-1. [ ] Task 2.2: Source Map Parsing (VLQ Decoder) ← IN PROGRESS
-2. [ ] Task 2.3: SourceMap Class Implementation
-3. [ ] Task 2.4: SourceMap.findEntry() Method
+1. [ ] Task 2.3: SourceMap Class Implementation ← IN PROGRESS
+2. [ ] Task 2.4: SourceMap.findEntry() Method
+3. [ ] Task 2.5: SourceMap.findOrigin() Method
 
 ** Phase Overview
 | Phase | Title | Tasks | Status | Completion |
 |-------|-------|-------|--------|------------|
 | 1 | Foundation & Core API | 10 | ✅ DONE | 100% |
-| 2 | Source Map Support | 71 | 🔄 IN PROGRESS | 8.5% |
+| 2 | Source Map Support | 71 | 🔄 IN PROGRESS | 19.7% |
 | 3 | Compilation Cache | 26 | TODO | 0% |
 | 4 | Module Hooks (Basic) | 32 | TODO | 0% |
 | 5 | Package.json Utilities | 12 | TODO | 0% |
 | 6 | Advanced Features | 15 | TODO | 0% |
 | 7 | Testing & QA | 5 | TODO | 0% |
-| **Total** | | **171** | | **9.4%** |
+| **Total** | | **171** | | **14.0%** |
 
 * 📜 History & Updates
 :LOGBOOK:
+- Note taken on [2025-11-03T03:19:00Z] \\
+  Task 2.2 COMPLETED: VLQ decoder & source map parsing (Base64, VLQ, JSON parsing, field extraction)
 - Note taken on [2025-11-03T03:13:00Z] \\
   Task 2.1 COMPLETED: Source map infrastructure implemented (cache, lifecycle, runtime integration)
 - Note taken on [2025-11-03T02:37:00Z] \\
@@ -1465,6 +1470,7 @@ Complete documentation and examples.
 ** Recent Changes
 | Timestamp | Action | Task ID | Details |
 |-----------|--------|---------|---------|
+| 2025-11-03T03:19:00Z | Completed | 2.2 | VLQ decoder & JSON parsing, 12/12 module tests passing ✅ |
 | 2025-11-03T03:13:00Z | Completed | 2.1 | Source map cache & infrastructure, tests passing ✅ |
 | 2025-11-03T02:37:00Z | Completed | Phase 1 | All 10 tasks done, 100% tests passing |
 | 2025-11-03T02:36:00Z | Completed | 1.10 | Module._compile() and compilation methods |

@@ -583,24 +583,193 @@ error:
 }
 
 // ============================================================================
-// SourceMap JavaScript Class (Stub - to be implemented in Task 2.3)
+// SourceMap JavaScript Class (Task 2.3)
 // ============================================================================
 
-bool jsrt_source_map_class_init(JSContext* ctx, JSValue module_obj) {
-  // TODO: Implement in Task 2.3 (SourceMap Class)
-  // This will register the SourceMap class with:
-  // - Constructor
-  // - payload getter
-  // - findEntry() method
-  // - findOrigin() method
-  JSRT_Debug("jsrt_source_map_class_init: TODO - implement in Task 2.3");
-  return true;  // Temporary success for now
+// SourceMap class ID
+static JSClassID jsrt_source_map_class_id;
+
+// SourceMap finalizer - called when JS object is garbage collected
+static void jsrt_source_map_finalizer(JSRuntime* rt, JSValue val) {
+  JSRT_SourceMap* map = JS_GetOpaque(val, jsrt_source_map_class_id);
+  if (map) {
+    jsrt_source_map_free(rt, map);
+  }
 }
 
+// SourceMap class definition
+static JSClassDef jsrt_source_map_class = {
+    .class_name = "SourceMap",
+    .finalizer = jsrt_source_map_finalizer,
+};
+
+/**
+ * SourceMap constructor - not exposed publicly
+ * Internal use only for creating instances from parsed source maps
+ */
+static JSValue jsrt_source_map_constructor(JSContext* ctx, JSValueConst new_target, int argc, JSValueConst* argv) {
+  // This constructor is not meant to be called directly from JavaScript
+  // Source maps are created via module.findSourceMap() or new SourceMap(payload)
+  return JS_ThrowTypeError(ctx, "SourceMap constructor is not exposed");
+}
+
+/**
+ * sourceMap.payload getter
+ * Returns the original JSON payload
+ */
+static JSValue jsrt_source_map_get_payload(JSContext* ctx, JSValueConst this_val) {
+  JSRT_SourceMap* map = JS_GetOpaque(this_val, jsrt_source_map_class_id);
+  if (!map) {
+    return JS_ThrowTypeError(ctx, "not a SourceMap instance");
+  }
+
+  // Return duplicated payload value
+  return JS_DupValue(ctx, map->payload);
+}
+
+/**
+ * sourceMap.findEntry(lineOffset, columnOffset)
+ * Find source mapping for zero-indexed position
+ *
+ * @param lineOffset Zero-indexed line number in generated file
+ * @param columnOffset Zero-indexed column number in generated file
+ * @return Mapping object or empty object {} if not found
+ */
+static JSValue jsrt_source_map_find_entry(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
+  JSRT_SourceMap* map = JS_GetOpaque(this_val, jsrt_source_map_class_id);
+  if (!map) {
+    return JS_ThrowTypeError(ctx, "not a SourceMap instance");
+  }
+
+  if (argc < 2) {
+    return JS_ThrowTypeError(ctx, "findEntry requires 2 arguments: lineOffset and columnOffset");
+  }
+
+  int32_t line_offset, column_offset;
+  if (JS_ToInt32(ctx, &line_offset, argv[0]) < 0) {
+    return JS_EXCEPTION;
+  }
+  if (JS_ToInt32(ctx, &column_offset, argv[1]) < 0) {
+    return JS_EXCEPTION;
+  }
+
+  // Validate parameters
+  if (line_offset < 0 || column_offset < 0) {
+    return JS_ThrowRangeError(ctx, "lineOffset and columnOffset must be non-negative");
+  }
+
+  // TODO: Task 2.4 will implement the actual binary search in decoded mappings
+  // For now, return empty object
+  JSRT_Debug("findEntry called with line=%d, column=%d (not yet implemented)", line_offset, column_offset);
+
+  JSValue result = JS_NewObject(ctx);
+  return result;
+}
+
+/**
+ * sourceMap.findOrigin(lineNumber, columnNumber)
+ * Find original position for one-indexed position (for Error stacks)
+ *
+ * @param lineNumber One-indexed line number in generated file
+ * @param columnNumber One-indexed column number in generated file
+ * @return Object with {fileName, lineNumber, columnNumber, name} or empty object
+ */
+static JSValue jsrt_source_map_find_origin(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
+  JSRT_SourceMap* map = JS_GetOpaque(this_val, jsrt_source_map_class_id);
+  if (!map) {
+    return JS_ThrowTypeError(ctx, "not a SourceMap instance");
+  }
+
+  if (argc < 2) {
+    return JS_ThrowTypeError(ctx, "findOrigin requires 2 arguments: lineNumber and columnNumber");
+  }
+
+  int32_t line_number, column_number;
+  if (JS_ToInt32(ctx, &line_number, argv[0]) < 0) {
+    return JS_EXCEPTION;
+  }
+  if (JS_ToInt32(ctx, &column_number, argv[1]) < 0) {
+    return JS_EXCEPTION;
+  }
+
+  // Validate parameters
+  if (line_number < 1 || column_number < 1) {
+    return JS_ThrowRangeError(ctx, "lineNumber and columnNumber must be >= 1");
+  }
+
+  // Convert one-indexed to zero-indexed
+  int32_t line_offset = line_number - 1;
+  int32_t column_offset = column_number - 1;
+
+  // TODO: Task 2.5 will implement by calling findEntry internally
+  JSRT_Debug("findOrigin called with line=%d, column=%d (not yet implemented)", line_number, column_number);
+
+  JSValue result = JS_NewObject(ctx);
+  return result;
+}
+
+// SourceMap prototype methods
+static const JSCFunctionListEntry jsrt_source_map_proto[] = {
+    JS_CGETSET_DEF("payload", jsrt_source_map_get_payload, NULL),
+    JS_CFUNC_DEF("findEntry", 2, jsrt_source_map_find_entry),
+    JS_CFUNC_DEF("findOrigin", 2, jsrt_source_map_find_origin),
+};
+
+/**
+ * Initialize SourceMap class in module context
+ * Registers the SourceMap class with QuickJS
+ */
+bool jsrt_source_map_class_init(JSContext* ctx, JSValue module_obj) {
+  JSRuntime* rt = JS_GetRuntime(ctx);
+
+  // Register SourceMap class
+  JS_NewClassID(&jsrt_source_map_class_id);
+  if (JS_NewClass(rt, jsrt_source_map_class_id, &jsrt_source_map_class) < 0) {
+    JSRT_Debug("Failed to register SourceMap class");
+    return false;
+  }
+
+  // Create SourceMap constructor
+  JSValue source_map_ctor = JS_NewCFunction2(ctx, jsrt_source_map_constructor, "SourceMap", 1, JS_CFUNC_constructor, 0);
+
+  // Create prototype object
+  JSValue proto = JS_NewObject(ctx);
+  JS_SetPropertyFunctionList(ctx, proto, jsrt_source_map_proto,
+                             sizeof(jsrt_source_map_proto) / sizeof(jsrt_source_map_proto[0]));
+
+  // Set prototype on constructor
+  JS_SetConstructorBit(ctx, source_map_ctor, true);
+  JS_SetPropertyStr(ctx, source_map_ctor, "prototype", proto);
+
+  // Add SourceMap to module exports (for internal use)
+  // Note: Not exposed in public node:module API, only used internally
+  JS_SetPropertyStr(ctx, module_obj, "SourceMap", source_map_ctor);
+
+  JSRT_Debug("SourceMap class registered successfully");
+  return true;
+}
+
+/**
+ * Create SourceMap instance from parsed data
+ * Used internally by module.findSourceMap()
+ */
 JSValue jsrt_source_map_create_instance(JSContext* ctx, JSRT_SourceMap* map) {
-  // TODO: Implement in Task 2.3 (SourceMap Class)
-  JSRT_Debug("jsrt_source_map_create_instance: TODO - implement in Task 2.3");
-  return JS_UNDEFINED;
+  if (!ctx || !map) {
+    return JS_UNDEFINED;
+  }
+
+  // Create new SourceMap instance
+  JSValue obj = JS_NewObjectClass(ctx, jsrt_source_map_class_id);
+  if (JS_IsException(obj)) {
+    return obj;
+  }
+
+  // Set the opaque pointer (takes ownership)
+  JS_SetOpaque(obj, map);
+
+  JSRT_Debug("Created SourceMap instance: sources=%zu, names=%zu", map->sources_count, map->names_count);
+
+  return obj;
 }
 
 // ============================================================================

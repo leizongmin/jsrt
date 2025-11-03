@@ -9,6 +9,7 @@
 #include "../../runtime.h"
 #include "../../util/debug.h"
 #include "../node_modules.h"
+#include "sourcemap.h"
 
 // Module class ID for opaque data
 static JSClassID jsrt_module_class_id;
@@ -1004,6 +1005,11 @@ JSValue JSRT_InitNodeModule(JSContext* ctx) {
                     JS_NewCFunction(ctx, jsrt_module_createRequire, "createRequire", 1));
   JS_SetPropertyStr(ctx, module_obj, "syncBuiltinESMExports",
                     JS_NewCFunction(ctx, jsrt_module_syncBuiltinESMExports, "syncBuiltinESMExports", 0));
+
+  // Initialize SourceMap class (for source map support)
+  if (!jsrt_source_map_class_init(ctx, module_obj)) {
+    JSRT_Debug("Warning: Failed to initialize SourceMap class");
+  }
 
   return module_obj;
 }

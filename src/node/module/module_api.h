@@ -43,6 +43,7 @@ JSValue jsrt_module_syncBuiltinESMExports(JSContext* ctx, JSValueConst this_val,
 JSValue jsrt_module_find_source_map(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv);
 JSValue jsrt_module_get_source_maps_support(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv);
 JSValue jsrt_module_set_source_maps_support(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv);
+JSValue jsrt_module_register_hooks(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv);
 
 // Module class constructor
 JSValue jsrt_module_constructor(JSContext* ctx, JSValueConst new_target, int argc, JSValueConst* argv);

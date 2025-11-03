@@ -7,6 +7,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include "../../node/module/compile_cache.h"
 #include "../../runtime.h"  // For JSRT_Runtime
 #include "../core/module_cache.h"
 #include "../protocols/protocol_dispatcher.h"
@@ -216,26 +217,54 @@ JSModuleDef* jsrt_load_esm_module(JSContext* ctx, JSRT_ModuleLoader* loader, con
 
   MODULE_DEBUG_LOADER("=== Loading ES module: %s ===", resolved_path);
 
-  // Note: ES modules are cached by QuickJS itself via JSModuleDef*
-  // We don't need to duplicate that caching here
+  // Check compile cache before loading content
+  JSRT_Runtime* runtime = (JSRT_Runtime*)JS_GetContextOpaque(ctx);
+  JSRT_CompileCacheConfig* compile_cache = runtime ? runtime->compile_cache : NULL;
+  bool compile_cache_enabled = compile_cache && jsrt_compile_cache_is_enabled(compile_cache);
+  JSValue compiled_bytecode = JS_UNDEFINED;
+  bool bytecode_cache_hit = false;
 
-  // Load module content via protocol dispatcher
-  JSRT_ReadFileResult file_result = jsrt_load_content_by_protocol(resolved_path);
-  if (file_result.error != JSRT_READ_FILE_OK) {
-    jsrt_module_throw_error(ctx, JSRT_MODULE_LOAD_FAILED, "Failed to load module '%s': %s",
-                            specifier ? specifier : resolved_path, JSRT_ReadFileErrorToString(file_result.error));
-    return NULL;
+  if (compile_cache_enabled) {
+    compiled_bytecode = jsrt_compile_cache_lookup(ctx, compile_cache, resolved_path);
+    if (!JS_IsUndefined(compiled_bytecode)) {
+      bytecode_cache_hit = true;
+      MODULE_DEBUG_LOADER("Compile cache HIT for ES module bytecode: %s", resolved_path);
+    }
   }
 
-  MODULE_DEBUG_LOADER("Loaded content for %s (%zu bytes)", resolved_path, file_result.size);
+  // Load module content via protocol dispatcher (only if cache miss)
+  JSRT_ReadFileResult file_result = {0};
 
-  // Compile as ES module
-  JSValue func_val =
-      JS_Eval(ctx, file_result.data, file_result.size, resolved_path, JS_EVAL_TYPE_MODULE | JS_EVAL_FLAG_COMPILE_ONLY);
+  if (!bytecode_cache_hit) {
+    file_result = jsrt_load_content_by_protocol(resolved_path);
+    if (file_result.error != JSRT_READ_FILE_OK) {
+      jsrt_module_throw_error(ctx, JSRT_MODULE_LOAD_FAILED, "Failed to load module '%s': %s",
+                              specifier ? specifier : resolved_path, JSRT_ReadFileErrorToString(file_result.error));
+      return NULL;
+    }
 
-  JSRT_ReadFileResultFree(&file_result);
+    MODULE_DEBUG_LOADER("Loaded content for %s (%zu bytes)", resolved_path, file_result.size);
 
-  if (JS_IsException(func_val)) {
+    // Compile as ES module
+    compiled_bytecode = JS_Eval(ctx, file_result.data, file_result.size, resolved_path,
+                                JS_EVAL_TYPE_MODULE | JS_EVAL_FLAG_COMPILE_ONLY);
+
+    JSRT_ReadFileResultFree(&file_result);
+
+    if (JS_IsException(compiled_bytecode)) {
+      MODULE_DEBUG_ERROR("Failed to compile ES module: %s", resolved_path);
+      return NULL;
+    }
+
+    // Store compiled bytecode in cache
+    if (compile_cache_enabled) {
+      if (!jsrt_compile_cache_store(ctx, compile_cache, resolved_path, compiled_bytecode)) {
+        MODULE_DEBUG_LOADER("Compile cache store failed for %s", resolved_path);
+      }
+    }
+  }
+
+  if (JS_IsException(compiled_bytecode)) {
     MODULE_DEBUG_ERROR("Failed to compile ES module: %s", resolved_path);
     return NULL;
   }
@@ -243,18 +272,19 @@ JSModuleDef* jsrt_load_esm_module(JSContext* ctx, JSRT_ModuleLoader* loader, con
   // Get the module definition from the compiled function
   // When JS_EVAL_TYPE_MODULE | JS_EVAL_FLAG_COMPILE_ONLY is used,
   // QuickJS returns a special value containing the JSModuleDef pointer
-  JSModuleDef* module = (JSModuleDef*)JS_VALUE_GET_PTR(func_val);
+  JSModuleDef* module = (JSModuleDef*)JS_VALUE_GET_PTR(compiled_bytecode);
   if (!module) {
     MODULE_DEBUG_ERROR("Failed to extract module definition: %s", resolved_path);
-    JS_FreeValue(ctx, func_val);
+    JS_FreeValue(ctx, compiled_bytecode);
     jsrt_module_throw_error(ctx, JSRT_MODULE_LOAD_FAILED, "Failed to extract module definition from '%s'",
                             resolved_path);
     return NULL;
   }
 
-  // Free the function value after extracting the module pointer
+  // Free the compiled bytecode after extracting the module pointer
   // The module is now owned by QuickJS's module system
-  JS_FreeValue(ctx, func_val);
+  JS_FreeValue(ctx, compiled_bytecode);
+  compiled_bytecode = JS_UNDEFINED;
 
   // Set up import.meta
   if (jsrt_setup_import_meta(ctx, module, loader, resolved_path) != 0) {

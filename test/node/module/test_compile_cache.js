@@ -16,19 +16,35 @@ function ensure(condition, message) {
 
 fs.rmSync(cacheDir, { recursive: true, force: true });
 
-const status = moduleApi.enableCompileCache({ directory: cacheDir, portable: false });
-ensure(status.status === moduleApi.constants.compileCacheStatus.ENABLED, 'compile cache should enable');
-ensure(status.directory === cacheDir, 'compile cache directory should match input');
+const status = moduleApi.enableCompileCache({
+  directory: cacheDir,
+  portable: false,
+});
+ensure(
+  status.status === moduleApi.constants.compileCacheStatus.ENABLED,
+  'compile cache should enable'
+);
+ensure(
+  status.directory === cacheDir,
+  'compile cache directory should match input'
+);
 ensure(status.portable === false, 'portable flag should reflect options');
-ensure(fs.existsSync(path.join(cacheDir, 'version.txt')), 'version file should be created');
+ensure(
+  fs.existsSync(path.join(cacheDir, 'version.txt')),
+  'version file should be created'
+);
 
 const repeat = moduleApi.enableCompileCache(cacheDir);
-ensure(repeat.status === moduleApi.constants.compileCacheStatus.ALREADY_ENABLED,
-       'enabling twice should report already enabled');
+ensure(
+  repeat.status === moduleApi.constants.compileCacheStatus.ALREADY_ENABLED,
+  'enabling twice should report already enabled'
+);
 
 const reportedDir = moduleApi.getCompileCacheDir();
-ensure(reportedDir === cacheDir, 'getCompileCacheDir should return configured path');
+ensure(
+  reportedDir === cacheDir,
+  'getCompileCacheDir should return configured path'
+);
 
 const flushResult = moduleApi.flushCompileCache();
 ensure(flushResult === 0, 'flushCompileCache should return 0');
-

@@ -320,7 +320,7 @@ cleanup:
   return status;
 }
 
-int JSRT_CmdRunFile(const char* filename, bool compact_node, int argc, char** argv) {
+int JSRT_CmdRunFile(const char* filename, bool compact_node, bool compile_cache_allowed, int argc, char** argv) {
   // Store command line arguments for process module
   jsrt_argc = argc;
   jsrt_argv = argv;
@@ -331,6 +331,9 @@ int JSRT_CmdRunFile(const char* filename, bool compact_node, int argc, char** ar
   if (compact_node) {
     JSRT_RuntimeSetCompactNodeMode(rt, true);
   }
+
+  // Set compile cache allowed flag
+  JSRT_RuntimeSetCompileCacheAllowed(rt, compile_cache_allowed);
 
   JSRT_ReadFileResult file = JSRT_ReadFileResultDefault();
   JSRT_EvalResult res = JSRT_EvalResultDefault();
@@ -405,7 +408,7 @@ end:
   return ret;
 }
 
-int JSRT_CmdRunStdin(bool compact_node, int argc, char** argv) {
+int JSRT_CmdRunStdin(bool compact_node, bool compile_cache_allowed, int argc, char** argv) {
   // Store command line arguments for process module
   jsrt_argc = argc;
   jsrt_argv = argv;
@@ -416,6 +419,9 @@ int JSRT_CmdRunStdin(bool compact_node, int argc, char** argv) {
   if (compact_node) {
     JSRT_RuntimeSetCompactNodeMode(rt, true);
   }
+
+  // Set compile cache allowed flag
+  JSRT_RuntimeSetCompileCacheAllowed(rt, compile_cache_allowed);
 
   JSRT_EvalResult res = JSRT_EvalResultDefault();
   JSRT_EvalResult res2 = JSRT_EvalResultDefault();

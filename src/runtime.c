@@ -18,6 +18,7 @@
 #include "module/protocols/protocol_registry.h"
 #include "node/module/compile_cache.h"
 #include "node/module/error_stack.h"
+#include "node/module/hooks.h"
 #include "node/module/sourcemap.h"
 #include "node/net/net_internal.h"
 #include "node/process/process.h"
@@ -222,6 +223,12 @@ JSRT_Runtime* JSRT_RuntimeNew() {
     JSRT_Debug("Failed to create compilation cache");
   }
 
+  // Initialize module hook registry
+  rt->hook_registry = jsrt_hook_registry_init(rt->ctx);
+  if (!rt->hook_registry) {
+    JSRT_Debug("Failed to create module hook registry");
+  }
+
   JSRT_RuntimeSetupStdConsole(rt);
   JSRT_RuntimeSetupStdTimer(rt);
   JSRT_RuntimeSetupStdEncoding(rt);
@@ -276,6 +283,12 @@ void JSRT_RuntimeFree(JSRT_Runtime* rt) {
   if (rt->compile_cache) {
     jsrt_compile_cache_free(rt->compile_cache);
     rt->compile_cache = NULL;
+  }
+
+  // Cleanup module hook registry
+  if (rt->hook_registry) {
+    jsrt_hook_registry_free(rt->hook_registry);
+    rt->hook_registry = NULL;
   }
 
   // Cleanup protocol registry
@@ -803,6 +816,35 @@ void JSRT_CompileResultFree(JSRT_CompileResult* result) {
 void JSRT_RuntimeSetCompactNodeMode(JSRT_Runtime* rt, bool enabled) {
   rt->compact_node_mode = enabled;
   JSRT_Debug("Compact Node.js mode: %s", enabled ? "enabled" : "disabled");
+}
+
+void JSRT_RuntimeSetCompileCacheAllowed(JSRT_Runtime* rt, bool allowed) {
+  if (rt && rt->compile_cache) {
+    jsrt_compile_cache_set_allowed(rt->compile_cache, allowed);
+    JSRT_Debug("Compile cache allowed: %s", allowed ? "enabled" : "disabled");
+  }
+}
+
+void JSRT_RuntimeGetCompileCacheStats(JSRT_Runtime* rt, uint64_t* hits, uint64_t* misses, uint64_t* writes,
+                                      uint64_t* errors, uint64_t* evictions, size_t* current_size, size_t* size_limit) {
+  if (rt && rt->compile_cache) {
+    jsrt_compile_cache_get_stats(rt->compile_cache, hits, misses, writes, errors, evictions, current_size, size_limit);
+  } else {
+    if (hits)
+      *hits = 0;
+    if (misses)
+      *misses = 0;
+    if (writes)
+      *writes = 0;
+    if (errors)
+      *errors = 0;
+    if (evictions)
+      *evictions = 0;
+    if (current_size)
+      *current_size = 0;
+    if (size_limit)
+      *size_limit = 0;
+  }
 }
 
 static void jsrt_debug_handle_walker(uv_handle_t* handle, void* arg) {

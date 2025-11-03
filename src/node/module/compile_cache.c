@@ -433,11 +433,17 @@ JSRT_CompileCacheConfig* jsrt_compile_cache_init(JSContext* ctx) {
 
   config->directory = NULL;
   config->portable = false;
+  config->allow_enable = true;
   config->enabled = false;
   config->hits = 0;
   config->misses = 0;
   config->writes = 0;
   config->errors = 0;
+  config->evictions = 0;
+  config->size_limit = DEFAULT_CACHE_SIZE_LIMIT;
+  config->current_size = 0;
+  config->lru_head = NULL;
+  config->lru_tail = NULL;
 
   JSRT_Debug("Compile cache initialized (disabled by default)");
 
@@ -449,12 +455,23 @@ void jsrt_compile_cache_free(JSRT_CompileCacheConfig* config) {
     return;
   }
 
+  // Clean up LRU list
+  JSRT_CacheLRUEntry* current = config->lru_head;
+  while (current) {
+    JSRT_CacheLRUEntry* next = current->next;
+    if (current->key) {
+      free(current->key);
+    }
+    free(current);
+    current = next;
+  }
+
   if (config->directory) {
     free(config->directory);
   }
 
-  JSRT_Debug("Compile cache freed (hits: %lu, misses: %lu, writes: %lu, errors: %lu)", config->hits, config->misses,
-             config->writes, config->errors);
+  JSRT_Debug("Compile cache freed (hits: %lu, misses: %lu, writes: %lu, errors: %lu, evictions: %lu)", config->hits,
+             config->misses, config->writes, config->errors, config->evictions);
 
   free(config);
 }
@@ -467,6 +484,11 @@ JSRT_CompileCacheStatus jsrt_compile_cache_enable(JSContext* ctx, JSRT_CompileCa
                                                   const char* directory, bool portable) {
   if (!config) {
     return JSRT_COMPILE_CACHE_FAILED;
+  }
+
+  if (!config->allow_enable) {
+    JSRT_Debug("Compile cache enable request ignored (disabled by runtime settings)");
+    return JSRT_COMPILE_CACHE_DISABLED;
   }
 
   // Check if already enabled
@@ -525,11 +547,21 @@ JSRT_CompileCacheStatus jsrt_compile_cache_enable(JSContext* ctx, JSRT_CompileCa
   config->portable = portable;
   config->enabled = true;
 
+  // Perform startup cleanup and calculate current cache size
+  config->current_size = jsrt_compile_cache_get_disk_size(cache_dir);
+  int cleanup_count = jsrt_compile_cache_startup_cleanup(config);
+  if (cleanup_count > 0) {
+    JSRT_Debug("Startup cleanup removed %d stale entries", cleanup_count);
+    // Recalculate size after cleanup
+    config->current_size = jsrt_compile_cache_get_disk_size(cache_dir);
+  }
+
   if (default_dir) {
     free(default_dir);
   }
 
-  JSRT_Debug("Compile cache enabled: %s (portable: %d)", config->directory, portable);
+  JSRT_Debug("Compile cache enabled: %s (portable: %d, size: %zu bytes, limit: %zu bytes)", config->directory, portable,
+             config->current_size, config->size_limit);
 
   return JSRT_COMPILE_CACHE_ENABLED;
 }
@@ -549,15 +581,24 @@ void jsrt_compile_cache_disable(JSRT_CompileCacheConfig* config) {
   JSRT_Debug("Compile cache disabled");
 }
 
+void jsrt_compile_cache_set_allowed(JSRT_CompileCacheConfig* config, bool allowed) {
+  if (!config) {
+    return;
+  }
+
+  config->allow_enable = allowed;
+  JSRT_Debug("Compile cache allow_enable set to: %s", allowed ? "true" : "false");
+}
+
 const char* jsrt_compile_cache_get_directory(JSRT_CompileCacheConfig* config) {
-  if (!config || !config->enabled) {
+  if (!config || !config->enabled || !config->allow_enable) {
     return NULL;
   }
   return config->directory;
 }
 
 bool jsrt_compile_cache_is_enabled(JSRT_CompileCacheConfig* config) {
-  return config && config->enabled;
+  return config && config->enabled && config->allow_enable;
 }
 
 // ============================================================================
@@ -826,10 +867,15 @@ JSValue jsrt_compile_cache_lookup(JSContext* ctx, JSRT_CompileCacheConfig* confi
 
   config->hits++;
   result = obj;
+
+  // Update LRU tracking for successful cache hit
+  jsrt_compile_cache_update_lru(config, key, data_size);
+
   goto cleanup;
 
 invalidate:
   jsrt_cache_remove_entry(config->directory, key);
+  jsrt_compile_cache_remove_lru(config, key);
   config->errors++;
 
 miss:
@@ -873,6 +919,11 @@ bool jsrt_compile_cache_store(JSContext* ctx, JSRT_CompileCacheConfig* config, c
     config->errors++;
     free(key);
     return false;
+  }
+
+  // Check if we need to evict entries to stay within size limit
+  if (jsrt_compile_cache_maybe_evict(config, bytecode_size)) {
+    JSRT_Debug("LRU eviction performed before storing %s (size: %zu bytes)", source_path, bytecode_size);
   }
 
   char* code_path = jsrt_cache_build_path(config->directory, key, CACHE_BYTECODE_SUFFIX);
@@ -919,6 +970,9 @@ bool jsrt_compile_cache_store(JSContext* ctx, JSRT_CompileCacheConfig* config, c
   config->writes++;
   success = true;
 
+  // Update LRU tracking and cache size for successful cache write
+  jsrt_compile_cache_update_lru(config, key, bytecode_size);
+
 cleanup:
   if (!success) {
     if (meta_path) {
@@ -943,7 +997,7 @@ cleanup:
 // ============================================================================
 
 void jsrt_compile_cache_get_stats(JSRT_CompileCacheConfig* config, uint64_t* hits, uint64_t* misses, uint64_t* writes,
-                                  uint64_t* errors) {
+                                  uint64_t* errors, uint64_t* evictions, size_t* current_size, size_t* size_limit) {
   if (!config) {
     return;
   }
@@ -956,6 +1010,12 @@ void jsrt_compile_cache_get_stats(JSRT_CompileCacheConfig* config, uint64_t* hit
     *writes = config->writes;
   if (errors)
     *errors = config->errors;
+  if (evictions)
+    *evictions = config->evictions;
+  if (current_size)
+    *current_size = config->current_size;
+  if (size_limit)
+    *size_limit = config->size_limit;
 }
 
 int jsrt_compile_cache_flush(JSRT_CompileCacheConfig* config) {
@@ -966,4 +1026,344 @@ int jsrt_compile_cache_flush(JSRT_CompileCacheConfig* config) {
   // TODO: Implement pending writes flush in Task 3.4
   JSRT_Debug("Flushing compile cache (no-op for now)");
   return 0;
+}
+
+// ============================================================================
+// Cache Maintenance
+// ============================================================================
+
+#include <dirent.h>
+
+int jsrt_compile_cache_clear(JSRT_CompileCacheConfig* config) {
+  if (!config || !config->enabled || !config->directory) {
+    return 0;
+  }
+
+  int removed_count = 0;
+  DIR* dir = opendir(config->directory);
+  if (!dir) {
+    JSRT_Debug("Failed to open cache directory for clearing: %s", config->directory);
+    return 0;
+  }
+
+  struct dirent* entry;
+  while ((entry = readdir(dir)) != NULL) {
+    // Skip . and .. directories
+    if (strcmp(entry->d_name, ".") == 0 || strcmp(entry->d_name, "..") == 0) {
+      continue;
+    }
+
+    // Remove files matching our cache patterns (.meta, .jsc)
+    size_t name_len = strlen(entry->d_name);
+    if ((name_len > 5 && strcmp(entry->d_name + name_len - 5, CACHE_META_SUFFIX) == 0) ||
+        (name_len > 4 && strcmp(entry->d_name + name_len - 4, CACHE_BYTECODE_SUFFIX) == 0)) {
+      char* full_path = jsrt_cache_build_path(config->directory, entry->d_name, "");
+      if (full_path) {
+        if (remove(full_path) == 0) {
+          removed_count++;
+          JSRT_Debug("Removed cache file: %s", entry->d_name);
+        }
+        free(full_path);
+      }
+    }
+  }
+
+  closedir(dir);
+
+  // Clear LRU tracking
+  JSRT_CacheLRUEntry* current = config->lru_head;
+  while (current) {
+    JSRT_CacheLRUEntry* next = current->next;
+    if (current->key) {
+      free(current->key);
+    }
+    free(current);
+    current = next;
+  }
+  config->lru_head = NULL;
+  config->lru_tail = NULL;
+  config->current_size = 0;
+
+  JSRT_Debug("Cleared compile cache: removed %d files", removed_count);
+  return removed_count;
+}
+
+// Forward declaration for metadata structure
+static void jsrt_cache_metadata_free(JSRT_CacheMetadata* meta);
+
+int jsrt_compile_cache_startup_cleanup(JSRT_CompileCacheConfig* config) {
+  if (!config || !config->enabled || !config->directory) {
+    return 0;
+  }
+
+  int removed_count = 0;
+  DIR* dir = opendir(config->directory);
+  if (!dir) {
+    return 0;
+  }
+
+  struct dirent* entry;
+  while ((entry = readdir(dir)) != NULL) {
+    // Skip . and .. directories
+    if (strcmp(entry->d_name, ".") == 0 || strcmp(entry->d_name, "..") == 0) {
+      continue;
+    }
+
+    size_t name_len = strlen(entry->d_name);
+
+    // Look for .meta files to validate
+    if (name_len > 5 && strcmp(entry->d_name + name_len - 5, CACHE_META_SUFFIX) == 0) {
+      // Extract key (remove .meta suffix)
+      char* key = strndup(entry->d_name, name_len - 5);
+      if (!key) {
+        continue;
+      }
+
+      // Validate cache entry
+      bool valid = false;
+      char* meta_path = jsrt_cache_build_path(config->directory, key, CACHE_META_SUFFIX);
+      char* code_path = jsrt_cache_build_path(config->directory, key, CACHE_BYTECODE_SUFFIX);
+
+      if (meta_path && code_path) {
+        JSRT_CacheMetadata meta;
+        if (jsrt_cache_read_metadata(meta_path, &meta)) {
+          // Check version compatibility
+          bool version_match =
+              (strcmp(meta.jsrt_version, JSRT_VERSION) == 0) && (strcmp(meta.quickjs_version, QUICKJS_VERSION) == 0);
+
+          if (version_match && access(code_path, F_OK) == 0) {
+            // Check if source file still exists and hasn't been modified (non-portable mode)
+            if (config->portable || access(meta.source_path, F_OK) == 0) {
+              if (config->portable) {
+                valid = true;  // Portable mode: don't check source mtime
+              } else {
+                struct stat st;
+                if (stat(meta.source_path, &st) == 0 && st.st_mtime == meta.mtime) {
+                  valid = true;
+                }
+              }
+            }
+          }
+
+          jsrt_cache_metadata_free(&meta);
+        }
+      }
+
+      // Remove invalid entries
+      if (!valid) {
+        JSRT_Debug("Removing stale cache entry: %s", key);
+        jsrt_cache_remove_entry(config->directory, key);
+        removed_count++;
+      }
+
+      if (meta_path) {
+        free(meta_path);
+      }
+      if (code_path) {
+        free(code_path);
+      }
+      free(key);
+    }
+  }
+
+  closedir(dir);
+
+  if (removed_count > 0) {
+    JSRT_Debug("Startup cleanup removed %d stale entries", removed_count);
+  }
+
+  return removed_count;
+}
+
+bool jsrt_compile_cache_maybe_evict(JSRT_CompileCacheConfig* config, size_t added_size) {
+  if (!config || !config->enabled || added_size == 0) {
+    return false;
+  }
+
+  // Check if adding this entry would exceed the size limit
+  if (config->current_size + added_size <= config->size_limit) {
+    return false;  // No eviction needed
+  }
+
+  size_t target_size = config->size_limit * 0.8;  // Target 80% of limit
+  size_t bytes_to_free = (config->current_size + added_size) - target_size;
+  size_t bytes_freed = 0;
+  int entries_evicted = 0;
+
+  JSRT_Debug("Cache eviction needed: current=%zu, adding=%zu, limit=%zu, target=%zu", config->current_size, added_size,
+             config->size_limit, target_size);
+
+  // Evict least recently used entries
+  while (config->lru_tail && bytes_freed < bytes_to_free) {
+    JSRT_CacheLRUEntry* lru_entry = config->lru_tail;
+
+    // Remove the cache entry from disk
+    jsrt_cache_remove_entry(config->directory, lru_entry->key);
+    bytes_freed += lru_entry->size;
+    entries_evicted++;
+
+    JSRT_Debug("Evicted LRU entry: %s (size: %zu bytes)", lru_entry->key, lru_entry->size);
+
+    // Remove from LRU list
+    jsrt_compile_cache_remove_lru(config, lru_entry->key);
+  }
+
+  if (entries_evicted > 0) {
+    config->evictions += entries_evicted;
+    config->current_size -= bytes_freed;
+    JSRT_Debug("Cache eviction completed: evicted %d entries, freed %zu bytes", entries_evicted, bytes_freed);
+    return true;
+  }
+
+  return false;
+}
+
+void jsrt_compile_cache_update_lru(JSRT_CompileCacheConfig* config, const char* key, size_t size) {
+  if (!config || !key) {
+    return;
+  }
+
+  time_t now = time(NULL);
+
+  // Check if entry already exists in LRU list
+  JSRT_CacheLRUEntry* current = config->lru_head;
+  while (current) {
+    if (strcmp(current->key, key) == 0) {
+      // Entry exists - move to front and update
+      current->access_time = now;
+      current->size = size;
+
+      // Remove from current position
+      if (current->prev) {
+        current->prev->next = current->next;
+      } else {
+        // Already at head
+        config->lru_head = current->next;
+      }
+
+      if (current->next) {
+        current->next->prev = current->prev;
+      } else {
+        // Currently at tail
+        config->lru_tail = current->prev;
+      }
+
+      // Move to front
+      current->prev = NULL;
+      current->next = config->lru_head;
+      if (config->lru_head) {
+        config->lru_head->prev = current;
+      }
+      config->lru_head = current;
+
+      if (!config->lru_tail) {
+        config->lru_tail = current;
+      }
+
+      return;
+    }
+    current = current->next;
+  }
+
+  // Entry doesn't exist - create new LRU entry
+  JSRT_CacheLRUEntry* new_entry = malloc(sizeof(JSRT_CacheLRUEntry));
+  if (!new_entry) {
+    return;
+  }
+
+  new_entry->key = strdup(key);
+  if (!new_entry->key) {
+    free(new_entry);
+    return;
+  }
+
+  new_entry->access_time = now;
+  new_entry->size = size;
+  new_entry->prev = NULL;
+  new_entry->next = config->lru_head;
+
+  if (config->lru_head) {
+    config->lru_head->prev = new_entry;
+  }
+  config->lru_head = new_entry;
+
+  if (!config->lru_tail) {
+    config->lru_tail = new_entry;
+  }
+
+  // Update cache size (only for new entries)
+  config->current_size += size;
+}
+
+void jsrt_compile_cache_remove_lru(JSRT_CompileCacheConfig* config, const char* key) {
+  if (!config || !key) {
+    return;
+  }
+
+  JSRT_CacheLRUEntry* current = config->lru_head;
+  while (current) {
+    if (strcmp(current->key, key) == 0) {
+      // Update cache size
+      config->current_size -= current->size;
+
+      // Remove from LRU list
+      if (current->prev) {
+        current->prev->next = current->next;
+      } else {
+        config->lru_head = current->next;
+      }
+
+      if (current->next) {
+        current->next->prev = current->prev;
+      } else {
+        config->lru_tail = current->prev;
+      }
+
+      // Free the entry
+      if (current->key) {
+        free(current->key);
+      }
+      free(current);
+
+      return;
+    }
+    current = current->next;
+  }
+}
+
+size_t jsrt_compile_cache_get_disk_size(const char* directory) {
+  if (!directory) {
+    return 0;
+  }
+
+  size_t total_size = 0;
+  DIR* dir = opendir(directory);
+  if (!dir) {
+    return 0;
+  }
+
+  struct dirent* entry;
+  while ((entry = readdir(dir)) != NULL) {
+    // Skip . and .. directories
+    if (strcmp(entry->d_name, ".") == 0 || strcmp(entry->d_name, "..") == 0) {
+      continue;
+    }
+
+    // Check for cache files
+    size_t name_len = strlen(entry->d_name);
+    if ((name_len > 5 && strcmp(entry->d_name + name_len - 5, CACHE_META_SUFFIX) == 0) ||
+        (name_len > 4 && strcmp(entry->d_name + name_len - 4, CACHE_BYTECODE_SUFFIX) == 0)) {
+      char* full_path = jsrt_cache_build_path(directory, entry->d_name, "");
+      if (full_path) {
+        struct stat st;
+        if (stat(full_path, &st) == 0) {
+          total_size += st.st_size;
+        }
+        free(full_path);
+      }
+    }
+  }
+
+  closedir(dir);
+  return total_size;
 }

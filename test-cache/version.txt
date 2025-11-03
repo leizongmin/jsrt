@@ -1,0 +1,2 @@
+jsrt_version=0.1.0
+quickjs_version=2025-04-26

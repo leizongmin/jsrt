@@ -24,28 +24,43 @@ int main(int argc, char** argv) {
 
   // Handle explicit stdin flag
   if (argc == 2 && strcmp(argv[1], "-") == 0) {
-    ret = JSRT_CmdRunStdin(false, argc, argv);
+    ret = JSRT_CmdRunStdin(false, true, argc, argv);
     return ret;
   }
 
   // Check for compact-node flag (enabled by default)
   bool compact_node = true;
+  bool compile_cache_allowed = true;
   int script_arg_start = 1;
 
-  if (argc >= 2) {
-    if (strcmp(argv[1], "--compact-node") == 0) {
+  // Check for JSRT_NO_COMPILE_CACHE environment variable
+  const char* no_cache_env = getenv("JSRT_NO_COMPILE_CACHE");
+  if (no_cache_env &&
+      (strcmp(no_cache_env, "1") == 0 || strcmp(no_cache_env, "true") == 0 || strcmp(no_cache_env, "yes") == 0)) {
+    compile_cache_allowed = false;
+  }
+
+  // Process command line flags
+  for (int i = 1; i < argc; i++) {
+    if (strcmp(argv[i], "--compact-node") == 0) {
       compact_node = true;
-      script_arg_start = 2;
-    } else if (strcmp(argv[1], "--no-compact-node") == 0) {
+      script_arg_start++;
+    } else if (strcmp(argv[i], "--no-compact-node") == 0) {
       compact_node = false;
-      script_arg_start = 2;
+      script_arg_start++;
+    } else if (strcmp(argv[i], "--no-compile-cache") == 0) {
+      compile_cache_allowed = false;
+      script_arg_start++;
+    } else {
+      // Stop processing flags when we hit a non-flag
+      break;
     }
   }
 
   if (argc < script_arg_start + 1) {
     // If no embedded bytecode and no arguments, check for piped stdin input
     if (!isatty(STDIN_FILENO)) {
-      ret = JSRT_CmdRunStdin(compact_node, argc, argv);
+      ret = JSRT_CmdRunStdin(compact_node, compile_cache_allowed, argc, argv);
       return ret;
     }
 
@@ -94,10 +109,11 @@ int main(int argc, char** argv) {
     }
     new_argv[new_argc] = NULL;
 
-    ret = JSRT_CmdRunFile(command, compact_node, new_argc, new_argv);
+    ret = JSRT_CmdRunFile(command, compact_node, compile_cache_allowed, new_argc, new_argv);
     free(new_argv);
   } else {
-    ret = JSRT_CmdRunFile(command, compact_node, argc - script_arg_start, argv + script_arg_start);
+    ret =
+        JSRT_CmdRunFile(command, compact_node, compile_cache_allowed, argc - script_arg_start, argv + script_arg_start);
   }
 
   return ret;

@@ -32,17 +32,39 @@ typedef enum {
   JSRT_COMPILE_CACHE_DISABLED = -2         // Disabled
 } JSRT_CompileCacheStatus;
 
+// Default cache size limit: 100MB
+#define DEFAULT_CACHE_SIZE_LIMIT (100 * 1024 * 1024)
+
+/**
+ * Cache LRU entry for tracking access order
+ */
+typedef struct JSRT_CacheLRUEntry {
+  char* key;                        // Cache entry key
+  time_t access_time;               // Last access time
+  size_t size;                      // Size of cache entry (bytes)
+  struct JSRT_CacheLRUEntry* next;  // Next entry in LRU list
+  struct JSRT_CacheLRUEntry* prev;  // Previous entry in LRU list
+} JSRT_CacheLRUEntry;
+
 /**
  * Cache configuration
  */
 typedef struct JSRT_CompileCacheConfig {
-  char* directory;  // Cache directory path
-  bool portable;    // Use content-based hashing (slower, relocatable)
-  bool enabled;     // Cache enabled flag
-  uint64_t hits;    // Cache hit count
-  uint64_t misses;  // Cache miss count
-  uint64_t writes;  // Cache write count
-  uint64_t errors;  // Cache error count
+  char* directory;      // Cache directory path
+  bool portable;        // Use content-based hashing (slower, relocatable)
+  bool allow_enable;    // Runtime/CLI toggle allowing enablement
+  bool enabled;         // Cache enabled flag
+  uint64_t hits;        // Cache hit count
+  uint64_t misses;      // Cache miss count
+  uint64_t writes;      // Cache write count
+  uint64_t errors;      // Cache error count
+  uint64_t evictions;   // Cache eviction count
+  size_t size_limit;    // Maximum cache size in bytes
+  size_t current_size;  // Current cache size in bytes
+
+  // LRU tracking for eviction
+  JSRT_CacheLRUEntry* lru_head;  // Most recently used
+  JSRT_CacheLRUEntry* lru_tail;  // Least recently used
 } JSRT_CompileCacheConfig;
 
 /**
@@ -94,6 +116,13 @@ JSRT_CompileCacheStatus jsrt_compile_cache_enable(JSContext* ctx, JSRT_CompileCa
  * @param config Cache configuration
  */
 void jsrt_compile_cache_disable(JSRT_CompileCacheConfig* config);
+
+/**
+ * Allow or disallow compilation cache usage
+ * @param config Cache configuration
+ * @param allowed Whether enabling the cache is permitted
+ */
+void jsrt_compile_cache_set_allowed(JSRT_CompileCacheConfig* config, bool allowed);
 
 /**
  * Get cache directory path
@@ -191,9 +220,12 @@ bool jsrt_compile_cache_store(JSContext* ctx, JSRT_CompileCacheConfig* config, c
  * @param misses Output: cache misses
  * @param writes Output: cache writes
  * @param errors Output: cache errors
+ * @param evictions Output: cache evictions
+ * @param current_size Output: current cache size in bytes
+ * @param size_limit Output: cache size limit in bytes
  */
 void jsrt_compile_cache_get_stats(JSRT_CompileCacheConfig* config, uint64_t* hits, uint64_t* misses, uint64_t* writes,
-                                  uint64_t* errors);
+                                  uint64_t* errors, uint64_t* evictions, size_t* current_size, size_t* size_limit);
 
 /**
  * Flush pending cache entries to disk
@@ -201,5 +233,53 @@ void jsrt_compile_cache_get_stats(JSRT_CompileCacheConfig* config, uint64_t* hit
  * @return Number of entries flushed
  */
 int jsrt_compile_cache_flush(JSRT_CompileCacheConfig* config);
+
+// ============================================================================
+// Cache Maintenance
+// ============================================================================
+
+/**
+ * Clear all compile cache entries
+ * @param config Cache configuration
+ * @return Number of entries removed
+ */
+int jsrt_compile_cache_clear(JSRT_CompileCacheConfig* config);
+
+/**
+ * Perform startup cleanup - remove stale entries
+ * @param config Cache configuration
+ * @return Number of entries removed
+ */
+int jsrt_compile_cache_startup_cleanup(JSRT_CompileCacheConfig* config);
+
+/**
+ * Check cache size and perform LRU eviction if needed
+ * @param config Cache configuration
+ * @param added_size Size of new entry being added
+ * @return true if eviction was performed, false otherwise
+ */
+bool jsrt_compile_cache_maybe_evict(JSRT_CompileCacheConfig* config, size_t added_size);
+
+/**
+ * Update LRU tracking for a cache entry
+ * @param config Cache configuration
+ * @param key Cache entry key
+ * @param size Size of the cache entry
+ */
+void jsrt_compile_cache_update_lru(JSRT_CompileCacheConfig* config, const char* key, size_t size);
+
+/**
+ * Remove cache entry from LRU tracking
+ * @param config Cache configuration
+ * @param key Cache entry key
+ */
+void jsrt_compile_cache_remove_lru(JSRT_CompileCacheConfig* config, const char* key);
+
+/**
+ * Get on-disk cache size by scanning directory
+ * @param directory Cache directory path
+ * @return Total size in bytes
+ */
+size_t jsrt_compile_cache_get_disk_size(const char* directory);
 
 #endif  // __JSRT_NODE_MODULE_COMPILE_CACHE_H__

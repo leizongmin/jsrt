@@ -10,6 +10,7 @@
 #include "../../util/debug.h"
 #include "../node_modules.h"
 #include "compile_cache.h"
+#include "hooks.h"
 #include "sourcemap.h"
 
 // Module class ID for opaque data
@@ -118,6 +119,99 @@ void jsrt_module_free_data(JSRuntime* rt, JSRT_ModuleData* data) {
   free(data->filename);
   free(data->path);
   free(data);
+}
+
+/**
+ * module.registerHooks(options) - Register module resolution and loading hooks
+ */
+JSValue jsrt_module_register_hooks(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
+  if (argc < 1) {
+    return JS_ThrowTypeError(ctx, "module.registerHooks() requires an options object");
+  }
+
+  if (!JS_IsObject(argv[0])) {
+    return JS_ThrowTypeError(ctx, "module.registerHooks() options must be an object");
+  }
+
+  // Get runtime to access hook registry
+  JSRT_Runtime* rt = JS_GetContextOpaque(ctx);
+  if (!rt || !rt->hook_registry) {
+    return JS_ThrowInternalError(ctx, "Module hook registry not initialized");
+  }
+
+  JSValue options = argv[0];
+  JSValue resolve_fn = JS_NULL;
+  JSValue load_fn = JS_NULL;
+
+  // Extract resolve function
+  JSValue resolve_val = JS_GetPropertyStr(ctx, options, "resolve");
+  if (JS_IsException(resolve_val)) {
+    return JS_EXCEPTION;
+  }
+  if (!JS_IsUndefined(resolve_val) && !JS_IsNull(resolve_val)) {
+    if (!JS_IsFunction(ctx, resolve_val)) {
+      JS_FreeValue(ctx, resolve_val);
+      return JS_ThrowTypeError(ctx, "module.registerHooks() resolve option must be a function");
+    }
+    resolve_fn = resolve_val;
+  } else {
+    JS_FreeValue(ctx, resolve_val);
+  }
+
+  // Extract load function
+  JSValue load_val = JS_GetPropertyStr(ctx, options, "load");
+  if (JS_IsException(load_val)) {
+    if (!JS_IsNull(resolve_fn)) {
+      JS_FreeValue(ctx, resolve_fn);
+    }
+    return JS_EXCEPTION;
+  }
+  if (!JS_IsUndefined(load_val) && !JS_IsNull(load_val)) {
+    if (!JS_IsFunction(ctx, load_val)) {
+      if (!JS_IsNull(resolve_fn)) {
+        JS_FreeValue(ctx, resolve_fn);
+      }
+      JS_FreeValue(ctx, load_val);
+      return JS_ThrowTypeError(ctx, "module.registerHooks() load option must be a function");
+    }
+    load_fn = load_val;
+  } else {
+    JS_FreeValue(ctx, load_val);
+  }
+
+  // Validate that at least one function is provided
+  if (JS_IsNull(resolve_fn) && JS_IsNull(load_fn)) {
+    return JS_ThrowTypeError(ctx, "module.registerHooks() requires at least resolve or load function");
+  }
+
+  // Register the hook
+  int result = jsrt_hook_register(rt->hook_registry, resolve_fn, load_fn);
+
+  // Clean up local references (hook registry takes ownership)
+  if (!JS_IsNull(resolve_fn)) {
+    JS_FreeValue(ctx, resolve_fn);
+  }
+  if (!JS_IsNull(load_fn)) {
+    JS_FreeValue(ctx, load_fn);
+  }
+
+  if (result != 0) {
+    return JS_ThrowInternalError(ctx, "Failed to register module hooks");
+  }
+
+  // Return a handle/identifier for the registered hooks
+  // For now, we return a simple handle object with hook count
+  JSValue handle = JS_NewObject(ctx);
+  if (JS_IsException(handle)) {
+    return JS_EXCEPTION;
+  }
+
+  // Add metadata to the handle
+  JS_SetPropertyStr(ctx, handle, "id", JS_NewInt32(ctx, rt->hook_registry->hook_count));
+  JS_SetPropertyStr(ctx, handle, "resolve", JS_IsNull(resolve_fn) ? JS_FALSE : JS_TRUE);
+  JS_SetPropertyStr(ctx, handle, "load", JS_IsNull(load_fn) ? JS_FALSE : JS_TRUE);
+
+  return handle;
 }
 
 /**
@@ -1145,6 +1239,49 @@ static JSValue jsrt_module_flush_compile_cache(JSContext* ctx, JSValueConst this
   return JS_NewInt32(ctx, rc);
 }
 
+static JSValue jsrt_module_clear_compile_cache(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
+  JSRT_CompileCacheConfig* config = jsrt_module_get_compile_cache(ctx);
+  if (!config || !jsrt_compile_cache_is_enabled(config)) {
+    return JS_NewInt32(ctx, 0);
+  }
+
+  int removed_count = jsrt_compile_cache_clear(config);
+  return JS_NewInt32(ctx, removed_count);
+}
+
+static JSValue jsrt_module_get_compile_cache_stats(JSContext* ctx, JSValueConst this_val, int argc,
+                                                   JSValueConst* argv) {
+  JSRT_CompileCacheConfig* config = jsrt_module_get_compile_cache(ctx);
+  if (!config || !jsrt_compile_cache_is_enabled(config)) {
+    return JS_UNDEFINED;
+  }
+
+  uint64_t hits = 0, misses = 0, writes = 0, errors = 0, evictions = 0;
+  size_t current_size = 0, size_limit = 0;
+
+  jsrt_compile_cache_get_stats(config, &hits, &misses, &writes, &errors, &evictions, &current_size, &size_limit);
+
+  JSValue result = JS_NewObject(ctx);
+  JS_SetPropertyStr(ctx, result, "hits", JS_NewInt64(ctx, hits));
+  JS_SetPropertyStr(ctx, result, "misses", JS_NewInt64(ctx, misses));
+  JS_SetPropertyStr(ctx, result, "writes", JS_NewInt64(ctx, writes));
+  JS_SetPropertyStr(ctx, result, "errors", JS_NewInt64(ctx, errors));
+  JS_SetPropertyStr(ctx, result, "evictions", JS_NewInt64(ctx, evictions));
+  JS_SetPropertyStr(ctx, result, "currentSize", JS_NewInt64(ctx, current_size));
+  JS_SetPropertyStr(ctx, result, "sizeLimit", JS_NewInt64(ctx, size_limit));
+
+  // Calculate hit rate
+  uint64_t total_requests = hits + misses;
+  double hit_rate = total_requests > 0 ? (double)hits / total_requests * 100.0 : 0.0;
+  JS_SetPropertyStr(ctx, result, "hitRate", JS_NewFloat64(ctx, hit_rate));
+
+  // Calculate size utilization
+  double utilization = size_limit > 0 ? (double)current_size / size_limit * 100.0 : 0.0;
+  JS_SetPropertyStr(ctx, result, "utilization", JS_NewFloat64(ctx, utilization));
+
+  return result;
+}
+
 /**
  * Module.wrap(script) - Wrap script in CommonJS wrapper
  */
@@ -1218,6 +1355,10 @@ JSValue JSRT_InitNodeModule(JSContext* ctx) {
                     JS_NewCFunction(ctx, jsrt_module_get_compile_cache_dir, "getCompileCacheDir", 0));
   JS_SetPropertyStr(ctx, ctor, "flushCompileCache",
                     JS_NewCFunction(ctx, jsrt_module_flush_compile_cache, "flushCompileCache", 0));
+  JS_SetPropertyStr(ctx, ctor, "clearCompileCache",
+                    JS_NewCFunction(ctx, jsrt_module_clear_compile_cache, "clearCompileCache", 0));
+  JS_SetPropertyStr(ctx, ctor, "getCompileCacheStats",
+                    JS_NewCFunction(ctx, jsrt_module_get_compile_cache_stats, "getCompileCacheStats", 0));
 
   // Add Module.wrapper property (array with wrapper parts)
   JSValue wrapper = JS_NewArray(ctx);
@@ -1261,12 +1402,18 @@ JSValue JSRT_InitNodeModule(JSContext* ctx) {
                     JS_NewCFunction(ctx, jsrt_module_get_source_maps_support, "getSourceMapsSupport", 0));
   JS_SetPropertyStr(ctx, module_obj, "setSourceMapsSupport",
                     JS_NewCFunction(ctx, jsrt_module_set_source_maps_support, "setSourceMapsSupport", 2));
+  JS_SetPropertyStr(ctx, module_obj, "registerHooks",
+                    JS_NewCFunction(ctx, jsrt_module_register_hooks, "registerHooks", 1));
   JS_SetPropertyStr(ctx, module_obj, "enableCompileCache",
                     JS_NewCFunction(ctx, jsrt_module_enable_compile_cache, "enableCompileCache", 1));
   JS_SetPropertyStr(ctx, module_obj, "getCompileCacheDir",
                     JS_NewCFunction(ctx, jsrt_module_get_compile_cache_dir, "getCompileCacheDir", 0));
   JS_SetPropertyStr(ctx, module_obj, "flushCompileCache",
                     JS_NewCFunction(ctx, jsrt_module_flush_compile_cache, "flushCompileCache", 0));
+  JS_SetPropertyStr(ctx, module_obj, "clearCompileCache",
+                    JS_NewCFunction(ctx, jsrt_module_clear_compile_cache, "clearCompileCache", 0));
+  JS_SetPropertyStr(ctx, module_obj, "getCompileCacheStats",
+                    JS_NewCFunction(ctx, jsrt_module_get_compile_cache_stats, "getCompileCacheStats", 0));
 
   JSValue compile_cache_status = JS_NewObject(ctx);
   JS_SetPropertyStr(ctx, compile_cache_status, "ENABLED", JS_NewInt32(ctx, JSRT_COMPILE_CACHE_ENABLED));
@@ -1329,6 +1476,10 @@ int js_node_module_init(JSContext* ctx, JSModuleDef* m) {
   JS_SetModuleExport(ctx, m, "setSourceMapsSupport", JS_DupValue(ctx, set_source_maps_support));
   JS_FreeValue(ctx, set_source_maps_support);
 
+  JSValue register_hooks = JS_GetPropertyStr(ctx, module_obj, "registerHooks");
+  JS_SetModuleExport(ctx, m, "registerHooks", JS_DupValue(ctx, register_hooks));
+  JS_FreeValue(ctx, register_hooks);
+
   JSValue enable_compile_cache = JS_GetPropertyStr(ctx, module_obj, "enableCompileCache");
   JS_SetModuleExport(ctx, m, "enableCompileCache", JS_DupValue(ctx, enable_compile_cache));
   JS_FreeValue(ctx, enable_compile_cache);
@@ -1340,6 +1491,14 @@ int js_node_module_init(JSContext* ctx, JSModuleDef* m) {
   JSValue flush_compile_cache = JS_GetPropertyStr(ctx, module_obj, "flushCompileCache");
   JS_SetModuleExport(ctx, m, "flushCompileCache", JS_DupValue(ctx, flush_compile_cache));
   JS_FreeValue(ctx, flush_compile_cache);
+
+  JSValue clear_compile_cache = JS_GetPropertyStr(ctx, module_obj, "clearCompileCache");
+  JS_SetModuleExport(ctx, m, "clearCompileCache", JS_DupValue(ctx, clear_compile_cache));
+  JS_FreeValue(ctx, clear_compile_cache);
+
+  JSValue get_compile_cache_stats = JS_GetPropertyStr(ctx, module_obj, "getCompileCacheStats");
+  JS_SetModuleExport(ctx, m, "getCompileCacheStats", JS_DupValue(ctx, get_compile_cache_stats));
+  JS_FreeValue(ctx, get_compile_cache_stats);
 
   JSValue module_constants = JS_GetPropertyStr(ctx, module_obj, "constants");
   JS_SetModuleExport(ctx, m, "constants", JS_DupValue(ctx, module_constants));

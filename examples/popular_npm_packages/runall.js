@@ -45,7 +45,9 @@ async function main() {
       console.log(`--- ${file} PASSED ---`);
     } else {
       failures += 1;
-      const reason = result.signal ? `signal ${result.signal}` : `exit code ${result.code}`;
+      const reason = result.signal
+        ? `signal ${result.signal}`
+        : `exit code ${result.code}`;
       console.log(`--- ${file} FAILED (${reason}) ---`);
     }
   }

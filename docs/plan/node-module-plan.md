@@ -8,10 +8,10 @@
 * Task Metadata
 :PROPERTIES:
 :CREATED: 2025-10-31T00:00:00Z
-:UPDATED: 2025-11-03T06:20:00Z
+:UPDATED: 2025-11-03T08:55:00Z
 :STATUS: 🟢 PHASE 4 ACTIVE
-:PROGRESS: 107/171
-:COMPLETION: 62.6%
+:PROGRESS: 109/171
+:COMPLETION: 63.7%
 :END:
 
 * Status Update Guidelines
@@ -1095,13 +1095,13 @@ Implement cache cleanup and maintenance.
 - New module API for clearing cache plus accompanying documentation snippet.
 - Metrics snapshot included in dashboard section for quick health checks.
 
-** TODO [#B] Phase 4: Module Hooks (Basic) [S][R:HIGH][C:COMPLEX][D:phase-3] :hooks:
+** IN-PROGRESS [#B] Phase 4: Module Hooks (Basic) [S][R:HIGH][C:COMPLEX][D:phase-3] :hooks:
 :PROPERTIES:
 :ID: phase-4
 :CREATED: 2025-10-31T00:00:00Z
 :DEPS: phase-3
-:PROGRESS: 0/32
-:COMPLETION: 0%
+:PROGRESS: 2/32
+:COMPLETION: 6.25%
 :END:
 
 Implement basic module resolution and loading hooks (synchronous only).
@@ -1130,21 +1130,23 @@ Implement basic module resolution and loading hooks (synchronous only).
 - **Performance Regression**: add microbenchmarks and disable hooks when none are registered.
 - **Debuggability**: provide `--trace-module-hooks` output and leverage `JSRT_Debug` for internal tracing.
 
-*** TODO [#A] Task 4.1: Hook Infrastructure [S][R:HIGH][C:MEDIUM]
+*** DONE [#A] Task 4.1: Hook Infrastructure [S][R:HIGH][C:MEDIUM]
+CLOSED: [2025-11-03T08:55:00Z]
 :PROPERTIES:
 :ID: 4.1
 :CREATED: 2025-10-31T00:00:00Z
+:COMPLETED: 2025-11-03T08:55:00Z
 :DEPS: phase-3
 :END:
 
 Set up hook registration and execution framework.
 
 **** Subtasks
-- [ ] Create ~src/node/module/hooks.c~ and ~.h~
-- [ ] Define hook chain data structure
-- [ ] Implement hook registration list
-- [ ] Implement hook chaining (LIFO order)
-- [ ] Add to build system
+- [X] Create ~src/node/module/hooks.c~ and ~.h~
+- [X] Define hook chain data structure
+- [X] Implement hook registration list
+- [X] Implement hook chaining (LIFO order)
+- [X] Add to build system
 
 **** Deliverables
 - `JSRT_ModuleHookRegistry` abstraction with add/remove helpers and teardown hooks.
@@ -1165,23 +1167,25 @@ typedef struct JSRTModuleHook {
 } JSRTModuleHook;
 #+END_SRC
 
-*** TODO [#A] Task 4.2: module.registerHooks() Implementation [S][R:MED][C:MEDIUM][D:4.1]
+*** DONE [#A] Task 4.2: module.registerHooks() Implementation [S][R:MED][C:MEDIUM][D:4.1]
+CLOSED: [2025-11-03T08:55:00Z]
 :PROPERTIES:
 :ID: 4.2
 :CREATED: 2025-10-31T00:00:00Z
+:COMPLETED: 2025-11-03T08:55:00Z
 :DEPS: 4.1
 :END:
 
 Implement synchronous hook registration (main thread only).
 
 **** Subtasks
-- [ ] Implement ~module.registerHooks(options)~
-- [ ] Accept ~options.resolve~ function
-- [ ] Accept ~options.load~ function
-- [ ] Validate hook functions (must be functions)
-- [ ] Add hooks to chain (LIFO order)
-- [ ] Store hooks in runtime context
-- [ ] Return hook registration handle
+- [X] Implement ~module.registerHooks(options)~
+- [X] Accept ~options.resolve~ function
+- [X] Accept ~options.load~ function
+- [X] Validate hook functions (must be functions)
+- [X] Add hooks to chain (LIFO order)
+- [X] Store hooks in runtime context
+- [X] Return hook registration handle
 
 **** Deliverables
 - JavaScript API mirroring Node.js semantics with argument validation and helpful errors.
@@ -1755,17 +1759,17 @@ Complete documentation and examples.
 
 * 🚀 Execution Dashboard
 :PROPERTIES:
-:CURRENT_PHASE: Phase 4 - KICKOFF 🚀
-:PROGRESS: 107/171
-:COMPLETION: 62.6%
-:ACTIVE_TASK: Task 4.1 - Hook Infrastructure
-:UPDATED: 2025-11-03T06:20:00Z
+:CURRENT_PHASE: Phase 4 - IN PROGRESS 🔄
+:PROGRESS: 109/171
+:COMPLETION: 63.7%
+:ACTIVE_TASK: Task 4.3 - Resolve Hook Execution
+:UPDATED: 2025-11-03T08:55:00Z
 :END:
 
 ** Current Status
-- Phase: Phase 4 KICKOFF 🚀 (Module Hooks - Basic)
-- Progress: 107/171 tasks (62.6%)
-- Active: Task 4.1 Hook Infrastructure scaffolding
+- Phase: Phase 4 IN PROGRESS 🔄 (Module Hooks - Basic)
+- Progress: 109/171 tasks (63.7%)
+- Active: Task 4.3 Resolve Hook Execution (next priority)
 
 ** Completed (Phase 1)
 1. [X] Task 1.1: Project Structure Setup
@@ -1799,22 +1803,26 @@ Complete documentation and examples.
 7. [X] Task 3.7: Cache Integration with Module Loader ✅
 8. [X] Task 3.8: Cache Maintenance ✅
 
+** Completed (Phase 4)
+1. [X] Task 4.1: Hook Infrastructure ✅
+2. [X] Task 4.2: module.registerHooks() Implementation ✅
+
 ** Next Steps
-- [ ] Implement hook registration and execution framework (Task 4.1)
-- [ ] Create module.registerHooks() API (Task 4.2)
 - [ ] Hook into path resolution pipeline (Task 4.3)
 - [ ] Hook into module loading pipeline (Task 4.4)
+- [ ] Implement robust error handling for hooks (Task 4.5)
+- [ ] Create hook examples and documentation (Task 4.6)
 
 ** Upcoming Milestones
-- Phase 4 kickoff: Hook infrastructure scaffolding (Task 4.1) and registration API (Task 4.2)
 - Phase 4 execution: Resolve/load hook execution with chaining (Tasks 4.3-4.4)
+- Phase 4 completion: Error handling and examples (Tasks 4.5-4.6)
 - Phase 5 prep: assemble package.json fixture set to exercise lookup/parsing helpers
 
 ** Roadmap Timeline
 | Week | Focus | Key Deliverables |
 |------|-------|------------------|
-| 45 (current) | Phase 4 kickoff | Hook infrastructure (4.1) plus registerHooks API (4.2) |
-| 46 | Phase 4 execution | Resolve/load hook execution with chaining (4.3-4.4) |
+| 45 (current) | Phase 4 execution | Resolve/load hook execution with chaining (4.3-4.4) |
+| 46 | Phase 4 completion | Error handling and examples (4.5-4.6) |
 | 47 | Phase 5 utilities | findPackageJSON + parsing helpers with caching fixtures |
 | 48 | Phase 6 advanced features | syncBuiltinESMExports, loader statistics, HMR prototype |
 | 49 | Phase 7 QA & polish | Full test sweep, perf benchmarks, docs & examples |
@@ -1842,14 +1850,20 @@ Complete documentation and examples.
 | 1 | Foundation & Core API | 10 | ✅ DONE | 100% |
 | 2 | Source Map Support | 71 | ✅ DONE | 100% |
 | 3 | Compilation Cache | 26 | ✅ DONE | 100% |
-| 4 | Module Hooks (Basic) | 32 | 🚀 KICKOFF | 0% |
+| 4 | Module Hooks (Basic) | 32 | 🔄 IN-PROGRESS | 6.25% |
 | 5 | Package.json Utilities | 12 | TODO | 0% |
 | 6 | Advanced Features | 15 | TODO | 0% |
 | 7 | Testing & QA | 5 | TODO | 0% |
-| **Total** | | **171** | | **62.6%** |
+| **Total** | | **171** | | **63.7%** |
 
 * 📜 History & Updates
 :LOGBOOK:
+- Note taken on [2025-11-03T08:55:00Z] \
+  🚀 Phase 4 PROGRESS: Hook infrastructure (4.1) and registerHooks API (4.2) completed (6.25%, 2/32 tasks)
+- Note taken on [2025-11-03T08:55:00Z] \\
+  Task 4.2 COMPLETED: module.registerHooks() Implementation (hook registration, validation, LIFO chaining)
+- Note taken on [2025-11-03T08:55:00Z] \\
+  Task 4.1 COMPLETED: Hook Infrastructure (hooks.c/h, data structures, registration list, build system)
 - Note taken on [2025-11-03T06:20:00Z] \
   🎉 Phase 3 COMPLETED: All 8 compilation cache tasks implemented (100%, 26/26 tasks)
 - Note taken on [2025-11-03T06:18:00Z] \\
@@ -1887,6 +1901,9 @@ Complete documentation and examples.
 ** Recent Changes
 | Timestamp | Action | Task ID | Details |
 |-----------|--------|---------|---------|
+| 2025-11-03T08:55:00Z | Completed | Phase 4 | 🚀 Hook infrastructure (4.1) and registerHooks API (4.2) complete, 2/32 tasks (6.25%) |
+| 2025-11-03T08:55:00Z | Completed | 4.2 | module.registerHooks() Implementation: hook registration, validation, LIFO chaining ✅ |
+| 2025-11-03T08:55:00Z | Completed | 4.1 | Hook Infrastructure: hooks.c/h, data structures, registration list, build system ✅ |
 | 2025-11-03T06:20:00Z | Completed | Phase 3 | 🎉 All 8 compilation cache tasks complete, 26/26 tasks (100%) |
 | 2025-11-03T06:20:00Z | Completed | 3.8 | Cache maintenance: size limits, LRU eviction, cleanup, clearCompileCache API ✅ |
 | 2025-11-03T06:18:00Z | Completed | 3.7 | Cache integration: jsrt_load_module hook, --no-compile-cache CLI flag, statistics ✅ |

@@ -17,6 +17,9 @@ typedef struct JSRT_SourceMapCache JSRT_SourceMapCache;
 // Forward declaration for compile cache
 typedef struct JSRT_CompileCacheConfig JSRT_CompileCacheConfig;
 
+// Forward declaration for hook registry
+typedef struct JSRTHookRegistry JSRTHookRegistry;
+
 typedef struct {
   JSRuntime* rt;
   JSContext* ctx;
@@ -41,6 +44,9 @@ typedef struct {
 
   // Compilation cache (for node:module bytecode cache)
   JSRT_CompileCacheConfig* compile_cache;
+
+  // Module hook registry (for module.registerHooks())
+  JSRTHookRegistry* hook_registry;
 } JSRT_Runtime;
 
 JSRT_Runtime* JSRT_RuntimeNew();
@@ -81,6 +87,9 @@ void JSRT_RuntimeFreeExceptionValues(JSRT_Runtime* rt);
 bool JSRT_RuntimeProcessUnhandledExceptionValues(JSRT_Runtime* rt);
 
 void JSRT_RuntimeSetCompactNodeMode(JSRT_Runtime* rt, bool enabled);
+void JSRT_RuntimeSetCompileCacheAllowed(JSRT_Runtime* rt, bool allowed);
+void JSRT_RuntimeGetCompileCacheStats(JSRT_Runtime* rt, uint64_t* hits, uint64_t* misses, uint64_t* writes,
+                                      uint64_t* errors, uint64_t* evictions, size_t* current_size, size_t* size_limit);
 
 typedef struct {
   uint8_t* data;

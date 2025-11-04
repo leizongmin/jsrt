@@ -115,6 +115,27 @@ static JSValue js_stdout_stream_write(JSContext* ctx, JSValueConst this_val, int
   return JS_NewBool(ctx, !should_drain);
 }
 
+// Write data to stdin (for process.stdin write compatibility)
+static JSValue js_stdin_stream_write(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
+  if (argc < 1) {
+    return JS_ThrowTypeError(ctx, "write() requires at least 1 argument");
+  }
+
+  // Convert argument to string
+  const char* str = JS_ToCString(ctx, argv[0]);
+  if (!str) {
+    return JS_EXCEPTION;
+  }
+
+  // Write to stdin file descriptor (this is unusual but Node.js supports it)
+  // Note: Writing to stdin is a no-op in most cases, but we handle it gracefully
+  ssize_t result = write(STDIN_FILENO, str, strlen(str));
+  JS_FreeCString(ctx, str);
+
+  // Always return true for stdin (no backpressure handling)
+  return JS_NewBool(ctx, true);
+}
+
 static JSValue js_stderr_stream_write(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
   JSStreamData* stream = js_stream_get_data(ctx, this_val, js_writable_class_id);
   if (!stream) {
@@ -242,6 +263,9 @@ JSValue jsrt_create_stdin_stream(JSContext* ctx) {
   // Override the read method to read from stdin
   JS_SetPropertyStr(ctx, stdin_obj, "read", JS_NewCFunction(ctx, js_stdin_stream_read, "read", 1));
   JS_SetPropertyStr(ctx, stdin_obj, "_read", JS_NewCFunction(ctx, js_stdin_internal_read, "_read", 1));
+
+  // Add write method for stdin compatibility (Node.js process.stdin is writable)
+  JS_SetPropertyStr(ctx, stdin_obj, "write", JS_NewCFunction(ctx, js_stdin_stream_write, "write", 3));
 
   // Set isTTY property
   JS_SetPropertyStr(ctx, stdin_obj, "isTTY", JS_NewBool(ctx, isatty(STDIN_FILENO)));

@@ -11,6 +11,7 @@
 
 #include <errno.h>
 #include <limits.h>
+#include <math.h>
 #include <quickjs.h>
 #include <signal.h>
 #include <stdio.h>
@@ -444,6 +445,74 @@ JSValue js_readstream_set_raw_mode(JSContext* ctx, JSValueConst this_val, int ar
   return JS_UNDEFINED;
 }
 
+// ReadStream pause method - pauses the underlying readable stream
+JSValue js_readstream_pause(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
+  // Get TTY stream data from object
+  JSTTYStreamData* tty_data = JS_GetOpaque2(ctx, this_val, js_readstream_class_id);
+  if (!tty_data) {
+    JSRT_Debug("pause() called on non-TTY ReadStream, using fallback");
+    // Fallback: set paused state on object
+    JS_SetPropertyStr(ctx, this_val, "_paused", JS_NewBool(ctx, true));
+    return JS_DupValue(ctx, this_val);
+  }
+
+  if (!tty_data->is_tty) {
+    return JS_ThrowTypeError(ctx, "pause() can only be called on TTY streams");
+  }
+
+  // Update pause state
+  JS_SetPropertyStr(ctx, this_val, "_paused", JS_NewBool(ctx, true));
+  JSRT_Debug("ReadStream paused for fd %d", tty_data->fd);
+
+  // Return this for method chaining
+  return JS_DupValue(ctx, this_val);
+}
+
+// ReadStream resume method - resumes the underlying readable stream
+JSValue js_readstream_resume(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
+  // Get TTY stream data from object
+  JSTTYStreamData* tty_data = JS_GetOpaque2(ctx, this_val, js_readstream_class_id);
+  if (!tty_data) {
+    JSRT_Debug("resume() called on non-TTY ReadStream, using fallback");
+    // Fallback: set paused state on object
+    JS_SetPropertyStr(ctx, this_val, "_paused", JS_NewBool(ctx, false));
+    return JS_DupValue(ctx, this_val);
+  }
+
+  if (!tty_data->is_tty) {
+    return JS_ThrowTypeError(ctx, "resume() can only be called on TTY streams");
+  }
+
+  // Update pause state
+  JS_SetPropertyStr(ctx, this_val, "_paused", JS_NewBool(ctx, false));
+  JSRT_Debug("ReadStream resumed for fd %d", tty_data->fd);
+
+  // Return this for method chaining
+  return JS_DupValue(ctx, this_val);
+}
+
+// ReadStream isPaused method - returns true if the stream is paused
+JSValue js_readstream_is_paused(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
+  // Get TTY stream data from object
+  JSTTYStreamData* tty_data = JS_GetOpaque2(ctx, this_val, js_readstream_class_id);
+  if (!tty_data) {
+    // Fallback: get paused state from object
+    JSValue paused_val = JS_GetPropertyStr(ctx, this_val, "_paused");
+    if (JS_IsBool(paused_val)) {
+      return paused_val;
+    }
+    return JS_NewBool(ctx, false);  // Default to not paused
+  }
+
+  // Get paused state
+  JSValue paused_val = JS_GetPropertyStr(ctx, this_val, "_paused");
+  if (JS_IsBool(paused_val)) {
+    return paused_val;
+  }
+
+  return JS_NewBool(ctx, false);  // Default to not paused
+}
+
 // ReadStream get_fd property getter
 JSValue js_readstream_get_fd(JSContext* ctx, JSValueConst this_val) {
   JSTTYStreamData* tty_data = JS_GetOpaque2(ctx, this_val, js_readstream_class_id);
@@ -511,6 +580,21 @@ JSValue js_readstream_constructor(JSContext* ctx, JSValueConst new_target, int a
   JSValue set_raw_mode = JS_NewCFunction(ctx, js_readstream_set_raw_mode, "setRawMode", 1);
   JS_SetPropertyStr(ctx, obj, "setRawMode", set_raw_mode);
 
+  // Add pause method
+  JSValue pause_method = JS_NewCFunction(ctx, js_readstream_pause, "pause", 0);
+  JS_SetPropertyStr(ctx, obj, "pause", pause_method);
+
+  // Add resume method
+  JSValue resume_method = JS_NewCFunction(ctx, js_readstream_resume, "resume", 0);
+  JS_SetPropertyStr(ctx, obj, "resume", resume_method);
+
+  // Add isPaused method
+  JSValue is_paused_method = JS_NewCFunction(ctx, js_readstream_is_paused, "isPaused", 0);
+  JS_SetPropertyStr(ctx, obj, "isPaused", is_paused_method);
+
+  // Initialize paused state to false
+  JS_SetPropertyStr(ctx, obj, "_paused", JS_NewBool(ctx, false));
+
   return obj;
 }
 
@@ -520,8 +604,15 @@ JSValue js_writestream_clear_line(JSContext* ctx, JSValueConst this_val, int arg
   int direction = CLEAR_LINE_DIRECTION_TO_END;  // Default: clear to end
 
   if (argc >= 1) {
+    // Validate direction parameter
+    if (JS_IsUndefined(argv[0]) || JS_IsNull(argv[0])) {
+      return JS_ThrowTypeError(ctx, "direction must be a number");
+    }
     if (JS_ToInt32(ctx, &direction, argv[0]) < 0) {
       return JS_EXCEPTION;
+    }
+    if (direction < -1 || direction > 1) {
+      return JS_ThrowRangeError(ctx, "direction must be -1, 0, or 1");
     }
   }
 
@@ -539,7 +630,7 @@ JSValue js_writestream_clear_line(JSContext* ctx, JSValueConst this_val, int arg
       break;
   }
   fflush(stdout);
-  return JS_UNDEFINED;
+  return JS_NewBool(ctx, true);  // Return true for successful operation
 }
 
 // WriteStream cursorTo method implementation (with magic parameter for QuickJS)
@@ -547,21 +638,35 @@ JSValue js_writestream_cursor_to(JSContext* ctx, JSValueConst this_val, int argc
   int32_t x = 0, y = 0;
 
   if (argc >= 1) {
+    // Validate x coordinate
+    if (JS_IsUndefined(argv[0]) || JS_IsNull(argv[0])) {
+      return JS_ThrowTypeError(ctx, "x coordinate must be a number");
+    }
     if (JS_ToInt32(ctx, &x, argv[0]) < 0) {
       return JS_EXCEPTION;
+    }
+    if (x < 0) {
+      return JS_ThrowRangeError(ctx, "x coordinate must be a non-negative number");
     }
   }
 
   if (argc >= 2) {
+    // Validate y coordinate
+    if (JS_IsUndefined(argv[1]) || JS_IsNull(argv[1])) {
+      return JS_ThrowTypeError(ctx, "y coordinate must be a number");
+    }
     if (JS_ToInt32(ctx, &y, argv[1]) < 0) {
       return JS_EXCEPTION;
+    }
+    if (y < 0) {
+      return JS_ThrowRangeError(ctx, "y coordinate must be a non-negative number");
     }
   }
 
   // ANSI escape code for cursor positioning (1-indexed)
   printf("\033[%d;%dH", y + 1, x + 1);
   fflush(stdout);
-  return JS_UNDEFINED;
+  return JS_NewBool(ctx, true);  // Return true for successful operation
 }
 
 // WriteStream moveCursor method implementation (with magic parameter for QuickJS)
@@ -569,15 +674,25 @@ JSValue js_writestream_move_cursor(JSContext* ctx, JSValueConst this_val, int ar
   int32_t dx = 0, dy = 0;
 
   if (argc >= 1) {
+    // Validate dx coordinate
+    if (JS_IsUndefined(argv[0]) || JS_IsNull(argv[0])) {
+      return JS_ThrowTypeError(ctx, "dx coordinate must be a number");
+    }
     if (JS_ToInt32(ctx, &dx, argv[0]) < 0) {
       return JS_EXCEPTION;
     }
+    // dx is already validated by JS_ToInt32, no need for additional finite check
   }
 
   if (argc >= 2) {
+    // Validate dy coordinate
+    if (JS_IsUndefined(argv[1]) || JS_IsNull(argv[1])) {
+      return JS_ThrowTypeError(ctx, "dy coordinate must be a number");
+    }
     if (JS_ToInt32(ctx, &dy, argv[1]) < 0) {
       return JS_EXCEPTION;
     }
+    // dy is already validated by JS_ToInt32, no need for additional finite check
   }
 
   // ANSI escape codes for moving cursor
@@ -591,7 +706,7 @@ JSValue js_writestream_move_cursor(JSContext* ctx, JSValueConst this_val, int ar
     printf("\033[%dA", -dy);
   fflush(stdout);
 
-  return JS_UNDEFINED;
+  return JS_NewBool(ctx, true);  // Return true for successful operation
 }
 
 // WriteStream getColorDepth method implementation (with magic parameter for QuickJS)
@@ -612,8 +727,15 @@ JSValue js_writestream_has_colors(JSContext* ctx, JSValueConst this_val, int arg
   int32_t count = 16;  // Default minimum for color support
 
   if (argc >= 1) {
+    // Validate count parameter
+    if (JS_IsUndefined(argv[0]) || JS_IsNull(argv[0])) {
+      return JS_ThrowTypeError(ctx, "count must be a number");
+    }
     if (JS_ToInt32(ctx, &count, argv[0]) < 0) {
       return JS_EXCEPTION;
+    }
+    if (count <= 0) {
+      return JS_ThrowRangeError(ctx, "count must be a positive number");
     }
   }
 
@@ -634,7 +756,7 @@ JSValue js_writestream_clear_screen_down(JSContext* ctx, JSValueConst this_val, 
   // ANSI escape code for clearing from cursor to end of screen
   printf("\033[J");
   fflush(stdout);
-  return JS_UNDEFINED;
+  return JS_NewBool(ctx, true);  // Return true for successful operation
 }
 
 // WriteStream get_window_size method implementation

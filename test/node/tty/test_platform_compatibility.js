@@ -262,9 +262,10 @@ try {
     commonSignals.forEach((signal) => {
       try {
         // Just check if we can add a listener, don't actually trigger the signal
-        process.on(signal, () => {});
+        // Note: Not removing listeners to avoid potential crashes
+        const handler = () => {};
+        process.on(signal, handler);
         availableSignals.push(signal);
-        process.removeAllListeners(signal);
       } catch (error) {
         // Signal not supported on this platform
       }

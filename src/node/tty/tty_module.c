@@ -41,6 +41,8 @@ JSValue js_tty_remove_listener(JSContext* ctx, JSValueConst this_val, int argc, 
 JSValue js_tty_remove_all_listeners(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv);
 JSValue js_tty_max_listeners(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv);
 JSValue js_tty_set_max_listeners(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv);
+JSValue js_tty_write(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv);
+JSValue js_tty_end(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv);
 
 // Simple EventEmitter methods for TTY streams (minimal implementation for testing)
 JSValue js_tty_on(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
@@ -128,6 +130,33 @@ JSValue js_tty_set_max_listeners(JSContext* ctx, JSValueConst this_val, int argc
     return JS_ThrowTypeError(ctx, "setMaxListeners() requires at least 1 argument (n)");
   }
 
+  // For testing purposes, just return successfully
+  return JS_DupValue(ctx, this_val);
+}
+
+JSValue js_tty_write(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
+  if (argc < 1) {
+    return JS_ThrowTypeError(ctx, "write() requires at least 1 argument (chunk)");
+  }
+
+  // Get the chunk to write
+  const char* chunk = JS_ToCString(ctx, argv[0]);
+  if (!chunk) {
+    return JS_EXCEPTION;
+  }
+
+  // Write to stdout (fd 1) by default for TTY WriteStream
+  ssize_t result = write(STDOUT_FILENO, chunk, strlen(chunk));
+
+  // Free the string
+  JS_FreeCString(ctx, chunk);
+
+  // Return true if write was successful
+  return JS_NewBool(ctx, result >= 0);
+}
+
+JSValue js_tty_end(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
+  // For WriteStream, end() should write any remaining data and close the stream
   // For testing purposes, just return successfully
   return JS_DupValue(ctx, this_val);
 }
@@ -988,6 +1017,13 @@ JSValue js_writestream_constructor(JSContext* ctx, JSValueConst new_target, int 
 
   JSValue set_max_listeners_method = JS_NewCFunction(ctx, js_tty_set_max_listeners, "setMaxListeners", 1);
   JS_SetPropertyStr(ctx, obj, "setMaxListeners", set_max_listeners_method);
+
+  // Add stream methods
+  JSValue write_method = JS_NewCFunction(ctx, js_tty_write, "write", 1);
+  JS_SetPropertyStr(ctx, obj, "write", write_method);
+
+  JSValue end_method = JS_NewCFunction(ctx, js_tty_end, "end", 0);
+  JS_SetPropertyStr(ctx, obj, "end", end_method);
 
   // Initialize simple event storage
   JSValue listeners = JS_NewObject(ctx);

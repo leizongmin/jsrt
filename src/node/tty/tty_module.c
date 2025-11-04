@@ -517,7 +517,7 @@ JSValue js_readstream_constructor(JSContext* ctx, JSValueConst new_target, int a
 // WriteStream clearLine method implementation (with magic parameter for QuickJS)
 JSValue js_writestream_clear_line(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv, int magic) {
   // Enhanced clearLine with direction support
-  int direction = CLEAR_LINE_DIRECTION_TO_END; // Default: clear to end
+  int direction = CLEAR_LINE_DIRECTION_TO_END;  // Default: clear to end
 
   if (argc >= 1) {
     if (JS_ToInt32(ctx, &direction, argv[0]) < 0) {
@@ -597,7 +597,7 @@ JSValue js_writestream_move_cursor(JSContext* ctx, JSValueConst this_val, int ar
 // WriteStream getColorDepth method implementation (with magic parameter for QuickJS)
 JSValue js_writestream_get_color_depth(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv, int magic) {
   // Get fd from stream object if available, otherwise use stdout (1)
-  int fd = 1; // Default to stdout
+  int fd = 1;  // Default to stdout
   JSTTYStreamData* tty_data = JS_GetOpaque2(ctx, this_val, js_writestream_class_id);
   if (tty_data) {
     fd = tty_data->fd;
@@ -618,7 +618,7 @@ JSValue js_writestream_has_colors(JSContext* ctx, JSValueConst this_val, int arg
   }
 
   // Get fd from stream object if available, otherwise use stdout (1)
-  int fd = 1; // Default to stdout
+  int fd = 1;  // Default to stdout
   JSTTYStreamData* tty_data = JS_GetOpaque2(ctx, this_val, js_writestream_class_id);
   if (tty_data) {
     fd = tty_data->fd;
@@ -629,7 +629,8 @@ JSValue js_writestream_has_colors(JSContext* ctx, JSValueConst this_val, int arg
 }
 
 // WriteStream clearScreenDown method implementation (with magic parameter for QuickJS)
-JSValue js_writestream_clear_screen_down(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv, int magic) {
+JSValue js_writestream_clear_screen_down(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv,
+                                         int magic) {
   // ANSI escape code for clearing from cursor to end of screen
   printf("\033[J");
   fflush(stdout);
@@ -639,7 +640,7 @@ JSValue js_writestream_clear_screen_down(JSContext* ctx, JSValueConst this_val, 
 // WriteStream get_window_size method implementation
 JSValue js_writestream_get_window_size(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
   // Get fd from stream object if available, otherwise use stdout (1)
-  int fd = 1; // Default to stdout
+  int fd = 1;  // Default to stdout
   JSTTYStreamData* tty_data = JS_GetOpaque2(ctx, this_val, js_writestream_class_id);
   if (tty_data) {
     fd = tty_data->fd;
@@ -700,7 +701,8 @@ JSValue js_writestream_constructor(JSContext* ctx, JSValueConst new_target, int 
   JSValue clear_line = JS_NewCFunction(ctx, (JSCFunction*)js_writestream_clear_line, "clearLine", 1);
   JSValue cursor_to = JS_NewCFunction(ctx, (JSCFunction*)js_writestream_cursor_to, "cursorTo", 2);
   JSValue move_cursor = JS_NewCFunction(ctx, (JSCFunction*)js_writestream_move_cursor, "moveCursor", 2);
-  JSValue clear_screen_down = JS_NewCFunction(ctx, (JSCFunction*)js_writestream_clear_screen_down, "clearScreenDown", 0);
+  JSValue clear_screen_down =
+      JS_NewCFunction(ctx, (JSCFunction*)js_writestream_clear_screen_down, "clearScreenDown", 0);
   JSValue get_color_depth = JS_NewCFunction(ctx, (JSCFunction*)js_writestream_get_color_depth, "getColorDepth", 0);
   JSValue has_colors = JS_NewCFunction(ctx, (JSCFunction*)js_writestream_has_colors, "hasColors", 1);
 

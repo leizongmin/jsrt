@@ -200,9 +200,14 @@ test('bytesRead and bytesWritten tracking', (done) => {
 
 // Test 5: bufferSize property
 test('bufferSize property', (done) => {
+  let serverSocket = null;
   const server = net.createServer((socket) => {
     // Don't read data to cause buffering
+    serverSocket = socket;
     socket.pause();
+    socket.on('end', () => {
+      socket.destroy();
+    });
   });
 
   server.listen(0, 'localhost', () => {
@@ -220,6 +225,9 @@ test('bufferSize property', (done) => {
         console.log(`✓ Client bufferSize: ${bufferSize} bytes`);
 
         client.end();
+        if (serverSocket && !serverSocket.destroyed) {
+          serverSocket.destroy();
+        }
         server.close(() => {
           done();
         });

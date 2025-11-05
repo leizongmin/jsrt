@@ -5,6 +5,7 @@
  * that support piping, events, and all standard stream methods.
  */
 
+#include <stdbool.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -230,32 +231,65 @@ static JSValue js_stdout_stream_end(JSContext* ctx, JSValueConst this_val, int a
   return JS_UNDEFINED;
 }
 
+// Helper: Set function on object only if missing or not callable
+static void set_function_if_missing(JSContext* ctx, JSValue stream_obj, const char* name, JSCFunction* func,
+                                    const char* display_name, int length) {
+  JSValue existing = JS_GetPropertyStr(ctx, stream_obj, name);
+  bool needs_set =
+      JS_IsException(existing) || JS_IsUndefined(existing) || JS_IsNull(existing) || !JS_IsFunction(ctx, existing);
+
+  if (!JS_IsException(existing)) {
+    JS_FreeValue(ctx, existing);
+  } else {
+    JSValue err = JS_GetException(ctx);
+    JS_FreeValue(ctx, err);
+  }
+
+  if (needs_set) {
+    JS_SetPropertyStr(ctx, stream_obj, name, JS_NewCFunction(ctx, func, display_name, length));
+  }
+}
+
+static void ensure_boolean_property(JSContext* ctx, JSValue stream_obj, const char* name, bool value, int flags) {
+  JSValue existing = JS_GetPropertyStr(ctx, stream_obj, name);
+  bool needs_set = JS_IsException(existing) || !JS_IsBool(existing);
+
+  if (!JS_IsException(existing)) {
+    JS_FreeValue(ctx, existing);
+  } else {
+    JSValue err = JS_GetException(ctx);
+    JS_FreeValue(ctx, err);
+  }
+
+  if (needs_set) {
+    JS_DefinePropertyValueStr(ctx, stream_obj, name, JS_NewBool(ctx, value), flags);
+  }
+}
+
 // Helper: Add EventEmitter methods to stream object
 static void add_event_emitter_methods(JSContext* ctx, JSValue stream_obj) {
   // Add EventEmitter wrapper methods
-  JS_SetPropertyStr(ctx, stream_obj, "on", JS_NewCFunction(ctx, js_stream_on, "on", 2));
-  JS_SetPropertyStr(ctx, stream_obj, "once", JS_NewCFunction(ctx, js_stream_once, "once", 2));
-  JS_SetPropertyStr(ctx, stream_obj, "emit", JS_NewCFunction(ctx, js_stream_emit, "emit", 1));
-  JS_SetPropertyStr(ctx, stream_obj, "off", JS_NewCFunction(ctx, js_stream_off, "off", 2));
-  JS_SetPropertyStr(ctx, stream_obj, "removeListener",
-                    JS_NewCFunction(ctx, js_stream_remove_listener, "removeListener", 2));
-  JS_SetPropertyStr(ctx, stream_obj, "addListener", JS_NewCFunction(ctx, js_stream_add_listener, "addListener", 2));
-  JS_SetPropertyStr(ctx, stream_obj, "removeAllListeners",
-                    JS_NewCFunction(ctx, js_stream_remove_all_listeners, "removeAllListeners", 1));
-  JS_SetPropertyStr(ctx, stream_obj, "listenerCount",
-                    JS_NewCFunction(ctx, js_stream_listener_count, "listenerCount", 1));
+  set_function_if_missing(ctx, stream_obj, "on", js_stream_on, "on", 2);
+  set_function_if_missing(ctx, stream_obj, "once", js_stream_once, "once", 2);
+  set_function_if_missing(ctx, stream_obj, "emit", js_stream_emit, "emit", 1);
+  set_function_if_missing(ctx, stream_obj, "off", js_stream_off, "off", 2);
+  set_function_if_missing(ctx, stream_obj, "removeListener", js_stream_remove_listener, "removeListener", 2);
+  set_function_if_missing(ctx, stream_obj, "addListener", js_stream_add_listener, "addListener", 2);
+  set_function_if_missing(ctx, stream_obj, "removeAllListeners", js_stream_remove_all_listeners, "removeAllListeners",
+                          1);
+  set_function_if_missing(ctx, stream_obj, "listenerCount", js_stream_listener_count, "listenerCount", 1);
 }
 
 // Helper: Add Readable methods to stream object
 static void add_readable_methods(JSContext* ctx, JSValue stream_obj) {
   // Add Readable methods (pause, resume, pipe, etc.)
-  JS_SetPropertyStr(ctx, stream_obj, "pause", JS_NewCFunction(ctx, js_readable_pause, "pause", 0));
-  JS_SetPropertyStr(ctx, stream_obj, "resume", JS_NewCFunction(ctx, js_readable_resume, "resume", 0));
-  JS_SetPropertyStr(ctx, stream_obj, "isPaused", JS_NewCFunction(ctx, js_readable_is_paused, "isPaused", 0));
-  JS_SetPropertyStr(ctx, stream_obj, "setEncoding", JS_NewCFunction(ctx, js_readable_set_encoding, "setEncoding", 1));
-  JS_SetPropertyStr(ctx, stream_obj, "pipe", JS_NewCFunction(ctx, js_readable_pipe, "pipe", 2));
-  JS_SetPropertyStr(ctx, stream_obj, "unpipe", JS_NewCFunction(ctx, js_readable_unpipe, "unpipe", 1));
-  JS_SetPropertyStr(ctx, stream_obj, "push", JS_NewCFunction(ctx, js_readable_push, "push", 2));
+  set_function_if_missing(ctx, stream_obj, "pause", js_readable_pause, "pause", 0);
+  set_function_if_missing(ctx, stream_obj, "resume", js_readable_resume, "resume", 0);
+  set_function_if_missing(ctx, stream_obj, "isPaused", js_readable_is_paused, "isPaused", 0);
+  set_function_if_missing(ctx, stream_obj, "setEncoding", js_readable_set_encoding, "setEncoding", 1);
+  set_function_if_missing(ctx, stream_obj, "pipe", js_readable_pipe, "pipe", 2);
+  set_function_if_missing(ctx, stream_obj, "unpipe", js_readable_unpipe, "unpipe", 1);
+  set_function_if_missing(ctx, stream_obj, "push", js_readable_push, "push", 2);
 }
 
 // Create stdin as a Readable stream (TTY ReadStream if in TTY environment)
@@ -276,6 +310,14 @@ JSValue jsrt_create_stdin_stream(JSContext* ctx) {
     if (JS_IsException(stdin_obj)) {
       return stdin_obj;
     }
+
+    // Ensure standard stream helpers exist even in TTY mode
+    add_event_emitter_methods(ctx, stdin_obj);
+    add_readable_methods(ctx, stdin_obj);
+    set_function_if_missing(ctx, stdin_obj, "read", js_stdin_stream_read, "read", 1);
+    set_function_if_missing(ctx, stdin_obj, "_read", js_stdin_internal_read, "_read", 1);
+    set_function_if_missing(ctx, stdin_obj, "write", js_stdin_stream_write, "write", 3);
+    ensure_boolean_property(ctx, stdin_obj, "readable", true, JS_PROP_WRITABLE);
   } else {
     // In non-TTY environment, create regular Readable stream
     // Ensure stream classes are initialized before creating any streams
@@ -307,6 +349,7 @@ JSValue jsrt_create_stdin_stream(JSContext* ctx) {
 
     // Add write method for stdin compatibility (Node.js process.stdin is writable)
     JS_SetPropertyStr(ctx, stdin_obj, "write", JS_NewCFunction(ctx, js_stdin_stream_write, "write", 3));
+    ensure_boolean_property(ctx, stdin_obj, "readable", true, JS_PROP_WRITABLE);
   }
 
   // Set isTTY property (for TTY streams, this is already set)
@@ -336,6 +379,10 @@ JSValue jsrt_create_stdout_stream(JSContext* ctx) {
     if (JS_IsException(stdout_obj)) {
       return stdout_obj;
     }
+
+    // Ensure EventEmitter helpers exist in TTY mode (in case module omitted them)
+    add_event_emitter_methods(ctx, stdout_obj);
+    ensure_boolean_property(ctx, stdout_obj, "writable", true, JS_PROP_WRITABLE);
   } else {
     // In non-TTY environment, create regular Writable stream
     // Ensure stream classes are initialized
@@ -361,6 +408,7 @@ JSValue jsrt_create_stdout_stream(JSContext* ctx) {
     // Override the write and end methods
     JS_SetPropertyStr(ctx, stdout_obj, "write", JS_NewCFunction(ctx, js_stdout_stream_write, "write", 3));
     JS_SetPropertyStr(ctx, stdout_obj, "end", JS_NewCFunction(ctx, js_stdout_stream_end, "end", 3));
+    ensure_boolean_property(ctx, stdout_obj, "writable", true, JS_PROP_WRITABLE);
   }
 
   // Set isTTY property (for TTY streams, this is already set)
@@ -390,6 +438,9 @@ JSValue jsrt_create_stderr_stream(JSContext* ctx) {
     if (JS_IsException(stderr_obj)) {
       return stderr_obj;
     }
+
+    add_event_emitter_methods(ctx, stderr_obj);
+    ensure_boolean_property(ctx, stderr_obj, "writable", true, JS_PROP_WRITABLE);
   } else {
     // In non-TTY environment, create regular Writable stream
     // Ensure stream classes are initialized
@@ -415,6 +466,7 @@ JSValue jsrt_create_stderr_stream(JSContext* ctx) {
     // Override the write and end methods
     JS_SetPropertyStr(ctx, stderr_obj, "write", JS_NewCFunction(ctx, js_stderr_stream_write, "write", 3));
     JS_SetPropertyStr(ctx, stderr_obj, "end", JS_NewCFunction(ctx, js_stdout_stream_end, "end", 3));
+    ensure_boolean_property(ctx, stderr_obj, "writable", true, JS_PROP_WRITABLE);
   }
 
   // Set isTTY property (for TTY streams, this is already set)

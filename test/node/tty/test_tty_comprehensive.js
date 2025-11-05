@@ -14,10 +14,16 @@ try {
   assert(typeof tty.isatty === 'function', 'tty.isatty should be a function');
   console.log('   ✓ tty.isatty is function: true');
 
-  assert(typeof tty.ReadStream === 'function', 'tty.ReadStream should be a function');
+  assert(
+    typeof tty.ReadStream === 'function',
+    'tty.ReadStream should be a function'
+  );
   console.log('   ✓ tty.ReadStream is function: true');
 
-  assert(typeof tty.WriteStream === 'function', 'tty.WriteStream should be a function');
+  assert(
+    typeof tty.WriteStream === 'function',
+    'tty.WriteStream should be a function'
+  );
   console.log('   ✓ tty.WriteStream is function: true');
 } catch (error) {
   console.log('   ✗ Module structure test failed:', error.message);
@@ -41,7 +47,10 @@ try {
 
   const result999 = tty.isatty(999); // invalid fd
   console.log(`   ✓ tty.isatty(999): ${result999}`);
-  assert(typeof result999 === 'boolean', 'tty.isatty(999) should return boolean');
+  assert(
+    typeof result999 === 'boolean',
+    'tty.isatty(999) should return boolean'
+  );
 } catch (error) {
   console.log('   ✗ isatty test failed:', error.message);
   process.exit(1);
@@ -51,21 +60,33 @@ try {
 console.log('\n3. Testing isatty error handling:');
 try {
   // Test missing arguments
-  assert.throws(() => {
-    tty.isatty();
-  }, /file descriptor/, 'Should throw for missing arguments');
+  assert.throws(
+    () => {
+      tty.isatty();
+    },
+    /file descriptor/,
+    'Should throw for missing arguments'
+  );
   console.log('   ✓ Throws for missing arguments: true');
 
   // Test negative fd
-  assert.throws(() => {
-    tty.isatty(-1);
-  }, /range/, 'Should throw for negative fd');
+  assert.throws(
+    () => {
+      tty.isatty(-1);
+    },
+    /range/,
+    'Should throw for negative fd'
+  );
   console.log('   ✓ Throws for negative fd: true');
 
   // Test too large fd
-  assert.throws(() => {
-    tty.isatty(2000);
-  }, /range/, 'Should throw for too large fd');
+  assert.throws(
+    () => {
+      tty.isatty(2000);
+    },
+    /range/,
+    'Should throw for too large fd'
+  );
   console.log('   ✓ Throws for too large fd: true');
 } catch (error) {
   console.log('   ✗ isatty error handling test failed:', error.message);
@@ -77,10 +98,16 @@ console.log('\n4. Testing ReadStream constructor:');
 try {
   const stdin = new tty.ReadStream(0);
 
-  assert(stdin && typeof stdin === 'object', 'Should create ReadStream instance');
+  assert(
+    stdin && typeof stdin === 'object',
+    'Should create ReadStream instance'
+  );
   console.log('   ✓ ReadStream created with fd 0');
 
-  assert(typeof stdin.isTTY === 'boolean', 'ReadStream should have isTTY property');
+  assert(
+    typeof stdin.isTTY === 'boolean',
+    'ReadStream should have isTTY property'
+  );
   console.log('   ✓ isTTY property: true');
 
   assert(stdin.isRaw === false, 'ReadStream should default isRaw to false');
@@ -89,7 +116,10 @@ try {
   assert(stdin.fd === 0, 'ReadStream should have correct fd');
   console.log('   ✓ fd property: true');
 
-  assert(typeof stdin.setRawMode === 'function', 'ReadStream should have setRawMode method');
+  assert(
+    typeof stdin.setRawMode === 'function',
+    'ReadStream should have setRawMode method'
+  );
   console.log('   ✓ setRawMode method: true');
 } catch (error) {
   console.log('   ✗ ReadStream constructor failed:', error.message);
@@ -110,7 +140,10 @@ try {
   console.log('   ✓ After setRawMode(true): true');
 
   stdin.setRawMode(false);
-  assert(stdin.isRaw === false, 'isRaw should be false after setRawMode(false)');
+  assert(
+    stdin.isRaw === false,
+    'isRaw should be false after setRawMode(false)'
+  );
   console.log('   ✓ After setRawMode(false): true');
 } catch (error) {
   console.log('   ✗ setRawMode test failed:', error.message);
@@ -121,16 +154,24 @@ try {
 console.log('\n6. Testing ReadStream error handling:');
 try {
   // Test invalid fd
-  assert.throws(() => {
-    new tty.ReadStream(-1);
-  }, /range/, 'Should throw for invalid fd');
+  assert.throws(
+    () => {
+      new tty.ReadStream(-1);
+    },
+    /range/,
+    'Should throw for invalid fd'
+  );
   console.log('   ✓ Throws for invalid fd: true');
 
   // Test setRawMode missing arguments
   const stdin = new tty.ReadStream(0);
-  assert.throws(() => {
-    stdin.setRawMode();
-  }, /boolean/, 'setRawMode should throw for missing arguments');
+  assert.throws(
+    () => {
+      stdin.setRawMode();
+    },
+    /boolean/,
+    'setRawMode should throw for missing arguments'
+  );
   console.log('   ✓ setRawMode throws for missing arguments: true');
 } catch (error) {
   console.log('   ✗ ReadStream error handling test failed:', error.message);
@@ -142,19 +183,31 @@ console.log('\n7. Testing WriteStream constructor:');
 try {
   const stdout = new tty.WriteStream(1);
 
-  assert(stdout && typeof stdout === 'object', 'Should create WriteStream instance');
+  assert(
+    stdout && typeof stdout === 'object',
+    'Should create WriteStream instance'
+  );
   console.log('   ✓ WriteStream created with fd 1');
 
-  assert(typeof stdout.isTTY === 'boolean', 'WriteStream should have isTTY property');
+  assert(
+    typeof stdout.isTTY === 'boolean',
+    'WriteStream should have isTTY property'
+  );
   console.log('   ✓ isTTY property: true');
 
   assert(stdout.fd === 1, 'WriteStream should have correct fd');
   console.log('   ✓ fd property: true');
 
-  assert(typeof stdout.columns === 'number' && stdout.columns > 0, 'WriteStream should have positive columns');
+  assert(
+    typeof stdout.columns === 'number' && stdout.columns > 0,
+    'WriteStream should have positive columns'
+  );
   console.log('   ✓ columns property: true');
 
-  assert(typeof stdout.rows === 'number' && stdout.rows > 0, 'WriteStream should have positive rows');
+  assert(
+    typeof stdout.rows === 'number' && stdout.rows > 0,
+    'WriteStream should have positive rows'
+  );
   console.log('   ✓ rows property: true');
 } catch (error) {
   console.log('   ✗ WriteStream constructor failed:', error.message);
@@ -166,13 +219,22 @@ console.log('\n8. Testing WriteStream cursor control:');
 try {
   const stdout = new tty.WriteStream(1);
 
-  assert(typeof stdout.clearLine === 'function', 'WriteStream should have clearLine method');
+  assert(
+    typeof stdout.clearLine === 'function',
+    'WriteStream should have clearLine method'
+  );
   console.log('   ✓ clearLine method: true');
 
-  assert(typeof stdout.cursorTo === 'function', 'WriteStream should have cursorTo method');
+  assert(
+    typeof stdout.cursorTo === 'function',
+    'WriteStream should have cursorTo method'
+  );
   console.log('   ✓ cursorTo method: true');
 
-  assert(typeof stdout.moveCursor === 'function', 'WriteStream should have moveCursor method');
+  assert(
+    typeof stdout.moveCursor === 'function',
+    'WriteStream should have moveCursor method'
+  );
   console.log('   ✓ moveCursor method: true');
 
   // Test method calls (should not throw and should return true)
@@ -196,26 +258,44 @@ console.log('\n9. Testing WriteStream color detection:');
 try {
   const stdout = new tty.WriteStream(1);
 
-  assert(typeof stdout.getColorDepth === 'function', 'WriteStream should have getColorDepth method');
+  assert(
+    typeof stdout.getColorDepth === 'function',
+    'WriteStream should have getColorDepth method'
+  );
   console.log('   ✓ getColorDepth method: true');
 
-  assert(typeof stdout.hasColors === 'function', 'WriteStream should have hasColors method');
+  assert(
+    typeof stdout.hasColors === 'function',
+    'WriteStream should have hasColors method'
+  );
   console.log('   ✓ hasColors method: true');
 
   const depth = stdout.getColorDepth();
-  assert(typeof depth === 'number' && depth >= 1, 'getColorDepth should return positive number');
+  assert(
+    typeof depth === 'number' && depth >= 1,
+    'getColorDepth should return positive number'
+  );
   console.log('   ✓ Color depth: true');
 
   const hasColors16 = stdout.hasColors(16);
-  assert(typeof hasColors16 === 'boolean', 'hasColors(16) should return boolean');
+  assert(
+    typeof hasColors16 === 'boolean',
+    'hasColors(16) should return boolean'
+  );
   console.log('   ✓ hasColors(16): true');
 
   const hasColors256 = stdout.hasColors(256);
-  assert(typeof hasColors256 === 'boolean', 'hasColors(256) should return boolean');
+  assert(
+    typeof hasColors256 === 'boolean',
+    'hasColors(256) should return boolean'
+  );
   console.log('   ✓ hasColors(256): true');
 
   const hasColors16M = stdout.hasColors(16777216);
-  assert(typeof hasColors16M === 'boolean', 'hasColors(16777216) should return boolean');
+  assert(
+    typeof hasColors16M === 'boolean',
+    'hasColors(16777216) should return boolean'
+  );
   console.log('   ✓ hasColors(16777216): true');
 } catch (error) {
   console.log('   ✗ Color detection test failed:', error.message);
@@ -226,9 +306,13 @@ try {
 console.log('\n10. Testing WriteStream error handling:');
 try {
   // Test invalid fd
-  assert.throws(() => {
-    new tty.WriteStream(-1);
-  }, /range/, 'Should throw for invalid fd');
+  assert.throws(
+    () => {
+      new tty.WriteStream(-1);
+    },
+    /range/,
+    'Should throw for invalid fd'
+  );
   console.log('   ✓ Throws for invalid fd: true');
 } catch (error) {
   console.log('   ✗ WriteStream error handling test failed:', error.message);
@@ -249,7 +333,10 @@ try {
   assert(typeof ttyESM.ReadStream === 'function', 'ESM should have ReadStream');
   console.log('   ✓ ESM has ReadStream: true');
 
-  assert(typeof ttyESM.WriteStream === 'function', 'ESM should have WriteStream');
+  assert(
+    typeof ttyESM.WriteStream === 'function',
+    'ESM should have WriteStream'
+  );
   console.log('   ✓ ESM has WriteStream: true');
 } catch (error) {
   console.log('   ✗ ES module import test failed:', error.message);
@@ -261,7 +348,10 @@ console.log('\n12. Testing edge cases:');
 try {
   // Test with string arguments
   const stringResult = tty.isatty('1');
-  assert(typeof stringResult === 'boolean', 'isatty with string should return boolean');
+  assert(
+    typeof stringResult === 'boolean',
+    'isatty with string should return boolean'
+  );
   console.log('   ✓ isatty with string argument: true');
 
   // Test method chaining compatibility
@@ -282,4 +372,6 @@ console.log('✅ ReadStream functionality works');
 console.log('✅ WriteStream functionality works');
 console.log('✅ Error handling is robust');
 console.log('✅ ES module compatibility maintained');
-console.log('\n🎉 All TTY tests passed! The Node.js TTY module is working correctly.');
+console.log(
+  '\n🎉 All TTY tests passed! The Node.js TTY module is working correctly.'
+);

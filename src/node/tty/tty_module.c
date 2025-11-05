@@ -43,6 +43,18 @@ JSValue js_tty_max_listeners(JSContext* ctx, JSValueConst this_val, int argc, JS
 JSValue js_tty_set_max_listeners(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv);
 JSValue js_tty_write(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv);
 JSValue js_tty_end(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv);
+JSValue js_readstream_set_raw_mode(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv);
+JSValue js_readstream_pause(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv);
+JSValue js_readstream_resume(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv);
+JSValue js_readstream_is_paused(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv);
+JSValue js_writestream_clear_line(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv, int magic);
+JSValue js_writestream_cursor_to(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv, int magic);
+JSValue js_writestream_move_cursor(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv, int magic);
+JSValue js_writestream_clear_screen_down(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv,
+                                         int magic);
+JSValue js_writestream_get_color_depth(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv, int magic);
+JSValue js_writestream_has_colors(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv, int magic);
+JSValue js_writestream_get_window_size(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv);
 
 // Simple EventEmitter methods for TTY streams (minimal implementation for testing)
 JSValue js_tty_on(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
@@ -502,18 +514,120 @@ void js_tty_cleanup_global_state(void) {
   resize_handlers = NULL;
 }
 
+// Initialize TTY classes (should be called during module initialization)
+static bool tty_classes_initialized = false;
+
+void js_tty_init_classes(JSContext* ctx) {
+  if (tty_classes_initialized) {
+    return;
+  }
+
+  // Create class IDs
+  JS_NewClassID(&js_readstream_class_id);
+  JS_NewClassID(&js_writestream_class_id);
+
+  // Create class definitions
+  JSClassDef readstream_class = {
+      "ReadStream",
+      .finalizer = js_tty_stream_finalizer,
+  };
+
+  JSClassDef writestream_class = {
+      "WriteStream",
+      .finalizer = js_tty_stream_finalizer,
+  };
+
+  JS_NewClass(JS_GetRuntime(ctx), js_readstream_class_id, &readstream_class);
+  JS_NewClass(JS_GetRuntime(ctx), js_writestream_class_id, &writestream_class);
+
+  // Create prototypes
+  JSValue readstream_proto = JS_NewObject(ctx);
+  JSValue writestream_proto = JS_NewObject(ctx);
+
+  // Add methods to ReadStream prototype
+  JS_SetPropertyStr(ctx, readstream_proto, "setRawMode",
+                    JS_NewCFunction(ctx, js_readstream_set_raw_mode, "setRawMode", 1));
+  JS_SetPropertyStr(ctx, readstream_proto, "pause", JS_NewCFunction(ctx, js_readstream_pause, "pause", 0));
+  JS_SetPropertyStr(ctx, readstream_proto, "resume", JS_NewCFunction(ctx, js_readstream_resume, "resume", 0));
+  JS_SetPropertyStr(ctx, readstream_proto, "isPaused", JS_NewCFunction(ctx, js_readstream_is_paused, "isPaused", 0));
+
+  // Add EventEmitter methods to ReadStream prototype
+  JS_SetPropertyStr(ctx, readstream_proto, "on", JS_NewCFunction(ctx, js_tty_on, "on", 2));
+  JS_SetPropertyStr(ctx, readstream_proto, "once", JS_NewCFunction(ctx, js_tty_once, "once", 2));
+  JS_SetPropertyStr(ctx, readstream_proto, "emit", JS_NewCFunction(ctx, js_tty_emit, "emit", 1));
+  JS_SetPropertyStr(ctx, readstream_proto, "addListener", JS_NewCFunction(ctx, js_tty_add_listener, "addListener", 2));
+  JS_SetPropertyStr(ctx, readstream_proto, "removeListener",
+                    JS_NewCFunction(ctx, js_tty_remove_listener, "removeListener", 2));
+  JS_SetPropertyStr(ctx, readstream_proto, "removeAllListeners",
+                    JS_NewCFunction(ctx, js_tty_remove_all_listeners, "removeAllListeners", 0));
+  JS_SetPropertyStr(ctx, readstream_proto, "getMaxListeners",
+                    JS_NewCFunction(ctx, js_tty_max_listeners, "getMaxListeners", 0));
+  JS_SetPropertyStr(ctx, readstream_proto, "setMaxListeners",
+                    JS_NewCFunction(ctx, js_tty_set_max_listeners, "setMaxListeners", 1));
+
+  // Add cursor control methods to WriteStream prototype
+  JS_SetPropertyStr(ctx, writestream_proto, "clearLine",
+                    JS_NewCFunction(ctx, (JSCFunction*)js_writestream_clear_line, "clearLine", 1));
+  JS_SetPropertyStr(ctx, writestream_proto, "cursorTo",
+                    JS_NewCFunction(ctx, (JSCFunction*)js_writestream_cursor_to, "cursorTo", 2));
+  JS_SetPropertyStr(ctx, writestream_proto, "moveCursor",
+                    JS_NewCFunction(ctx, (JSCFunction*)js_writestream_move_cursor, "moveCursor", 2));
+  JS_SetPropertyStr(ctx, writestream_proto, "clearScreenDown",
+                    JS_NewCFunction(ctx, (JSCFunction*)js_writestream_clear_screen_down, "clearScreenDown", 0));
+  JS_SetPropertyStr(ctx, writestream_proto, "getColorDepth",
+                    JS_NewCFunction(ctx, (JSCFunction*)js_writestream_get_color_depth, "getColorDepth", 0));
+  JS_SetPropertyStr(ctx, writestream_proto, "hasColors",
+                    JS_NewCFunction(ctx, (JSCFunction*)js_writestream_has_colors, "hasColors", 1));
+  JS_SetPropertyStr(ctx, writestream_proto, "getWindowSize",
+                    JS_NewCFunction(ctx, js_writestream_get_window_size, "getWindowSize", 0));
+
+  // Add stream methods to WriteStream prototype
+  JS_SetPropertyStr(ctx, writestream_proto, "write", JS_NewCFunction(ctx, js_tty_write, "write", 1));
+  JS_SetPropertyStr(ctx, writestream_proto, "end", JS_NewCFunction(ctx, js_tty_end, "end", 0));
+
+  // Add EventEmitter methods to WriteStream prototype
+  JS_SetPropertyStr(ctx, writestream_proto, "on", JS_NewCFunction(ctx, js_tty_on, "on", 2));
+  JS_SetPropertyStr(ctx, writestream_proto, "once", JS_NewCFunction(ctx, js_tty_once, "once", 2));
+  JS_SetPropertyStr(ctx, writestream_proto, "emit", JS_NewCFunction(ctx, js_tty_emit, "emit", 1));
+  JS_SetPropertyStr(ctx, writestream_proto, "addListener", JS_NewCFunction(ctx, js_tty_add_listener, "addListener", 2));
+  JS_SetPropertyStr(ctx, writestream_proto, "removeListener",
+                    JS_NewCFunction(ctx, js_tty_remove_listener, "removeListener", 2));
+  JS_SetPropertyStr(ctx, writestream_proto, "removeAllListeners",
+                    JS_NewCFunction(ctx, js_tty_remove_all_listeners, "removeAllListeners", 0));
+  JS_SetPropertyStr(ctx, writestream_proto, "getMaxListeners",
+                    JS_NewCFunction(ctx, js_tty_max_listeners, "getMaxListeners", 0));
+  JS_SetPropertyStr(ctx, writestream_proto, "setMaxListeners",
+                    JS_NewCFunction(ctx, js_tty_set_max_listeners, "setMaxListeners", 1));
+
+  // Set constructor property on prototypes
+  JSValue readstream_ctor = JS_NewCFunction2(ctx, js_readstream_constructor, "ReadStream", 1, JS_CFUNC_constructor, 0);
+  JSValue writestream_ctor =
+      JS_NewCFunction2(ctx, js_writestream_constructor, "WriteStream", 1, JS_CFUNC_constructor, 0);
+
+  // CRITICAL: Set constructor prototype property (this was missing!)
+  JS_SetPropertyStr(ctx, readstream_ctor, "prototype", readstream_proto);
+  JS_SetPropertyStr(ctx, writestream_ctor, "prototype", writestream_proto);
+
+  JS_SetPropertyStr(ctx, readstream_proto, "constructor", JS_DupValue(ctx, readstream_ctor));
+  JS_SetPropertyStr(ctx, writestream_proto, "constructor", JS_DupValue(ctx, writestream_ctor));
+
+  // Set the prototypes for the classes (using DupValue to avoid GC issues)
+  JS_SetClassProto(ctx, js_readstream_class_id, JS_DupValue(ctx, readstream_proto));
+  JS_SetClassProto(ctx, js_writestream_class_id, JS_DupValue(ctx, writestream_proto));
+
+  tty_classes_initialized = true;
+
+  // Clean up constructor references (prototypes are now owned by the class)
+  JS_FreeValue(ctx, readstream_ctor);
+  JS_FreeValue(ctx, writestream_ctor);
+}
+
 // Class ID getter functions
 JSClassID js_tty_get_readstream_class_id(void) {
-  if (js_readstream_class_id == 0) {
-    JS_NewClassID(&js_readstream_class_id);
-  }
   return js_readstream_class_id;
 }
 
 JSClassID js_tty_get_writestream_class_id(void) {
-  if (js_writestream_class_id == 0) {
-    JS_NewClassID(&js_writestream_class_id);
-  }
   return js_writestream_class_id;
 }
 
@@ -554,7 +668,11 @@ JSValue js_readstream_set_raw_mode(JSContext* ctx, JSValueConst this_val, int ar
   }
 
   if (!tty_data->is_tty || !tty_data->handle_initialized) {
-    return JS_ThrowTypeError(ctx, "setRawMode() can only be called on TTY streams");
+    // For non-TTY streams or streams without initialized handles,
+    // allow setRawMode but just update the isRaw property
+    JS_SetPropertyStr(ctx, this_val, "isRaw", JS_NewBool(ctx, mode));
+    JSRT_Debug("setRawMode(%d) called on non-TTY ReadStream, using fallback", mode);
+    return JS_UNDEFINED;
   }
 
   // Use libuv to set actual terminal mode
@@ -585,13 +703,15 @@ JSValue js_readstream_pause(JSContext* ctx, JSValueConst this_val, int argc, JSV
     return JS_DupValue(ctx, this_val);
   }
 
-  if (!tty_data->is_tty) {
-    return JS_ThrowTypeError(ctx, "pause() can only be called on TTY streams");
-  }
-
+  // Allow pause() on both TTY and non-TTY streams (Node.js behavior)
   // Update pause state
   JS_SetPropertyStr(ctx, this_val, "_paused", JS_NewBool(ctx, true));
-  JSRT_Debug("ReadStream paused for fd %d", tty_data->fd);
+
+  if (tty_data->is_tty) {
+    JSRT_Debug("ReadStream paused for fd %d (TTY)", tty_data->fd);
+  } else {
+    JSRT_Debug("ReadStream paused for fd %d (non-TTY fallback)", tty_data->fd);
+  }
 
   // Return this for method chaining
   return JS_DupValue(ctx, this_val);
@@ -608,13 +728,15 @@ JSValue js_readstream_resume(JSContext* ctx, JSValueConst this_val, int argc, JS
     return JS_DupValue(ctx, this_val);
   }
 
-  if (!tty_data->is_tty) {
-    return JS_ThrowTypeError(ctx, "resume() can only be called on TTY streams");
-  }
-
+  // Allow resume() on both TTY and non-TTY streams (Node.js behavior)
   // Update pause state
   JS_SetPropertyStr(ctx, this_val, "_paused", JS_NewBool(ctx, false));
-  JSRT_Debug("ReadStream resumed for fd %d", tty_data->fd);
+
+  if (tty_data->is_tty) {
+    JSRT_Debug("ReadStream resumed for fd %d (TTY)", tty_data->fd);
+  } else {
+    JSRT_Debug("ReadStream resumed for fd %d (non-TTY fallback)", tty_data->fd);
+  }
 
   // Return this for method chaining
   return JS_DupValue(ctx, this_val);
@@ -684,7 +806,7 @@ JSValue js_writestream_get_fd(JSContext* ctx, JSValueConst this_val) {
 
 // ReadStream constructor with proper implementation
 JSValue js_readstream_constructor(JSContext* ctx, JSValueConst new_target, int argc, JSValueConst* argv) {
-  JSValue obj = JS_NewObject(ctx);
+  JSValue obj = JS_NewObjectClass(ctx, js_readstream_class_id);
 
   int32_t fd = 0;  // Default to stdin
   if (argc >= 1) {
@@ -700,51 +822,43 @@ JSValue js_readstream_constructor(JSContext* ctx, JSValueConst new_target, int a
     }
   }
 
-  // Set properties
-  JS_SetPropertyStr(ctx, obj, "isTTY", JS_NewBool(ctx, isatty(fd)));
-  JS_SetPropertyStr(ctx, obj, "isRaw", JS_NewBool(ctx, 0));
+  // Allocate TTY stream data
+  JSTTYStreamData* stream = malloc(sizeof(JSTTYStreamData));
+  if (!stream) {
+    JS_FreeValue(ctx, obj);
+    return JS_ThrowOutOfMemory(ctx);
+  }
+
+  // Initialize stream data
+  memset(stream, 0, sizeof(JSTTYStreamData));
+  stream->fd = fd;
+  stream->is_raw = false;
+  stream->ctx = ctx;
+
+  // Check if this is actually a TTY using the same method as js_tty_init_handle
+  stream->is_tty = (uv_guess_handle(fd) == UV_TTY);
+
+  if (stream->is_tty) {
+    // Only initialize TTY handle if this is actually a TTY
+    if (!js_tty_init_handle(stream, fd, true, ctx)) {
+      JS_FreeValue(ctx, obj);
+      free(stream);
+      return JS_ThrowTypeError(ctx, "Failed to initialize TTY handle");
+    }
+    JSRT_Debug("TTY ReadStream created for fd %d (TTY)", fd);
+  } else {
+    // For non-TTY, set handle_initialized to false so setRawMode() will use fallback
+    stream->handle_initialized = false;
+    JSRT_Debug("TTY ReadStream created for fd %d (non-TTY fallback)", fd);
+  }
+
+  // Store the stream data in the object
+  JS_SetOpaque(obj, stream);
+
+  // Set properties (these are now also accessible via prototype)
+  JS_SetPropertyStr(ctx, obj, "isTTY", JS_NewBool(ctx, stream->is_tty));
+  JS_SetPropertyStr(ctx, obj, "isRaw", JS_NewBool(ctx, stream->is_raw));
   JS_SetPropertyStr(ctx, obj, "fd", JS_NewInt32(ctx, fd));
-
-  // Add setRawMode method with correct implementation
-  JSValue set_raw_mode = JS_NewCFunction(ctx, js_readstream_set_raw_mode, "setRawMode", 1);
-  JS_SetPropertyStr(ctx, obj, "setRawMode", set_raw_mode);
-
-  // Add pause method
-  JSValue pause_method = JS_NewCFunction(ctx, js_readstream_pause, "pause", 0);
-  JS_SetPropertyStr(ctx, obj, "pause", pause_method);
-
-  // Add resume method
-  JSValue resume_method = JS_NewCFunction(ctx, js_readstream_resume, "resume", 0);
-  JS_SetPropertyStr(ctx, obj, "resume", resume_method);
-
-  // Add isPaused method
-  JSValue is_paused_method = JS_NewCFunction(ctx, js_readstream_is_paused, "isPaused", 0);
-  JS_SetPropertyStr(ctx, obj, "isPaused", is_paused_method);
-
-  // Add basic EventEmitter methods
-  JSValue on_method = JS_NewCFunction(ctx, js_tty_on, "on", 2);
-  JS_SetPropertyStr(ctx, obj, "on", on_method);
-
-  JSValue once_method = JS_NewCFunction(ctx, js_tty_once, "once", 2);
-  JS_SetPropertyStr(ctx, obj, "once", once_method);
-
-  JSValue emit_method = JS_NewCFunction(ctx, js_tty_emit, "emit", 1);
-  JS_SetPropertyStr(ctx, obj, "emit", emit_method);
-
-  JSValue add_listener_method = JS_NewCFunction(ctx, js_tty_add_listener, "addListener", 2);
-  JS_SetPropertyStr(ctx, obj, "addListener", add_listener_method);
-
-  JSValue remove_listener_method = JS_NewCFunction(ctx, js_tty_remove_listener, "removeListener", 2);
-  JS_SetPropertyStr(ctx, obj, "removeListener", remove_listener_method);
-
-  JSValue remove_all_listeners_method = JS_NewCFunction(ctx, js_tty_remove_all_listeners, "removeAllListeners", 0);
-  JS_SetPropertyStr(ctx, obj, "removeAllListeners", remove_all_listeners_method);
-
-  JSValue max_listeners_method = JS_NewCFunction(ctx, js_tty_max_listeners, "getMaxListeners", 0);
-  JS_SetPropertyStr(ctx, obj, "getMaxListeners", max_listeners_method);
-
-  JSValue set_max_listeners_method = JS_NewCFunction(ctx, js_tty_set_max_listeners, "setMaxListeners", 1);
-  JS_SetPropertyStr(ctx, obj, "setMaxListeners", set_max_listeners_method);
 
   // Initialize paused state to false
   JS_SetPropertyStr(ctx, obj, "_paused", JS_NewBool(ctx, false));
@@ -945,7 +1059,7 @@ JSValue js_writestream_get_window_size(JSContext* ctx, JSValueConst this_val, in
 
 // WriteStream constructor with proper implementation
 JSValue js_writestream_constructor(JSContext* ctx, JSValueConst new_target, int argc, JSValueConst* argv) {
-  JSValue obj = JS_NewObject(ctx);
+  JSValue obj = JS_NewObjectClass(ctx, js_writestream_class_id);
 
   int32_t fd = 1;  // Default to stdout
   if (argc >= 1) {
@@ -961,69 +1075,45 @@ JSValue js_writestream_constructor(JSContext* ctx, JSValueConst new_target, int 
     }
   }
 
-  // Set properties
-  JS_SetPropertyStr(ctx, obj, "isTTY", JS_NewBool(ctx, isatty(fd)));
-  JS_SetPropertyStr(ctx, obj, "fd", JS_NewInt32(ctx, fd));
-
-  // Get terminal size if available
-  int columns = 80, rows = 24;
-  if (isatty(fd)) {
-    struct winsize w;
-    if (ioctl(fd, TIOCGWINSZ, &w) == 0) {
-      columns = w.ws_col;
-      rows = w.ws_row;
-    }
+  // Allocate TTY stream data
+  JSTTYStreamData* stream = malloc(sizeof(JSTTYStreamData));
+  if (!stream) {
+    JS_FreeValue(ctx, obj);
+    return JS_ThrowOutOfMemory(ctx);
   }
-  JS_SetPropertyStr(ctx, obj, "columns", JS_NewInt32(ctx, columns));
-  JS_SetPropertyStr(ctx, obj, "rows", JS_NewInt32(ctx, rows));
 
-  // Add cursor control methods with simple implementations (avoid magic for now)
-  JSValue clear_line = JS_NewCFunction(ctx, (JSCFunction*)js_writestream_clear_line, "clearLine", 1);
-  JSValue cursor_to = JS_NewCFunction(ctx, (JSCFunction*)js_writestream_cursor_to, "cursorTo", 2);
-  JSValue move_cursor = JS_NewCFunction(ctx, (JSCFunction*)js_writestream_move_cursor, "moveCursor", 2);
-  JSValue clear_screen_down =
-      JS_NewCFunction(ctx, (JSCFunction*)js_writestream_clear_screen_down, "clearScreenDown", 0);
-  JSValue get_color_depth = JS_NewCFunction(ctx, (JSCFunction*)js_writestream_get_color_depth, "getColorDepth", 0);
-  JSValue has_colors = JS_NewCFunction(ctx, (JSCFunction*)js_writestream_has_colors, "hasColors", 1);
+  // Initialize stream data
+  memset(stream, 0, sizeof(JSTTYStreamData));
+  stream->fd = fd;
+  stream->ctx = ctx;
 
-  JS_SetPropertyStr(ctx, obj, "clearLine", clear_line);
-  JS_SetPropertyStr(ctx, obj, "cursorTo", cursor_to);
-  JS_SetPropertyStr(ctx, obj, "moveCursor", move_cursor);
-  JS_SetPropertyStr(ctx, obj, "clearScreenDown", clear_screen_down);
-  JS_SetPropertyStr(ctx, obj, "getColorDepth", get_color_depth);
-  JS_SetPropertyStr(ctx, obj, "hasColors", has_colors);
+  // Check if this is actually a TTY using the same method as js_tty_init_handle
+  stream->is_tty = (uv_guess_handle(fd) == UV_TTY);
 
-  // Add basic EventEmitter methods
-  JSValue on_method = JS_NewCFunction(ctx, js_tty_on, "on", 2);
-  JS_SetPropertyStr(ctx, obj, "on", on_method);
+  if (stream->is_tty) {
+    // Only initialize TTY handle if this is actually a TTY
+    if (!js_tty_init_handle(stream, fd, false, ctx)) {
+      JS_FreeValue(ctx, obj);
+      free(stream);
+      return JS_ThrowTypeError(ctx, "Failed to initialize TTY handle");
+    }
+    JSRT_Debug("TTY WriteStream created for fd %d (TTY)", fd);
+  } else {
+    // For non-TTY, set handle_initialized to false and use default values
+    stream->handle_initialized = false;
+    stream->columns = 80;
+    stream->rows = 24;
+    JSRT_Debug("TTY WriteStream created for fd %d (non-TTY fallback)", fd);
+  }
 
-  JSValue once_method = JS_NewCFunction(ctx, js_tty_once, "once", 2);
-  JS_SetPropertyStr(ctx, obj, "once", once_method);
+  // Store the stream data in the object
+  JS_SetOpaque(obj, stream);
 
-  JSValue emit_method = JS_NewCFunction(ctx, js_tty_emit, "emit", 1);
-  JS_SetPropertyStr(ctx, obj, "emit", emit_method);
-
-  JSValue add_listener_method = JS_NewCFunction(ctx, js_tty_add_listener, "addListener", 2);
-  JS_SetPropertyStr(ctx, obj, "addListener", add_listener_method);
-
-  JSValue remove_listener_method = JS_NewCFunction(ctx, js_tty_remove_listener, "removeListener", 2);
-  JS_SetPropertyStr(ctx, obj, "removeListener", remove_listener_method);
-
-  JSValue remove_all_listeners_method = JS_NewCFunction(ctx, js_tty_remove_all_listeners, "removeAllListeners", 0);
-  JS_SetPropertyStr(ctx, obj, "removeAllListeners", remove_all_listeners_method);
-
-  JSValue max_listeners_method = JS_NewCFunction(ctx, js_tty_max_listeners, "getMaxListeners", 0);
-  JS_SetPropertyStr(ctx, obj, "getMaxListeners", max_listeners_method);
-
-  JSValue set_max_listeners_method = JS_NewCFunction(ctx, js_tty_set_max_listeners, "setMaxListeners", 1);
-  JS_SetPropertyStr(ctx, obj, "setMaxListeners", set_max_listeners_method);
-
-  // Add stream methods
-  JSValue write_method = JS_NewCFunction(ctx, js_tty_write, "write", 1);
-  JS_SetPropertyStr(ctx, obj, "write", write_method);
-
-  JSValue end_method = JS_NewCFunction(ctx, js_tty_end, "end", 0);
-  JS_SetPropertyStr(ctx, obj, "end", end_method);
+  // Set properties (these are now also accessible via prototype)
+  JS_SetPropertyStr(ctx, obj, "isTTY", JS_NewBool(ctx, stream->is_tty));
+  JS_SetPropertyStr(ctx, obj, "fd", JS_NewInt32(ctx, fd));
+  JS_SetPropertyStr(ctx, obj, "columns", JS_NewInt32(ctx, stream->columns));
+  JS_SetPropertyStr(ctx, obj, "rows", JS_NewInt32(ctx, stream->rows));
 
   // Initialize simple event storage
   JSValue listeners = JS_NewObject(ctx);
@@ -1034,19 +1124,31 @@ JSValue js_writestream_constructor(JSContext* ctx, JSValueConst new_target, int 
 
 // Initialize TTY module
 JSValue JSRT_InitNodeTTY(JSContext* ctx) {
+  // Ensure TTY classes are initialized first
+  js_tty_init_classes(ctx);
+
   JSValue tty_obj = JS_NewObject(ctx);
 
   // Add isatty function
   JS_SetPropertyStr(ctx, tty_obj, "isatty", JS_NewCFunction(ctx, js_tty_isatty, "isatty", 1));
 
-  // Add ReadStream class
-  JSValue readstream_ctor = JS_NewCFunction2(ctx, js_readstream_constructor, "ReadStream", 1, JS_CFUNC_constructor, 0);
-  JS_SetPropertyStr(ctx, tty_obj, "ReadStream", readstream_ctor);
+  // Get the prototype constructors that were created during class initialization
+  JSValue readstream_proto = JS_GetClassProto(ctx, js_readstream_class_id);
+  JSValue writestream_proto = JS_GetClassProto(ctx, js_writestream_class_id);
 
-  // Add WriteStream class
-  JSValue writestream_ctor =
-      JS_NewCFunction2(ctx, js_writestream_constructor, "WriteStream", 1, JS_CFUNC_constructor, 0);
+  // Extract the constructor from the prototype
+  JSValue readstream_ctor = JS_GetPropertyStr(ctx, readstream_proto, "constructor");
+  JSValue writestream_ctor = JS_GetPropertyStr(ctx, writestream_proto, "constructor");
+
+  // Add ReadStream class constructor to module
+  JS_SetPropertyStr(ctx, tty_obj, "ReadStream", readstream_ctor);
   JS_SetPropertyStr(ctx, tty_obj, "WriteStream", writestream_ctor);
+
+  // Clean up references
+  JS_FreeValue(ctx, readstream_proto);
+  JS_FreeValue(ctx, writestream_proto);
+  JS_FreeValue(ctx, readstream_ctor);
+  JS_FreeValue(ctx, writestream_ctor);
 
   return tty_obj;
 }

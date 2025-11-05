@@ -110,7 +110,9 @@ JSValue jsrt_init_unified_process_module(JSContext* ctx) {
   JS_SetPropertyStr(ctx, process, "kill", JS_NewCFunction(ctx, js_process_kill, "kill", 2));
 
   // Event handling (events.c)
-  JS_SetPropertyStr(ctx, process, "on", JS_NewCFunction(ctx, js_process_on_events, "on", 2));
+  JS_SetPropertyStr(ctx, process, "on", JS_NewCFunction(ctx, js_process_on_with_signals, "on", 2));
+  JS_SetPropertyStr(ctx, process, "removeListener",
+                    JS_NewCFunction(ctx, js_process_remove_listener, "removeListener", 2));
   JS_SetPropertyStr(ctx, process, "emit", JS_NewCFunction(ctx, js_process_emit_events, "emit", 1));
   JS_SetPropertyStr(ctx, process, "emitWarning", JS_NewCFunction(ctx, js_process_emit_warning, "emitWarning", 3));
   JS_SetPropertyStr(

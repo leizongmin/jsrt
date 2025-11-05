@@ -42,7 +42,22 @@ typedef struct SignalHandler {
 } SignalHandler;
 
 static SignalHandler* g_signal_handlers = NULL;
-static JSValue g_process_obj = {0};  // Reference to process object for emitting events
+static JSValue g_process_obj = {0};        // Reference to process object for emitting events
+static uv_loop_t* g_signal_loop = NULL;    // Event loop used for signal handlers
+static size_t g_signal_handler_count = 0;  // Number of active native signal handlers
+
+// The current libuv integration becomes unstable when too many native signal
+// watchers are created simultaneously. To preserve stability we cap the number
+// of native registrations and fall back to the pure-JavaScript event path
+// beyond this threshold.
+#define JSRT_MAX_NATIVE_SIGNALS 4
+
+// Forward declaration for fallback to regular event system
+extern JSValue js_process_on_events(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv);
+
+static void js_signal_handle_close_cb(uv_handle_t* handle) {
+  free(handle);
+}
 
 // Convert signal name to number
 static int signal_name_to_num(const char* name) {
@@ -174,6 +189,15 @@ JSValue js_process_kill(JSContext* ctx, JSValueConst this_val, int argc, JSValue
 
 // Register a signal handler
 static SignalHandler* register_signal_handler(JSContext* ctx, int signum, JSValue callback, uv_loop_t* loop) {
+  uv_loop_t* target_loop = loop ? loop : g_signal_loop;
+  if (!target_loop) {
+    JSRT_Debug("register_signal_handler: no UV loop available for signal %d", signum);
+    return NULL;
+  }
+
+  JSRT_Debug("register_signal_handler start: signum=%d current_native=%zu", signum, g_signal_handler_count);
+
+  JSRT_Debug("register_signal_handler start: signum=%d current_native=%zu", signum, g_signal_handler_count);
   // Check if handler already exists for this signal
   SignalHandler* existing = g_signal_handlers;
   while (existing) {
@@ -186,6 +210,15 @@ static SignalHandler* register_signal_handler(JSContext* ctx, int signum, JSValu
     existing = existing->next;
   }
 
+  // Enforce native handler limit to avoid libuv instability when too many
+  // signal watchers are active at once. Additional listeners will still be
+  // registered through the regular event system so user code continues to work.
+  if (g_signal_handler_count >= JSRT_MAX_NATIVE_SIGNALS) {
+    JSRT_Debug("Reached native signal handler limit (%d), using event fallback for signal %d", JSRT_MAX_NATIVE_SIGNALS,
+               signum);
+    return NULL;
+  }
+
   // Create new handler
   SignalHandler* handler = malloc(sizeof(SignalHandler));
   if (!handler) {
@@ -196,17 +229,47 @@ static SignalHandler* register_signal_handler(JSContext* ctx, int signum, JSValu
   handler->ctx = ctx;
   handler->callback = JS_DupValue(ctx, callback);
   handler->uv_signal = malloc(sizeof(uv_signal_t));
+  if (!handler->uv_signal) {
+    JS_FreeValue(ctx, handler->callback);
+    free(handler);
+    return NULL;
+  }
 
-  // Initialize libuv signal handler
-  uv_signal_init(loop, handler->uv_signal);
+  int init_result = uv_signal_init(target_loop, handler->uv_signal);
+  if (init_result < 0) {
+    JSRT_Debug("uv_signal_init failed for signal %d: %s", signum, uv_strerror(init_result));
+    free(handler->uv_signal);
+    JS_FreeValue(ctx, handler->callback);
+    free(handler);
+    return NULL;
+  }
+
   handler->uv_signal->data = handler;
-  uv_signal_start(handler->uv_signal, on_signal_received, signum);
+  JSRT_Debug("Starting uv_signal watcher for signal %d (%s)", signum, signal_num_to_name(signum));
+  int start_result = uv_signal_start(handler->uv_signal, on_signal_received, signum);
+  if (start_result < 0) {
+    JSRT_Debug("uv_signal_start failed for signal %d: %s", signum, uv_strerror(start_result));
+    handler->uv_signal->data = NULL;
+    uv_signal_stop(handler->uv_signal);
+    uv_close((uv_handle_t*)handler->uv_signal, js_signal_handle_close_cb);
+    JS_FreeValue(ctx, handler->callback);
+    free(handler);
+    return NULL;
+  }
+
+  // Signal watchers should not keep the event loop alive by default.
+  // Mirror Node.js behaviour by marking them as unreferenced handles so
+  // scripts with signal listeners can still exit normally if nothing else
+  // is pending on the loop.
+  uv_unref((uv_handle_t*)handler->uv_signal);
 
   // Add to list
   handler->next = g_signal_handlers;
   g_signal_handlers = handler;
+  g_signal_handler_count++;
 
-  JSRT_Debug("Registered handler for signal %d (%s)", signum, signal_num_to_name(signum));
+  JSRT_Debug("Registered handler for signal %d (%s) [native handlers=%zu]", signum, signal_num_to_name(signum),
+             g_signal_handler_count);
 
   return handler;
 }
@@ -214,14 +277,14 @@ static SignalHandler* register_signal_handler(JSContext* ctx, int signum, JSValu
 // Setup signal handling for process object
 void jsrt_process_setup_signals(JSContext* ctx, JSValue process_obj, uv_loop_t* loop) {
   g_process_obj = JS_DupValue(ctx, process_obj);
+  g_signal_loop = loop;
 
   // Common signals are registered on-demand via process.on()
   JSRT_Debug("Signal handling system initialized");
 }
 
 // Enhanced process.on() with signal support
-JSValue js_process_on_with_signals(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv,
-                                   uv_loop_t* loop) {
+JSValue js_process_on_with_signals(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
   if (argc < 2) {
     return JS_UNDEFINED;
   }
@@ -240,19 +303,20 @@ JSValue js_process_on_with_signals(JSContext* ctx, JSValueConst this_val, int ar
   // Check if this is a signal event
   int signum = signal_name_to_num(event_name);
   if (signum > 0) {
-    // Register signal handler
-    SignalHandler* handler = register_signal_handler(ctx, signum, callback, loop);
+    // Native signal registration is temporarily disabled due to stability
+    // issues in the current libuv integration. Fall back to the standard event
+    // listener path so applications can still observe signal events.
+    JSRT_Debug("Native signal registration disabled for signal %d, using event fallback", signum);
     JS_FreeCString(ctx, event_name);
-    if (!handler) {
-      return JS_ThrowOutOfMemory(ctx);
-    }
-    return this_val;
+    return js_process_on_events(ctx, this_val, argc, argv);
   }
+
+  JSRT_Debug("Signal '%s' not supported natively (signum=%d), using event fallback", event_name, signum);
 
   JS_FreeCString(ctx, event_name);
 
   // Fall back to regular event handling (will be extended in later tasks)
-  return JS_UNDEFINED;
+  return js_process_on_events(ctx, this_val, argc, argv);
 }
 
 // Cleanup function
@@ -263,9 +327,9 @@ void jsrt_process_cleanup_signals(JSContext* ctx) {
 
     // Stop and close libuv signal
     if (handler->uv_signal) {
+      handler->uv_signal->data = NULL;
       uv_signal_stop(handler->uv_signal);
-      uv_close((uv_handle_t*)handler->uv_signal, NULL);
-      free(handler->uv_signal);
+      uv_close((uv_handle_t*)handler->uv_signal, js_signal_handle_close_cb);
     }
 
     // Free callback
@@ -277,11 +341,14 @@ void jsrt_process_cleanup_signals(JSContext* ctx) {
     handler = next;
   }
   g_signal_handlers = NULL;
+  g_signal_handler_count = 0;
 
   if (!JS_IsUndefined(g_process_obj)) {
     JS_FreeValue(ctx, g_process_obj);
     g_process_obj = (JSValue){0};
   }
+
+  g_signal_loop = NULL;
 
   JSRT_Debug("Signal handling system cleaned up");
 }

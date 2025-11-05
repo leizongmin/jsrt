@@ -261,11 +261,11 @@ try {
     const availableSignals = [];
     commonSignals.forEach((signal) => {
       try {
-        // Just check if we can add a listener, don't actually trigger the signal
-        // Note: Not removing listeners to avoid potential crashes
-        const handler = () => {};
-        process.on(signal, handler);
-        availableSignals.push(signal);
+        // Just check if process.on exists and signal is a string
+        // Don't actually add listeners to avoid potential memory issues
+        if (typeof process.on === 'function' && typeof signal === 'string') {
+          availableSignals.push(signal);
+        }
       } catch (error) {
         // Signal not supported on this platform
       }

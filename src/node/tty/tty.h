@@ -120,6 +120,7 @@ JSClassID js_tty_get_writestream_class_id(void);
 // Module initialization and cleanup
 int js_tty_init_global_state(void);
 void js_tty_cleanup_global_state(void);
+void js_tty_init_classes(JSContext* ctx);
 
 // Class IDs for TTY streams (extern declarations)
 extern JSClassID js_readstream_class_id;

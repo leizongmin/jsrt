@@ -9,11 +9,20 @@
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
+#include <uv.h>
 #include "../stream/stream_internal.h"
+#include "../tty/tty.h"
 #include "process.h"
 
 // Forward declarations
 extern void js_std_dump_error(JSContext* ctx);
+
+// TTY constructor declarations
+extern JSValue js_readstream_constructor(JSContext* ctx, JSValueConst new_target, int argc, JSValueConst* argv);
+extern JSValue js_writestream_constructor(JSContext* ctx, JSValueConst new_target, int argc, JSValueConst* argv);
+
+// TTY class initialization
+extern void js_tty_init_classes(JSContext* ctx);
 
 // EventEmitter wrapper functions from stream module
 extern JSValue js_stream_on(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv);
@@ -33,6 +42,20 @@ extern JSValue js_readable_set_encoding(JSContext* ctx, JSValueConst this_val, i
 extern JSValue js_readable_pipe(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv);
 extern JSValue js_readable_unpipe(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv);
 extern JSValue js_readable_push(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv);
+
+// TTY detection helper mirroring node:tty isatty logic
+static bool jsrt_process_fd_is_tty(int fd) {
+  if (fd < 0 || fd > 1024) {
+    return false;
+  }
+
+  uv_handle_type handle_type = uv_guess_handle(fd);
+  if (handle_type == UV_TTY) {
+    return true;
+  }
+
+  return isatty(fd);
+}
 
 // Read data from file descriptor (for stdin)
 static JSValue js_stdin_stream_read(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
@@ -235,112 +258,169 @@ static void add_readable_methods(JSContext* ctx, JSValue stream_obj) {
   JS_SetPropertyStr(ctx, stream_obj, "push", JS_NewCFunction(ctx, js_readable_push, "push", 2));
 }
 
-// Create stdin as a Readable stream
+// Create stdin as a Readable stream (TTY ReadStream if in TTY environment)
 JSValue jsrt_create_stdin_stream(JSContext* ctx) {
-  // Ensure stream classes are initialized before creating any streams
-  extern void jsrt_stream_init_classes(JSContext * ctx);
-  jsrt_stream_init_classes(ctx);
+  JSValue stdin_obj;
+  bool is_tty = jsrt_process_fd_is_tty(STDIN_FILENO);
 
-  // Create a Readable stream
-  JSValue stdin_obj = js_readable_constructor(ctx, JS_UNDEFINED, 0, NULL);
-  if (JS_IsException(stdin_obj)) {
-    return stdin_obj;
+  if (is_tty) {
+    // In TTY environment, create TTY ReadStream
+    // Ensure TTY classes are initialized
+    js_tty_init_classes(ctx);
+
+    // Create a TTY ReadStream with fd 0 (stdin)
+    JSValue fd_arg = JS_NewInt32(ctx, STDIN_FILENO);
+    stdin_obj = js_readstream_constructor(ctx, JS_UNDEFINED, 1, &fd_arg);
+    JS_FreeValue(ctx, fd_arg);
+
+    if (JS_IsException(stdin_obj)) {
+      return stdin_obj;
+    }
+  } else {
+    // In non-TTY environment, create regular Readable stream
+    // Ensure stream classes are initialized before creating any streams
+    extern void jsrt_stream_init_classes(JSContext * ctx);
+    jsrt_stream_init_classes(ctx);
+
+    // Create a Readable stream
+    stdin_obj = js_readable_constructor(ctx, JS_UNDEFINED, 0, NULL);
+    if (JS_IsException(stdin_obj)) {
+      return stdin_obj;
+    }
+
+    // Get the stream data
+    JSStreamData* stream = js_stream_get_data(ctx, stdin_obj, js_readable_class_id);
+    if (!stream) {
+      JS_FreeValue(ctx, stdin_obj);
+      return JS_ThrowTypeError(ctx, "Failed to create stdin stream");
+    }
+
+    // Add EventEmitter methods (needed because stream module may not be loaded yet)
+    add_event_emitter_methods(ctx, stdin_obj);
+
+    // Add Readable methods (pause, resume, pipe, etc.)
+    add_readable_methods(ctx, stdin_obj);
+
+    // Override the read method to read from stdin
+    JS_SetPropertyStr(ctx, stdin_obj, "read", JS_NewCFunction(ctx, js_stdin_stream_read, "read", 1));
+    JS_SetPropertyStr(ctx, stdin_obj, "_read", JS_NewCFunction(ctx, js_stdin_internal_read, "_read", 1));
+
+    // Add write method for stdin compatibility (Node.js process.stdin is writable)
+    JS_SetPropertyStr(ctx, stdin_obj, "write", JS_NewCFunction(ctx, js_stdin_stream_write, "write", 3));
   }
 
-  // Get the stream data
-  JSStreamData* stream = js_stream_get_data(ctx, stdin_obj, js_readable_class_id);
-  if (!stream) {
-    JS_FreeValue(ctx, stdin_obj);
-    return JS_ThrowTypeError(ctx, "Failed to create stdin stream");
-  }
+  // Set isTTY property (for TTY streams, this is already set)
+  JS_SetPropertyStr(ctx, stdin_obj, "isTTY", JS_NewBool(ctx, is_tty));
 
-  // Add EventEmitter methods (needed because stream module may not be loaded yet)
-  add_event_emitter_methods(ctx, stdin_obj);
-
-  // Add Readable methods (pause, resume, pipe, etc.)
-  add_readable_methods(ctx, stdin_obj);
-
-  // Override the read method to read from stdin
-  JS_SetPropertyStr(ctx, stdin_obj, "read", JS_NewCFunction(ctx, js_stdin_stream_read, "read", 1));
-  JS_SetPropertyStr(ctx, stdin_obj, "_read", JS_NewCFunction(ctx, js_stdin_internal_read, "_read", 1));
-
-  // Add write method for stdin compatibility (Node.js process.stdin is writable)
-  JS_SetPropertyStr(ctx, stdin_obj, "write", JS_NewCFunction(ctx, js_stdin_stream_write, "write", 3));
-
-  // Set isTTY property
-  JS_SetPropertyStr(ctx, stdin_obj, "isTTY", JS_NewBool(ctx, isatty(STDIN_FILENO)));
-
-  // Set fd property
+  // Set fd property (for TTY streams, this is already set)
   JS_SetPropertyStr(ctx, stdin_obj, "fd", JS_NewInt32(ctx, STDIN_FILENO));
 
   return stdin_obj;
 }
 
-// Create stdout as a Writable stream
+// Create stdout as a Writable stream (TTY WriteStream if in TTY environment)
 JSValue jsrt_create_stdout_stream(JSContext* ctx) {
-  // Ensure stream classes are initialized
-  extern void jsrt_stream_init_classes(JSContext * ctx);
-  jsrt_stream_init_classes(ctx);
+  JSValue stdout_obj;
+  bool is_tty = jsrt_process_fd_is_tty(STDOUT_FILENO);
 
-  // Create a Writable stream
-  JSValue stdout_obj = js_writable_constructor(ctx, JS_UNDEFINED, 0, NULL);
-  if (JS_IsException(stdout_obj)) {
-    return stdout_obj;
+  if (is_tty) {
+    // In TTY environment, create TTY WriteStream
+    // Ensure TTY classes are initialized
+    js_tty_init_classes(ctx);
+
+    // Create a TTY WriteStream with fd 1 (stdout)
+    JSValue fd_arg = JS_NewInt32(ctx, STDOUT_FILENO);
+    stdout_obj = js_writestream_constructor(ctx, JS_UNDEFINED, 1, &fd_arg);
+    JS_FreeValue(ctx, fd_arg);
+
+    if (JS_IsException(stdout_obj)) {
+      return stdout_obj;
+    }
+  } else {
+    // In non-TTY environment, create regular Writable stream
+    // Ensure stream classes are initialized
+    extern void jsrt_stream_init_classes(JSContext * ctx);
+    jsrt_stream_init_classes(ctx);
+
+    // Create a Writable stream
+    stdout_obj = js_writable_constructor(ctx, JS_UNDEFINED, 0, NULL);
+    if (JS_IsException(stdout_obj)) {
+      return stdout_obj;
+    }
+
+    // Get the stream data
+    JSStreamData* stream = js_stream_get_data(ctx, stdout_obj, js_writable_class_id);
+    if (!stream) {
+      JS_FreeValue(ctx, stdout_obj);
+      return JS_ThrowTypeError(ctx, "Failed to create stdout stream");
+    }
+
+    // Add EventEmitter methods (needed because stream module may not be loaded yet)
+    add_event_emitter_methods(ctx, stdout_obj);
+
+    // Override the write and end methods
+    JS_SetPropertyStr(ctx, stdout_obj, "write", JS_NewCFunction(ctx, js_stdout_stream_write, "write", 3));
+    JS_SetPropertyStr(ctx, stdout_obj, "end", JS_NewCFunction(ctx, js_stdout_stream_end, "end", 3));
   }
 
-  // Get the stream data
-  JSStreamData* stream = js_stream_get_data(ctx, stdout_obj, js_writable_class_id);
-  if (!stream) {
-    JS_FreeValue(ctx, stdout_obj);
-    return JS_ThrowTypeError(ctx, "Failed to create stdout stream");
-  }
+  // Set isTTY property (for TTY streams, this is already set)
+  JS_SetPropertyStr(ctx, stdout_obj, "isTTY", JS_NewBool(ctx, is_tty));
 
-  // Add EventEmitter methods (needed because stream module may not be loaded yet)
-  add_event_emitter_methods(ctx, stdout_obj);
-
-  // Override the write and end methods
-  JS_SetPropertyStr(ctx, stdout_obj, "write", JS_NewCFunction(ctx, js_stdout_stream_write, "write", 3));
-  JS_SetPropertyStr(ctx, stdout_obj, "end", JS_NewCFunction(ctx, js_stdout_stream_end, "end", 3));
-
-  // Set isTTY property
-  JS_SetPropertyStr(ctx, stdout_obj, "isTTY", JS_NewBool(ctx, isatty(STDOUT_FILENO)));
-
-  // Set fd property
+  // Set fd property (for TTY streams, this is already set)
   JS_SetPropertyStr(ctx, stdout_obj, "fd", JS_NewInt32(ctx, STDOUT_FILENO));
 
   return stdout_obj;
 }
 
-// Create stderr as a Writable stream
+// Create stderr as a Writable stream (TTY WriteStream if in TTY environment)
 JSValue jsrt_create_stderr_stream(JSContext* ctx) {
-  // Ensure stream classes are initialized
-  extern void jsrt_stream_init_classes(JSContext * ctx);
-  jsrt_stream_init_classes(ctx);
+  JSValue stderr_obj;
+  bool is_tty = jsrt_process_fd_is_tty(STDERR_FILENO);
 
-  // Create a Writable stream
-  JSValue stderr_obj = js_writable_constructor(ctx, JS_UNDEFINED, 0, NULL);
-  if (JS_IsException(stderr_obj)) {
-    return stderr_obj;
+  if (is_tty) {
+    // In TTY environment, create TTY WriteStream
+    // Ensure TTY classes are initialized
+    js_tty_init_classes(ctx);
+
+    // Create a TTY WriteStream with fd 2 (stderr)
+    JSValue fd_arg = JS_NewInt32(ctx, STDERR_FILENO);
+    stderr_obj = js_writestream_constructor(ctx, JS_UNDEFINED, 1, &fd_arg);
+    JS_FreeValue(ctx, fd_arg);
+
+    if (JS_IsException(stderr_obj)) {
+      return stderr_obj;
+    }
+  } else {
+    // In non-TTY environment, create regular Writable stream
+    // Ensure stream classes are initialized
+    extern void jsrt_stream_init_classes(JSContext * ctx);
+    jsrt_stream_init_classes(ctx);
+
+    // Create a Writable stream
+    stderr_obj = js_writable_constructor(ctx, JS_UNDEFINED, 0, NULL);
+    if (JS_IsException(stderr_obj)) {
+      return stderr_obj;
+    }
+
+    // Get the stream data
+    JSStreamData* stream = js_stream_get_data(ctx, stderr_obj, js_writable_class_id);
+    if (!stream) {
+      JS_FreeValue(ctx, stderr_obj);
+      return JS_ThrowTypeError(ctx, "Failed to create stderr stream");
+    }
+
+    // Add EventEmitter methods (needed because stream module may not be loaded yet)
+    add_event_emitter_methods(ctx, stderr_obj);
+
+    // Override the write and end methods
+    JS_SetPropertyStr(ctx, stderr_obj, "write", JS_NewCFunction(ctx, js_stderr_stream_write, "write", 3));
+    JS_SetPropertyStr(ctx, stderr_obj, "end", JS_NewCFunction(ctx, js_stdout_stream_end, "end", 3));
   }
 
-  // Get the stream data
-  JSStreamData* stream = js_stream_get_data(ctx, stderr_obj, js_writable_class_id);
-  if (!stream) {
-    JS_FreeValue(ctx, stderr_obj);
-    return JS_ThrowTypeError(ctx, "Failed to create stderr stream");
-  }
+  // Set isTTY property (for TTY streams, this is already set)
+  JS_SetPropertyStr(ctx, stderr_obj, "isTTY", JS_NewBool(ctx, is_tty));
 
-  // Add EventEmitter methods (needed because stream module may not be loaded yet)
-  add_event_emitter_methods(ctx, stderr_obj);
-
-  // Override the write and end methods
-  JS_SetPropertyStr(ctx, stderr_obj, "write", JS_NewCFunction(ctx, js_stderr_stream_write, "write", 3));
-  JS_SetPropertyStr(ctx, stderr_obj, "end", JS_NewCFunction(ctx, js_stdout_stream_end, "end", 3));
-
-  // Set isTTY property
-  JS_SetPropertyStr(ctx, stderr_obj, "isTTY", JS_NewBool(ctx, isatty(STDERR_FILENO)));
-
-  // Set fd property
+  // Set fd property (for TTY streams, this is already set)
   JS_SetPropertyStr(ctx, stderr_obj, "fd", JS_NewInt32(ctx, STDERR_FILENO));
 
   return stderr_obj;

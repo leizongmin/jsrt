@@ -113,6 +113,49 @@ JSValue js_process_emit_events(JSContext* ctx, JSValueConst this_val, int argc, 
   return JS_NewBool(ctx, emitted);
 }
 
+// process.removeListener(event, callback)
+JSValue js_process_remove_listener(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
+  if (argc < 2) {
+    return JS_UNDEFINED;
+  }
+
+  const char* event_name = JS_ToCString(ctx, argv[0]);
+  if (!event_name) {
+    return JS_EXCEPTION;
+  }
+
+  JSValue callback = argv[1];
+  if (!JS_IsFunction(ctx, callback)) {
+    JS_FreeCString(ctx, event_name);
+    return JS_ThrowTypeError(ctx, "Callback must be a function");
+  }
+
+  // Remove the listener from the global list
+  EventListener** current = &g_event_listeners;
+  while (*current) {
+    EventListener* listener = *current;
+    if (strcmp(listener->event_name, event_name) == 0) {
+      // Compare JS values by reference
+      bool is_equal = JS_StrictEq(ctx, listener->callback, callback);
+
+      if (is_equal) {
+        // Remove this listener
+        *current = listener->next;
+        free(listener->event_name);
+        JS_FreeValue(ctx, listener->callback);
+        free(listener);
+
+        JSRT_Debug("Removed event listener for '%s'", event_name);
+        break;
+      }
+    }
+    current = &listener->next;
+  }
+
+  JS_FreeCString(ctx, event_name);
+  return this_val;  // Return process for chaining
+}
+
 // Emit 'exit' event
 void jsrt_process_emit_exit(JSContext* ctx, int exit_code) {
   JSRT_Debug("Emitting 'exit' event with code %d", exit_code);

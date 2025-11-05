@@ -77,13 +77,13 @@ const char* jsrt_process_get_exec_path_internal(void);
 
 // Signals (signals.c)
 JSValue js_process_kill(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv);
-JSValue js_process_on_with_signals(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv,
-                                   uv_loop_t* loop);
+JSValue js_process_on_with_signals(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv);
 void jsrt_process_setup_signals(JSContext* ctx, JSValue process_obj, uv_loop_t* loop);
 void jsrt_process_cleanup_signals(JSContext* ctx);
 
 // Events (events.c)
 JSValue js_process_on_events(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv);
+JSValue js_process_remove_listener(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv);
 JSValue js_process_emit_events(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv);
 JSValue js_process_emit_warning(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv);
 JSValue js_process_set_uncaught_exception_capture(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv);

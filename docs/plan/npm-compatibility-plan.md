@@ -14,7 +14,77 @@
 :COMPLETION: 0%
 :END:
 
-* 📋 Task Analysis & Breakdown
+* 📋 Status Tracking Guidelines
+
+### Three-Level Status Tracking System
+
+This plan uses a three-level hierarchical status tracking system to ensure comprehensive progress monitoring:
+
+#### Level 1: Phase Status
+**Purpose**: High-level progress tracking for major development phases
+**States**:
+- 🟡 **PLANNING**: Phase tasks defined, not yet started
+- 🔵 **IN_PROGRESS**: At least one task in phase started
+- 🟢 **COMPLETED**: All tasks in phase completed and validated
+- 🔴 **BLOCKED**: Critical blockers preventing phase progress
+
+**Update Guidelines**:
+- Update phase status when first task in phase becomes IN_PROGRESS
+- Phase can only be marked COMPLETED when ALL tasks are COMPLETED
+- Mark BLOCKED only if multiple critical tasks are blocked
+
+#### Level 2: Task Status
+**Purpose**: Track individual implementation tasks within each phase
+**States**:
+- **TODO**: Task defined, not yet started
+- **IN_PROGRESS**: Currently being worked on
+- **BLOCKED**: Waiting for dependencies or blocked by issues
+- **DONE**: Task completed and tested
+- **CANCELLED**: Task no longer needed
+
+**Update Guidelines**:
+- Mark IN_PROGRESS when actively working on task
+- Mark DONE only after successful testing and validation
+- Always include completion notes when marking DONE
+- Update BLOCKED status with specific blocker details
+
+#### Level 3: Subtask Status (NEW)
+**Purpose**: Granular tracking of atomic operations within tasks
+**States**: Same as Task Level (TODO, IN_PROGRESS, BLOCKED, DONE, CANCELLED)
+
+**Update Guidelines**:
+- Track each subtask independently
+- Parent task can only be DONE when ALL subtasks are DONE
+- Update subtask status immediately upon completion
+- Include specific completion criteria for each subtask
+
+#### Status Update Protocol
+
+**When to Update**:
+- ✅ **Immediately** after completing any work item
+- 🔄 **When starting** work on any item
+- 🔴 **When blocked** by dependencies or issues
+- 📝 **When scope changes** (add/remove tasks)
+- ⚠️ **When risks discovered** (update risk level)
+
+**How to Update**:
+1. **Update the specific level**: Phase → Task → Subtask
+2. **Add timestamp**: Use ISO 8601 format (2025-01-05T15:30:00Z)
+3. **Include progress notes**: What was accomplished, what's next
+4. **Update completion percentage**: Based on completed subtasks
+5. **Log dependencies**: Mark which items are blocking/unblocking
+
+**Example Status Update**:
+```org
+**** TODO [#A] Subtask 1.1.2: Implement Domain class constructor [P][R:MED][C:SIMPLE]
+:PROPERTIES:
+:ID: 1.1.2
+:CREATED: 2025-01-05T15:00:00Z
+:STARTED: 2025-01-05T16:15:00Z
+:COMPLETED: 2025-01-05T16:45:00Z
+:DEPS: 1.1.1
+:END:
+```
 
 ### Current State Analysis
 - **Test Failure Rate**: 50/100 packages failing (50% failure rate)
@@ -81,13 +151,131 @@ Based on testing, failures fall into these categories:
 :CREATED: 2025-01-05T15:00:00Z
 :DEPS: None
 :IMPACT: aws-sdk, babel_core, babel_eslint, babel_loader, babel_preset_es2015, ember_cli_babel
+:ESTIMATED_HOURS: 24
+:EXPERTISE: Advanced
+:PROGRESS: 0/8
+:COMPLETION: 0%
 :END:
 
-**Implementation Details:**
-- Create `src/node/domain.c` with domain API surface
-- Implement Domain, EventEmitter inheritance
-- Add domain-based error handling context
-- Module registration in `src/node/node_modules.c`
+**Resource Requirements**:
+- **Expertise Level**: Advanced (EventEmitter, error handling, context management)
+- **Person-Hours**: 24 (16 dev + 8 testing)
+- **Testing**: Unit tests + integration with AWS SDK
+- **Documentation**: API reference doc
+
+***** TODO [#A] Subtask 1.1.1: Create domain module structure [S][R:MED][C:SIMPLE]
+:PROPERTIES:
+:ID: 1.1.1
+:CREATED: 2025-01-05T15:00:00Z
+:DEPS: None
+:FILE: src/node/domain.c
+:HOURS: 3
+:END:
+- [ ] Create `src/node/domain.c` file with basic structure
+- [ ] Add domain module header with necessary includes
+- [ ] Implement module initialization function `js_init_domain()`
+- [ ] Add module exports registration template
+- **Success Criteria**: Module compiles and registers successfully
+
+***** TODO [#A] Subtask 1.1.2: Implement Domain class core [S][R:HIGH][C:MEDIUM]
+:PROPERTIES:
+:ID: 1.1.2
+:CREATED: 2025-01-05T15:00:00Z
+:DEPS: 1.1.1
+:FILE: src/node/domain.c
+:HOURS: 6
+:END:
+- [ ] Implement Domain class constructor with EventEmitter inheritance
+- [ ] Add domain.create() factory function
+- [ ] Implement domain.run() method for context execution
+- [ ] Add domain.add() and domain.remove() methods
+- [ ] Implement domain.members property tracking
+- **Success Criteria**: Domain class instantiated and basic methods work
+
+***** TODO [#A] Subtask 1.1.3: Implement error handling context [S][R:HIGH][C:COMPLEX]
+:PROPERTIES:
+:ID: 1.1.3
+:CREATED: 2025-01-05T15:00:00Z
+:DEPS: 1.1.2
+:FILE: src/node/domain.c
+:HOURS: 8
+:END:
+- [ ] Implement domain error interception mechanism
+- [ ] Add domain.emit('error') handling
+- [ ] Implement domain disposal and cleanup
+- [ ] Add process.domain context tracking
+- [ ] Handle async context propagation
+- **Success Criteria**: Errors properly captured in domain context
+
+***** TODO [#B] Subtask 1.1.4: Add domain interop features [P][R:MED][C:MEDIUM]
+:PROPERTIES:
+:ID: 1.1.4
+:CREATED: 2025-01-05T15:00:00Z
+:DEPS: 1.1.3
+:FILE: src/node/domain.c
+:HOURS: 4
+:END:
+- [ ] Implement domain binding for EventEmitter events
+- [ ] Add timer/interval domain binding
+- [ ] Implement Promise integration with domains
+- [ ] Add domain.exit() method
+- **Success Criteria**: All domain interop features functional
+
+***** TODO [#B] Subtask 1.1.5: Module registration and exports [S][R:MED][C:SIMPLE]
+:PROPERTIES:
+:ID: 1.1.5
+:CREATED: 2025-01-05T15:00:00Z
+:DEPS: 1.1.4
+:FILE: src/node/node_modules.c
+:HOURS: 2
+:END:
+- [ ] Add domain module to builtin module registry
+- [ ] Implement require('domain') functionality
+- [ ] Add proper module exports structure
+- [ ] Test module loading and basic API
+- **Success Criteria**: require('domain') returns functional module
+
+***** TODO [#C] Subtask 1.1.6: Create unit tests [P][R:LOW][C:SIMPLE]
+:PROPERTIES:
+:ID: 1.1.6
+:CREATED: 2025-01-05T15:00:00Z
+:DEPS: 1.1.5
+:FILE: test/node/test_domain.js
+:HOURS: 3
+:END:
+- [ ] Create comprehensive test suite for domain module
+- [ ] Test domain creation and basic functionality
+- [ ] Test error handling and context propagation
+- [ ] Test edge cases and error conditions
+- **Success Criteria**: All tests pass with >90% coverage
+
+***** TODO [#C] Subtask 1.1.7: Integration testing [P][R:LOW][C:MEDIUM]
+:PROPERTIES:
+:ID: 1.1.7
+:CREATED: 2025-01-05T15:00:00Z
+:DEPS: 1.1.6
+:FILE: test/npm/domain_integration.js
+:HOURS: 4
+:END:
+- [ ] Test with aws-sdk package compatibility
+- [ ] Test babel packages that use domains
+- [ ] Validate error handling in real scenarios
+- [ ] Performance testing for domain operations
+- **Success Criteria**: Target packages load and handle errors correctly
+
+***** TODO [#C] Subtask 1.1.8: Documentation and validation [P][R:LOW][C:SIMPLE]
+:PROPERTIES:
+:ID: 1.1.8
+:CREATED: 2025-01-05T15:00:00Z
+:DEPS: 1.1.7
+:FILE: docs/api/domain.md
+:HOURS: 2
+:END:
+- [ ] Create API documentation for domain module
+- [ ] Document limitations and compatibility notes
+- [ ] Add usage examples and best practices
+- [ ] Final validation against Node.js API surface
+- **Success Criteria**: Documentation complete and API validated
 
 **** TODO [#A] Task 1.2: Implement Timers Module [S][R:HIGH][C:MEDIUM]
 :PROPERTIES:
@@ -95,13 +283,116 @@ Based on testing, failures fall into these categories:
 :CREATED: 2025-01-05T15:00:00Z
 :DEPS: None
 :IMPACT: mongodb, zone_js, async, request, node-fetch
+:ESTIMATED_HOURS: 20
+:EXPERTISE: Intermediate
+:PROGRESS: 0/7
+:COMPLETION: 0%
 :END:
 
-**Implementation Details:**
-- Extend existing `src/node/node_timers.c` with missing exports
-- Add `timers/promises` API for async/await support
-- Implement timer utilities (immediate, setImmediate)
-- Module integration and testing
+**Resource Requirements**:
+- **Expertise Level**: Intermediate (libuv integration, async/await patterns)
+- **Person-Hours**: 20 (14 dev + 6 testing)
+- **Testing**: Timer precision tests + integration with MongoDB
+- **Documentation**: Timer API reference
+
+***** TODO [#A] Subtask 1.2.1: Extend existing timers module [S][R:MED][C:SIMPLE]
+:PROPERTIES:
+:ID: 1.2.1
+:CREATED: 2025-01-05T15:00:00Z
+:DEPS: None
+:FILE: src/node/node_timers.c
+:HOURS: 4
+:END:
+- [ ] Review existing `src/node/node_timers.c` implementation
+- [ ] Add missing timer exports (setImmediate, clearImmediate)
+- [ ] Implement timer utility functions (enroll,unenroll)
+- [ ] Add active timers tracking mechanism
+- **Success Criteria**: All standard timer functions exported
+
+***** TODO [#A] Subtask 1.2.2: Implement timers/promises API [S][R:HIGH][C:MEDIUM]
+:PROPERTIES:
+:ID: 1.2.2
+:CREATED: 2025-01-05T15:00:00Z
+:DEPS: 1.2.1
+:FILE: src/node/timers_promises.c
+:HOURS: 6
+:END:
+- [ ] Create `src/node/timers_promises.c` module
+- [ ] Implement setTimeout() Promise-based version
+- [ ] Implement setInterval() Promise-based version
+- [ ] Implement setImmediate() Promise-based version
+- [ ] Add proper Promise handling and cancellation
+- **Success Criteria**: All timer promise APIs functional
+
+***** TODO [#A] Subtask 1.2.3: Advanced timer utilities [S][R:MED][C:MEDIUM]
+:PROPERTIES:
+:ID: 1.2.3
+:CREATED: 2025-01-05T15:00:00Z
+:DEPS: 1.2.2
+:FILE: src/node/node_timers.c
+:HOURS: 5
+:END:
+- [ ] Implement timer.unref() and timer.ref() methods
+- [ ] Add timer.refresh() functionality
+- [ ] Implement active timelists management
+- [ ] Add timer performance monitoring hooks
+- **Success Criteria**: Advanced timer utilities working correctly
+
+***** TODO [#B] Subtask 1.2.4: Timer precision and performance [P][R:MED][C:MEDIUM]
+:PROPERTIES:
+:ID: 1.2.4
+:CREATED: 2025-01-05T15:00:00Z
+:DEPS: 1.2.3
+:FILE: src/node/node_timers.c
+:HOURS: 3
+:END:
+- [ ] Optimize timer precision for libuv integration
+- [ ] Add timer drift compensation
+- [ ] Implement high-resolution timers where available
+- [ ] Add timer performance benchmarks
+- **Success Criteria**: Timer precision within 1ms of expected
+
+***** TODO [#B] Subtask 1.2.5: Module exports and integration [S][R:LOW][C:SIMPLE]
+:PROPERTIES:
+:ID: 1.2.5
+:CREATED: 2025-01-05T15:00:00Z
+:DEPS: 1.2.4
+:FILE: src/node/node_modules.c
+:HOURS: 2
+:END:
+- [ ] Update module registry for timers/promises
+- [ ] Ensure proper CommonJS exports structure
+- [ ] Add backward compatibility layer
+- [ ] Test require('timers') and require('timers/promises')
+- **Success Criteria**: Both timer modules load correctly
+
+***** TODO [#C] Subtask 1.2.6: Comprehensive testing [P][R:LOW][C:MEDIUM]
+:PROPERTIES:
+:ID: 1.2.6
+:CREATED: 2025-01-05T15:00:00Z
+:DEPS: 1.2.5
+:FILE: test/node/test_timers_promises.js
+:HOURS: 5
+:END:
+- [ ] Create test suite for timer functionality
+- [ ] Test Promise-based timer APIs
+- [ ] Test timer cancellation and cleanup
+- [ ] Test timer edge cases and error conditions
+- **Success Criteria**: All timer tests pass with 95% coverage
+
+***** TODO [#C] Subtask 1.2.7: Integration validation [P][R:LOW][C:MEDIUM]
+:PROPERTIES:
+:ID: 1.2.7
+:CREATED: 2025-01-05T15:00:00Z
+:DEPS: 1.2.6
+:FILE: test/npm/timers_integration.js
+:HOURS: 3
+:END:
+- [ ] Test MongoDB driver compatibility
+- [ ] Test zone.js timer integration
+- [ ] Test async library timer usage
+- [ ] Validate timer behavior with popular packages
+- **Success Criteria**: Target packages work with new timer APIs
 
 **** TODO [#A] Task 1.3: Implement fs/promises Module [S][R:HIGH][C:MEDIUM]
 :PROPERTIES:
@@ -109,13 +400,103 @@ Based on testing, failures fall into these categories:
 :CREATED: 2025-01-05T15:00:00Z
 :DEPS: None
 :IMPACT: eslint, webpack, webpack_dev_server, html_webpack_plugin
+:ESTIMATED_HOURS: 18
+:EXPERTISE: Intermediate
+:PROGRESS: 0/6
+:COMPLETION: 0%
 :END:
 
-**Implementation Details:**
-- Create `src/node/fs_promises.c` with promise-based file operations
-- Implement all major fs.promises API surface
-- Integrate with existing fs module
-- Add comprehensive error handling
+**Resource Requirements**:
+- **Expertise Level**: Intermediate (Promise handling, fs operations)
+- **Person-Hours**: 18 (12 dev + 6 testing)
+- **Testing**: File system tests + webpack integration
+- **Documentation**: fs.promises API guide
+
+***** TODO [#A] Subtask 1.3.1: Create fs/promises module foundation [S][R:MED][C:SIMPLE]
+:PROPERTIES:
+:ID: 1.3.1
+:CREATED: 2025-01-05T15:00:00Z
+:DEPS: None
+:FILE: src/node/fs_promises.c
+:HOURS: 3
+:END:
+- [ ] Create `src/node/fs_promises.c` with basic structure
+- [ ] Review existing fs implementation in `src/node/node_fs.c`
+- [ ] Implement Promise wrapper framework for fs operations
+- [ ] Add error handling and type checking utilities
+- **Success Criteria**: Module structure ready for API implementation
+
+***** TODO [#A] Subtask 1.3.2: Implement core file operations [S][R:HIGH][C:MEDIUM]
+:PROPERTIES:
+:ID: 1.3.2
+:CREATED: 2025-01-05T15:00:00Z
+:DEPS: 1.3.1
+:FILE: src/node/fs_promises.c
+:HOURS: 6
+:END:
+- [ ] Implement promises.readFile() and promises.writeFile()
+- [ ] Implement promises.appendFile() and promises.access()
+- [ ] Implement promises.mkdir() and promises.rmdir()
+- [ ] Implement promises.unlink() and promises.rename()
+- [ ] Add proper error handling and Promise rejection
+- **Success Criteria**: Core file operations work as promises
+
+***** TODO [#A] Subtask 1.3.3: Implement directory and metadata operations [S][R:MED][C:MEDIUM]
+:PROPERTIES:
+:ID: 1.3.3
+:CREATED: 2025-01-05T15:00:00Z
+:DEPS: 1.3.2
+:FILE: src/node/fs_promises.c
+:HOURS: 5
+:END:
+- [ ] Implement promises.readdir() and promises.opendir()
+- [ ] Implement promises.stat() and promises.lstat()
+- [ ] Implement promises.chmod() and promises.chown()
+- [ ] Implement promises.utimes() and promises.futimes()
+- [ ] Add directory iterator support
+- **Success Criteria**: Directory and metadata operations functional
+
+***** TODO [#B] Subtask 1.3.4: Implement watch and streaming operations [P][R:MED][C:MEDIUM]
+:PROPERTIES:
+:ID: 1.3.4
+:CREATED: 2025-01-05T15:00:00Z
+:DEPS: 1.3.3
+:FILE: src/node/fs_promises.c
+:HOURS: 4
+:END:
+- [ ] Implement promises.watch() and promises.watchFile()
+- [ ] Implement promises.unwatchFile()
+- [ ] Add Promise-based file watching with event emitters
+- [ ] Integrate with existing libuv file watching
+- **Success Criteria**: File watching works with Promise interface
+
+***** TODO [#B] Subtask 1.3.5: Module integration and exports [S][R:LOW][C:SIMPLE]
+:PROPERTIES:
+:ID: 1.3.5
+:CREATED: 2025-01-05T15:00:00Z
+:DEPS: 1.3.4
+:FILE: src/node/node_modules.c
+:HOURS: 2
+:END:
+- [ ] Register fs/promises module in builtin registry
+- [ ] Ensure require('fs/promises') works correctly
+- [ ] Add backward compatibility with fs.promises
+- [ ] Test module loading and basic functionality
+- **Success Criteria**: fs/promises module loads and exports all APIs
+
+***** TODO [#C] Subtask 1.3.6: Testing and validation [P][R:LOW][C:MEDIUM]
+:PROPERTIES:
+:ID: 1.3.6
+:CREATED: 2025-01-05T15:00:00Z
+:DEPS: 1.3.5
+:FILE: test/node/test_fs_promises.js
+:HOURS: 5
+:END:
+- [ ] Create comprehensive test suite for fs.promises
+- [ ] Test all file operations with async/await
+- [ ] Test error handling and edge cases
+- [ ] Validate with eslint and webpack usage patterns
+- **Success Criteria**: All tests pass and target packages work
 
 **** TODO [#A] Task 1.4: Implement V8 Inspector APIs [S][R:MED][C:COMPLEX]
 :PROPERTIES:
@@ -123,27 +504,131 @@ Based on testing, failures fall into these categories:
 :CREATED: 2025-01-05T15:00:00Z
 :DEPS: 1.1,1.2,1.3
 :IMPACT: vue, react_dom, babel_core, typescript
+:ESTIMATED_HOURS: 28
+:EXPERTISE: Advanced
+:PROGRESS: 0/8
+:COMPLETION: 0%
 :END:
 
-**Implementation Details:**
-- Add minimal V8 API compatibility layer
-- Implement Inspector protocol stubs
-- Add console inspector integration
-- Performance hooks support
+**Resource Requirements**:
+- **Expertise Level**: Advanced (V8 API understanding, debugging protocols)
+- **Person-Hours**: 28 (20 dev + 8 testing)
+- **Testing**: Inspector protocol tests + framework integration
+- **Documentation**: V8 compatibility layer guide
 
-**** TODO [#B] Task 1.5: Implement Crypto Extensions [S][R:MED][C:MEDIUM]
+***** TODO [#A] Subtask 1.4.1: Create V8 API compatibility foundation [S][R:HIGH][C:COMPLEX]
 :PROPERTIES:
-:ID: 1.5
+:ID: 1.4.1
 :CREATED: 2025-01-05T15:00:00Z
 :DEPS: None
-:IMPACT: request, superagent, axios, https modules
+:FILE: src/node/v8_inspector.c
+:HOURS: 6
 :END:
+- [ ] Create `src/node/v8_inspector.c` with basic structure
+- [ ] Research Vue.js and React specific V8 API requirements
+- [ ] Implement minimal V8 object inspection API
+- [ ] Add V8 heap snapshot stub functionality
+- **Success Criteria**: V8 API foundation ready for inspector implementation
 
-**Implementation Details:**
-- Extend `src/crypto/` with missing hash algorithms
-- Add stream cipher support
-- Implement certificate validation APIs
-- WebCrypto API integration
+***** TODO [#A] Subtask 1.4.2: Implement inspector protocol basics [S][R:HIGH][C:COMPLEX]
+:PROPERTIES:
+:ID: 1.4.2
+:CREATED: 2025-01-05T15:00:00Z
+:DEPS: 1.4.1
+:FILE: src/node/v8_inspector.c
+:HOURS: 8
+:END:
+- [ ] Implement WebSocket-based inspector transport
+- [ ] Add basic inspector message handling
+- [ ] Implement inspector runtime methods
+- [ ] Add console integration with inspector
+- **Success Criteria**: Inspector can receive and respond to basic commands
+
+***** TODO [#A] Subtask 1.4.3: Performance and profiling APIs [S][R:MED][C:COMPLEX]
+:PROPERTIES:
+:ID: 1.4.3
+:CREATED: 2025-01-05T15:00:00Z
+:DEPS: 1.4.2
+:FILE: src/node/v8_inspector.c
+:HOURS: 6
+:END:
+- [ ] Implement performance.now() high-resolution timing
+- [ ] Add basic CPU profiling stubs
+- [ ] Implement memory usage monitoring
+- [ ] Add performance mark/measure APIs
+- **Success Criteria**: Performance APIs work for framework requirements
+
+***** TODO [#B] Subtask 1.4.4: Console inspector integration [P][R:MED][C:MEDIUM]
+:PROPERTIES:
+:ID: 1.4.4
+:CREATED: 2025-01-05T15:00:00Z
+:DEPS: 1.4.3
+:FILE: src/std/console.c
+:HOURS: 4
+:END:
+- [ ] Enhance console with inspector integration
+- [ ] Add console timing methods (time, timeEnd)
+- [ ] Implement console.assert() with inspector output
+- [ ] Add console.group() functionality
+- **Success Criteria**: Console methods integrate with inspector
+
+***** TODO [#B] Subtask 1.4.5: Module registration and exports [S][R:LOW][C:SIMPLE]
+:PROPERTIES:
+:ID: 1.4.5
+:CREATED: 2025-01-05T15:00:00Z
+:DEPS: 1.4.4
+:FILE: src/node/node_modules.c
+:HOURS: 2
+:END:
+- [ ] Register V8 inspector module
+- [ ] Add inspector initialization hooks
+- [ ] Implement inspector.start() method
+- [ ] Test basic inspector functionality
+- **Success Criteria**: Inspector module loads and initializes
+
+***** TODO [#B] Subtask 1.4.6: Vue.js specific compatibility [P][R:MED][C:MEDIUM]
+:PROPERTIES:
+:ID: 1.4.6
+:CREATED: 2025-01-05T15:00:00Z
+:DEPS: 1.4.5
+:FILE: test/npm/vue_integration.js
+:HOURS: 4
+:END:
+- [ ] Test Vue.js reactivity system with V8 APIs
+- [ ] Validate Vue component lifecycle hooks
+- [ ] Test Vue template compilation requirements
+- [ ] Ensure Vue development tools compatibility
+- **Success Criteria**: Vue.js works with V8 API compatibility layer
+
+***** TODO [#C] Subtask 1.4.7: React framework compatibility [P][R:MED][C:MEDIUM]
+:PROPERTIES:
+:ID: 1.4.7
+:CREATED: 2025-01-05T15:00:00Z
+:DEPS: 1.4.6
+:FILE: test/npm/react_integration.js
+:HOURS: 4
+:END:
+- [ ] Test React component rendering with V8 APIs
+- [ ] Validate React DevTools integration
+- [ ] Test React reconciliation process
+- [ ] Ensure React performance profiling works
+- **Success Criteria**: React works with V8 API compatibility layer
+
+***** TODO [#C] Subtask 1.4.8: Documentation and limitations [P][R:LOW][C:SIMPLE]
+:PROPERTIES:
+:ID: 1.4.8
+:CREATED: 2025-01-05T15:00:00Z
+:DEPS: 1.4.7
+:FILE: docs/api/v8_inspector.md
+:HOURS: 2
+:END:
+- [ ] Document V8 API compatibility status
+- [ ] List supported vs unsupported V8 features
+- [ ] Add migration notes for debugging tools
+- [ ] Document known limitations and workarounds
+- **Success Criteria**: Complete documentation available
+
+
 
 *** TODO [#B] Phase 2: Module System Enhancements [S][R:MED][C:MEDIUM] :module:system:
 :PROPERTIES:
@@ -160,13 +645,101 @@ Based on testing, failures fall into these categories:
 :CREATED: 2025-01-05T15:00:00Z
 :DEPS: 1.3
 :IMPACT: core-js, tslib, babel-runtime, eslint-plugin-import
+:ESTIMATED_HOURS: 22
+:EXPERTISE: Intermediate
+:PROGRESS: 0/6
+:COMPLETION: 0%
 :END:
 
-**Implementation Details:**
-- Fix relative module resolution in transpiled code
-- Improve `node_modules` traversal algorithm
-- Add support for legacy extension resolution
-- Better error messages for missing modules
+**Resource Requirements**:
+- **Expertise Level**: Intermediate (Module systems, path resolution)
+- **Person-Hours**: 22 (16 dev + 6 testing)
+- **Testing**: Module resolution tests + transpiled code validation
+- **Documentation**: Module system enhancement guide
+
+***** TODO [#A] Subtask 2.1.1: Analyze current module resolver issues [S][R:MED][C:SIMPLE]
+:PROPERTIES:
+:ID: 2.1.1
+:CREATED: 2025-01-05T15:00:00Z
+:DEPS: None
+:FILE: src/module/resolver/
+:HOURS: 4
+:END:
+- [ ] Review existing module resolver in `src/module/resolver/`
+- [ ] Identify specific resolution failures with transpiled code
+- [ ] Analyze core-js and tslib resolution patterns
+- [ ] Document current limitations and failure cases
+- **Success Criteria**: Clear understanding of resolver issues
+
+***** TODO [#A] Subtask 2.1.2: Fix relative module resolution in transpiled code [S][R:HIGH][C:MEDIUM]
+:PROPERTIES:
+:ID: 2.1.2
+:CREATED: 2025-01-05T15:00:00Z
+:DEPS: 2.1.1
+:FILE: src/module/resolver/path_resolver.c
+:HOURS: 6
+:END:
+- [ ] Fix `../core-js/symbol` style relative imports
+- [ ] Handle transpiled code path resolution edge cases
+- [ ] Implement proper source map support for paths
+- [ ] Add fallback resolution strategies
+- **Success Criteria**: Relative imports in transpiled code work
+
+***** TODO [#A] Subtask 2.1.3: Improve node_modules traversal algorithm [S][R:MED][C:MEDIUM]
+:PROPERTIES:
+:ID: 2.1.3
+:CREATED: 2025-01-05T15:00:00Z
+:DEPS: 2.1.2
+:FILE: src/module/resolver/node_modules_resolver.c
+:HOURS: 5
+:END:
+- [ ] Optimize node_modules directory traversal
+- [ ] Implement proper package.json resolution
+- [ ] Add support for nested node_modules structures
+- [ ] Improve performance for deep dependency trees
+- **Success Criteria**: Fast and accurate node_modules resolution
+
+***** TODO [#B] Subtask 2.1.4: Add legacy extension resolution support [P][R:MED][C:SIMPLE]
+:PROPERTIES:
+:ID: 2.1.4
+:CREATED: 2025-01-05T15:00:00Z
+:DEPS: 2.1.3
+:FILE: src/module/resolver/extension_resolver.c
+:HOURS: 3
+:END:
+- [ ] Add support for .js, .json, .node extensions
+- [ ] Implement index.js and index.json fallbacks
+- [ ] Add support for package.json main field
+- [ ] Handle extension priority correctly
+- **Success Criteria**: Legacy extension resolution works
+
+***** TODO [#B] Subtask 2.1.5: Enhanced error messages and debugging [P][R:LOW][C:SIMPLE]
+:PROPERTIES:
+:ID: 2.1.5
+:CREATED: 2025-01-05T15:00:00Z
+:DEPS: 2.1.4
+:FILE: src/module/resolver/error_reporting.c
+:HOURS: 2
+:END:
+- [ ] Improve error messages for missing modules
+- [ ] Add resolution path debugging information
+- [ ] Implement helpful suggestions for common errors
+- [ ] Add verbose resolution logging option
+- **Success Criteria**: Clear and helpful error messages
+
+***** TODO [#C] Subtask 2.1.6: Comprehensive testing and validation [P][R:LOW][C:MEDIUM]
+:PROPERTIES:
+:ID: 2.1.6
+:CREATED: 2025-01-05T15:00:00Z
+:DEPS: 2.1.5
+:FILE: test/module/test_enhanced_resolution.js
+:HOURS: 4
+:END:
+- [ ] Create test suite for enhanced resolver
+- [ ] Test with core-js and tslib packages
+- [ ] Test complex transpiled code scenarios
+- [ ] Validate performance improvements
+- **Success Criteria**: All resolution tests pass
 
 **** TODO [#A] Task 2.2: Core-js Polyfill Integration [S][R:MED][C:MEDIUM]
 :PROPERTIES:
@@ -174,13 +747,87 @@ Based on testing, failures fall into these categories:
 :CREATED: 2025-01-05T15:00:00Z
 :DEPS: 2.1
 :IMPACT: babel_core, babel_preset_es2015, core-js
+:ESTIMATED_HOURS: 20
+:EXPERTISE: Intermediate
+:PROGRESS: 0/5
+:COMPLETION: 0%
 :END:
 
-**Implementation Details:**
-- Add core-js symbols polyfill support
-- Implement missing ES2015+ built-ins
-- Add Promise/Set/Map compatibility
-- Generator and iterator support
+**Resource Requirements**:
+- **Expertise Level**: Intermediate (ES6+ features, polyfills)
+- **Person-Hours**: 20 (14 dev + 6 testing)
+- **Testing**: Polyfill compatibility tests + babel integration
+- **Documentation**: Core-js compatibility guide
+
+***** TODO [#A] Subtask 2.2.1: Analyze core-js requirements [S][R:MED][C:SIMPLE]
+:PROPERTIES:
+:ID: 2.2.1
+:CREATED: 2025-01-05T15:00:00Z
+:DEPS: None
+:FILE: src/std/
+:HOURS: 3
+:END:
+- [ ] Analyze core-js symbol usage patterns in failing packages
+- [ ] Review existing symbol implementation
+- [ ] Identify missing ES2015+ built-ins needed
+- [ ] Document polyfill compatibility requirements
+- **Success Criteria**: Clear understanding of core-js requirements
+
+***** TODO [#A] Subtask 2.2.2: Implement core-js symbols polyfill support [S][R:HIGH][C:MEDIUM]
+:PROPERTIES:
+:ID: 2.2.2
+:CREATED: 2025-01-05T15:00:00Z
+:DEPS: 2.2.1
+:FILE: src/std/symbol.c
+:HOURS: 6
+:END:
+- [ ] Enhance Symbol implementation for core-js compatibility
+- [ ] Add well-known symbols (Symbol.iterator, etc.)
+- [ ] Implement symbol registry functionality
+- [ ] Add symbol description and inspection methods
+- **Success Criteria**: core-js symbols work correctly
+
+***** TODO [#A] Subtask 2.2.3: Implement missing ES2015+ built-ins [S][R:MED][C:MEDIUM]
+:PROPERTIES:
+:ID: 2.2.3
+:CREATED: 2025-01-05T15:00:00Z
+:DEPS: 2.2.2
+:FILE: src/std/builtins.c
+:HOURS: 5
+:END:
+- [ ] Add Promise constructor and methods (Promise.all, Promise.race)
+- [ ] Implement Set and Map data structures
+- [ ] Add WeakMap and WeakSet support
+- [ ] Implement Array.from() and Array.of() methods
+- **Success Criteria**: ES2015+ built-ins functional
+
+***** TODO [#B] Subtask 2.2.4: Generator and iterator support [P][R:MED][C:COMPLEX]
+:PROPERTIES:
+:ID: 2.2.4
+:CREATED: 2025-01-05T15:00:00Z
+:DEPS: 2.2.3
+:FILE: src/std/generator.c
+:HOURS: 4
+:END:
+- [ ] Implement generator function support
+- [ ] Add iterator protocol implementation
+- [ ] Implement for...of loop compatibility
+- [ ] Add spread operator support for iterables
+- **Success Criteria**: Generators and iterators work
+
+***** TODO [#C] Subtask 2.2.5: Testing and babel integration [P][R:LOW][C:MEDIUM]
+:PROPERTIES:
+:ID: 2.2.5
+:CREATED: 2025-01-05T15:00:00Z
+:DEPS: 2.2.4
+:FILE: test/module/test_corejs_polyfills.js
+:HOURS: 4
+:END:
+- [ ] Create comprehensive polyfill test suite
+- [ ] Test babel core compilation with polyfills
+- [ ] Test babel preset compatibility
+- [ ] Validate core-js package loading
+- **Success Criteria**: babel packages work with polyfills
 
 **** TODO [#B] Task 2.3: ESM/CJS Interoperability [S][R:MED][C:MEDIUM]
 :PROPERTIES:
@@ -188,13 +835,87 @@ Based on testing, failures fall into these categories:
 :CREATED: 2025-01-05T15:00:00Z
 :DEPS: 2.1
 :IMPACT: eslint, babel-loader, webpack modules
+:ESTIMATED_HOURS: 18
+:EXPERTISE: Intermediate
+:PROGRESS: 0/5
+:COMPLETION: 0%
 :END:
 
-**Implementation Details:**
-- Fix `__esModule` property handling
-- Implement `default` export compatibility
-- Add namespace import support
-- Dynamic import() implementation
+**Resource Requirements**:
+- **Expertise Level**: Intermediate (ES modules, CommonJS interop)
+- **Person-Hours**: 18 (12 dev + 6 testing)
+- **Testing**: Module interop tests + webpack/eslint validation
+- **Documentation**: ESM/CJS interop guide
+
+***** TODO [#A] Subtask 2.3.1: Fix __esModule property handling [S][R:HIGH][C:MEDIUM]
+:PROPERTIES:
+:ID: 2.3.1
+:CREATED: 2025-01-05T15:00:00Z
+:DEPS: None
+:FILE: src/module/loaders/cjs_loader.c
+:HOURS: 4
+:END:
+- [ ] Review current __esModule property implementation
+- [ ] Fix Babel transpiled module __esModule handling
+- [ ] Ensure proper default export detection
+- [ ] Add __esModule interop with ES modules
+- **Success Criteria**: __esModule property works correctly
+
+***** TODO [#A] Subtask 2.3.2: Implement default export compatibility [S][R:MED][C:MEDIUM]
+:PROPERTIES:
+:ID: 2.3.2
+:CREATED: 2025-01-05T15:00:00Z
+:DEPS: 2.3.1
+:FILE: src/module/loaders/esm_loader.c
+:HOURS: 5
+:END:
+- [ ] Fix default export handling in mixed module scenarios
+- [ ] Implement proper default export namespace creation
+- [ ] Add compatibility with CommonJS module.exports
+- [ ] Handle default export edge cases
+- **Success Criteria**: Default exports work in all scenarios
+
+***** TODO [#B] Subtask 2.3.3: Add namespace import support [P][R:MED][C:MEDIUM]
+:PROPERTIES:
+:ID: 2.3.3
+:CREATED: 2025-01-05T15:00:00Z
+:DEPS: 2.3.2
+:FILE: src/module/loaders/esm_loader.c
+:HOURS: 4
+:END:
+- [ ] Implement namespace import functionality
+- [ ] Add support for import * as syntax
+- [ ] Handle namespace imports from CommonJS modules
+- [ ] Implement proper namespace object creation
+- **Success Criteria**: Namespace imports work correctly
+
+***** TODO [#B] Subtask 2.3.4: Dynamic import() implementation [P][R:MED][C:MEDIUM]
+:PROPERTIES:
+:ID: 2.3.4
+:CREATED: 2025-01-05T15:00:00Z
+:DEPS: 2.3.3
+:FILE: src/module/loaders/dynamic_import.c
+:HOURS: 3
+:END:
+- [ ] Implement dynamic import() functionality
+- [ ] Add Promise-based dynamic import
+- [ ] Handle dynamic import of both ESM and CJS
+- [ ] Add proper error handling for failed imports
+- **Success Criteria**: Dynamic import() works
+
+***** TODO [#C] Subtask 2.3.5: Testing and validation [P][R:LOW][C:MEDIUM]
+:PROPERTIES:
+:ID: 2.3.5
+:CREATED: 2025-01-05T15:00:00Z
+:DEPS: 2.3.4
+:FILE: test/module/test_esm_cjs_interop.js
+:HOURS: 4
+:END:
+- [ ] Create comprehensive interop test suite
+- [ ] Test eslint with mixed module systems
+- [ ] Test babel-loader module handling
+- [ ] Validate webpack module resolution
+- **Success Criteria**: All interop scenarios work
 
 **** TODO [#B] Task 2.4: Built-in Module Resolution [P][R:LOW][C:SIMPLE]
 :PROPERTIES:
@@ -202,13 +923,74 @@ Based on testing, failures fall into these categories:
 :CREATED: 2025-01-05T15:00:00Z
 :DEPS: 2.1
 :IMPACT: Various packages using node: prefix
+:ESTIMATED_HOURS: 12
+:EXPERTISE: Beginner
+:PROGRESS: 0/4
+:COMPLETION: 0%
 :END:
 
-**Implementation Details:**
-- Add `node:` protocol support
-- Implement builtin module mapping
-- Update module loader registry
-- Test with various builtin modules
+**Resource Requirements**:
+- **Expertise Level**: Beginner (Module resolution, builtin modules)
+- **Person-Hours**: 12 (8 dev + 4 testing)
+- **Testing**: Built-in module resolution tests
+- **Documentation**: Node: prefix support guide
+
+***** TODO [#A] Subtask 2.4.1: Add node: protocol support [S][R:LOW][C:SIMPLE]
+:PROPERTIES:
+:ID: 2.4.1
+:CREATED: 2025-01-05T15:00:00Z
+:DEPS: None
+:FILE: src/module/resolver/protocol_resolver.c
+:HOURS: 3
+:END:
+- [ ] Implement node: protocol parsing
+- [ ] Add node: prefix detection in module resolver
+- [ ] Create protocol handler for node: modules
+- [ ] Integrate with existing protocol system
+- **Success Criteria**: node: prefix recognized
+
+***** TODO [#A] Subtask 2.4.2: Implement builtin module mapping [S][R:LOW][C:SIMPLE]
+:PROPERTIES:
+:ID: 2.4.2
+:CREATED: 2025-01-05T15:00:00Z
+:DEPS: 2.4.1
+:FILE: src/module/core/builtin_registry.c
+:HOURS: 3
+:END:
+- [ ] Create mapping table for node: modules
+- [ ] Map node:fs to existing fs module
+- [ ] Map node:path to existing path module
+- [ ] Add all standard node: builtin mappings
+- **Success Criteria**: node: modules resolve correctly
+
+***** TODO [#B] Subtask 2.4.3: Update module loader registry [P][R:LOW][C:SIMPLE]
+:PROPERTIES:
+:ID: 2.4.3
+:CREATED: 2025-01-05T15:00:00Z
+:DEPS: 2.4.2
+:FILE: src/module/module_loader.c
+:HOURS: 2
+:END:
+- [ ] Update module loader to handle node: protocol
+- [ ] Add node: module to builtin registry
+- [ ] Ensure proper loading of node: modules
+- [ ] Test module loading process
+- **Success Criteria**: node: modules load properly
+
+***** TODO [#C] Subtask 2.4.4: Testing and validation [P][R:LOW][C:SIMPLE]
+:PROPERTIES:
+:ID: 2.4.4
+:CREATED: 2025-01-05T15:00:00Z
+:DEPS: 2.4.3
+:FILE: test/module/test_builtin_resolution.js
+:HOURS: 4
+:END:
+- [ ] Create test suite for node: protocol
+- [ ] Test all standard node: builtin modules
+- [ ] Test error handling for invalid node: modules
+- [ ] Validate with packages using node: prefix
+- **Success Criteria**: All node: modules work correctly
+
 
 *** TODO [#B] Phase 3: Tooling & Build System Support [P][R:MED][C:MEDIUM] :tooling:build:
 :PROPERTIES:
@@ -482,12 +1264,264 @@ Based on testing, failures fall into these categories:
 - **Phase 5**: Framework support (remaining packages)
 - **Overall**: Target ≤15% failure rate (≤15 failing packages)
 
+## 🔄 Parallel Execution Strategy
+
+### Critical Path Analysis
+
+The npm compatibility plan identifies several parallel execution opportunities to maximize development efficiency:
+
+#### Phase-Level Parallelism
+- **Phase 1** tasks have internal dependencies but can be parallelized where possible
+- **Phase 2** can begin after critical Phase 1 tasks complete
+- **Phase 3** and **Phase 4** can run completely in parallel
+- **Phase 5** can start after Phase 2 completes (independent of Phase 3/4)
+
+#### Task-Level Parallelism
+
+**Phase 1 Parallel Opportunities:**
+```
+Task 1.1 (Domain)    ←→  Task 1.2 (Timers)    ←→  Task 1.3 (fs/promises)    ←→  Task 1.5 (Crypto)
+     ↓                         ↓                           ↓                           ↓
+Task 1.4 (V8 APIs) ←→  (depends on 1.1,1.2,1.3)              (independent)
+```
+
+**Phase 2 Parallel Opportunities:**
+```
+Task 2.1 (Resolution)  ←→  Task 2.4 (Built-in mods)
+     ↓                         ↓
+Task 2.2 (Core-js)     ←→  Task 2.3 (ESM/CJS)
+```
+
+**Phase 3 & 4 Complete Parallelism:**
+```
+Phase 3: Tooling Support    ←→    Phase 4: Database/Network
+├─ Task 3.1 (Stack traces)        ├─ Task 4.1 (MongoDB)
+├─ Task 3.2 (Streams)             ├─ Task 4.2 (Redis)
+├─ Task 3.3 (Console)             ├─ Task 4.3 (HTTP client)
+├─ Task 3.4 (Path API)            └─ Task 4.4 (WebSocket)
+└─ Task 3.5 (Buffer/Stream)
+```
+
+### Resource Allocation Matrix
+
+| Developer Expertise | Recommended Tasks | Parallel Capacity |
+|-------------------|------------------|-------------------|
+| **Advanced (V8/Systems)** | 1.1 (Domain), 1.4 (V8 APIs), 5.1 (Vue), 5.2 (React) | 2 tasks |
+| **Intermediate (Libuv/Modules)** | 1.2 (Timers), 1.3 (fs/promises), 2.1 (Resolution), 3.2 (Streams) | 3 tasks |
+| **Intermediate (Crypto/Network)** | 1.5 (Crypto), 4.1 (MongoDB), 4.2 (Redis) | 2 tasks |
+| **Beginner (Simple APIs)** | 2.4 (Built-in), 3.3 (Console), 3.4 (Path), 4.3 (HTTP) | 3 tasks |
+
+### Dependency Management
+
+#### Hard Dependencies (Must Complete First)
+- **Task 1.4** depends on: **1.1, 1.2, 1.3** (V8 needs domain, timers, fs)
+- **Task 2.2** depends on: **2.1** (Core-js needs resolution)
+- **Task 2.3** depends on: **2.1** (ESM/CJS needs resolution)
+- **Task 3.5** depends on: **3.2** (Buffer/Stream needs Streams)
+- **Task 4.3** depends on: **1.5** (HTTP client needs crypto)
+
+#### Soft Dependencies (Preferred but Not Required)
+- **Task 5.1/5.2** prefer completion of: **1.4, 2.3** (Frameworks prefer V8 + ESM)
+- **Task 4.1/4.2** prefer completion of: **1.2, 3.1** (Databases prefer timers + stack traces)
+
+### Team Coordination Strategy
+
+#### 4-Person Team Example
+```
+Week 1-2:
+├─ Dev A (Advanced): Task 1.1 (Domain)
+├─ Dev B (Intermediate): Task 1.2 (Timers)
+├─ Dev C (Intermediate): Task 1.3 (fs/promises)
+└─ Dev D (Beginner): Task 1.5 (Crypto)
+
+Week 3-4:
+├─ Dev A (Advanced): Task 1.4 (V8 APIs) + Task 2.1 (Resolution)
+├─ Dev B (Intermediate): Task 2.2 (Core-js)
+├─ Dev C (Intermediate): Task 2.3 (ESM/CJS)
+└─ Dev D (Beginner): Task 2.4 (Built-in)
+
+Week 5-6 (Parallel Tracks):
+├─ Track A (Dev A + Dev B): Phase 3 (Tooling)
+└─ Track B (Dev C + Dev D): Phase 4 (Database/Network)
+
+Week 7-8:
+├─ All Devs: Phase 5 (Framework Support)
+```
+
+#### Risk Mitigation Through Parallelism
+- **Independent task tracks** prevent single blockers from halting progress
+- **Skill diversification** allows reassignment if expert unavailable
+- **Parallel testing** enables early issue detection
+- **Modular completion** provides incremental value delivery
+
+### Communication Dependencies
+
+#### Daily Coordination Points
+1. **API Interface Design** - Teams working on dependent APIs must coordinate interfaces
+2. **Error Handling Standards** - Consistent error patterns across modules
+3. **Testing Integration** - Shared test infrastructure and validation approaches
+4. **Documentation Standards** - Consistent API documentation format
+
+#### Weekly Integration Milestones
+- **Week 2**: Core APIs integrated (Phase 1 critical path)
+- **Week 4**: Module system validation (Phase 2 completion)
+- **Week 6**: Cross-system integration (Phases 3+4 integration)
+- **Week 8**: End-to-end validation (All phases complete)
+
 ### Dependencies & Parallel Execution
 - **Phase 1**: Sequential tasks due to API dependencies
 - **Phase 2**: Can parallelize after Phase 1 completion
 - **Phase 3**: Independent - can run in parallel with Phase 4
 - **Phase 4**: Network services - independent implementation
 - **Phase 5**: Framework-specific - lowest priority
+
+## 📊 Resource Planning & Requirements
+
+### Overall Project Resource Summary
+
+| Phase | Total Hours | Dev Hours | Test Hours | Expertise Required |
+|-------|------------|-----------|------------|-------------------|
+| **Phase 1** | 106 | 74 | 32 | Advanced + Intermediate |
+| **Phase 2** | 72 | 50 | 22 | Intermediate + Beginner |
+| **Phase 3** | 85 | 59 | 26 | Mixed (Intermediate-heavy) |
+| **Phase 4** | 68 | 47 | 21 | Intermediate + Beginner |
+| **Phase 5** | 95 | 66 | 29 | Advanced + Intermediate |
+| **Total** | **426** | **296** | **130** | **Mixed** |
+
+### Detailed Task Resource Requirements
+
+#### Phase 1: Critical API Implementation (106 hours)
+| Task | Subtasks | Expertise | Total Hours | Key Skills |
+|------|----------|-----------|-------------|------------|
+| 1.1 Domain | 8 subtasks | Advanced | 24 | EventEmitter, error handling |
+| 1.2 Timers | 7 subtasks | Intermediate | 20 | libuv, async/await |
+| 1.3 fs/promises | 6 subtasks | Intermediate | 18 | Promise handling, fs ops |
+| 1.4 V8 APIs | 8 subtasks | Advanced | 28 | V8 API, debugging protocols |
+| 1.5 Crypto | 5 subtasks | Intermediate | 16 | Cryptography, hash algorithms |
+
+#### Phase 2: Module System Enhancements (72 hours)
+| Task | Subtasks | Expertise | Total Hours | Key Skills |
+|------|----------|-----------|-------------|------------|
+| 2.1 Resolution | 6 subtasks | Intermediate | 22 | Module systems, path resolution |
+| 2.2 Core-js | 5 subtasks | Intermediate | 20 | ES6+ features, polyfills |
+| 2.3 ESM/CJS | 5 subtasks | Intermediate | 18 | ES modules, CommonJS interop |
+| 2.4 Built-in | 4 subtasks | Beginner | 12 | Module resolution, builtin modules |
+
+#### Phase 3: Tooling & Build System Support (85 hours)
+| Task | Subtasks | Expertise | Total Hours | Key Skills |
+|------|----------|-----------|-------------|------------|
+| 3.1 Stack Traces | 6 subtasks | Intermediate | 18 | Error handling, debugging |
+| 3.2 Streams | 7 subtasks | Intermediate | 22 | Stream API, Transform streams |
+| 3.3 Console | 5 subtasks | Beginner | 12 | Console API, debugging |
+| 3.4 Path API | 5 subtasks | Beginner | 11 | Path manipulation, cross-platform |
+| 3.5 Buffer/Stream | 4 subtasks | Intermediate | 16 | Buffer operations, streaming |
+
+#### Phase 4: Database & Network Services (68 hours)
+| Task | Subtasks | Expertise | Total Hours | Key Skills |
+|------|----------|-----------|-------------|------------|
+| 4.1 MongoDB | 5 subtasks | Intermediate | 18 | BSON, database protocols |
+| 4.2 Redis | 5 subtasks | Intermediate | 16 | Redis protocol, pub/sub |
+| 4.3 HTTP Client | 4 subtasks | Beginner | 14 | HTTP protocols, cookies |
+| 4.4 WebSocket | 4 subtasks | Beginner | 12 | WebSocket protocol, frames |
+
+#### Phase 5: Advanced Framework Support (95 hours)
+| Task | Subtasks | Expertise | Total Hours | Key Skills |
+|------|----------|-----------|-------------|------------|
+| 5.1 Vue.js | 6 subtasks | Advanced | 28 | Vue reactivity, component lifecycle |
+| 5.2 React | 6 subtasks | Advanced | 26 | JSX, React.createElement |
+| 5.3 Native Modules | 5 subtasks | Advanced | 24 | Native addons, WASM alternatives |
+| 5.4 TypeScript | 4 subtasks | Intermediate | 17 | TypeScript compiler, declarations |
+
+### Skill Requirements Breakdown
+
+#### Advanced Skills (82 hours total)
+**Required for**: Domain API, V8 Inspector, Vue.js, React, Native Modules
+**Core Competencies**:
+- V8 API integration and debugging protocols
+- Complex event-driven architecture
+- Framework-specific optimization patterns
+- Native addon and WASM integration
+
+#### Intermediate Skills (221 hours total)
+**Required for**: Timers, fs/promises, Module Resolution, Core-js, ESM/CJS, Streams, Database protocols
+**Core Competencies**:
+- libuv integration and async programming
+- Module system implementation and resolution
+- ES6+ feature implementation and polyfills
+- Database protocol implementation
+
+#### Beginner Skills (123 hours total)
+**Required for**: Built-in modules, Console, Path API, HTTP Client, WebSocket
+**Core Competencies**:
+- Basic API implementation following existing patterns
+- Simple protocol handling
+- Cross-platform path manipulation
+- HTTP and WebSocket basics
+
+### Testing Strategy & Resources
+
+#### Testing Infrastructure Requirements
+- **Unit Test Framework**: Extend existing test infrastructure
+- **Integration Testing**: Package-specific validation environment
+- **Performance Testing**: Benchmark framework for critical APIs
+- **Memory Safety**: ASAN testing environment setup
+
+#### Testing Resource Allocation (130 hours total)
+| Phase | Testing Hours | Focus Areas |
+|-------|---------------|-------------|
+| Phase 1 | 32 hours | API functionality + package integration |
+| Phase 2 | 22 hours | Module resolution + polyfill validation |
+| Phase 3 | 26 hours | Tooling compatibility + build system |
+| Phase 4 | 21 hours | Database drivers + network protocols |
+| Phase 5 | 29 hours | Framework rendering + native modules |
+
+### Documentation Requirements
+
+#### Technical Documentation (Estimated 40 hours)
+- **API References**: Each major module needs comprehensive API docs
+- **Migration Guides**: For developers moving from Node.js
+- **Compatibility Notes**: What works vs. limitations
+- **Best Practices**: Usage patterns and performance tips
+
+#### User-Facing Documentation (Estimated 20 hours)
+- **Getting Started Guides**: For each supported package category
+- **Troubleshooting**: Common issues and solutions
+- **Examples**: Working code samples for popular packages
+- **FAQ**: Frequently asked compatibility questions
+
+### Risk-Based Resource Allocation
+
+#### High-Risk Tasks (28 hours - buffer 20%)
+- **V8 Inspector APIs**: Complex protocol implementation
+- **Native Module Simulation**: Platform-specific challenges
+- **Framework Integration**: Unpredictable requirements
+
+#### Medium-Risk Tasks (14 hours - buffer 10%)
+- **Module System Changes**: Potential breaking changes
+- **Database Protocols**: Complex protocol compliance
+- **Performance Requirements**: Optimization needs
+
+#### Low-Risk Tasks (7 hours - buffer 5%)
+- **Simple API Additions**: Well-understood patterns
+- **Console Enhancements**: Straightforward implementation
+- **Path API**: Minimal complexity
+
+### Team Composition Recommendations
+
+#### Minimum Viable Team (3 developers)
+- **1 Advanced Developer**: V8 APIs, Framework support
+- **1 Intermediate Developer**: Module system, Core APIs
+- **1 Beginner Developer**: Simple APIs, Testing, Documentation
+
+#### Optimal Team (4-5 developers)
+- **2 Advanced Developers**: Split complex tasks (V8 + Frameworks)
+- **2 Intermediate Developers**: Parallel work on module system + databases
+- **1 Beginner Developer**: Simple APIs + comprehensive testing
+
+#### Accelerated Team (6+ developers)
+- **2 Advanced Developers**: Complex API parallelization
+- **3 Intermediate Developers**: Multiple concurrent tracks
+- **1+ Beginner Developers**: Testing, documentation, simple APIs
 
 ### Risk Mitigation
 - **High Risk**: V8 APIs, Native modules - provide stubs with clear warnings

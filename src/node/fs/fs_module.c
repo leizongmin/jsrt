@@ -306,3 +306,47 @@ int js_node_fs_init(JSContext* ctx, JSModuleDef* m) {
 
   return 0;
 }
+
+// fs/promises module initialization
+int js_node_fs_promises_init(JSContext* ctx, JSModuleDef* m) {
+  // Get the promises namespace from the fs module
+  JSValue fs_module = JSRT_InitNodeFs(ctx);
+  JSValue promises = JS_GetPropertyStr(ctx, fs_module, "promises");
+
+  // Export all promises methods
+  JS_SetModuleExport(ctx, m, "open", JS_GetPropertyStr(ctx, promises, "open"));
+  JS_SetModuleExport(ctx, m, "readFile", JS_GetPropertyStr(ctx, promises, "readFile"));
+  JS_SetModuleExport(ctx, m, "writeFile", JS_GetPropertyStr(ctx, promises, "writeFile"));
+  JS_SetModuleExport(ctx, m, "appendFile", JS_GetPropertyStr(ctx, promises, "appendFile"));
+  JS_SetModuleExport(ctx, m, "stat", JS_GetPropertyStr(ctx, promises, "stat"));
+  JS_SetModuleExport(ctx, m, "lstat", JS_GetPropertyStr(ctx, promises, "lstat"));
+  JS_SetModuleExport(ctx, m, "unlink", JS_GetPropertyStr(ctx, promises, "unlink"));
+  JS_SetModuleExport(ctx, m, "rename", JS_GetPropertyStr(ctx, promises, "rename"));
+  JS_SetModuleExport(ctx, m, "mkdir", JS_GetPropertyStr(ctx, promises, "mkdir"));
+  JS_SetModuleExport(ctx, m, "rmdir", JS_GetPropertyStr(ctx, promises, "rmdir"));
+  JS_SetModuleExport(ctx, m, "readdir", JS_GetPropertyStr(ctx, promises, "readdir"));
+  JS_SetModuleExport(ctx, m, "readlink", JS_GetPropertyStr(ctx, promises, "readlink"));
+  JS_SetModuleExport(ctx, m, "link", JS_GetPropertyStr(ctx, promises, "link"));
+  JS_SetModuleExport(ctx, m, "symlink", JS_GetPropertyStr(ctx, promises, "symlink"));
+  JS_SetModuleExport(ctx, m, "realpath", JS_GetPropertyStr(ctx, promises, "realpath"));
+  JS_SetModuleExport(ctx, m, "rm", JS_GetPropertyStr(ctx, promises, "rm"));
+  JS_SetModuleExport(ctx, m, "cp", JS_GetPropertyStr(ctx, promises, "cp"));
+  JS_SetModuleExport(ctx, m, "chmod", JS_GetPropertyStr(ctx, promises, "chmod"));
+  JS_SetModuleExport(ctx, m, "lchmod", JS_GetPropertyStr(ctx, promises, "lchmod"));
+  JS_SetModuleExport(ctx, m, "chown", JS_GetPropertyStr(ctx, promises, "chown"));
+  JS_SetModuleExport(ctx, m, "lchown", JS_GetPropertyStr(ctx, promises, "lchown"));
+  JS_SetModuleExport(ctx, m, "utimes", JS_GetPropertyStr(ctx, promises, "utimes"));
+  JS_SetModuleExport(ctx, m, "lutimes", JS_GetPropertyStr(ctx, promises, "lutimes"));
+  JS_SetModuleExport(ctx, m, "access", JS_GetPropertyStr(ctx, promises, "access"));
+  JS_SetModuleExport(ctx, m, "mkdtemp", JS_GetPropertyStr(ctx, promises, "mkdtemp"));
+  JS_SetModuleExport(ctx, m, "truncate", JS_GetPropertyStr(ctx, promises, "truncate"));
+  JS_SetModuleExport(ctx, m, "copyFile", JS_GetPropertyStr(ctx, promises, "copyFile"));
+
+  // Export the whole promises object as default
+  JS_SetModuleExport(ctx, m, "default", JS_DupValue(ctx, promises));
+
+  JS_FreeValue(ctx, promises);
+  JS_FreeValue(ctx, fs_module);
+
+  return 0;
+}

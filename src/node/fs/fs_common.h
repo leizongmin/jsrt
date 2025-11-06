@@ -162,5 +162,6 @@ JSValue js_fs_promises_truncate(JSContext* ctx, JSValueConst this_val, int argc,
 // Module initialization
 JSValue JSRT_InitNodeFs(JSContext* ctx);
 int js_node_fs_init(JSContext* ctx, JSModuleDef* m);
+int js_node_fs_promises_init(JSContext* ctx, JSModuleDef* m);
 
 #endif  // JSRT_NODE_FS_COMMON_H

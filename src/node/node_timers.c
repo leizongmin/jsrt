@@ -148,14 +148,36 @@ static JSValue js_clear_immediate(JSContext* ctx, JSValueConst this_val, int arg
   return JS_UNDEFINED;
 }
 
-// Initialize Node.js timer globals
-JSValue JSRT_InitNodeTimers(JSContext* ctx) {
-  JSValue timers = JS_NewObject(ctx);
+// Promise-based setImmediate implementation
+static JSValue js_timers_promise_set_immediate(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
+  // Create promise capability functions
+  JSValue promise_funcs[2];
+  JSValue promise = JS_NewPromiseCapability(ctx, promise_funcs);
+  JSValue resolve_func = promise_funcs[0];
+  JSValue reject_func = promise_funcs[1];
 
-  JS_SetPropertyStr(ctx, timers, "setImmediate", JS_NewCFunction(ctx, js_set_immediate, "setImmediate", 1));
-  JS_SetPropertyStr(ctx, timers, "clearImmediate", JS_NewCFunction(ctx, js_clear_immediate, "clearImmediate", 1));
+  // Schedule the immediate with resolve callback
+  JSValue args[1];
+  args[0] = JS_UNDEFINED;  // No value passed to resolve
 
-  return timers;
+  // Create immediate callback that resolves the promise
+  JSValue immediate_result = js_set_immediate(ctx, JS_UNDEFINED, 1, args);
+
+  // If immediate scheduling failed, reject the promise
+  if (JS_IsException(immediate_result)) {
+    JSValue error = JS_GetException(ctx);
+    JS_Call(ctx, reject_func, JS_UNDEFINED, 1, &error);
+    JS_FreeValue(ctx, error);
+  } else {
+    // Resolve the promise immediately (since setImmediate is synchronous in our implementation)
+    JS_Call(ctx, resolve_func, JS_UNDEFINED, 0, NULL);
+  }
+
+  JS_FreeValue(ctx, immediate_result);
+  JS_FreeValue(ctx, resolve_func);
+  JS_FreeValue(ctx, reject_func);
+
+  return promise;
 }
 
 // Add Node.js timer globals to global object
@@ -166,4 +188,57 @@ void JSRT_AddNodeTimerGlobals(JSContext* ctx) {
   JS_SetPropertyStr(ctx, global, "clearImmediate", JS_NewCFunction(ctx, js_clear_immediate, "clearImmediate", 1));
 
   JS_FreeValue(ctx, global);
+}
+
+// Enhanced timers module initialization
+JSValue JSRT_InitNodeTimers(JSContext* ctx) {
+  JSValue timers = JS_NewObject(ctx);
+
+  // Immediate timers
+  JS_SetPropertyStr(ctx, timers, "setImmediate", JS_NewCFunction(ctx, js_set_immediate, "setImmediate", 1));
+  JS_SetPropertyStr(ctx, timers, "clearImmediate", JS_NewCFunction(ctx, js_clear_immediate, "clearImmediate", 1));
+
+  // Active timer list tracking (for debugging)
+  JSValue active_immediates = JS_NewArray(ctx);
+  JS_SetPropertyStr(ctx, timers, "_activeImmediates", active_immediates);
+
+  return timers;
+}
+
+// Timers module ES module initialization
+int js_node_timers_init(JSContext* ctx, JSModuleDef* m) {
+  JSValue timers = JSRT_InitNodeTimers(ctx);
+
+  // Export individual functions
+  JS_SetModuleExport(ctx, m, "setImmediate", JS_GetPropertyStr(ctx, timers, "setImmediate"));
+  JS_SetModuleExport(ctx, m, "clearImmediate", JS_GetPropertyStr(ctx, timers, "clearImmediate"));
+
+  // Export the whole module as default
+  JS_SetModuleExport(ctx, m, "default", timers);
+
+  return 0;
+}
+
+// timers/promises module initialization
+JSValue JSRT_InitNodeTimersPromises(JSContext* ctx) {
+  JSValue timers_promises = JS_NewObject(ctx);
+
+  // Promise-based immediate timer
+  JS_SetPropertyStr(ctx, timers_promises, "setImmediate",
+                    JS_NewCFunction(ctx, js_timers_promise_set_immediate, "setImmediate", 1));
+
+  return timers_promises;
+}
+
+// timers/promises ES module initialization
+int js_node_timers_promises_init(JSContext* ctx, JSModuleDef* m) {
+  JSValue timers_promises = JSRT_InitNodeTimersPromises(ctx);
+
+  // Export individual functions
+  JS_SetModuleExport(ctx, m, "setImmediate", JS_GetPropertyStr(ctx, timers_promises, "setImmediate"));
+
+  // Export the whole module as default
+  JS_SetModuleExport(ctx, m, "default", timers_promises);
+
+  return 0;
 }

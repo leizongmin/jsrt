@@ -98,6 +98,11 @@ static void js_stream_finalizer(JSRuntime* rt, JSValue obj) {
     if (!JS_IsUndefined(stream->error_value)) {
       JS_FreeValueRT(rt, stream->error_value);
     }
+
+    // Note: Encoding strings (stream->options.encoding, stream->options.defaultEncoding)
+    // are not freed here because they may be static strings or shared across calls.
+    // If dynamic allocation is added later, proper cleanup should be implemented here.
+
     // Free buffered data
     if (stream->buffered_data) {
       for (size_t i = 0; i < stream->buffer_size; i++) {

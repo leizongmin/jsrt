@@ -305,17 +305,16 @@ JSModuleDef* jsrt_load_esm_module(JSContext* ctx, JSRT_ModuleLoader* loader, con
 }
 
 /**
- * Get exports from ES module
+ * Get exports from ES module with enhanced CJS/ESM interoperability
  */
 JSValue jsrt_get_esm_exports(JSContext* ctx, JSModuleDef* module) {
   if (!ctx || !module) {
     return JS_EXCEPTION;
   }
 
-  MODULE_DEBUG_LOADER("Getting exports from ES module");
+  MODULE_DEBUG_LOADER("Getting exports from ES module with CJS/ESM interoperability");
 
   // Get the module namespace object which contains all exports
-  // This is the standard way to access ES module exports in QuickJS
   JSValue ns = JS_GetModuleNamespace(ctx, module);
 
   if (JS_IsException(ns)) {
@@ -323,8 +322,89 @@ JSValue jsrt_get_esm_exports(JSContext* ctx, JSModuleDef* module) {
     return JS_EXCEPTION;
   }
 
-  MODULE_DEBUG_LOADER("Successfully retrieved ES module exports");
-  return ns;
+  // Enhanced CJS/ESM interoperability wrapper
+  // This creates a hybrid object that works well with both CJS require() and ESM import
+  JSValue exports_wrapper = JS_NewObject(ctx);
+  if (JS_IsException(exports_wrapper)) {
+    JS_FreeValue(ctx, ns);
+    return JS_EXCEPTION;
+  }
+
+  // Copy all named exports from the namespace to the wrapper
+  JSPropertyEnum* props;
+  uint32_t prop_count;
+
+  if (!JS_GetOwnPropertyNames(ctx, &props, &prop_count, ns, JS_GPN_STRING_MASK | JS_GPN_SYMBOL_MASK)) {
+    // Copy each property to the wrapper
+    for (uint32_t i = 0; i < prop_count; i++) {
+      JSValue prop_name = JS_AtomToString(ctx, props[i].atom);
+      JSValue prop_value = JS_GetProperty(ctx, ns, props[i].atom);
+
+      if (!JS_IsUndefined(prop_value) && !JS_IsException(prop_value)) {
+        JS_SetProperty(ctx, exports_wrapper, props[i].atom, prop_value);
+      }
+
+      JS_FreeValue(ctx, prop_name);
+      JS_FreeValue(ctx, prop_value);
+    }
+
+    // Free the property array
+    for (uint32_t i = 0; i < prop_count; i++) {
+      JS_FreeAtom(ctx, props[i].atom);
+    }
+    js_free(ctx, props);
+  }
+
+  // Handle default export - crucial for CJS/ESM interop
+  JSValue default_export = JS_GetPropertyStr(ctx, ns, "default");
+  if (!JS_IsUndefined(default_export) && !JS_IsException(default_export)) {
+    // Set default export on the wrapper
+    JS_SetPropertyStr(ctx, exports_wrapper, "default", JS_DupValue(ctx, default_export));
+
+    // For CJS compatibility, also copy default exports to the root object
+    // This allows both require().foo and require().default.foo to work
+    if (JS_IsObject(default_export)) {
+      JSPropertyEnum* default_props;
+      uint32_t default_prop_count;
+
+      if (!JS_GetOwnPropertyNames(ctx, &default_props, &default_prop_count, default_export, JS_GPN_STRING_MASK)) {
+        for (uint32_t i = 0; i < default_prop_count; i++) {
+          JSValue prop_name = JS_AtomToString(ctx, default_props[i].atom);
+          const char* prop_name_str = JS_ToCString(ctx, prop_name);
+
+          // Only copy if not already present to avoid overwriting named exports
+          JSValue existing = JS_GetProperty(ctx, exports_wrapper, default_props[i].atom);
+          if (JS_IsUndefined(existing)) {
+            JSValue prop_value = JS_GetProperty(ctx, default_export, default_props[i].atom);
+            if (!JS_IsUndefined(prop_value) && !JS_IsException(prop_value)) {
+              JS_SetProperty(ctx, exports_wrapper, default_props[i].atom, prop_value);
+            }
+            JS_FreeValue(ctx, prop_value);
+          } else {
+            JS_FreeValue(ctx, existing);
+          }
+
+          JS_FreeCString(ctx, prop_name_str);
+          JS_FreeValue(ctx, prop_name);
+        }
+
+        // Free the property array
+        for (uint32_t i = 0; i < default_prop_count; i++) {
+          JS_FreeAtom(ctx, default_props[i].atom);
+        }
+        js_free(ctx, default_props);
+      }
+    }
+  } else {
+    // No explicit default export - create one from the namespace for CJS compatibility
+    JS_SetPropertyStr(ctx, exports_wrapper, "default", JS_DupValue(ctx, ns));
+  }
+
+  JS_FreeValue(ctx, default_export);
+  JS_FreeValue(ctx, ns);
+
+  MODULE_DEBUG_LOADER("Successfully created CJS/ESM interoperable exports wrapper");
+  return exports_wrapper;
 }
 
 /**

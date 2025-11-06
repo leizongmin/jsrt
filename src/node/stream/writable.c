@@ -252,7 +252,12 @@ static JSValue js_writable_set_default_encoding(JSContext* ctx, JSValueConst thi
     return JS_ThrowTypeError(ctx, "Unknown encoding");
   }
 
-  // For now, just store the encoding name (leak managed by static strings)
+  // Free previous encoding if it was dynamically allocated
+  if (stream->options.defaultEncoding && stream->options.defaultEncoding != stream->options.encoding) {
+    JS_FreeCString(ctx, stream->options.defaultEncoding);
+  }
+
+  // Store the encoding name
   stream->options.defaultEncoding = encoding;
 
   return this_val;

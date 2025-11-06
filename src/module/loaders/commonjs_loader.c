@@ -207,11 +207,31 @@ JSValue jsrt_load_commonjs_module(JSContext* ctx, JSRT_ModuleLoader* loader, con
     }
   }
 
-  // Check for circular dependency
+  // Check for circular dependency - return partially initialized module (Node.js behavior)
   if (jsrt_is_loading_commonjs(loader, resolved_path)) {
-    MODULE_DEBUG_ERROR("Circular dependency detected: %s", resolved_path);
-    return jsrt_module_throw_error(ctx, JSRT_MODULE_CIRCULAR_DEPENDENCY, "Circular dependency detected for module: %s",
-                                   resolved_path);
+    MODULE_DEBUG_LOADER("Circular dependency detected, returning partial module: %s", resolved_path);
+
+    // Return a partial module object that will be completed when the circular dependency resolves
+    JSValue partial_module = JS_NewObject(ctx);
+    if (JS_IsException(partial_module)) {
+      return partial_module;
+    }
+
+    // Create a basic exports object that can be populated later
+    JSValue exports_obj = JS_NewObject(ctx);
+    if (JS_IsException(exports_obj)) {
+      JS_FreeValue(ctx, partial_module);
+      return exports_obj;
+    }
+
+    JS_SetPropertyStr(ctx, partial_module, "exports", exports_obj);
+
+    // Cache the partial module so subsequent gets return the same object
+    if (loader->enable_cache && loader->cache) {
+      jsrt_module_cache_put(loader->cache, resolved_path, partial_module);
+    }
+
+    return partial_module;
   }
 
   // Mark module as loading

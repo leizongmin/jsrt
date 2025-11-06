@@ -60,8 +60,9 @@ static JSValue js_error_capture_stack_trace(JSContext* ctx, JSValueConst this_va
     return JS_EXCEPTION;
   }
 
-  JS_SetPropertyStr(ctx, target_obj, "stack", stack_val);
-  JS_FreeValue(ctx, stack_val);
+  if (JS_SetPropertyStr(ctx, target_obj, "stack", stack_val) < 0) {
+    return JS_EXCEPTION;
+  }
 
   JSRT_Debug("Stack trace captured and set on target object");
   return JS_UNDEFINED;

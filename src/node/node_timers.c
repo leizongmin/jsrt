@@ -153,24 +153,29 @@ static JSValue js_timers_promise_set_immediate(JSContext* ctx, JSValueConst this
   // Create promise capability functions
   JSValue promise_funcs[2];
   JSValue promise = JS_NewPromiseCapability(ctx, promise_funcs);
+  if (JS_IsException(promise)) {
+    return promise;
+  }
   JSValue resolve_func = promise_funcs[0];
   JSValue reject_func = promise_funcs[1];
 
   // Schedule the immediate with resolve callback
-  JSValue args[1];
-  args[0] = JS_UNDEFINED;  // No value passed to resolve
-
-  // Create immediate callback that resolves the promise
-  JSValue immediate_result = js_set_immediate(ctx, JS_UNDEFINED, 1, args);
+  JSValue immediate_args[1];
+  immediate_args[0] = JS_DupValue(ctx, resolve_func);
+  JSValue immediate_result = js_set_immediate(ctx, JS_UNDEFINED, 1, immediate_args);
+  JS_FreeValue(ctx, immediate_args[0]);
 
   // If immediate scheduling failed, reject the promise
   if (JS_IsException(immediate_result)) {
     JSValue error = JS_GetException(ctx);
-    JS_Call(ctx, reject_func, JS_UNDEFINED, 1, &error);
+    JSValue call_result = JS_Call(ctx, reject_func, JS_UNDEFINED, 1, &error);
+    if (!JS_IsException(call_result)) {
+      JS_FreeValue(ctx, call_result);
+    }
     JS_FreeValue(ctx, error);
-  } else {
-    // Resolve the promise immediately (since setImmediate is synchronous in our implementation)
-    JS_Call(ctx, resolve_func, JS_UNDEFINED, 0, NULL);
+    JS_FreeValue(ctx, resolve_func);
+    JS_FreeValue(ctx, reject_func);
+    return promise;
   }
 
   JS_FreeValue(ctx, immediate_result);

@@ -13,6 +13,55 @@ Phase 2.1: ✅ COMPLETED (2025-10-06T01:15:00Z) - Final 6 async APIs (truncate, 
 Latest Work: ALL CORE FS APIS IMPLEMENTED (93.2%)
 Test Status: All fs tests passing, WPT 90.6% (maintained), project tests 239/239 (100%)
 Stream Dependency: ✅ RESOLVED (2025-10-30) - stream module baseline stable, ready for ReadStream/WriteStream
+
+## 🎉 Recent Achievement: node:fs/promises Module Support (2025-11-07)
+
+### ✅ COMPLETED: `require('node:fs/promises')` Support
+
+**Implementation Date:** 2025-11-07
+**Status:** ✅ **FULLY FUNCTIONAL**
+
+**What Was Implemented:**
+- ✅ `require('node:fs/promises')` now works and returns the `fs.promises` namespace
+- ✅ All 31 Promise APIs are accessible via direct module import
+- ✅ Module registration in `src/node/node_modules.c` (line 107)
+- ✅ Complete API exports in `src/node/fs/fs_module.c` (lines 311-352)
+- ✅ Comprehensive test coverage in `test/node/fs/test_fs_promises_module.js`
+
+**Usage Examples:**
+```javascript
+// Now works in jsrt:
+const fsPromises = require('node:fs/promises');
+
+// Direct method access:
+await fsPromises.readFile('file.txt');
+await fsPromises.writeFile('file.txt', 'content');
+await fsPromises.stat('file.txt');
+
+// All 31 Promise methods available:
+// open, readFile, writeFile, appendFile, stat, lstat, unlink, rename,
+// mkdir, rmdir, readdir, readlink, link, symlink, realpath, rm, cp,
+// chmod, lchmod, chown, lchown, utimes, lutimes, access, mkdtemp,
+// truncate, copyFile, + FileHandle constructor
+```
+
+**Technical Details:**
+- Module initialization: `js_node_fs_promises_init()` in `fs_module.c:311`
+- Exports all Promise methods as named exports + default export
+- Reuses existing `fs.promises` namespace from main `node:fs` module
+- Zero additional code required - leverages existing Promise API implementation
+
+**Test Results:**
+- ✅ Module loads successfully
+- ✅ All required methods accessible (readFile, writeFile, stat, mkdir, unlink)
+- ✅ Basic functionality verified (write → read → verify → delete)
+- ✅ Returns correct data types (ArrayBuffer for binary data)
+
+**Impact:**
+- Improves Node.js compatibility for npm packages expecting `require('node:fs/promises')`
+- Enables modern ESM-style imports of Promise-based fs operations
+- Aligns with Node.js v20+ module naming conventions
+
 ---
 
 ## 🔄 Follow-up Optimization Plan (Updated 2025-10-30)

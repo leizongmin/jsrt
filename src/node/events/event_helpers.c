@@ -52,8 +52,18 @@ uint32_t get_array_length(JSContext* ctx, JSValueConst array) {
 JSValue get_or_create_max_listeners(JSContext* ctx, JSValueConst this_val) {
   JSValue max_listeners = JS_GetPropertyStr(ctx, this_val, "_maxListeners");
   if (JS_IsUndefined(max_listeners)) {
-    // Default max listeners is 10
-    max_listeners = JS_NewInt32(ctx, 10);
+    // Check for global default only for new instances
+    JSValue global = JS_GetGlobalObject(ctx);
+    JSValue default_max = JS_GetPropertyStr(ctx, global, "_defaultMaxListeners");
+    JS_FreeValue(ctx, global);
+
+    if (!JS_IsUndefined(default_max)) {
+      max_listeners = JS_DupValue(ctx, default_max);
+    } else {
+      // Default max listeners is 10
+      max_listeners = JS_NewInt32(ctx, 10);
+    }
+    // Store the value on the instance
     JS_SetPropertyStr(ctx, this_val, "_maxListeners", JS_DupValue(ctx, max_listeners));
   }
   return max_listeners;

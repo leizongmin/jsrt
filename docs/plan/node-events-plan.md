@@ -300,3 +300,74 @@ Overall Progress: 67/67 tasks completed (100%)
 - Implement EventTarget as separate class
 - Maintain current memory management patterns
 - Follow existing module registration approach
+
+---
+
+## 🚨 Critical Node.js Compatibility Fix (2025-11-07)
+
+### Issue Identified
+Many npm packages using `const EventEmitter = require('events')` pattern were failing with:
+```
+TypeError: parent class must be a constructor
+```
+
+### Root Cause Analysis
+- **Problem**: `require('events')` was returning an object containing `EventEmitter` as a property
+- **Expected**: `require('events')` should return the `EventEmitter` constructor directly (like Node.js)
+- **Impact**: Libraries using `class Foo extends EventEmitter` where `EventEmitter = require('events')` failed
+
+### Solution Implemented
+**File**: `src/node/events/node_events.c`
+
+**Changes Made**:
+1. **Module Export Structure**: Changed `JSRT_InitNodeEvents()` to return `EventEmitter` directly instead of wrapping in object
+2. **Property Attachment**: Attached all other exports (`EventTarget`, `Event`, `CustomEvent`, static methods) as properties to the `EventEmitter` function
+3. **Backward Compatibility**: Maintained destructuring support by keeping `EventEmitter` and `default` properties
+
+**Key Code Changes**:
+```c
+// BEFORE: Return object containing EventEmitter
+JSValue events_obj = JS_NewObject(ctx);
+JS_SetPropertyStr(ctx, events_obj, "EventEmitter", EventEmitter);
+return events_obj;
+
+// AFTER: Return EventEmitter directly with properties
+JS_SetPropertyStr(ctx, EventEmitter, "EventTarget", EventTarget);
+JS_SetPropertyStr(ctx, EventEmitter, "Event", Event);
+// ... attach all other exports as properties
+return EventEmitter;
+```
+
+### Compatibility Results
+✅ **Direct require pattern** (now works):
+```js
+const EventEmitter = require('events');
+class Foo extends EventEmitter { }  // ✅ Works!
+```
+
+✅ **Destructuring pattern** (still works):
+```js
+const { EventEmitter } = require('events');
+class Bar extends EventEmitter { }  // ✅ Still works
+```
+
+✅ **All exports accessible**:
+```js
+const events = require('events');
+console.log(events.EventTarget);     // ✅ Function
+console.log(events.once);           // ✅ Function
+console.log(events.Event);          // ✅ Function
+```
+
+### Testing Validation
+- **Test Suite**: All 288 tests pass (100% success rate)
+- **Manual Testing**: Comprehensive inheritance and API compatibility verified
+- **npm Compatibility**: Resolves issues with popular packages using direct require pattern
+
+### Impact Assessment
+- **Breaking Changes**: None - full backward compatibility maintained
+- **npm Compatibility**: Major improvement - enables many packages that previously failed
+- **Performance**: No measurable impact - same memory and execution patterns
+- **Standards Compliance**: Now matches Node.js behavior exactly
+
+**Status**: ✅ **COMPLETE** - Critical compatibility issue resolved

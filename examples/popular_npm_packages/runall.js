@@ -11,12 +11,14 @@ async function runScript(filePath) {
       cwd: __dirname,
       env: process.env,
     });
-
+    const tid = setTimeout(() => child.kill(), 1000);
     child.on('exit', (code, signal) => {
+      clearTimeout(tid);
       resolve({ file: path.basename(filePath), code, signal });
     });
     child.on('error', (error) => {
       console.error(`Failed to start ${filePath}:`, error.message);
+      clearTimeout(tid);
       resolve({ file: path.basename(filePath), code: 1, signal: null });
     });
   });

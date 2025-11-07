@@ -155,6 +155,11 @@ bool jsrt_is_relative_path(const char* path) {
   if (!path)
     return false;
 
+  // Check for exactly "." (current directory)
+  if (strcmp(path, ".") == 0) {
+    return true;
+  }
+
   // Check for ./ or ../
   return (path[0] == '.' && (jsrt_is_path_separator(path[1]) || (path[1] == '.' && jsrt_is_path_separator(path[2]))));
 }
@@ -192,6 +197,12 @@ char* jsrt_resolve_relative_path(const char* base_path, const char* relative_pat
   if (!base_dir)
     return NULL;
 
+  // Special case: specifier is exactly "."
+  if (strcmp(relative_path, ".") == 0) {
+    MODULE_DEBUG_RESOLVER("Special case '.' resolved to parent directory: %s", base_dir);
+    return base_dir;
+  }
+
   // Handle ./ and ../ prefixes
   const char* clean_relative = relative_path;
   char* current_base = base_dir;
@@ -222,6 +233,12 @@ char* jsrt_resolve_relative_path(const char* base_path, const char* relative_pat
       // Not a relative path prefix
       break;
     }
+  }
+
+  // Check if clean_relative is empty after processing prefixes
+  if (clean_relative[0] == '\0') {
+    MODULE_DEBUG_RESOLVER("Resolved to base directory (empty remaining path): %s", current_base);
+    return current_base;
   }
 
   // Join the cleaned relative path with the final base directory

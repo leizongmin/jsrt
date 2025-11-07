@@ -421,7 +421,16 @@ JSValue JSRT_InitNodeStream(JSContext* ctx) {
     extern JSValue JSRT_InitNodeEvents(JSContext * ctx);
     JSValue events_module = JSRT_InitNodeEvents(ctx);
     if (!JS_IsException(events_module) && !JS_IsUndefined(events_module)) {
-      JSValue ee_ctor = JS_GetPropertyStr(ctx, events_module, "EventEmitter");
+      JSValue ee_ctor;
+      // Handle both new format (EventEmitter directly) and old format (object with EventEmitter property)
+      if (JS_IsFunction(ctx, events_module)) {
+        // New format: events_module IS the EventEmitter constructor
+        ee_ctor = JS_DupValue(ctx, events_module);
+      } else {
+        // Old format: events_module is an object with EventEmitter property
+        ee_ctor = JS_GetPropertyStr(ctx, events_module, "EventEmitter");
+      }
+
       if (!JS_IsException(ee_ctor) && !JS_IsUndefined(ee_ctor)) {
         JS_SetPropertyStr(ctx, global, "EventEmitter", ee_ctor);
       } else {

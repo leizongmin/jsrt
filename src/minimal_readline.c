@@ -253,6 +253,11 @@ char* readline(const char* prompt) {
       if (errno == EINTR) {
         continue;
       }
+      if (errno == EAGAIN || errno == EWOULDBLOCK) {
+        // Non-blocking descriptor with no data yet – yield briefly and retry
+        usleep(1000);
+        continue;
+      }
       free(line);
       restore_terminal();
       return NULL;

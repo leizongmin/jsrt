@@ -5,6 +5,7 @@
 
 #include "minimal_readline.h"
 
+#include <errno.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -236,13 +237,30 @@ char* readline(const char* prompt) {
   while (1) {
     char c;
 #ifdef _WIN32
-    DWORD chars_read;
-    if (!ReadConsole(console_handle, &c, 1, &chars_read, NULL) || chars_read != 1) {
-      break;
+    DWORD chars_read = 0;
+    if (!ReadConsole(console_handle, &c, 1, &chars_read, NULL)) {
+      free(line);
+      restore_terminal();
+      return NULL;
+    }
+    if (chars_read == 0) {
+      // Nothing read yet, retry
+      continue;
     }
 #else
-    if (read(STDIN_FILENO, &c, 1) != 1) {
-      break;
+    ssize_t bytes_read = read(STDIN_FILENO, &c, 1);
+    if (bytes_read == -1) {
+      if (errno == EINTR) {
+        continue;
+      }
+      free(line);
+      restore_terminal();
+      return NULL;
+    }
+    if (bytes_read == 0) {
+      free(line);
+      restore_terminal();
+      return NULL;
     }
 #endif
 

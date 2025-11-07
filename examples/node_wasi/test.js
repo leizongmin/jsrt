@@ -1,20 +1,41 @@
-import { readFile } from 'node:fs/promises';
-import { WASI } from 'node:wasi';
-import { argv, env } from 'node:process';
+const { readFile } = require('node:fs/promises');
+const { WASI } = require('node:wasi');
+const { argv, env } = require('node:process');
 
-const wasi = new WASI({
-  version: 'preview1',
-  args: argv,
-  env,
-  preopens: {
-    '/local': process.cwd(),
-  },
-});
+async function main() {
+  console.log('Starting WASI example...');
 
-const wasm = await WebAssembly.compile(
-  await readFile(new URL('./demo.wasm', import.meta.url)),
-);
-const instance = await WebAssembly.instantiate(wasm, wasi.getImportObject());
+  try {
+    const wasmBuffer = await readFile(__dirname + '/demo.wasm');
+    console.log('WASM file read successfully, size:', wasmBuffer.byteLength);
 
-wasi.start(instance);
+    const wasi = new WASI({
+      version: 'preview1',
+      args: argv,
+      env,
+      preopens: {
+        '/local': process.cwd(),
+      },
+    });
 
+    const wasm = await WebAssembly.compile(wasmBuffer);
+    const instance = await WebAssembly.instantiate(
+      wasm,
+      wasi.getImportObject()
+    );
+
+    console.log('WASI instance created, starting...');
+    wasi.start(instance);
+    console.log('WASI execution completed.');
+  } catch (error) {
+    console.error('Error details:', {
+      message: error.message,
+      name: error.name,
+      stack: error.stack,
+      code: error.code,
+    });
+    process.exit(1);
+  }
+}
+
+main();

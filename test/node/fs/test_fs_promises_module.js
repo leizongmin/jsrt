@@ -9,12 +9,36 @@ console.log('Testing require("node:fs/promises") module loading...\n');
 async function testFsPromisesModule() {
   try {
     // Test that fsPromises object exists and has expected methods
-    assert.strictEqual(typeof fsPromises, 'object', 'fsPromises should be an object');
-    assert.strictEqual(typeof fsPromises.readFile, 'function', 'readFile should be a function');
-    assert.strictEqual(typeof fsPromises.writeFile, 'function', 'writeFile should be a function');
-    assert.strictEqual(typeof fsPromises.stat, 'function', 'stat should be a function');
-    assert.strictEqual(typeof fsPromises.mkdir, 'function', 'mkdir should be a function');
-    assert.strictEqual(typeof fsPromises.unlink, 'function', 'unlink should be a function');
+    assert.strictEqual(
+      typeof fsPromises,
+      'object',
+      'fsPromises should be an object'
+    );
+    assert.strictEqual(
+      typeof fsPromises.readFile,
+      'function',
+      'readFile should be a function'
+    );
+    assert.strictEqual(
+      typeof fsPromises.writeFile,
+      'function',
+      'writeFile should be a function'
+    );
+    assert.strictEqual(
+      typeof fsPromises.stat,
+      'function',
+      'stat should be a function'
+    );
+    assert.strictEqual(
+      typeof fsPromises.mkdir,
+      'function',
+      'mkdir should be a function'
+    );
+    assert.strictEqual(
+      typeof fsPromises.unlink,
+      'function',
+      'unlink should be a function'
+    );
     console.log('✓ All required methods exist');
 
     // Test basic functionality
@@ -27,7 +51,10 @@ async function testFsPromisesModule() {
 
     // Read file (returns ArrayBuffer by default)
     const dataBuffer = await fsPromises.readFile(testFile);
-    assert.ok(dataBuffer instanceof ArrayBuffer, 'readFile should return ArrayBuffer');
+    assert.ok(
+      dataBuffer instanceof ArrayBuffer,
+      'readFile should return ArrayBuffer'
+    );
 
     // Convert to string for verification
     const decodedString = Buffer.from(dataBuffer).toString('utf8');
@@ -44,7 +71,6 @@ async function testFsPromisesModule() {
     console.log('✓ unlink works');
 
     console.log('\nAll require("node:fs/promises") tests passed! ✓');
-
   } catch (error) {
     console.error('✗ Test failed:', error);
     process.exit(1);

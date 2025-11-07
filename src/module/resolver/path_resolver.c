@@ -274,41 +274,44 @@ JSRT_ResolvedPath* jsrt_resolve_path(JSContext* ctx, const char* specifier, cons
 
   // For non-URL, non-builtin paths, try extensions and directory index
   if (!result->is_url && !result->is_builtin) {
-    // First check if resolved path is a directory
-    if (is_directory(resolved)) {
-      MODULE_DEBUG_RESOLVER("Resolved path is a directory: %s", resolved);
-
-      // Try package.json main field first
-      char* package_main = jsrt_resolve_package_main(ctx, resolved, is_esm);
-      if (package_main) {
-        MODULE_DEBUG_RESOLVER("Resolved directory via package.json main: %s", package_main);
-        free(resolved);
-        result->resolved_path = package_main;
-      } else {
-        // Fallback to directory index
-        char* dir_index = jsrt_try_directory_index(resolved);
-        if (dir_index) {
-          MODULE_DEBUG_RESOLVER("Resolved directory via index file: %s", dir_index);
-          free(resolved);
-          result->resolved_path = dir_index;
-        } else {
-          MODULE_DEBUG_RESOLVER("No main or index found in directory: %s", resolved);
-          result->resolved_path = resolved;
-        }
-      }
-    } else if (file_exists(resolved)) {
-      // It's a regular file
-      MODULE_DEBUG_RESOLVER("Resolved path exists as file: %s", resolved);
+    // **CRITICAL**: Try extensions FIRST before checking if it's a directory
+    // This handles cases where both 'http.js' (file) and 'http/' (directory) exist
+    // The file should take priority over the directory for relative requires
+    if (file_exists(resolved)) {
+      // It's a regular file that exists exactly as specified
+      MODULE_DEBUG_RESOLVER("Resolved path exists as exact file: %s", resolved);
       result->resolved_path = resolved;
     } else {
-      // Path doesn't exist as file or directory - try extensions
+      // Try to find a file with extensions (this is the key fix)
       char* with_ext = jsrt_try_extensions(resolved);
       if (with_ext) {
         MODULE_DEBUG_RESOLVER("Resolved path with extension: %s", with_ext);
         free(resolved);
         result->resolved_path = with_ext;
+      } else if (is_directory(resolved)) {
+        // If no file with extension found, check if it's a directory
+        MODULE_DEBUG_RESOLVER("Resolved path is a directory: %s", resolved);
+
+        // Try package.json main field first
+        char* package_main = jsrt_resolve_package_main(ctx, resolved, is_esm);
+        if (package_main) {
+          MODULE_DEBUG_RESOLVER("Resolved directory via package.json main: %s", package_main);
+          free(resolved);
+          result->resolved_path = package_main;
+        } else {
+          // Fallback to directory index
+          char* dir_index = jsrt_try_directory_index(resolved);
+          if (dir_index) {
+            MODULE_DEBUG_RESOLVER("Resolved directory via index file: %s", dir_index);
+            free(resolved);
+            result->resolved_path = dir_index;
+          } else {
+            MODULE_DEBUG_RESOLVER("No main or index found in directory: %s", resolved);
+            result->resolved_path = resolved;
+          }
+        }
       } else {
-        // Try as directory index
+        // Try as directory index (handles case where 'http' resolves to 'http/index.js')
         char* dir_index = jsrt_try_directory_index(resolved);
         if (dir_index) {
           MODULE_DEBUG_RESOLVER("Resolved as directory index: %s", dir_index);

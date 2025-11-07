@@ -515,38 +515,57 @@ static JSValue js_util_inherits(JSContext* ctx, JSValueConst this_val, int argc,
     return node_throw_error(ctx, NODE_ERR_MISSING_ARGS, "util.inherits requires constructor and superConstructor");
   }
 
-  if (!JS_IsFunction(ctx, argv[0]) || !JS_IsFunction(ctx, argv[1])) {
-    return node_throw_error(ctx, NODE_ERR_INVALID_ARG_TYPE, "Both arguments must be constructor functions");
+  // More detailed debugging for constructor function check
+  bool is_ctor_func = JS_IsFunction(ctx, argv[0]);
+  bool is_super_func = JS_IsFunction(ctx, argv[1]);
+
+  if (!is_ctor_func || !is_super_func) {
+    // For Node.js compatibility: allow objects that look like constructors
+    // Check if the object has a prototype property that's an object
+    JSValue ctor_proto = JS_GetPropertyStr(ctx, argv[0], "prototype");
+    JSValue super_proto = JS_GetPropertyStr(ctx, argv[1], "prototype");
+
+    bool ctor_has_proto = !JS_IsException(ctor_proto) && JS_IsObject(ctor_proto);
+    bool super_has_proto = !JS_IsException(super_proto) && JS_IsObject(super_proto);
+
+    JS_FreeValue(ctx, ctor_proto);
+    JS_FreeValue(ctx, super_proto);
+
+    if (!ctor_has_proto || !super_has_proto) {
+      return node_throw_error(ctx, NODE_ERR_INVALID_ARG_TYPE, "parent class must be constructor");
+    }
   }
 
-  // Set up prototype chain: constructor.prototype = Object.create(superConstructor.prototype)
+  // Get superConstructor.prototype
   JSValue super_proto = JS_GetPropertyStr(ctx, argv[1], "prototype");
   if (JS_IsException(super_proto)) {
     return JS_EXCEPTION;
   }
 
-  JSValue object_ctor = JS_GetGlobalObject(ctx);
-  JSValue object_obj = JS_GetPropertyStr(ctx, object_ctor, "Object");
-  JSValue create_fn = JS_GetPropertyStr(ctx, object_obj, "create");
+  // Check if super_proto is a valid object for Object.create
+  if (JS_IsNull(super_proto) || JS_IsUndefined(super_proto) || !JS_IsObject(super_proto)) {
+    // If prototype is null/undefined/not an object, create a plain object as prototype
+    JS_FreeValue(ctx, super_proto);
+    super_proto = JS_NewObject(ctx);
+  }
 
-  JSValue new_proto = JS_Call(ctx, create_fn, object_obj, 1, &super_proto);
+  // Use JS_NewObjectProto directly instead of Object.create() for better compatibility
+  // This bypasses QuickJS's strict validation in Object.create()
+  JSValue new_proto = JS_NewObjectProto(ctx, super_proto);
 
   JS_FreeValue(ctx, super_proto);
-  JS_FreeValue(ctx, create_fn);
-  JS_FreeValue(ctx, object_obj);
-  JS_FreeValue(ctx, object_ctor);
 
   if (JS_IsException(new_proto)) {
     return JS_EXCEPTION;
   }
 
-  // Set constructor property
+  // Set constructor property on the prototype
   JS_SetPropertyStr(ctx, new_proto, "constructor", JS_DupValue(ctx, argv[0]));
 
-  // Set the prototype
+  // Set the constructor's prototype
   JS_SetPropertyStr(ctx, argv[0], "prototype", new_proto);
 
-  // Set super_ property
+  // Set super_ property for Node.js compatibility
   JS_SetPropertyStr(ctx, argv[0], "super_", JS_DupValue(ctx, argv[1]));
 
   return JS_UNDEFINED;

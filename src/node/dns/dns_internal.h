@@ -51,5 +51,7 @@ JSValue js_dns_lookupservice_promise(JSContext* ctx, JSValueConst this_val, int 
 // Module functions (from dns_module.c)
 JSValue JSRT_InitNodeDns(JSContext* ctx);
 int js_node_dns_init(JSContext* ctx, JSModuleDef* m);
+JSValue JSRT_InitNodeDnsPromises(JSContext* ctx);
+int js_node_dns_promises_init(JSContext* ctx, JSModuleDef* m);
 
 #endif  // JSRT_NODE_DNS_INTERNAL_H

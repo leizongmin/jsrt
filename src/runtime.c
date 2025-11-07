@@ -23,6 +23,9 @@
 #include "node/net/net_internal.h"
 #include "node/process/process.h"
 #include "node/process/process_node.h"
+
+// Forward declaration to avoid including node_buffer.h which conflicts with system headers
+JSValue JSRT_InitNodeBuffer(JSContext* ctx);
 #include "std/abort.h"
 #include "std/base64.h"
 #include "std/blob.h"
@@ -253,6 +256,9 @@ JSRT_Runtime* JSRT_RuntimeNew() {
   JSRT_RuntimeSetupStdWebAssembly(rt);
   JSRT_StdModuleInit(rt);
   JSRT_StdCommonJSInit(rt);
+
+  // Initialize Node.js globals for compatibility
+  JSRT_RuntimeSetupNodeGlobals(rt);
 
   // Setup Error.stack line number fix for CommonJS modules
   jsrt_setup_error_stack_fix(rt);
@@ -872,4 +878,50 @@ static void jsrt_debug_dump_handles(uv_loop_t* loop) {
 #else
   (void)loop;
 #endif
+}
+
+/**
+ * Setup Node.js global variables (Buffer, etc.) for compatibility
+ */
+void JSRT_RuntimeSetupNodeGlobals(JSRT_Runtime* rt) {
+  if (!rt || !rt->ctx) {
+    return;
+  }
+
+  JSRT_Debug("Setting up Node.js global variables for compatibility");
+
+  // Make Buffer globally available like in Node.js
+  JSValue buffer_module = JSRT_InitNodeBuffer(rt->ctx);
+  if (!JS_IsException(buffer_module)) {
+    JSValue Buffer = JS_GetPropertyStr(rt->ctx, buffer_module, "Buffer");
+    if (!JS_IsException(Buffer)) {
+      JS_SetPropertyStr(rt->ctx, rt->global, "Buffer", Buffer);
+      JSRT_Debug("Buffer globally available");
+    } else {
+      JS_FreeValue(rt->ctx, Buffer);
+    }
+    JS_FreeValue(rt->ctx, buffer_module);
+  } else {
+    JS_FreeValue(rt->ctx, buffer_module);
+  }
+
+  // Make process globally available (should already be there, but ensure)
+  JSValue process_val = JS_GetPropertyStr(rt->ctx, rt->global, "process");
+  if (JS_IsUndefined(process_val)) {
+    JSValue process_obj = jsrt_get_process_module(rt->ctx);
+    if (!JS_IsException(process_obj)) {
+      JS_SetPropertyStr(rt->ctx, rt->global, "process", process_obj);
+      JSRT_Debug("Process globally available");
+    } else {
+      JS_FreeValue(rt->ctx, process_obj);
+    }
+  } else {
+    JS_FreeValue(rt->ctx, process_val);
+  }
+
+  // Make __dirname and __filename available globally for CommonJS modules
+  JS_SetPropertyStr(rt->ctx, rt->global, "__dirname", JS_NewString(rt->ctx, "."));
+  JS_SetPropertyStr(rt->ctx, rt->global, "__filename", JS_NewString(rt->ctx, "__main__.js"));
+
+  JSRT_Debug("Node.js global variables setup complete");
 }

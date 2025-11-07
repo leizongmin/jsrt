@@ -177,3 +177,62 @@ int js_node_dns_init(JSContext* ctx, JSModuleDef* m) {
 
   return 0;
 }
+
+// dns/promises module initialization
+JSValue JSRT_InitNodeDnsPromises(JSContext* ctx) {
+  JSValue dns_promises = JS_NewObject(ctx);
+
+  // Core DNS functions with promises - implemented
+  JS_DefinePropertyValueStr(ctx, dns_promises, "lookup", JS_NewCFunction(ctx, js_dns_lookup_promise, "lookup", 2),
+                            JS_PROP_C_W_E);
+  JS_DefinePropertyValueStr(ctx, dns_promises, "lookupService",
+                            JS_NewCFunction(ctx, js_dns_lookupservice_promise, "lookupService", 2), JS_PROP_C_W_E);
+
+  // Promise stubs for resolve methods
+  JS_DefinePropertyValueStr(ctx, dns_promises, "resolve",
+                            JS_NewCFunction(ctx, js_dns_resolve_promise_stub, "resolve", 2), JS_PROP_C_W_E);
+  JS_DefinePropertyValueStr(ctx, dns_promises, "resolve4",
+                            JS_NewCFunction(ctx, js_dns_resolve_promise_stub, "resolve4", 1), JS_PROP_C_W_E);
+  JS_DefinePropertyValueStr(ctx, dns_promises, "resolve6",
+                            JS_NewCFunction(ctx, js_dns_resolve_promise_stub, "resolve6", 1), JS_PROP_C_W_E);
+  JS_DefinePropertyValueStr(ctx, dns_promises, "resolveMx",
+                            JS_NewCFunction(ctx, js_dns_resolve_promise_stub, "resolveMx", 1), JS_PROP_C_W_E);
+  JS_DefinePropertyValueStr(ctx, dns_promises, "resolveTxt",
+                            JS_NewCFunction(ctx, js_dns_resolve_promise_stub, "resolveTxt", 1), JS_PROP_C_W_E);
+  JS_DefinePropertyValueStr(ctx, dns_promises, "resolveCname",
+                            JS_NewCFunction(ctx, js_dns_resolve_promise_stub, "resolveCname", 1), JS_PROP_C_W_E);
+  JS_DefinePropertyValueStr(ctx, dns_promises, "resolveNs",
+                            JS_NewCFunction(ctx, js_dns_resolve_promise_stub, "resolveNs", 1), JS_PROP_C_W_E);
+  JS_DefinePropertyValueStr(ctx, dns_promises, "resolveSoa",
+                            JS_NewCFunction(ctx, js_dns_resolve_promise_stub, "resolveSoa", 1), JS_PROP_C_W_E);
+  JS_DefinePropertyValueStr(ctx, dns_promises, "resolveSrv",
+                            JS_NewCFunction(ctx, js_dns_resolve_promise_stub, "resolveSrv", 1), JS_PROP_C_W_E);
+  JS_DefinePropertyValueStr(ctx, dns_promises, "resolveNaptr",
+                            JS_NewCFunction(ctx, js_dns_resolve_promise_stub, "resolveNaptr", 1), JS_PROP_C_W_E);
+  JS_DefinePropertyValueStr(ctx, dns_promises, "resolvePtr",
+                            JS_NewCFunction(ctx, js_dns_resolve_promise_stub, "resolvePtr", 1), JS_PROP_C_W_E);
+  JS_DefinePropertyValueStr(ctx, dns_promises, "resolveCaa",
+                            JS_NewCFunction(ctx, js_dns_resolve_promise_stub, "resolveCaa", 1), JS_PROP_C_W_E);
+  JS_DefinePropertyValueStr(ctx, dns_promises, "reverse",
+                            JS_NewCFunction(ctx, js_dns_resolve_promise_stub, "reverse", 1), JS_PROP_C_W_E);
+
+  return dns_promises;
+}
+
+// dns/promises ES module initialization
+int js_node_dns_promises_init(JSContext* ctx, JSModuleDef* m) {
+  JSValue dns_promises = JSRT_InitNodeDnsPromises(ctx);
+
+  // Export individual functions
+  JSValue lookup = JS_GetPropertyStr(ctx, dns_promises, "lookup");
+  JS_SetModuleExport(ctx, m, "lookup", JS_DupValue(ctx, lookup));
+  JS_FreeValue(ctx, lookup);
+
+  JSValue lookupService = JS_GetPropertyStr(ctx, dns_promises, "lookupService");
+  JS_SetModuleExport(ctx, m, "lookupService", JS_DupValue(ctx, lookupService));
+  JS_FreeValue(ctx, lookupService);
+
+  JS_SetModuleExport(ctx, m, "default", dns_promises);
+
+  return 0;
+}

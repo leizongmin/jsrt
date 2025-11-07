@@ -14,6 +14,11 @@
 // Global async ID counter
 static async_id_t next_async_id = 1;
 
+// Forward declarations for AsyncLocalStorage methods
+static JSValue js_async_local_storage_run(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv);
+static JSValue js_async_local_storage_getStore(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv);
+static JSValue js_async_local_storage_exit(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv);
+
 // Create async ID
 static JSValue js_async_hooks_create_hook(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
   // Simplified implementation: return a numeric ID
@@ -73,6 +78,105 @@ static JSValue js_async_hooks_disable(JSContext* ctx, JSValueConst this_val, int
   return JS_FALSE;
 }
 
+// Simple AsyncLocalStorage constructor function
+static JSValue js_async_local_storage_constructor(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
+  // Create a new object with storage and methods attached
+  JSValue obj = JS_NewObject(ctx);
+
+  // Create internal storage for context data
+  JSValue storage = JS_NewObject(ctx);
+  JS_SetPropertyStr(ctx, obj, "_storage", storage);
+
+  // Add methods directly to the object (simpler approach)
+  JS_SetPropertyStr(ctx, obj, "run", JS_NewCFunction(ctx, js_async_local_storage_run, "run", 3));
+  JS_SetPropertyStr(ctx, obj, "getStore", JS_NewCFunction(ctx, js_async_local_storage_getStore, "getStore", 0));
+  JS_SetPropertyStr(ctx, obj, "exit", JS_NewCFunction(ctx, js_async_local_storage_exit, "exit", 2));
+
+  return obj;
+}
+
+// AsyncLocalStorage instance methods
+static JSValue js_async_local_storage_run(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
+  if (argc < 2) {
+    return JS_ThrowTypeError(ctx, "AsyncLocalStorage.run() requires at least 2 arguments");
+  }
+
+  // Get the storage value and function to run
+  JSValue storage = JS_GetPropertyStr(ctx, this_val, "_storage");
+  JSValue store = argv[0];
+  JSValue func = argv[1];
+
+  if (!JS_IsFunction(ctx, func)) {
+    JS_FreeValue(ctx, storage);
+    return JS_ThrowTypeError(ctx, "Second argument must be a function");
+  }
+
+  // Store the context value (simplified implementation)
+  JS_SetPropertyStr(ctx, storage, "_current_context", store);
+
+  // Call the function with remaining arguments
+  JSValue ret;
+  if (argc > 2) {
+    JSValueConst* args = &argv[2];
+    ret = JS_Call(ctx, func, JS_UNDEFINED, argc - 2, args);
+  } else {
+    ret = JS_Call(ctx, func, JS_UNDEFINED, 0, NULL);
+  }
+
+  JS_FreeValue(ctx, storage);
+  return ret;
+}
+
+static JSValue js_async_local_storage_getStore(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
+  JSValue storage = JS_GetPropertyStr(ctx, this_val, "_storage");
+  JSValue store = JS_GetPropertyStr(ctx, storage, "_current_context");
+
+  JS_FreeValue(ctx, storage);
+  return store;
+}
+
+static JSValue js_async_local_storage_exit(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
+  if (argc < 1) {
+    return JS_ThrowTypeError(ctx, "AsyncLocalStorage.exit() requires at least 1 argument");
+  }
+
+  JSValue func = argv[0];
+  if (!JS_IsFunction(ctx, func)) {
+    return JS_ThrowTypeError(ctx, "First argument must be a function");
+  }
+
+  // Store the current context
+  JSValue storage = JS_GetPropertyStr(ctx, this_val, "_storage");
+  JSValue current_store = JS_GetPropertyStr(ctx, storage, "_current_context");
+
+  // Clear the context temporarily (set to undefined)
+  JS_SetPropertyStr(ctx, storage, "_current_context", JS_UNDEFINED);
+
+  // Call the function with remaining arguments
+  JSValue ret;
+  if (argc > 1) {
+    JSValueConst* args = &argv[1];
+    ret = JS_Call(ctx, func, JS_UNDEFINED, argc - 1, args);
+  } else {
+    ret = JS_Call(ctx, func, JS_UNDEFINED, 0, NULL);
+  }
+
+  // Restore the context
+  JS_SetPropertyStr(ctx, storage, "_current_context", current_store);
+
+  JS_FreeValue(ctx, storage);
+  JS_FreeValue(ctx, current_store);
+
+  return ret;
+}
+
+// Initialize AsyncLocalStorage class
+static JSValue js_async_hooks_init_async_local_storage(JSContext* ctx) {
+  JSValue async_local_storage =
+      JS_NewCFunction2(ctx, js_async_local_storage_constructor, "AsyncLocalStorage", 1, JS_CFUNC_constructor, 0);
+  return async_local_storage;
+}
+
 // Initialize async hooks module
 JSValue JSRT_InitNodeAsyncHooks(JSContext* ctx) {
   JSValue async_hooks = JS_NewObject(ctx);
@@ -93,6 +197,10 @@ JSValue JSRT_InitNodeAsyncHooks(JSContext* ctx) {
   // Enable/disable functions
   JS_SetPropertyStr(ctx, async_hooks, "enable", JS_NewCFunction(ctx, js_async_hooks_enable, "enable", 1));
   JS_SetPropertyStr(ctx, async_hooks, "disable", JS_NewCFunction(ctx, js_async_hooks_disable, "disable", 1));
+
+  // AsyncLocalStorage class
+  JSValue async_local_storage = js_async_hooks_init_async_local_storage(ctx);
+  JS_SetPropertyStr(ctx, async_hooks, "AsyncLocalStorage", async_local_storage);
 
   // Constants for hook types
   JSValue types = JS_NewObject(ctx);
@@ -117,6 +225,7 @@ int js_node_async_hooks_init(JSContext* ctx, JSModuleDef* m) {
   JS_SetModuleExport(ctx, m, "triggerAsyncId", JS_GetPropertyStr(ctx, async_hooks, "triggerAsyncId"));
   JS_SetModuleExport(ctx, m, "enable", JS_GetPropertyStr(ctx, async_hooks, "enable"));
   JS_SetModuleExport(ctx, m, "disable", JS_GetPropertyStr(ctx, async_hooks, "disable"));
+  JS_SetModuleExport(ctx, m, "AsyncLocalStorage", JS_GetPropertyStr(ctx, async_hooks, "AsyncLocalStorage"));
 
   // Export the whole module as default
   JS_SetModuleExport(ctx, m, "default", async_hooks);

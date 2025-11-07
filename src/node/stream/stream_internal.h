@@ -7,6 +7,7 @@
 #include <stdlib.h>
 
 // Forward declare class IDs (defined in stream.c)
+extern JSClassID js_stream_class_id;
 extern JSClassID js_readable_class_id;
 extern JSClassID js_writable_class_id;
 extern JSClassID js_duplex_class_id;
@@ -113,9 +114,8 @@ JSValue js_passthrough_constructor(JSContext* ctx, JSValueConst new_target, int 
 void js_passthrough_init_prototype(JSContext* ctx, JSValue passthrough_proto);
 
 // stream.c
-JSValue js_stream_destroy(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv);
-JSValue js_stream_get_destroyed(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv);
-JSValue js_stream_get_errored(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv);
+JSValue js_stream_constructor(JSContext* ctx, JSValueConst new_target, int argc, JSValueConst* argv);
+JSValue js_stream_pipe(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv);
 
 // Initialize stream classes (must be called before creating any streams)
 void jsrt_stream_init_classes(JSContext* ctx);

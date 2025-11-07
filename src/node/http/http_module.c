@@ -577,6 +577,24 @@ JSValue JSRT_InitNodeHttp(JSContext* ctx) {
   JS_SetPropertyStr(ctx, http_module, "Agent",
                     JS_NewCFunction2(ctx, js_http_agent_constructor, "Agent", 1, JS_CFUNC_constructor, 0));
 
+  // Create prototypes for constructors (required for Object.create() and inheritance)
+  JSValue server_proto = JS_NewObject(ctx);
+  JSValue response_proto = JS_NewObject(ctx);
+  JSValue request_proto = JS_NewObject(ctx);
+  JSValue client_request_proto = JS_NewObject(ctx);
+
+  // Set prototype properties for constructors
+  JS_SetPropertyStr(ctx, server_ctor, "prototype", server_proto);
+  JS_SetPropertyStr(ctx, response_ctor, "prototype", response_proto);
+  JS_SetPropertyStr(ctx, request_ctor, "prototype", request_proto);
+  JS_SetPropertyStr(ctx, client_request_ctor, "prototype", client_request_proto);
+
+  // Set constructor back-reference on prototypes
+  JS_SetPropertyStr(ctx, server_proto, "constructor", JS_DupValue(ctx, server_ctor));
+  JS_SetPropertyStr(ctx, response_proto, "constructor", JS_DupValue(ctx, response_ctor));
+  JS_SetPropertyStr(ctx, request_proto, "constructor", JS_DupValue(ctx, request_ctor));
+  JS_SetPropertyStr(ctx, client_request_proto, "constructor", JS_DupValue(ctx, client_request_ctor));
+
   // Export constructors
   JS_SetPropertyStr(ctx, http_module, "Server", server_ctor);
   JS_SetPropertyStr(ctx, http_module, "ServerResponse", response_ctor);

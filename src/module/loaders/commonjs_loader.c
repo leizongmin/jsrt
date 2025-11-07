@@ -6,7 +6,9 @@
 #include <stdlib.h>
 #include <string.h>
 #include "../../node/module/compile_cache.h"
+#include "../../node/node_modules.h"
 #include "../../runtime.h"  // For JSRT_Runtime
+#include "babel_loader.h"
 
 // Include hooks for load hook execution
 #ifdef JSRT_NODE_COMPAT
@@ -21,6 +23,7 @@ JSRT_ReadFileResult jsrt_hook_result_to_file_result(JSRTHookLoadResult* hook_res
 #include "../core/module_cache.h"
 #include "../core/module_loader.h"
 #include "../protocols/protocol_dispatcher.h"
+#include "../resolver/path_resolver.h"
 #include "../resolver/path_util.h"
 #include "../util/module_debug.h"
 #include "../util/module_errors.h"
@@ -130,7 +133,7 @@ static char* get_dirname(const char* path) {
 /**
  * Create CommonJS wrapper code
  */
-static char* create_wrapper_code(const char* content, const char* resolved_path) {
+char* create_wrapper_code(const char* content, const char* resolved_path) {
   (void)resolved_path;  // Not used in wrapper itself, only passed as argument
 
   // CommonJS wrapper format:
@@ -314,7 +317,7 @@ JSValue jsrt_load_commonjs_module(JSContext* ctx, JSRT_ModuleLoader* loader, con
 
     MODULE_DEBUG_LOADER("Loaded content for %s (%zu bytes)", resolved_path, file_result.size);
 
-    wrapper_code = create_wrapper_code(file_result.data, resolved_path);
+    wrapper_code = jsrt_create_enhanced_wrapper_code(file_result.data, resolved_path);
     JSRT_ReadFileResultFree(&file_result);
 
     if (!wrapper_code) {
@@ -548,6 +551,64 @@ static JSValue js_commonjs_require(JSContext* ctx, JSValueConst this_val, int ar
 }
 
 /**
+ * require.resolve(request, [options]) - Resolve module path without loading it
+ * Compatible with Node.js require.resolve behavior
+ */
+static JSValue js_commonjs_require_resolve(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
+  if (argc < 1) {
+    return JS_ThrowTypeError(ctx, "require.resolve() requires at least one argument");
+  }
+
+  const char* request = JS_ToCString(ctx, argv[0]);
+  if (!request) {
+    return JS_EXCEPTION;
+  }
+
+  // Check if it's a builtin module (return as-is, like Module._resolveFilename)
+  if (JSRT_IsNodeModule(request)) {
+    JSValue result = JS_NewString(ctx, request);
+    JS_FreeCString(ctx, request);
+    return result;
+  }
+
+  // Handle node: prefixed builtins
+  if (strncmp(request, "node:", 5) == 0) {
+    const char* name = request + 5;
+    if (JSRT_IsNodeModule(name)) {
+      JSValue result = JS_NewString(ctx, request);
+      JS_FreeCString(ctx, request);
+      return result;
+    }
+  }
+
+  // Get runtime and module loader from context
+  JSRT_Runtime* rt = JS_GetContextOpaque(ctx);
+  if (!rt || !rt->module_loader) {
+    JS_FreeCString(ctx, request);
+    return JS_ThrowInternalError(ctx, "require.resolve: module loader not available");
+  }
+
+  // Use path resolver to resolve the module path from current working directory
+  JSRT_ResolvedPath* resolved = jsrt_resolve_path(ctx, request, NULL, false);
+
+  JS_FreeCString(ctx, request);
+
+  if (!resolved) {
+    // Throw MODULE_NOT_FOUND error
+    JSValue error = JS_NewError(ctx);
+    JS_SetPropertyStr(ctx, error, "code", JS_NewString(ctx, "MODULE_NOT_FOUND"));
+    JS_SetPropertyStr(ctx, error, "message", JS_NewString(ctx, "Cannot find module"));
+    return JS_Throw(ctx, error);
+  }
+
+  // Return resolved path
+  JSValue result = JS_NewString(ctx, resolved->resolved_path);
+  jsrt_resolved_path_free(resolved);
+
+  return result;
+}
+
+/**
  * Create require() function bound to module path
  */
 JSValue jsrt_create_require_function(JSContext* ctx, JSRT_ModuleLoader* loader, const char* module_path) {
@@ -568,6 +629,42 @@ JSValue jsrt_create_require_function(JSContext* ctx, JSRT_ModuleLoader* loader, 
 
   // Create function with data
   JSValue require_func = JS_NewCFunctionData(ctx, js_commonjs_require, 1, 0, 2, func_data);
+
+  if (JS_IsException(require_func)) {
+    JS_FreeValue(ctx, func_data[0]);
+    JS_FreeValue(ctx, func_data[1]);
+    return JS_EXCEPTION;
+  }
+
+  // Add require.resolve, require.cache, require.extensions, require.main properties
+  // These are expected to be present on require functions in Node.js
+
+  // Create a resolve function that calls Module._resolveFilename when available
+  // We use a bound function to ensure we can access the Module constructor when needed
+  JSValue resolve_func = JS_NewCFunction(ctx, js_commonjs_require_resolve, "resolve", 2);
+  if (!JS_IsException(resolve_func)) {
+    JS_SetPropertyStr(ctx, require_func, "resolve", resolve_func);
+  } else {
+    JS_FreeValue(ctx, resolve_func);
+  }
+
+  // Create empty cache and extensions objects for compatibility
+  JSValue cache_obj = JS_NewObject(ctx);
+  if (!JS_IsException(cache_obj)) {
+    JS_SetPropertyStr(ctx, require_func, "cache", cache_obj);
+  } else {
+    JS_FreeValue(ctx, cache_obj);
+  }
+
+  JSValue extensions_obj = JS_NewObject(ctx);
+  if (!JS_IsException(extensions_obj)) {
+    JS_SetPropertyStr(ctx, require_func, "extensions", extensions_obj);
+  } else {
+    JS_FreeValue(ctx, extensions_obj);
+  }
+
+  // require.main - undefined for now (set when main module runs)
+  JS_SetPropertyStr(ctx, require_func, "main", JS_UNDEFINED);
 
   // func_data values are now owned by the function
   // Don't free them here

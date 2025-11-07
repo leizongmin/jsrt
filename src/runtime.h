@@ -102,4 +102,9 @@ JSRT_CompileResult JSRT_RuntimeCompileToBytecode(JSRT_Runtime* rt, const char* f
                                                  size_t length);
 void JSRT_CompileResultFree(JSRT_CompileResult* result);
 
+/**
+ * Setup Node.js global variables (Buffer, etc.) for compatibility
+ */
+void JSRT_RuntimeSetupNodeGlobals(JSRT_Runtime* rt);
+
 #endif

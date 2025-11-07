@@ -1,5 +1,6 @@
 #include <stdlib.h>
 #include <string.h>
+#include <strings.h>  // For memset
 #include "../../util/debug.h"
 #include "../node_modules.h"
 #include "stream_internal.h"
@@ -10,6 +11,7 @@ JSClassID js_writable_class_id;
 JSClassID js_duplex_class_id;
 JSClassID js_transform_class_id;
 JSClassID js_passthrough_class_id;
+JSClassID js_stream_class_id;
 
 static JSAtom stream_impl_atom = JS_ATOM_NULL;
 
@@ -70,7 +72,10 @@ int js_stream_attach_impl(JSContext* ctx, JSValueConst public_obj, JSValue holde
 
 // Finalizer for all stream types
 static void js_stream_finalizer(JSRuntime* rt, JSValue obj) {
-  JSStreamData* stream = JS_GetOpaque(obj, js_readable_class_id);
+  JSStreamData* stream = JS_GetOpaque(obj, js_stream_class_id);
+  if (!stream) {
+    stream = JS_GetOpaque(obj, js_readable_class_id);
+  }
   if (!stream) {
     stream = JS_GetOpaque(obj, js_writable_class_id);
   }
@@ -135,6 +140,7 @@ static void js_stream_finalizer(JSRuntime* rt, JSValue obj) {
 }
 
 // Class definitions
+static JSClassDef js_stream_class = {"Stream", .finalizer = js_stream_finalizer};
 static JSClassDef js_readable_class = {"Readable", .finalizer = js_stream_finalizer};
 static JSClassDef js_writable_class = {"Writable", .finalizer = js_stream_finalizer};
 static JSClassDef js_duplex_class = {"Duplex", .finalizer = js_stream_finalizer};
@@ -143,7 +149,10 @@ static JSClassDef js_passthrough_class = {"PassThrough", .finalizer = js_stream_
 
 // Base method: stream.destroy([error])
 JSValue js_stream_destroy(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
-  JSStreamData* stream = js_stream_get_data(ctx, this_val, js_readable_class_id);
+  JSStreamData* stream = js_stream_get_data(ctx, this_val, js_stream_class_id);
+  if (!stream) {
+    stream = js_stream_get_data(ctx, this_val, js_readable_class_id);
+  }
   if (!stream) {
     stream = js_stream_get_data(ctx, this_val, js_writable_class_id);
   }
@@ -192,7 +201,10 @@ JSValue js_stream_destroy(JSContext* ctx, JSValueConst this_val, int argc, JSVal
 
 // Property getter: stream.destroyed
 JSValue js_stream_get_destroyed(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
-  JSStreamData* stream = js_stream_get_data(ctx, this_val, js_readable_class_id);
+  JSStreamData* stream = js_stream_get_data(ctx, this_val, js_stream_class_id);
+  if (!stream) {
+    stream = js_stream_get_data(ctx, this_val, js_readable_class_id);
+  }
   if (!stream) {
     stream = js_stream_get_data(ctx, this_val, js_writable_class_id);
   }
@@ -215,7 +227,10 @@ JSValue js_stream_get_destroyed(JSContext* ctx, JSValueConst this_val, int argc,
 
 // Property getter: stream.errored
 JSValue js_stream_get_errored(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
-  JSStreamData* stream = js_stream_get_data(ctx, this_val, js_readable_class_id);
+  JSStreamData* stream = js_stream_get_data(ctx, this_val, js_stream_class_id);
+  if (!stream) {
+    stream = js_stream_get_data(ctx, this_val, js_readable_class_id);
+  }
   if (!stream) {
     stream = js_stream_get_data(ctx, this_val, js_writable_class_id);
   }
@@ -263,6 +278,107 @@ static JSValue js_writable_end(JSContext* ctx, JSValueConst this_val, int argc, 
   return JS_UNDEFINED;
 }
 
+// Base Stream constructor
+JSValue js_stream_constructor(JSContext* ctx, JSValueConst new_target, int argc, JSValueConst* argv) {
+  JSStreamData* stream = malloc(sizeof(JSStreamData));
+  if (!stream) {
+    return JS_ThrowOutOfMemory(ctx);
+  }
+
+  // Initialize stream data
+  memset(stream, 0, sizeof(JSStreamData));
+  stream->magic = JS_STREAM_MAGIC;
+  stream->readable = false;
+  stream->writable = false;
+  stream->destroyed = false;
+  stream->ended = false;
+  stream->errored = false;
+  stream->error_value = JS_UNDEFINED;
+
+  // Set default options
+  stream->options.highWaterMark = 16 * 1024;  // 16KB default
+  stream->options.objectMode = false;
+  stream->options.encoding = NULL;
+  stream->options.defaultEncoding = "utf8";
+  stream->options.emitClose = true;
+  stream->options.autoDestroy = true;
+
+  JSValue obj = JS_NewObjectClass(ctx, js_stream_class_id);
+  if (JS_IsException(obj)) {
+    free(stream);
+    return obj;
+  }
+
+  JS_SetOpaque(obj, stream);
+
+  // Initialize event emitter functionality
+  JSValue emitter = init_stream_event_emitter(ctx, obj);
+  if (JS_IsException(emitter)) {
+    JS_FreeValue(ctx, obj);
+    free(stream);
+    return emitter;
+  }
+  JS_FreeValue(ctx, emitter);
+
+  // Add default stream properties
+  JS_SetPropertyStr(ctx, obj, "readable", JS_NewBool(ctx, stream->readable));
+  JS_SetPropertyStr(ctx, obj, "writable", JS_NewBool(ctx, stream->writable));
+  JS_SetPropertyStr(ctx, obj, "destroyed", JS_NewBool(ctx, stream->destroyed));
+
+  return obj;
+}
+
+// Stream.prototype.pipe - essential method for Node.js stream compatibility
+JSValue js_stream_pipe(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
+  if (argc < 1) {
+    return JS_ThrowTypeError(ctx, "pipe() requires at least one argument");
+  }
+
+  JSValue destination = argv[0];
+
+  // Check if destination has writable side
+  JSValue has_writable = JS_GetPropertyStr(ctx, destination, "writable");
+  bool dest_is_writable = JS_ToBool(ctx, has_writable);
+  JS_FreeValue(ctx, has_writable);
+
+  if (!dest_is_writable) {
+    return JS_ThrowTypeError(ctx, "Cannot pipe to non-writable stream");
+  }
+
+  // Get options if provided
+  JSValue options = argc > 1 ? argv[1] : JS_UNDEFINED;
+
+  // Simple pipe implementation - add destination to pipe list
+  JSStreamData* stream = js_stream_get_data(ctx, this_val, js_stream_class_id);
+  if (!stream) {
+    stream = js_stream_get_data(ctx, this_val, js_readable_class_id);
+  }
+
+  if (stream && !stream->destroyed) {
+    // Expand pipe destinations array if needed
+    if (stream->pipe_count >= stream->pipe_capacity) {
+      size_t new_capacity = stream->pipe_capacity * 2 + 1;
+      JSValue* new_destinations = realloc(stream->pipe_destinations, new_capacity * sizeof(JSValue));
+      if (new_destinations) {
+        stream->pipe_destinations = new_destinations;
+        stream->pipe_capacity = new_capacity;
+      }
+    }
+
+    // Add destination to pipe list
+    if (stream->pipe_count < stream->pipe_capacity) {
+      stream->pipe_destinations[stream->pipe_count] = JS_DupValue(ctx, destination);
+      stream->pipe_count++;
+    }
+
+    // Emit 'pipe' event on this stream
+    stream_emit(ctx, this_val, "pipe", 1, &destination);
+  }
+
+  // Return destination for chaining
+  return JS_DupValue(ctx, destination);
+}
+
 // Initialize stream classes - must be called before creating any streams
 void jsrt_stream_init_classes(JSContext* ctx) {
   static bool classes_initialized = false;
@@ -271,6 +387,7 @@ void jsrt_stream_init_classes(JSContext* ctx) {
   }
 
   // Register class IDs
+  JS_NewClassID(&js_stream_class_id);
   JS_NewClassID(&js_readable_class_id);
   JS_NewClassID(&js_writable_class_id);
   JS_NewClassID(&js_duplex_class_id);
@@ -278,6 +395,7 @@ void jsrt_stream_init_classes(JSContext* ctx) {
   JS_NewClassID(&js_passthrough_class_id);
 
   // Create class definitions
+  JS_NewClass(JS_GetRuntime(ctx), js_stream_class_id, &js_stream_class);
   JS_NewClass(JS_GetRuntime(ctx), js_readable_class_id, &js_readable_class);
   JS_NewClass(JS_GetRuntime(ctx), js_writable_class_id, &js_writable_class);
   JS_NewClass(JS_GetRuntime(ctx), js_duplex_class_id, &js_duplex_class);
@@ -320,6 +438,7 @@ JSValue JSRT_InitNodeStream(JSContext* ctx) {
   jsrt_stream_init_classes(ctx);
 
   // Create constructors
+  JSValue stream_ctor = JS_NewCFunction2(ctx, js_stream_constructor, "Stream", 0, JS_CFUNC_constructor, 0);
   JSValue readable_ctor = JS_NewCFunction2(ctx, js_readable_constructor, "Readable", 1, JS_CFUNC_constructor, 0);
   JSValue writable_ctor = JS_NewCFunction2(ctx, js_writable_constructor, "Writable", 1, JS_CFUNC_constructor, 0);
   JSValue duplex_ctor = JS_NewCFunction2(ctx, js_duplex_constructor, "Duplex", 1, JS_CFUNC_constructor, 0);
@@ -330,6 +449,7 @@ JSValue JSRT_InitNodeStream(JSContext* ctx) {
   JSValue transform_wrapper = JS_UNDEFINED;
 
   // Create prototypes
+  JSValue stream_proto = JS_NewObject(ctx);
   JSValue readable_proto = JS_NewObject(ctx);
   JSValue writable_proto = JS_NewObject(ctx);
   JSValue duplex_proto = JS_NewObject(ctx);
@@ -345,6 +465,19 @@ JSValue JSRT_InitNodeStream(JSContext* ctx) {
   JSValue add_listener_method = JS_NewCFunction(ctx, js_stream_add_listener, "addListener", 2);
   JSValue remove_all_method = JS_NewCFunction(ctx, js_stream_remove_all_listeners, "removeAllListeners", 1);
   JSValue listener_count_method = JS_NewCFunction(ctx, js_stream_listener_count, "listenerCount", 1);
+
+  // Add EventEmitter methods to base Stream prototype
+  JS_SetPropertyStr(ctx, stream_proto, "on", JS_DupValue(ctx, on_method));
+  JS_SetPropertyStr(ctx, stream_proto, "once", JS_DupValue(ctx, once_method));
+  JS_SetPropertyStr(ctx, stream_proto, "emit", JS_DupValue(ctx, emit_method));
+  JS_SetPropertyStr(ctx, stream_proto, "off", JS_DupValue(ctx, off_method));
+  JS_SetPropertyStr(ctx, stream_proto, "removeListener", JS_DupValue(ctx, remove_listener_method));
+  JS_SetPropertyStr(ctx, stream_proto, "addListener", JS_DupValue(ctx, add_listener_method));
+  JS_SetPropertyStr(ctx, stream_proto, "removeAllListeners", JS_DupValue(ctx, remove_all_method));
+  JS_SetPropertyStr(ctx, stream_proto, "listenerCount", JS_DupValue(ctx, listener_count_method));
+
+  // Add pipe method to base Stream prototype (essential for Node.js compatibility)
+  JS_SetPropertyStr(ctx, stream_proto, "pipe", JS_NewCFunction(ctx, js_stream_pipe, "pipe", 1));
 
   // Add to readable prototype
   JS_SetPropertyStr(ctx, readable_proto, "on", JS_DupValue(ctx, on_method));
@@ -446,12 +579,17 @@ JSValue JSRT_InitNodeStream(JSContext* ctx) {
   JS_SetPropertyStr(ctx, transform_proto, "end", JS_NewCFunction(ctx, js_writable_end, "end", 0));
   JS_SetPropertyStr(ctx, passthrough_proto, "end", JS_NewCFunction(ctx, js_writable_end, "end", 0));
 
-  // Set up prototype chain: PassThrough -> Transform -> Duplex -> Readable
+  // Set up prototype chain with base Stream class:
+  // Stream -> Readable -> Duplex -> Transform -> PassThrough
+  // Stream -> Writable (separate branch)
+  JS_SetPrototype(ctx, readable_proto, stream_proto);
+  JS_SetPrototype(ctx, writable_proto, stream_proto);
   JS_SetPrototype(ctx, duplex_proto, readable_proto);
   JS_SetPrototype(ctx, transform_proto, duplex_proto);
   JS_SetPrototype(ctx, passthrough_proto, transform_proto);
 
   // Set prototypes
+  JS_SetPropertyStr(ctx, stream_ctor, "prototype", stream_proto);
   JS_SetPropertyStr(ctx, readable_ctor, "prototype", readable_proto);
   JS_SetPropertyStr(ctx, writable_ctor, "prototype", writable_proto);
   JS_SetPropertyStr(ctx, duplex_ctor, "prototype", duplex_proto);
@@ -459,12 +597,15 @@ JSValue JSRT_InitNodeStream(JSContext* ctx) {
   JS_SetPropertyStr(ctx, passthrough_ctor, "prototype", passthrough_proto);
 
   // Set constructor property on prototypes
+  JS_SetPropertyStr(ctx, stream_proto, "constructor", JS_DupValue(ctx, stream_ctor));
   JS_SetPropertyStr(ctx, readable_proto, "constructor", JS_DupValue(ctx, readable_ctor));
   JS_SetPropertyStr(ctx, writable_proto, "constructor", JS_DupValue(ctx, writable_ctor));
   JS_SetPropertyStr(ctx, duplex_proto, "constructor", JS_DupValue(ctx, duplex_ctor));
+  JS_SetPropertyStr(ctx, transform_proto, "constructor", JS_DupValue(ctx, transform_ctor));
   JS_SetPropertyStr(ctx, passthrough_proto, "constructor", JS_DupValue(ctx, passthrough_ctor));
 
   // Set class prototypes
+  JS_SetClassProto(ctx, js_stream_class_id, JS_DupValue(ctx, stream_proto));
   JS_SetClassProto(ctx, js_readable_class_id, JS_DupValue(ctx, readable_proto));
   JS_SetClassProto(ctx, js_writable_class_id, JS_DupValue(ctx, writable_proto));
   JS_SetClassProto(ctx, js_duplex_class_id, JS_DupValue(ctx, duplex_proto));
@@ -513,16 +654,31 @@ JSValue JSRT_InitNodeStream(JSContext* ctx) {
   transform_wrapper = transform_wrapper_local;
 
   // Add to module
+  JS_SetPropertyStr(ctx, stream_module, "Stream", stream_ctor);
   JS_SetPropertyStr(ctx, stream_module, "Readable", readable_ctor);
   JS_SetPropertyStr(ctx, stream_module, "Writable", writable_ctor);
   JS_SetPropertyStr(ctx, stream_module, "Duplex", duplex_ctor);
   JS_SetPropertyStr(ctx, stream_module, "Transform", transform_wrapper);
   JS_SetPropertyStr(ctx, stream_module, "PassThrough", passthrough_ctor);
 
-  // Initialize Phase 5 utilities (pipeline, finished, Readable.from, etc.)
-  js_stream_init_utilities(ctx, stream_module);
+  // Node.js compatibility: make the main module object behave like the Stream constructor
+  // when used with `extends` or `new`. This allows packages like mute-stream to work.
+  // In Node.js, `require('stream')` returns a constructor function, not just an object.
 
-  return stream_module;
+  // Copy essential properties from module to the constructor
+  JS_SetPropertyStr(ctx, stream_ctor, "Readable", JS_DupValue(ctx, readable_ctor));
+  JS_SetPropertyStr(ctx, stream_ctor, "Writable", JS_DupValue(ctx, writable_ctor));
+  JS_SetPropertyStr(ctx, stream_ctor, "Duplex", JS_DupValue(ctx, duplex_ctor));
+  JS_SetPropertyStr(ctx, stream_ctor, "Transform", JS_DupValue(ctx, transform_wrapper));
+  JS_SetPropertyStr(ctx, stream_ctor, "PassThrough", JS_DupValue(ctx, passthrough_ctor));
+
+  // Copy the utility functions too (Phase 5 utilities must be initialized first)
+  js_stream_init_utilities(ctx, stream_module);
+  JS_SetPropertyStr(ctx, stream_ctor, "pipeline", JS_GetPropertyStr(ctx, stream_module, "pipeline"));
+  JS_SetPropertyStr(ctx, stream_ctor, "finished", JS_GetPropertyStr(ctx, stream_module, "finished"));
+
+  // Return the constructor as the module (like Node.js does)
+  return stream_ctor;
 }
 
 // ES Module support
@@ -530,6 +686,7 @@ int js_node_stream_init(JSContext* ctx, JSModuleDef* m) {
   JSValue stream_module = JSRT_InitNodeStream(ctx);
 
   // Export individual classes
+  JS_SetModuleExport(ctx, m, "Stream", JS_GetPropertyStr(ctx, stream_module, "Stream"));
   JS_SetModuleExport(ctx, m, "Readable", JS_GetPropertyStr(ctx, stream_module, "Readable"));
   JS_SetModuleExport(ctx, m, "Writable", JS_GetPropertyStr(ctx, stream_module, "Writable"));
   JS_SetModuleExport(ctx, m, "Duplex", JS_GetPropertyStr(ctx, stream_module, "Duplex"));

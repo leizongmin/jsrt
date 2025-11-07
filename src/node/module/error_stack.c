@@ -21,6 +21,80 @@
 // Global stack trace limit configuration
 static int32_t g_stack_trace_limit = 10;
 
+// Forward declarations for CallSite methods
+static JSValue js_create_callsite_object(JSContext* ctx, const char* file_name, int line_number, int column_number,
+                                         const char* function_name);
+static JSValue js_callsite_get_file_name(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv);
+static JSValue js_callsite_get_line_number(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv);
+static JSValue js_callsite_get_column_number(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv);
+static JSValue js_callsite_get_function_name(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv);
+static JSValue js_callsite_is_eval(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv);
+static JSValue js_callsite_get_eval_origin(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv);
+
+// CallSite object constructor for Node.js compatibility
+static JSValue js_create_callsite_object(JSContext* ctx, const char* file_name, int line_number, int column_number,
+                                         const char* function_name) {
+  JSValue callsite = JS_NewObject(ctx);
+
+  // Add properties and methods to mimic Node.js CallSite object
+  JS_SetPropertyStr(ctx, callsite, "fileName", JS_NewString(ctx, file_name ? file_name : "<anonymous>"));
+  JS_SetPropertyStr(ctx, callsite, "lineNumber", JS_NewInt32(ctx, line_number));
+  JS_SetPropertyStr(ctx, callsite, "columnNumber", JS_NewInt32(ctx, column_number));
+  JS_SetPropertyStr(ctx, callsite, "functionName", JS_NewString(ctx, function_name ? function_name : "<anonymous>"));
+
+  // Add methods that depd library expects
+  JSValue getFileName_func = JS_NewCFunction(ctx, js_callsite_get_file_name, "getFileName", 0);
+  JS_SetPropertyStr(ctx, callsite, "getFileName", getFileName_func);
+
+  JSValue getLineNumber_func = JS_NewCFunction(ctx, js_callsite_get_line_number, "getLineNumber", 0);
+  JS_SetPropertyStr(ctx, callsite, "getLineNumber", getLineNumber_func);
+
+  JSValue getColumnNumber_func = JS_NewCFunction(ctx, js_callsite_get_column_number, "getColumnNumber", 0);
+  JS_SetPropertyStr(ctx, callsite, "getColumnNumber", getColumnNumber_func);
+
+  JSValue getFunctionName_func = JS_NewCFunction(ctx, js_callsite_get_function_name, "getFunctionName", 0);
+  JS_SetPropertyStr(ctx, callsite, "getFunctionName", getFunctionName_func);
+
+  JSValue isEval_func = JS_NewCFunction(ctx, js_callsite_is_eval, "isEval", 0);
+  JS_SetPropertyStr(ctx, callsite, "isEval", isEval_func);
+
+  JSValue getEvalOrigin_func = JS_NewCFunction(ctx, js_callsite_get_eval_origin, "getEvalOrigin", 0);
+  JS_SetPropertyStr(ctx, callsite, "getEvalOrigin", getEvalOrigin_func);
+
+  return callsite;
+}
+
+// CallSite method implementations
+static JSValue js_callsite_get_file_name(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
+  JSValue file_name = JS_GetPropertyStr(ctx, this_val, "fileName");
+  return file_name;
+}
+
+static JSValue js_callsite_get_line_number(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
+  JSValue line_number = JS_GetPropertyStr(ctx, this_val, "lineNumber");
+  return line_number;
+}
+
+static JSValue js_callsite_get_column_number(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
+  JSValue column_number = JS_GetPropertyStr(ctx, this_val, "columnNumber");
+  return column_number;
+}
+
+static JSValue js_callsite_get_function_name(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
+  JSValue function_name = JS_GetPropertyStr(ctx, this_val, "functionName");
+  return function_name;
+}
+
+static JSValue js_callsite_is_eval(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
+  // Simple implementation - return false for now
+  return JS_FALSE;
+}
+
+static JSValue js_callsite_get_eval_origin(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
+  // Simple implementation - return empty string for now
+  return JS_NewString(ctx, "");
+}
+
 // Error.captureStackTrace(targetObject, constructorOpt)
 static JSValue js_error_capture_stack_trace(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
   if (argc < 1) {
@@ -34,37 +108,34 @@ static JSValue js_error_capture_stack_trace(JSContext* ctx, JSValueConst this_va
 
   JSRT_Debug("Error.captureStackTrace called on target object");
 
-  // Create a simple stack trace
-  char stack_trace[2048];
-  int pos = 0;
-
-  // Get error message if it exists
-  JSValue message_val = JS_GetPropertyStr(ctx, target_obj, "message");
-  const char* message = JS_ToCString(ctx, message_val);
-
-  pos += snprintf(stack_trace + pos, sizeof(stack_trace) - pos, "%s\n", message ? message : "Error");
-
-  if (message) {
-    JS_FreeCString(ctx, message);
-  }
-  JS_FreeValue(ctx, message_val);
-
-  // Add stack frames
-  for (int32_t i = 1; i <= g_stack_trace_limit && pos < sizeof(stack_trace) - 100; i++) {
-    pos += snprintf(stack_trace + pos, sizeof(stack_trace) - pos, "    at %s (%s:%d:%d)\n",
-                    i == 1 ? "captureStackTrace" : "anonymous", "<anonymous>", i * 10, i * 5);
-  }
-
-  JSValue stack_val = JS_NewString(ctx, stack_trace);
-  if (JS_IsException(stack_val)) {
+  // Create an array of CallSite objects (Node.js compatibility)
+  JSValue stack_array = JS_NewArray(ctx);
+  if (JS_IsException(stack_array)) {
     return JS_EXCEPTION;
   }
 
-  if (JS_SetPropertyStr(ctx, target_obj, "stack", stack_val) < 0) {
+  // Add some sample CallSite objects to the array
+  // In a real implementation, this would capture the actual call stack
+  for (int32_t i = 0; i < 5 && i < g_stack_trace_limit; i++) {
+    char file_name[256];
+    snprintf(file_name, sizeof(file_name), "module_%d.js", i);
+
+    JSValue callsite = js_create_callsite_object(ctx, file_name, (i + 1) * 10, (i + 1) * 5, "functionName");
+    if (JS_IsException(callsite)) {
+      JS_FreeValue(ctx, stack_array);
+      return JS_EXCEPTION;
+    }
+
+    JS_SetPropertyUint32(ctx, stack_array, i, callsite);
+  }
+
+  // Set the stack property as the array of CallSite objects
+  if (JS_SetPropertyStr(ctx, target_obj, "stack", stack_array) < 0) {
+    JS_FreeValue(ctx, stack_array);
     return JS_EXCEPTION;
   }
 
-  JSRT_Debug("Stack trace captured and set on target object");
+  JSRT_Debug("Stack trace captured and set on target object as CallSite array");
   return JS_UNDEFINED;
 }
 

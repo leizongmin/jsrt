@@ -91,6 +91,15 @@ int jsrt_push_loading_commonjs(JSRT_ModuleLoader* loader, const char* resolved_p
  */
 int jsrt_pop_loading_commonjs(JSRT_ModuleLoader* loader);
 
+/**
+ * Create CommonJS wrapper code
+ *
+ * @param content Module source content
+ * @param resolved_path Module file path
+ * @return Allocated wrapper code string (caller must free), or NULL on error
+ */
+char* create_wrapper_code(const char* content, const char* resolved_path);
+
 #ifdef __cplusplus
 }
 #endif

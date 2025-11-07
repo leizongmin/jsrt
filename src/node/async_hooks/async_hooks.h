@@ -10,6 +10,9 @@ extern "C" {
 // Async Hook IDs
 typedef uint32_t async_id_t;
 
+// AsyncLocalStorage class ID
+#define JS_ASYNC_LOCAL_STORAGE_CLASS_ID 1
+
 // Async Hook Types
 typedef enum {
   NODE_ASYNC_HOOK_INIT = 0,

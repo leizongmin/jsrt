@@ -80,8 +80,11 @@ JSValue JSRT_InitNodeEvents(JSContext* ctx) {
   JSValue error_monitor = js_events_get_error_monitor(ctx, JS_UNDEFINED, 0, NULL);
   JS_SetPropertyStr(ctx, EventEmitter, "errorMonitor", error_monitor);
 
-  // For backward compatibility and destructuring support, also export EventEmitter as a property
+  // For backward compatibility and destructuring support, add EventEmitter as property
+  // This is safe because we're setting the function as a property of itself
   JS_SetPropertyStr(ctx, EventEmitter, "EventEmitter", JS_DupValue(ctx, EventEmitter));
+
+  // Add default export
   JS_SetPropertyStr(ctx, EventEmitter, "default", JS_DupValue(ctx, EventEmitter));
 
   // Return EventEmitter directly (not wrapped in an object)

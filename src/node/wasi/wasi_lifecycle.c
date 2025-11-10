@@ -138,14 +138,9 @@ JSValue jsrt_wasi_start(JSContext* ctx, jsrt_wasi_t* wasi, JSValue instance) {
   }
   JS_FreeValue(ctx, exports);
 
-  wasi->exec_env = wasm_runtime_create_exec_env(wasi->wamr_instance, 65536);
-  if (!wasi->exec_env) {
-    JS_FreeValue(ctx, start_fn);
-    jsrt_wasi_detach_instance(ctx, wasi);
-    return jsrt_wasi_throw_error(ctx, JSRT_WASI_ERROR_INTERNAL, "Failed to create WASM execution environment");
-  }
-
-  JSRT_Debug("WAMR instance extracted and execution environment created");
+  // Skip WAMR execution environment creation in simplified version
+  wasi->exec_env = NULL;
+  JSRT_Debug("Skipping WAMR execution environment creation (simplified version)");
 
   // Call _start()
   JSRT_Debug("Calling WASI _start()");
@@ -181,11 +176,6 @@ JSValue jsrt_wasi_start(JSContext* ctx, jsrt_wasi_t* wasi, JSValue instance) {
   wasi->exit_code = exit_code;
 
   JSRT_Debug("WASI _start() completed with exit code: %d", exit_code);
-
-  if (wasi->exec_env) {
-    wasm_runtime_destroy_exec_env(wasi->exec_env);
-    wasi->exec_env = NULL;
-  }
 
   // Return exit code (matches Node.js WASI semantics)
   return JS_NewInt32(ctx, exit_code);
@@ -246,14 +236,9 @@ JSValue jsrt_wasi_initialize(JSContext* ctx, jsrt_wasi_t* wasi, JSValue instance
 
   JS_FreeValue(ctx, exports);
 
-  wasi->exec_env = wasm_runtime_create_exec_env(wasi->wamr_instance, 65536);
-  if (!wasi->exec_env) {
-    JS_FreeValue(ctx, init_fn);
-    jsrt_wasi_detach_instance(ctx, wasi);
-    return jsrt_wasi_throw_error(ctx, JSRT_WASI_ERROR_INTERNAL, "Failed to create WASM execution environment");
-  }
-
-  JSRT_Debug("WAMR instance extracted and execution environment created");
+  // Skip WAMR execution environment creation in simplified version
+  wasi->exec_env = NULL;
+  JSRT_Debug("Skipping WAMR execution environment creation in initialize() (simplified version)");
 
   // Call _initialize()
   JSRT_Debug("Calling WASI _initialize()");
@@ -279,11 +264,6 @@ JSValue jsrt_wasi_initialize(JSContext* ctx, jsrt_wasi_t* wasi, JSValue instance
   }
 
   JS_FreeValue(ctx, result);
-
-  if (wasi->exec_env) {
-    wasm_runtime_destroy_exec_env(wasi->exec_env);
-    wasi->exec_env = NULL;
-  }
 
   // Mark as initialized
   wasi->initialized = true;

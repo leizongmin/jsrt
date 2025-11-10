@@ -4,12 +4,10 @@
  * Implementation of start() and initialize() methods for WASI instances.
  */
 
-#include "../../std/webassembly.h"
 #include "../../util/debug.h"
 #include "wasi.h"
 
 #include <string.h>
-#include <wasm_export.h>
 
 static void jsrt_wasi_detach_instance(JSContext* ctx, jsrt_wasi_t* wasi) {
   if (!wasi) {
@@ -19,11 +17,6 @@ static void jsrt_wasi_detach_instance(JSContext* ctx, jsrt_wasi_t* wasi) {
   if (!JS_IsUndefined(wasi->wasm_instance)) {
     JS_FreeValue(ctx, wasi->wasm_instance);
     wasi->wasm_instance = JS_UNDEFINED;
-  }
-
-  if (wasi->exec_env) {
-    wasm_runtime_destroy_exec_env(wasi->exec_env);
-    wasi->exec_env = NULL;
   }
 
   wasi->wamr_instance = NULL;
@@ -65,30 +58,10 @@ static int jsrt_wasi_attach_instance(JSContext* ctx, jsrt_wasi_t* wasi, JSValueC
     return -1;
   }
 
-  wasm_module_inst_t module_inst = jsrt_webassembly_get_instance(ctx, instance);
-  if (!module_inst) {
-    JS_FreeValue(ctx, exports);
-    jsrt_wasi_throw_error(ctx, JSRT_WASI_ERROR_INTERNAL, "Failed to extract WAMR instance from WebAssembly.Instance");
-    wasi->instance_failed = true;
-    return -1;
-  }
-
-  wasm_memory_inst_t memory = wasm_runtime_get_default_memory(module_inst);
-  if (!memory) {
-    JS_FreeValue(ctx, exports);
-    jsrt_wasi_throw_error(ctx, JSRT_WASI_ERROR_MISSING_MEMORY_EXPORT, NULL);
-    wasi->instance_failed = true;
-    return -1;
-  }
-
-  if (wasi->exec_env) {
-    wasm_runtime_destroy_exec_env(wasi->exec_env);
-    wasi->exec_env = NULL;
-  }
-
+  // Simplified WASI attachment without WAMR integration
   wasi->wasm_instance = JS_DupValue(ctx, instance);
-  wasi->wamr_instance = module_inst;
-  wasi->memory_validated = true;
+  wasi->wamr_instance = NULL;  // Not used in simplified version
+  wasi->memory_validated = false;
 
   *out_exports = exports;
   JSRT_Debug("jsrt_wasi_attach_instance: success");

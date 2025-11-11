@@ -156,8 +156,40 @@ static int jsrt_wasm_global_read_exported(const jsrt_wasm_global_data_t* data, w
 static int jsrt_wasm_global_write_exported(const jsrt_wasm_global_data_t* data, const wasm_val_t* val);
 
 // Helper function to create WebAssembly error constructors
+// Generic constructor function for WebAssembly error types
+static JSValue js_webassembly_error_constructor(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv,
+                                                int magic) {
+  const char* error_names[] = {"CompileError", "LinkError", "RuntimeError"};
+  const char* name = (magic >= 0 && magic < 3) ? error_names[magic] : "Error";
+
+  // Get the message argument (if provided)
+  const char* message = "";
+  if (argc > 0 && !JS_IsUndefined(argv[0]) && !JS_IsNull(argv[0])) {
+    message = JS_ToCString(ctx, argv[0]);
+  }
+
+  JSValue error = JS_NewError(ctx);
+  JS_DefinePropertyValueStr(ctx, error, "name", JS_NewString(ctx, name), JS_PROP_WRITABLE | JS_PROP_CONFIGURABLE);
+  JS_DefinePropertyValueStr(ctx, error, "message", JS_NewString(ctx, message), JS_PROP_WRITABLE | JS_PROP_CONFIGURABLE);
+
+  if (argc > 0 && !JS_IsUndefined(argv[0]) && !JS_IsNull(argv[0])) {
+    JS_FreeCString(ctx, message);
+  }
+
+  return error;
+}
+
 static JSValue create_webassembly_error_constructor(JSContext* ctx, const char* name, JSValue error_proto) {
-  JSValue ctor = JS_NewCFunction2(ctx, NULL, name, 1, JS_CFUNC_constructor, 0);
+  int magic = 0;
+  if (strcmp(name, "CompileError") == 0) {
+    magic = 0;
+  } else if (strcmp(name, "LinkError") == 0) {
+    magic = 1;
+  } else if (strcmp(name, "RuntimeError") == 0) {
+    magic = 2;
+  }
+
+  JSValue ctor = JS_NewCFunction2(ctx, js_webassembly_error_constructor, name, 1, JS_CFUNC_constructor_magic, magic);
 
   // Create prototype that inherits from Error.prototype
   JSValue proto = JS_NewObject(ctx);
@@ -666,6 +698,21 @@ static JSValue js_webassembly_module_constructor(JSContext* ctx, JSValueConst ne
     is_problematic_demo = true;
   }
 
+  // Additional input validation to prevent WAMR crashes
+  bool is_too_small = false;
+  if (size < 8) {  // WASM modules need at least 8 bytes (magic + version)
+    is_too_small = true;
+  }
+
+  // Validate magic header before passing to WAMR
+  bool has_invalid_magic = false;
+  if (size >= 4) {
+    const uint8_t* magic = bytes;
+    if (magic[0] != 0x00 || magic[1] != 0x61 || magic[2] != 0x73 || magic[3] != 0x6d) {
+      has_invalid_magic = true;
+    }
+  }
+
   wasm_module_t module = NULL;
 
   if (is_problematic_demo) {
@@ -674,6 +721,16 @@ static JSValue js_webassembly_module_constructor(JSContext* ctx, JSValueConst ne
         "js_webassembly_module_constructor: Detected problematic demo.wasm (%zu bytes), skipping WAMR compilation",
         size);
     module = NULL;
+  } else if (is_too_small) {
+    // Modules that are too small will definitely fail WAMR, skip directly
+    JSRT_Debug("js_webassembly_module_constructor: Module too small (%zu bytes), skipping WAMR compilation", size);
+    js_free(ctx, bytes_copy);
+    return throw_webassembly_compile_error(ctx, "WASM module load failed: invalid module length");
+  } else if (has_invalid_magic) {
+    // Invalid magic number, skip WAMR to prevent potential crashes
+    JSRT_Debug("js_webassembly_module_constructor: Invalid magic header, skipping WAMR compilation");
+    js_free(ctx, bytes_copy);
+    return throw_webassembly_compile_error(ctx, "WASM module load failed: magic header not detected");
   } else {
     // Try normal WAMR compilation for other WASM files
     JSRT_Debug("js_webassembly_module_constructor: Attempting normal WAMR compilation for %zu bytes", size);

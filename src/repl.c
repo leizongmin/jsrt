@@ -308,7 +308,7 @@ int JSRT_CmdRunREPL(int argc, char** argv) {
             if (!JS_IsUndefined(result_val) && !JS_IsNull(result_val)) {
               DynBuf dbuf;
               dbuf_init(&dbuf);
-              JSRT_GetJSValuePrettyString(&dbuf, rt->ctx, result_val, NULL, true);
+              JSRT_GetJSValuePrettyString(&dbuf, rt->ctx, result_val, NULL, JSRT_VALUE_COLOR_FULL);
               if (dbuf.buf && dbuf.size > 0) {
                 // Null-terminate the buffer for safe printing
                 dbuf_putc(&dbuf, '\0');
@@ -400,7 +400,7 @@ int JSRT_CmdRunREPL(int argc, char** argv) {
           if (!JS_IsUndefined(result_val) && !JS_IsNull(result_val)) {
             DynBuf dbuf;
             dbuf_init(&dbuf);
-            JSRT_GetJSValuePrettyString(&dbuf, rt->ctx, result_val, NULL, true);
+            JSRT_GetJSValuePrettyString(&dbuf, rt->ctx, result_val, NULL, JSRT_VALUE_COLOR_FULL);
             if (dbuf.buf && dbuf.size > 0) {
               // Null-terminate the buffer for safe printing
               dbuf_putc(&dbuf, '\0');

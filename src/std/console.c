@@ -142,11 +142,12 @@ static double jsrt_get_time_ms() {
 
 // Common function for console output with different streams and colors
 static void jsrt_console_output(JSContext* ctx, int argc, JSValueConst* argv, FILE* stream, const char* color_start,
-                                const char* color_end, const char* prefix) {
+                                const char* color_end, const char* prefix, JSRT_ValueColorMode value_color_mode) {
   int i;
   DynBuf dbuf;
   jsrt_init_dbuf(ctx, &dbuf);
-  bool colors = isatty(fileno(stream));
+  bool supports_color = isatty(fileno(stream));
+  JSRT_ValueColorMode effective_mode = supports_color ? value_color_mode : JSRT_VALUE_COLOR_NONE;
 
   // Add indentation for groups
   for (int g = 0; g < group_level; g++) {
@@ -155,10 +156,10 @@ static void jsrt_console_output(JSContext* ctx, int argc, JSValueConst* argv, FI
 
   // Add prefix if provided
   if (prefix) {
-    if (colors && color_start)
+    if (supports_color && color_start)
       dbuf_putstr(&dbuf, color_start);
     dbuf_putstr(&dbuf, prefix);
-    if (colors && color_end)
+    if (supports_color && color_end)
       dbuf_putstr(&dbuf, color_end);
     if (argc > 0)
       dbuf_putstr(&dbuf, " ");
@@ -168,7 +169,7 @@ static void jsrt_console_output(JSContext* ctx, int argc, JSValueConst* argv, FI
     if (i != 0) {
       dbuf_putstr(&dbuf, " ");
     }
-    JSRT_GetJSValuePrettyString(&dbuf, ctx, argv[i], NULL, colors);
+    JSRT_GetJSValuePrettyString(&dbuf, ctx, argv[i], NULL, effective_mode);
   }
 
   fwrite(dbuf.buf, 1, dbuf.size, stream);
@@ -177,38 +178,42 @@ static void jsrt_console_output(JSContext* ctx, int argc, JSValueConst* argv, FI
 }
 
 static JSValue jsrt_console_log(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
-  jsrt_console_output(ctx, argc, argv, stdout, NULL, NULL, NULL);
+  jsrt_console_output(ctx, argc, argv, stdout, NULL, NULL, NULL, JSRT_VALUE_COLOR_NO_STRINGS);
   fflush(stdout);  // Ensure output appears immediately
   return JS_UNDEFINED;
 }
 
 static JSValue jsrt_console_error(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
-  jsrt_console_output(ctx, argc, argv, stderr, JSRT_ColorizeFontRed, JSRT_ColorizeClear, NULL);
+  jsrt_console_output(ctx, argc, argv, stderr, JSRT_ColorizeFontRed, JSRT_ColorizeClear, NULL, JSRT_VALUE_COLOR_FULL);
   fflush(stderr);  // Ensure output appears immediately
   return JS_UNDEFINED;
 }
 
 static JSValue jsrt_console_warn(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
-  jsrt_console_output(ctx, argc, argv, stderr, JSRT_ColorizeFontYellow, JSRT_ColorizeClear, NULL);
+  jsrt_console_output(ctx, argc, argv, stderr, JSRT_ColorizeFontYellow, JSRT_ColorizeClear, NULL,
+                      JSRT_VALUE_COLOR_FULL);
   fflush(stderr);  // Ensure output appears immediately
   return JS_UNDEFINED;
 }
 
 static JSValue jsrt_console_info(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
-  jsrt_console_output(ctx, argc, argv, stdout, JSRT_ColorizeFontBlue, JSRT_ColorizeClear, NULL);
+  jsrt_console_output(ctx, argc, argv, stdout, JSRT_ColorizeFontBlue, JSRT_ColorizeClear, NULL,
+                      JSRT_VALUE_COLOR_NO_STRINGS);
   fflush(stdout);  // Ensure output appears immediately
   return JS_UNDEFINED;
 }
 
 static JSValue jsrt_console_debug(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
-  jsrt_console_output(ctx, argc, argv, stdout, JSRT_ColorizeFontBlack, JSRT_ColorizeClear, NULL);
+  jsrt_console_output(ctx, argc, argv, stdout, JSRT_ColorizeFontBlack, JSRT_ColorizeClear, NULL,
+                      JSRT_VALUE_COLOR_NO_STRINGS);
   fflush(stdout);  // Ensure output appears immediately
   return JS_UNDEFINED;
 }
 
 static JSValue jsrt_console_trace(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
   // Output the trace message first
-  jsrt_console_output(ctx, argc, argv, stderr, JSRT_ColorizeFontCyan, JSRT_ColorizeClear, "Trace:");
+  jsrt_console_output(ctx, argc, argv, stderr, JSRT_ColorizeFontCyan, JSRT_ColorizeClear,
+                      "Trace:", JSRT_VALUE_COLOR_FULL);
 
   // Output a simple stack trace indication
   for (int g = 0; g <= group_level; g++) {
@@ -222,7 +227,8 @@ static JSValue jsrt_console_trace(JSContext* ctx, JSValueConst this_val, int arg
 static JSValue jsrt_console_assert(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
   if (argc == 0) {
     // No assertion, always fails
-    jsrt_console_output(ctx, 0, NULL, stderr, JSRT_ColorizeFontRed, JSRT_ColorizeClear, "Assertion failed:");
+    jsrt_console_output(ctx, 0, NULL, stderr, JSRT_ColorizeFontRed, JSRT_ColorizeClear,
+                        "Assertion failed:", JSRT_VALUE_COLOR_FULL);
     return JS_UNDEFINED;
   }
 
@@ -232,9 +238,10 @@ static JSValue jsrt_console_assert(JSContext* ctx, JSValueConst this_val, int ar
     // Print assertion failed message with remaining arguments
     if (argc > 1) {
       jsrt_console_output(ctx, argc - 1, argv + 1, stderr, JSRT_ColorizeFontRed, JSRT_ColorizeClear,
-                          "Assertion failed:");
+                          "Assertion failed:", JSRT_VALUE_COLOR_FULL);
     } else {
-      jsrt_console_output(ctx, 0, NULL, stderr, JSRT_ColorizeFontRed, JSRT_ColorizeClear, "Assertion failed");
+      jsrt_console_output(ctx, 0, NULL, stderr, JSRT_ColorizeFontRed, JSRT_ColorizeClear, "Assertion failed",
+                          JSRT_VALUE_COLOR_FULL);
     }
   }
   return JS_UNDEFINED;
@@ -287,7 +294,8 @@ static JSValue jsrt_console_time(JSContext* ctx, JSValueConst this_val, int argc
   if (jsrt_find_timer(label) >= 0) {
     char message[256];
     snprintf(message, sizeof(message), "Timer '%s' already exists", label);
-    jsrt_console_output(ctx, 0, NULL, stdout, JSRT_ColorizeFontYellow, JSRT_ColorizeClear, message);
+    jsrt_console_output(ctx, 0, NULL, stdout, JSRT_ColorizeFontYellow, JSRT_ColorizeClear, message,
+                        JSRT_VALUE_COLOR_FULL);
   } else {
     jsrt_add_timer(label, jsrt_get_time_ms());
   }
@@ -328,7 +336,8 @@ static JSValue jsrt_console_timeEnd(JSContext* ctx, JSValueConst this_val, int a
   } else {
     char message[256];
     snprintf(message, sizeof(message), "Timer '%s' does not exist", label);
-    jsrt_console_output(ctx, 0, NULL, stdout, JSRT_ColorizeFontYellow, JSRT_ColorizeClear, message);
+    jsrt_console_output(ctx, 0, NULL, stdout, JSRT_ColorizeFontYellow, JSRT_ColorizeClear, message,
+                        JSRT_VALUE_COLOR_FULL);
   }
 
   if (argc > 0 && label != JS_ToCString(ctx, argv[0])) {
@@ -409,7 +418,8 @@ static JSValue jsrt_console_countReset(JSContext* ctx, JSValueConst this_val, in
   } else {
     char message[256];
     snprintf(message, sizeof(message), "Count for '%s' does not exist", label);
-    jsrt_console_output(ctx, 0, NULL, stdout, JSRT_ColorizeFontYellow, JSRT_ColorizeClear, message);
+    jsrt_console_output(ctx, 0, NULL, stdout, JSRT_ColorizeFontYellow, JSRT_ColorizeClear, message,
+                        JSRT_VALUE_COLOR_FULL);
   }
 
   if (argc > 0 && label != JS_ToCString(ctx, argv[0])) {
@@ -419,7 +429,7 @@ static JSValue jsrt_console_countReset(JSContext* ctx, JSValueConst this_val, in
 }
 
 static JSValue jsrt_console_group(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
-  jsrt_console_output(ctx, argc, argv, stdout, NULL, NULL, NULL);
+  jsrt_console_output(ctx, argc, argv, stdout, NULL, NULL, NULL, JSRT_VALUE_COLOR_NO_STRINGS);
   group_level++;
   return JS_UNDEFINED;
 }
@@ -445,7 +455,7 @@ static JSValue jsrt_console_clear(JSContext* ctx, JSValueConst this_val, int arg
 
 static JSValue jsrt_console_dir(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
   // Same as log for now - could be enhanced with more detailed object inspection
-  jsrt_console_output(ctx, argc, argv, stdout, NULL, NULL, NULL);
+  jsrt_console_output(ctx, argc, argv, stdout, NULL, NULL, NULL, JSRT_VALUE_COLOR_NO_STRINGS);
   return JS_UNDEFINED;
 }
 
@@ -524,7 +534,7 @@ static JSValue jsrt_console_table(JSContext* ctx, JSValueConst this_val, int arg
     putchar('\n');
   } else {
     // Fall back to regular log
-    jsrt_console_output(ctx, argc, argv, stdout, NULL, NULL, NULL);
+    jsrt_console_output(ctx, argc, argv, stdout, NULL, NULL, NULL, JSRT_VALUE_COLOR_NO_STRINGS);
   }
 
   return JS_UNDEFINED;
@@ -555,7 +565,7 @@ static bool is_visited(VisitedObject* visited, void* ptr) {
 
 // Internal implementation with circular reference detection
 static void JSRT_GetJSValuePrettyStringInternal(DynBuf* s, JSContext* ctx, JSValueConst value, const char* name,
-                                                bool colors, VisitedObject* visited, int depth) {
+                                                JSRT_ValueColorMode color_mode, VisitedObject* visited, int depth) {
   // Limit recursion depth to prevent stack overflow even with non-circular deep structures
   const int MAX_DEPTH = 10;
   if (depth > MAX_DEPTH) {
@@ -564,19 +574,23 @@ static void JSRT_GetJSValuePrettyStringInternal(DynBuf* s, JSContext* ctx, JSVal
   }
 
   uint32_t tag = JS_VALUE_GET_NORM_TAG(value);
+  bool colors_enabled = color_mode != JSRT_VALUE_COLOR_NONE;
+  bool string_colors = color_mode == JSRT_VALUE_COLOR_FULL;
   size_t len;
   const char* str;
   switch (tag) {
     case JS_TAG_UNDEFINED: {
       str = JS_ToCStringLen(ctx, &len, value);
-      colors&& dbuf_putstr(s, JSRT_ColorizeFontBlack);
+      if (colors_enabled)
+        dbuf_putstr(s, JSRT_ColorizeFontBlack);
       if (str) {
         dbuf_putstr(s, str);
         JS_FreeCString(ctx, str);
       } else {
         dbuf_putstr(s, "undefined");
       }
-      colors&& dbuf_putstr(s, JSRT_ColorizeClear);
+      if (colors_enabled)
+        dbuf_putstr(s, JSRT_ColorizeClear);
       break;
     }
     case JS_TAG_BIG_INT:
@@ -586,38 +600,44 @@ static void JSRT_GetJSValuePrettyStringInternal(DynBuf* s, JSContext* ctx, JSVal
     case JS_TAG_BOOL:
     case JS_TAG_SYMBOL: {
       str = JS_ToCStringLen(ctx, &len, value);
-      colors&& dbuf_putstr(s, JSRT_ColorizeFontYellow);
+      if (colors_enabled)
+        dbuf_putstr(s, JSRT_ColorizeFontYellow);
       if (str) {
         dbuf_putstr(s, str);
         JS_FreeCString(ctx, str);
       } else {
         dbuf_putstr(s, "[invalid value]");
       }
-      colors&& dbuf_putstr(s, JSRT_ColorizeClear);
+      if (colors_enabled)
+        dbuf_putstr(s, JSRT_ColorizeClear);
       break;
     }
     case JS_TAG_NULL: {
       str = JS_ToCStringLen(ctx, &len, value);
-      colors&& dbuf_putstr(s, JSRT_ColorizeFontWhiteBold);
+      if (colors_enabled)
+        dbuf_putstr(s, JSRT_ColorizeFontWhiteBold);
       if (str) {
         dbuf_putstr(s, str);
         JS_FreeCString(ctx, str);
       } else {
         dbuf_putstr(s, "null");
       }
-      colors&& dbuf_putstr(s, JSRT_ColorizeClear);
+      if (colors_enabled)
+        dbuf_putstr(s, JSRT_ColorizeClear);
       break;
     }
     case JS_TAG_STRING: {
       str = JS_ToCStringLen(ctx, &len, value);
-      colors&& dbuf_putstr(s, JSRT_ColorizeFontGreen);
+      if (string_colors)
+        dbuf_putstr(s, JSRT_ColorizeFontGreen);
       if (str) {
         dbuf_putstr(s, str);
         JS_FreeCString(ctx, str);
       } else {
         dbuf_putstr(s, "[invalid string]");
       }
-      colors&& dbuf_putstr(s, JSRT_ColorizeClear);
+      if (string_colors)
+        dbuf_putstr(s, JSRT_ColorizeClear);
       break;
     }
     case JS_TAG_OBJECT: {
@@ -626,9 +646,11 @@ static void JSRT_GetJSValuePrettyStringInternal(DynBuf* s, JSContext* ctx, JSVal
 
       // Check for circular reference
       if (is_visited(visited, obj_ptr)) {
-        colors&& dbuf_putstr(s, JSRT_ColorizeFontMagenta);
+        if (colors_enabled)
+          dbuf_putstr(s, JSRT_ColorizeFontMagenta);
         dbuf_putstr(s, "[Circular]");
-        colors&& dbuf_putstr(s, JSRT_ColorizeClear);
+        if (colors_enabled)
+          dbuf_putstr(s, JSRT_ColorizeClear);
         break;
       }
 
@@ -636,7 +658,8 @@ static void JSRT_GetJSValuePrettyStringInternal(DynBuf* s, JSContext* ctx, JSVal
       VisitedObject current = {.ptr = obj_ptr, .next = visited};
 
       if (JS_IsFunction(ctx, value)) {
-        colors&& dbuf_putstr(s, JSRT_ColorizeFontCyan);
+        if (colors_enabled)
+          dbuf_putstr(s, JSRT_ColorizeFontCyan);
         dbuf_putstr(s, "[Function: ");
         JSValue n = JS_GetPropertyStr(ctx, value, "name");
         str = JS_ToCStringLen(ctx, &len, n);
@@ -648,7 +671,8 @@ static void JSRT_GetJSValuePrettyStringInternal(DynBuf* s, JSContext* ctx, JSVal
         }
         JS_FreeValue(ctx, n);
         dbuf_putstr(s, "]");
-        colors&& dbuf_putstr(s, JSRT_ColorizeClear);
+        if (colors_enabled)
+          dbuf_putstr(s, JSRT_ColorizeClear);
       } else {
         // is an array?
         JSValue n = JS_GetPropertyStr(ctx, value, "length");
@@ -684,7 +708,7 @@ static void JSRT_GetJSValuePrettyStringInternal(DynBuf* s, JSContext* ctx, JSVal
               dbuf_putstr(s, k);
               dbuf_putstr(s, ": ");
               v = JS_GetProperty(ctx, value, tab[i].atom);
-              JSRT_GetJSValuePrettyStringInternal(s, ctx, v, k, colors, &current, depth + 1);
+              JSRT_GetJSValuePrettyStringInternal(s, ctx, v, k, color_mode, &current, depth + 1);
               JS_FreeCString(ctx, k);
               JS_FreeValue(ctx, v);
               if (i < display_len - 1) {
@@ -693,7 +717,7 @@ static void JSRT_GetJSValuePrettyStringInternal(DynBuf* s, JSContext* ctx, JSVal
             } else {
               dbuf_putstr(s, "[invalid key]: ");
               v = JS_GetProperty(ctx, value, tab[i].atom);
-              JSRT_GetJSValuePrettyStringInternal(s, ctx, v, NULL, colors, &current, depth + 1);
+              JSRT_GetJSValuePrettyStringInternal(s, ctx, v, NULL, color_mode, &current, depth + 1);
               JS_FreeValue(ctx, v);
               if (i < display_len - 1) {
                 dbuf_putstr(s, ", ");
@@ -724,6 +748,7 @@ static void JSRT_GetJSValuePrettyStringInternal(DynBuf* s, JSContext* ctx, JSVal
 }
 
 // Public API - entry point for pretty printing
-void JSRT_GetJSValuePrettyString(DynBuf* s, JSContext* ctx, JSValueConst value, const char* name, bool colors) {
-  JSRT_GetJSValuePrettyStringInternal(s, ctx, value, name, colors, NULL, 0);
+void JSRT_GetJSValuePrettyString(DynBuf* s, JSContext* ctx, JSValueConst value, const char* name,
+                                 JSRT_ValueColorMode color_mode) {
+  JSRT_GetJSValuePrettyStringInternal(s, ctx, value, name, color_mode, NULL, 0);
 }

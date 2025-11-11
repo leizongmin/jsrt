@@ -122,6 +122,17 @@ JSValue jsrt_wasi_start(JSContext* ctx, jsrt_wasi_t* wasi, JSValue instance) {
     return JS_EXCEPTION;
   }
 
+  // Validate memory export
+  JSValue memory_val = JS_GetPropertyStr(ctx, exports, "memory");
+  if (JS_IsException(memory_val) || JS_IsNull(memory_val) || JS_IsUndefined(memory_val)) {
+    JS_FreeValue(ctx, exports);
+    JS_FreeValue(ctx, memory_val);
+    jsrt_wasi_detach_instance(ctx, wasi);
+    return jsrt_wasi_throw_error(ctx, JSRT_WASI_ERROR_MISSING_MEMORY_EXPORT, NULL);
+  }
+  JS_FreeValue(ctx, memory_val);
+  wasi->memory_validated = true;
+
   if (jsrt_wasi_expect_no_export(ctx, exports, "_initialize", "_initialize export is incompatible with WASI.start()") <
       0) {
     JS_FreeValue(ctx, exports);

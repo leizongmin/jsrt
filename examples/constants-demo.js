@@ -19,11 +19,20 @@ try {
   console.log('📦 Module Overview:');
   const topLevelProps = Object.keys(constants);
   console.log(`   Total top-level properties: ${topLevelProps.length}`);
-  console.log(`   Properties: ${topLevelProps.slice(0, 10).join(', ')}${topLevelProps.length > 10 ? '...' : ''}`);
+  console.log(
+    `   Properties: ${topLevelProps.slice(0, 10).join(', ')}${topLevelProps.length > 10 ? '...' : ''}`
+  );
 
   // Show errno constants
   console.log('\n🚫 Errno Constants (Error Codes):');
-  const commonErrors = ['ENOENT', 'EACCES', 'EEXIST', 'EINVAL', 'EPERM', 'EPIPE'];
+  const commonErrors = [
+    'ENOENT',
+    'EACCES',
+    'EEXIST',
+    'EINVAL',
+    'EPERM',
+    'EPIPE',
+  ];
   for (const error of commonErrors) {
     if (constants.errno && constants.errno[error] !== undefined) {
       console.log(`   ${error.padEnd(8)}: ${constants.errno[error]}`);
@@ -75,7 +84,7 @@ try {
   if (constants.crypto) {
     const cryptoProps = Object.keys(constants.crypto);
     console.log(`   Total: ${cryptoProps.length} crypto constants`);
-    cryptoProps.forEach(prop => {
+    cryptoProps.forEach((prop) => {
       console.log(`   ${prop}: ${constants.crypto[prop]}`);
     });
   }
@@ -95,7 +104,6 @@ try {
     // Check read permissions
     fs.accessSync('/tmp', constants.R_OK);
     console.log('   ✅ /tmp directory is readable');
-
   } catch (error) {
     if (error.code === constants.errno.ENOENT) {
       console.log('   ❌ Directory does not exist');
@@ -113,9 +121,13 @@ try {
     fs.readFileSync('/nonexistent/file');
   } catch (error) {
     console.log(`   File read failed with error code: ${error.code}`);
-    console.log(`   Error code value: ${constants.errno[error.code] || 'unknown'}`);
+    console.log(
+      `   Error code value: ${constants.errno[error.code] || 'unknown'}`
+    );
     if (error.code === constants.errno.ENOENT) {
-      console.log('   ✅ Error correctly identified as ENOENT (file not found)');
+      console.log(
+        '   ✅ Error correctly identified as ENOENT (file not found)'
+      );
     }
   }
 
@@ -129,7 +141,7 @@ try {
       [constants.errno.EACCES]: 'Permission denied',
       [constants.errno.EEXIST]: 'File exists',
       [constants.errno.EINVAL]: 'Invalid argument',
-      [constants.errno.EPIPE]: 'Broken pipe'
+      [constants.errno.EPIPE]: 'Broken pipe',
     };
 
     return errorMessages[errorCode] || `Unknown error (${errorCode})`;
@@ -142,10 +154,14 @@ try {
   console.log('\n4️⃣  Module Identity Example:');
 
   const constants1 = require('node:constants');
-  const constants2 = require('constants');  // Should work with our implementation
+  const constants2 = require('constants'); // Should work with our implementation
 
-  console.log(`   require('node:constants') === require('constants'): ${constants1 === constants2}`);
-  console.log(`   Module object identity: ${constants1 === constants2 ? '✅ Same object' : '❌ Different objects'}`);
+  console.log(
+    `   require('node:constants') === require('constants'): ${constants1 === constants2}`
+  );
+  console.log(
+    `   Module object identity: ${constants1 === constants2 ? '✅ Same object' : '❌ Different objects'}`
+  );
 
   // Success summary
   console.log('\n🎉 Constants Module Demo Complete!');
@@ -158,8 +174,9 @@ try {
 
   console.log('\n🚀 Ready for npm packages that depend on constants!');
   console.log('\n💡 This implementation enables countless Node.js packages');
-  console.log('   to work seamlessly with jsrt, expanding ecosystem compatibility.');
-
+  console.log(
+    '   to work seamlessly with jsrt, expanding ecosystem compatibility.'
+  );
 } catch (error) {
   console.error('❌ Demo failed:', error.message);
   console.error('Stack:', error.stack);

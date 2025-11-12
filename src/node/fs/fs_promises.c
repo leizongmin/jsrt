@@ -9,6 +9,7 @@
 // Promise work request structure (extends fs_async_work_t concept)
 typedef struct {
   uv_fs_t req;         // libuv fs request (MUST be first for casting)
+  uv_timer_t timer;    // libuv timer for async operations
   JSContext* ctx;      // QuickJS context
   JSValue resolve;     // Promise resolve function
   JSValue reject;      // Promise reject function
@@ -19,6 +20,7 @@ typedef struct {
   int flags;           // Operation flags
   int mode;            // File mode
   int64_t offset;      // File offset for read/write
+  int result;          // Custom operation result for non-fs operations
 } fs_promise_work_t;
 
 // Forward declaration for FileHandle class
@@ -84,6 +86,28 @@ static void fs_promise_complete_void(uv_fs_t* req) {
   }
 
   fs_promise_work_free(work);
+}
+
+// Recursive mkdir timer callback (runs back in main thread)
+static void fs_promise_mkdir_recursive_timer_cb(uv_timer_t* timer) {
+  fs_promise_work_t* work = (fs_promise_work_t*)timer->data;
+  JSContext* ctx = work->ctx;
+
+  if (work->result != 0) {
+    // Reject with error
+    JSValue error = create_fs_error(ctx, errno, "mkdir", work->path);
+    JSValue ret = JS_Call(ctx, work->reject, JS_UNDEFINED, 1, &error);
+    JS_FreeValue(ctx, error);
+    JS_FreeValue(ctx, ret);
+  } else {
+    // Resolve with undefined
+    JSValue ret = JS_Call(ctx, work->resolve, JS_UNDEFINED, 0, NULL);
+    JS_FreeValue(ctx, ret);
+  }
+
+  uv_timer_stop(timer);
+  uv_close((uv_handle_t*)timer, NULL);  // The fs_promise_work_t will be cleaned up separately
+  fs_promise_work_free(work);           // Clean up the work structure
 }
 
 // File descriptor completion (operations like open)
@@ -1982,14 +2006,21 @@ JSValue js_fs_promises_mkdir(JSContext* ctx, JSValueConst this_val, int argc, JS
     return JS_EXCEPTION;
   }
 
-  // Parse mode (default: 0777)
+  // Parse mode (default: 0777) and recursive option
   int32_t mode = 0777;
+  bool recursive = false;
   if (argc >= 2 && JS_IsObject(argv[1])) {
     JSValue mode_val = JS_GetPropertyStr(ctx, argv[1], "mode");
     if (!JS_IsUndefined(mode_val)) {
       JS_ToInt32(ctx, &mode, mode_val);
     }
     JS_FreeValue(ctx, mode_val);
+
+    JSValue recursive_val = JS_GetPropertyStr(ctx, argv[1], "recursive");
+    if (JS_IsBool(recursive_val)) {
+      recursive = JS_ToBool(ctx, recursive_val);
+    }
+    JS_FreeValue(ctx, recursive_val);
   }
 
   // Create Promise
@@ -2015,14 +2046,37 @@ JSValue js_fs_promises_mkdir(JSContext* ctx, JSValueConst this_val, int argc, JS
   work->reject = resolving_funcs[1];
   work->path = strdup(path);
   work->mode = mode;
+  work->flags = recursive ? 1 : 0;  // Store recursive flag in flags field
   JS_FreeCString(ctx, path);
 
   // Queue async mkdir operation
   uv_loop_t* loop = fs_get_uv_loop(ctx);
-  int result = uv_fs_mkdir(loop, &work->req, work->path, mode, fs_promise_complete_void);
+  int result;
+
+  if (recursive) {
+    // For recursive mkdir, we need to use our own implementation
+    // since uv_fs_mkdir doesn't support recursive creation
+    // We'll use a timer to make it async
+    work->timer.data = work;                           // Store work pointer in timer
+    work->result = mkdir_recursive(work->path, mode);  // Perform the operation
+    result = uv_timer_init(loop, &work->timer);
+    if (result == 0) {
+      result = uv_timer_start(&work->timer, fs_promise_mkdir_recursive_timer_cb, 0, 0);
+    }
+  } else {
+    // Non-recursive: use libuv
+    result = uv_fs_mkdir(loop, &work->req, work->path, mode, fs_promise_complete_void);
+  }
 
   if (result < 0) {
-    JSValue error = create_fs_error(ctx, -result, "mkdir", work->path);
+    JSValue error;
+    if (recursive) {
+      // For recursive mkdir, errno is set by mkdir_recursive
+      error = create_fs_error(ctx, errno, "mkdir", work->path);
+    } else {
+      // For non-recursive, result is negative UV error code
+      error = create_fs_error(ctx, -result, "mkdir", work->path);
+    }
     JSValue ret = JS_Call(ctx, work->reject, JS_UNDEFINED, 1, &error);
     JS_FreeValue(ctx, error);
     JS_FreeValue(ctx, ret);

@@ -401,7 +401,7 @@ JSValue js_fs_unlink_async(JSContext* ctx, JSValueConst this_val, int argc, JSVa
   return JS_UNDEFINED;
 }
 
-// fs.mkdir(path, mode, callback) - True async
+// fs.mkdir(path, options, callback) - True async
 JSValue js_fs_mkdir_async(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv) {
   if (argc < 2) {
     return JS_ThrowTypeError(ctx, "mkdir requires path and callback");
@@ -413,16 +413,39 @@ JSValue js_fs_mkdir_async(JSContext* ctx, JSValueConst this_val, int argc, JSVal
   }
 
   int mode = 0777;  // Default mode
-  JSValue callback = argv[1];
+  bool recursive = false;
+  JSValue callback;
 
   if (argc >= 3) {
-    // mkdir(path, mode, callback)
-    if (JS_IsNumber(argv[1])) {
+    // Check if argv[1] is options object or mode number
+    if (JS_IsObject(argv[1])) {
+      // Modern format: mkdir(path, options, callback)
+      JSValue mode_val = JS_GetPropertyStr(ctx, argv[1], "mode");
+      if (!JS_IsUndefined(mode_val)) {
+        JS_ToInt32(ctx, &mode, mode_val);
+      }
+      JS_FreeValue(ctx, mode_val);
+
+      JSValue recursive_val = JS_GetPropertyStr(ctx, argv[1], "recursive");
+      if (JS_IsBool(recursive_val)) {
+        recursive = JS_ToBool(ctx, recursive_val);
+      }
+      JS_FreeValue(ctx, recursive_val);
+
+      callback = argv[2];
+    } else if (JS_IsNumber(argv[1])) {
+      // Legacy format: mkdir(path, mode, callback)
       int32_t mode_int;
       JS_ToInt32(ctx, &mode_int, argv[1]);
       mode = mode_int;
+      callback = argv[2];
+    } else {
+      // mkdir(path, callback) - use default mode
+      callback = argv[1];
     }
-    callback = argv[2];
+  } else {
+    // mkdir(path, callback) - use default mode
+    callback = argv[1];
   }
 
   if (!JS_IsFunction(ctx, callback)) {
@@ -438,12 +461,38 @@ JSValue js_fs_mkdir_async(JSContext* ctx, JSValueConst this_val, int argc, JSVal
 
   work->callback = JS_DupValue(ctx, callback);
   work->path = strdup(path);
+  work->flags = recursive ? 1 : 0;  // Store recursive flag in flags
   JS_FreeCString(ctx, path);
 
   uv_loop_t* loop = fs_get_uv_loop(ctx);
-  int result = uv_fs_mkdir(loop, &work->req, work->path, mode, fs_async_complete_void);
+  int result;
+
+  if (recursive) {
+    // For recursive mkdir, use our implementation and call callback immediately
+    // This is consistent with Node.js behavior where recursive mkdir is typically fast
+    int mkdir_result = mkdir_recursive(work->path, mode);
+    if (mkdir_result != 0) {
+      JSValue error = create_fs_error(ctx, errno, "mkdir", work->path);
+      JSValue args[1] = {error};
+      JSValue ret = JS_Call(ctx, work->callback, JS_UNDEFINED, 1, args);
+      JS_FreeValue(ctx, ret);
+      JS_FreeValue(ctx, error);
+      fs_async_work_free(work);
+      return JS_UNDEFINED;
+    } else {
+      JSValue args[1] = {JS_NULL};  // No error
+      JSValue ret = JS_Call(ctx, work->callback, JS_UNDEFINED, 1, args);
+      JS_FreeValue(ctx, ret);
+      fs_async_work_free(work);
+      return JS_UNDEFINED;
+    }
+  } else {
+    // Non-recursive: use libuv
+    result = uv_fs_mkdir(loop, &work->req, work->path, mode, fs_async_complete_void);
+  }
 
   if (result < 0) {
+    // This only happens for non-recursive case since recursive is handled above
     JSValue error = create_fs_error(ctx, -result, "mkdir", work->path);
     JSValue args[1] = {error};
     JSValue ret = JS_Call(ctx, work->callback, JS_UNDEFINED, 1, args);

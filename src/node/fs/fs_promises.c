@@ -88,6 +88,12 @@ static void fs_promise_complete_void(uv_fs_t* req) {
   fs_promise_work_free(work);
 }
 
+// Close callback for timer handle
+static void fs_promise_timer_close_cb(uv_handle_t* handle) {
+  fs_promise_work_t* work = (fs_promise_work_t*)handle->data;
+  fs_promise_work_free(work);  // Now safe to clean up the work structure
+}
+
 // Recursive mkdir timer callback (runs back in main thread)
 static void fs_promise_mkdir_recursive_timer_cb(uv_timer_t* timer) {
   fs_promise_work_t* work = (fs_promise_work_t*)timer->data;
@@ -106,8 +112,7 @@ static void fs_promise_mkdir_recursive_timer_cb(uv_timer_t* timer) {
   }
 
   uv_timer_stop(timer);
-  uv_close((uv_handle_t*)timer, NULL);  // The fs_promise_work_t will be cleaned up separately
-  fs_promise_work_free(work);           // Clean up the work structure
+  uv_close((uv_handle_t*)timer, fs_promise_timer_close_cb);  // Clean up work structure after handle is closed
 }
 
 // File descriptor completion (operations like open)

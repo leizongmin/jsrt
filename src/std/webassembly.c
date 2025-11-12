@@ -157,7 +157,7 @@ static int jsrt_wasm_global_write_exported(const jsrt_wasm_global_data_t* data, 
 
 // Helper function to create WebAssembly error constructors
 // Generic constructor function for WebAssembly error types
-static JSValue js_webassembly_error_constructor(JSContext* ctx, JSValueConst this_val, int argc, JSValueConst* argv,
+static JSValue js_webassembly_error_constructor(JSContext* ctx, JSValueConst new_target, int argc, JSValueConst* argv,
                                                 int magic) {
   const char* error_names[] = {"CompileError", "LinkError", "RuntimeError"};
   const char* name = (magic >= 0 && magic < 3) ? error_names[magic] : "Error";
@@ -189,7 +189,7 @@ static JSValue create_webassembly_error_constructor(JSContext* ctx, const char* 
     magic = 2;
   }
 
-  JSValue ctor = JS_NewCFunction2(ctx, js_webassembly_error_constructor, name, 1, JS_CFUNC_constructor_magic, magic);
+  JSValue ctor = JS_NewCFunction2(ctx, (JSCFunction *)js_webassembly_error_constructor, name, 1, JS_CFUNC_constructor_magic, magic);
 
   // Create prototype that inherits from Error.prototype
   JSValue proto = JS_NewObject(ctx);
@@ -2382,7 +2382,7 @@ static JSValue js_webassembly_memory_buffer_getter(JSContext* ctx, JSValueConst 
   }
 
   // Create ArrayBuffer that references the WASM memory (not a copy)
-  JSValue buffer = JS_NewArrayBuffer(ctx, data, size, NULL, NULL, false);
+  JSValue buffer = JS_NewArrayBuffer(ctx, (uint8_t*)data, size, NULL, NULL, false);
   if (JS_IsException(buffer)) {
     return buffer;
   }

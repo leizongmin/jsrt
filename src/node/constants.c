@@ -3,6 +3,7 @@
 #include <signal.h>
 #include <string.h>
 #include <sys/stat.h>
+#include <unistd.h>
 #include "../runtime.h"
 #include "../std/assert.h"
 #include "../util/debug.h"

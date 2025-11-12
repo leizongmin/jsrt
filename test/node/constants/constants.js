@@ -24,7 +24,15 @@ try {
   // Test that essential properties exist
   console.log('\nTesting essential properties...');
 
-  const requiredProps = ['errno', 'signals', 'priority', 'F_OK', 'R_OK', 'W_OK', 'X_OK'];
+  const requiredProps = [
+    'errno',
+    'signals',
+    'priority',
+    'F_OK',
+    'R_OK',
+    'W_OK',
+    'X_OK',
+  ];
   let missingProps = [];
 
   for (const prop of requiredProps) {
@@ -108,7 +116,9 @@ try {
   console.log('\nTesting priority constants...');
   if (constants.priority && typeof constants.priority === 'object') {
     const priorityProps = Object.keys(constants.priority);
-    console.log(`✅ Priority object found with ${priorityProps.length} properties`);
+    console.log(
+      `✅ Priority object found with ${priorityProps.length} properties`
+    );
     if (priorityProps.length > 0) {
       console.log(`   Properties: ${priorityProps.join(', ')}`);
     }
@@ -138,7 +148,9 @@ try {
     const cryptoProps = Object.keys(constants.crypto);
     console.log(`✅ Crypto object found with ${cryptoProps.length} properties`);
     if (cryptoProps.length > 0) {
-      console.log(`   Properties: ${cryptoProps.slice(0, 5).join(', ')}${cryptoProps.length > 5 ? '...' : ''}`);
+      console.log(
+        `   Properties: ${cryptoProps.slice(0, 5).join(', ')}${cryptoProps.length > 5 ? '...' : ''}`
+      );
     }
   } else {
     console.log('⚠️  Crypto constants not found or not an object');
@@ -152,7 +164,9 @@ try {
   if (constants1 === constants2) {
     console.log('✅ require("node:constants") === require("constants")');
   } else {
-    console.log('ℹ️  require("node:constants") !== require("constants") (may be expected)');
+    console.log(
+      'ℹ️  require("node:constants") !== require("constants") (may be expected)'
+    );
   }
 
   // Summary
@@ -165,7 +179,6 @@ try {
   console.log(`✅ Priority Object: present`);
   console.log(`✅ Extended Categories: ${foundCategories.length}`);
   console.log(`✅ Overall: SUCCESS`);
-
 } catch (error) {
   console.error('❌ Test failed:', error.message);
   console.error('Stack:', error.stack);

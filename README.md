@@ -6,7 +6,7 @@
 [![CI](https://github.com/leizongmin/jsrt/actions/workflows/ci.yml/badge.svg)](https://github.com/leizongmin/jsrt/actions/workflows/ci.yml)
 [![Coverage](https://img.shields.io/badge/coverage-70.8%25-yellow)](https://github.com/leizongmin/jsrt/actions/workflows/coverage.yml)
 [![WPT](https://img.shields.io/badge/WPT-90.6%25_pass-brightgreen)](docs/WPT.md)
-[![npm Compatibility](https://img.shields.io/badge/npm-73.3%25 Compatible-blue)](docs/npm-compatibility.md)
+[![npm Compatibility](https://img.shields.io/badge/npm-73.3%25%20Compatible-blue)](docs/npm-compatibility.md)
 [![Tests](https://img.shields.io/badge/tests-288%20passing-brightgreen)](test/)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](https://opensource.org/licenses/MIT)
 

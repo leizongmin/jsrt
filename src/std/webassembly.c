@@ -189,7 +189,8 @@ static JSValue create_webassembly_error_constructor(JSContext* ctx, const char* 
     magic = 2;
   }
 
-  JSValue ctor = JS_NewCFunction2(ctx, (JSCFunction *)js_webassembly_error_constructor, name, 1, JS_CFUNC_constructor_magic, magic);
+  JSValue ctor =
+      JS_NewCFunction2(ctx, (JSCFunction*)js_webassembly_error_constructor, name, 1, JS_CFUNC_constructor_magic, magic);
 
   // Create prototype that inherits from Error.prototype
   JSValue proto = JS_NewObject(ctx);

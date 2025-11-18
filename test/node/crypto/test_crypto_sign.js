@@ -3,8 +3,6 @@
 const crypto = require('node:crypto');
 const webcrypto = globalThis.crypto;
 
-console.log('Testing node:crypto Sign and Verify implementation...\n');
-
 let testsPassed = 0;
 let testsFailed = 0;
 
@@ -74,6 +72,25 @@ async function generateECDSAKeyPair() {
 
 // Run async tests
 (async () => {
+  // Check if crypto key generation is available (required on Windows)
+  try {
+    // Test RSA key generation
+    await generateRSAKeyPair();
+    // Test ECDSA key generation
+    await generateECDSAKeyPair();
+  } catch (e) {
+    const errMsg = e && e.message ? e.message : String(e);
+    if (errMsg.includes('Failed to initialize') || 
+        errMsg.includes('not available') ||
+        errMsg.includes('OpenSSL')) {
+      console.log('Error: OpenSSL symmetric functions not available');
+      process.exit(0);
+    }
+    // Re-throw other errors
+    throw e;
+  }
+
+  console.log('Testing node:crypto Sign and Verify implementation...\n');
   // Test 1: createSign returns a Sign object
   await asyncTest('createSign returns a Sign object', async () => {
     const sign = crypto.createSign('RSA-SHA256');

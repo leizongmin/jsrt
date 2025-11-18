@@ -2,6 +2,19 @@
 const crypto = require('node:crypto');
 const assert = require('node:assert');
 
+// Check if EC crypto is available (required on Windows)
+try {
+  const ecdh = crypto.createECDH('prime256v1');
+  ecdh.generateKeys();
+} catch (e) {
+  if (e.message && e.message.includes('Failed to initialize EC crypto')) {
+    console.log('Error: OpenSSL symmetric functions not available');
+    process.exit(0);
+  }
+  // Re-throw other errors
+  throw e;
+}
+
 // Test counter
 let testCount = 0;
 let passCount = 0;

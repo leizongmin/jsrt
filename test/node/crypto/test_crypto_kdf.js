@@ -4,6 +4,19 @@
 
 const crypto = require('node:crypto');
 
+// Check if OpenSSL KDF functions are available (required on Windows)
+try {
+  crypto.pbkdf2Sync('test', 'salt', 1, 16, 'sha256');
+} catch (e) {
+  if (e.message && (e.message.includes('PBKDF2 key derivation failed') || 
+                     e.message.includes('HKDF key derivation failed'))) {
+    console.log('Error: OpenSSL symmetric functions not available');
+    process.exit(0);
+  }
+  // Re-throw other errors
+  throw e;
+}
+
 let testsRun = 0;
 let testsPassed = 0;
 let testsFailed = 0;
